@@ -1,0 +1,225 @@
+# Transforming Vertical Face-Based Fixture Coordinates to View-Relative Coordinates in Revit
+
+## Overview
+
+When working with vertical face-based families (e.g., wall-mounted fixtures) in Revit floor plans or ceiling plans, you need to transform global coordinates into a wall-relative local coordinate system. This allows you to work with intuitive directions like "along the wall" and "perpendicular to the wall" regardless of the wall's actual orientation in the model.
+
+## The Problem
+
+In a floor plan view:
+- Global X and Y axes are fixed (typically X = East, Y = North)
+- A wall can be at any angle (0°, 45°, 90°, etc.)
+- A fixture on a wall has a position in global coordinates
+- You want to place elements (tags, wires, annotations) relative to the wall, not relative to global axes
+
+For example, "place a tag 8 inches to the right along the wall" should work regardless of whether the wall runs North-South, East-West, or at any other angle.
+
+## The Solution: Wall-Local Coordinate System
+
+Create a local coordinate system where:
+- **Local X axis** = parallel to the wall (along the wall face)
+- **Local Y axis** = perpendicular to the wall (wall normal, pointing outward)
+- **Origin** = fixture location point
+
+### Step 1: Get the Wall Face Normal
+
+The wall normal is the direction perpendicular to the wall surface, pointing outward from the wall face where the fixture is hosted.
+
+```csharp
+private static XYZ GetWallFaceNormal(FamilyInstance fixture)
+{
+    try
+    {
+        Reference hostFaceRef = fixture.HostFace;
+        if (hostFaceRef != null)
+        {
+            Element host = fixture.Host;
+            GeometryObject geomObj = host.GetGeometryObjectFromReference(hostFaceRef);
+
+            if (geomObj is PlanarFace planarFace)
+            {
+                XYZ normal = planarFace.FaceNormal;
+                // Extract horizontal component only (for plan view)
+                // Normalize to get unit vector
+                var horizontal = new XYZ(normal.X, normal.Y, 0);
+                var length = horizontal.GetLength();
+                if (length > 0.001)
+                    return horizontal.Normalize();
+            }
+        }
+    }
+    catch
+    {
+        // Fallback below
+    }
+
+    // Fallback: use fixture's facing orientation
+    XYZ facingOrientation = fixture.FacingOrientation;
+    var facing = new XYZ(facingOrientation.X, facingOrientation.Y, 0);
+    var facingLength = facing.GetLength();
+    return facingLength > 0.001 ? facing.Normalize() : XYZ.BasisY;
+}
+```
+
+### Step 2: Calculate the Wall Parallel Direction
+
+The wall parallel direction is 90° counterclockwise from the wall normal (in plan view):
+
+```csharp
+XYZ wallNormal = GetWallFaceNormal(fixture);
+XYZ wallParallel = new XYZ(-wallNormal.Y, wallNormal.X, 0);
+```
+
+This gives you:
+- `wallNormal` = direction pointing outward from wall (will become local Y)
+- `wallParallel` = direction along the wall (will become local X)
+
+### Step 3: Calculate the Rotation Angle
+
+Determine the angle needed to rotate from global coordinates to wall-local coordinates:
+
+```csharp
+// Wall normal pointing in +Y direction = 0° rotation
+// This formula gives the angle to rotate from global to wall-local
+double wallAngle = Math.Atan2(wallNormal.Y, wallNormal.X) - Math.PI / 2.0;
+```
+
+**Why subtract π/2?**
+- `Math.Atan2(wallNormal.Y, wallNormal.X)` gives the angle of the wall normal from the global +X axis
+- We want local Y to align with the wall normal
+- Subtracting π/2 (90°) accounts for the fact that Y is 90° CCW from X
+
+### Step 4: Create Transform Matrices
+
+Create transforms to convert between global and wall-local coordinates:
+
+```csharp
+XYZ fixturePoint = ((LocationPoint)fixture.Location).Point;
+
+// Global to wall-local transform (rotate by negative angle around fixture point)
+Transform globalToWallLocal = Transform.CreateRotationAtPoint(XYZ.BasisZ, -wallAngle, fixturePoint);
+
+// Wall-local to global transform (inverse)
+Transform wallLocalToGlobal = globalToWallLocal.Inverse;
+```
+
+### Step 5: Transform Points
+
+Convert any point between coordinate systems:
+
+```csharp
+// Global point to wall-local
+XYZ globalPoint = someElement.Location;
+XYZ localPoint = globalToWallLocal.OfPoint(globalPoint);
+
+// Wall-local point to global
+XYZ newLocalPoint = new XYZ(localX, localY, localZ);
+XYZ newGlobalPoint = wallLocalToGlobal.OfPoint(newLocalPoint);
+```
+
+## Working in Wall-Local Coordinates
+
+Once transformed, you can work intuitively:
+
+| Local Coordinate | Meaning |
+|------------------|---------|
+| +X | Right along the wall |
+| -X | Left along the wall |
+| +Y | Outward from wall (into room) |
+| -Y | Toward wall (into wall) |
+| Z | Unchanged (elevation) |
+
+### Example: Place a Tag Along the Wall
+
+```csharp
+// Get fixture position in wall-local coordinates
+XYZ fixtureLocal = globalToWallLocal.OfPoint(fixturePoint);
+
+// Calculate new tag position: 8" to the right along wall, 5" outward from wall
+double offsetAlongWall = 8.0 / 12.0;  // 8 inches in feet
+double offsetFromWall = 5.0 / 12.0;   // 5 inches in feet
+
+XYZ newTagLocal = new XYZ(
+    fixtureLocal.X + offsetAlongWall,  // Along wall
+    fixtureLocal.Y + offsetFromWall,   // Perpendicular to wall
+    fixtureLocal.Z                      // Same elevation
+);
+
+// Convert back to global coordinates for Revit API
+XYZ newTagGlobal = wallLocalToGlobal.OfPoint(newTagLocal);
+```
+
+### Example: Determine Which Side of Fixture a Point Is On
+
+```csharp
+XYZ clickPoint = uidoc.Selection.PickPoint("Select a point");
+XYZ clickLocal = globalToWallLocal.OfPoint(clickPoint);
+XYZ fixtureLocal = globalToWallLocal.OfPoint(fixturePoint);
+
+// Check position relative to fixture
+if (clickLocal.X > fixtureLocal.X)
+    // Point is to the RIGHT along the wall
+else
+    // Point is to the LEFT along the wall
+
+if (clickLocal.Y > fixtureLocal.Y)
+    // Point is OUTWARD from wall (away from wall)
+else
+    // Point is TOWARD wall
+```
+
+## Complete Example Class
+
+```csharp
+public class WallLocalCoordinateSystem
+{
+    public XYZ Origin { get; }
+    public XYZ WallNormal { get; }
+    public XYZ WallParallel { get; }
+    public double WallAngle { get; }
+    public Transform GlobalToLocal { get; }
+    public Transform LocalToGlobal { get; }
+
+    public WallLocalCoordinateSystem(FamilyInstance fixture)
+    {
+        Origin = ((LocationPoint)fixture.Location).Point;
+        
+        WallNormal = GetWallFaceNormal(fixture);
+        WallParallel = new XYZ(-WallNormal.Y, WallNormal.X, 0);
+        
+        WallAngle = Math.Atan2(WallNormal.Y, WallNormal.X) - Math.PI / 2.0;
+        
+        GlobalToLocal = Transform.CreateRotationAtPoint(XYZ.BasisZ, -WallAngle, Origin);
+        LocalToGlobal = GlobalToLocal.Inverse;
+    }
+
+    public XYZ ToLocal(XYZ globalPoint) => GlobalToLocal.OfPoint(globalPoint);
+    public XYZ ToGlobal(XYZ localPoint) => LocalToGlobal.OfPoint(localPoint);
+
+    private static XYZ GetWallFaceNormal(FamilyInstance fixture)
+    {
+        // ... (implementation as shown above)
+    }
+}
+
+// Usage:
+var coords = new WallLocalCoordinateSystem(fixture);
+XYZ localPos = coords.ToLocal(someGlobalPoint);
+XYZ globalPos = coords.ToGlobal(someLocalPoint);
+```
+
+## Key Points to Remember
+
+1. **Wall normal** comes from the host face geometry (`fixture.HostFace`)
+2. **Wall parallel** is 90° CCW from normal: `(-normal.Y, normal.X, 0)`
+3. **Rotation angle** accounts for aligning local Y with wall normal
+4. **Transform origin** should be at the fixture location for intuitive offsets
+5. **Always normalize** direction vectors to ensure consistent calculations
+6. **Z coordinate** typically remains unchanged in plan view operations
+
+## Common Pitfalls
+
+- **Forgetting to normalize**: Direction vectors must be unit length for consistent offsets
+- **Wrong rotation direction**: Use negative angle for global-to-local transform
+- **Not handling fallbacks**: Some fixtures may not have accessible host face geometry
+- **Ignoring Z component**: For plan views, extract only horizontal (X, Y) components of the normal

@@ -1,0 +1,89 @@
+AI PROMPT: Driver Selection from Fixture Segment Wattages (Linear Power)
+
+You are tasked with selecting LED drivers for a given electrical circuit.
+Each segment corresponds to one lighting fixture on that circuit.
+Each fixture has a value for the instance parameter named Linear Power, which provides the wattage for that fixture.
+Follow the rules below exactly. Do not infer or invent additional constraints.
+
+1. Available Drivers
+Drivers come in the following configurations:
+1×30W → 1 sub-driver, max 30W
+1×60W → 1 sub-driver, max 60W
+1×96W → 1 sub-driver, max 96W
+2×96W → 2 independent sub-drivers, each max 96W
+3×96W → 3 independent sub-drivers, each max 96W
+
+Rules:
+Each sub-driver is electrically independent
+No sub-driver may exceed its individual wattage limit
+Power cannot be shared between sub-drivers
+
+2. Input Definition
+Input is the list of fixtures connected to the circuit.
+For each fixture (segment), read the Linear Power parameter from the family instance.
+All calculations are based solely on these Linear Power values.
+
+3. Segment Auto-Splitting Rule
+If a fixture’s Linear Power exceeds 96W, it must be split into equal parts:
+If Linear Power ≤ 96W, keep segment unchanged
+If Linear Power > 96W:
+Split the segment into 2 equal wattage segments
+Repeat recursively until all resulting segments are ≤96W
+
+Notes:
+All splits must be equal in wattage
+There is no limit to the number of splits
+After splitting, all resulting segments are final and indivisible
+
+4. Optimization Objectives
+Minimize the number of physical drivers
+If more than one driver is required, all drivers must be the same type
+If multiple driver types yield the same number of drivers, choose the type that minimizes total sub-drivers
+Sub-drivers may be partially loaded
+Excess unused sub-drivers are allowed but should be minimized
+
+5. Sub-driver Packing Logic
+Pack fixture segments into sub-drivers using First-Fit Decreasing:
+Sort all fixture segments by Linear Power in descending order
+Place each segment into the first sub-driver where:
+currentLoad + LinearPower ≤ 96W
+
+If no existing sub-driver can accept the segment, create a new sub-driver
+The result is the total number of sub-drivers required (Nsubs).
+
+6. Homogeneous Driver Selection Logic
+If Nsubs = 1:
+Choose the smallest valid single driver:
+≤30W → 1×30W
+≤60W → 1×60W
+≤96W → 1×96W
+If Nsubs > 1:
+All drivers must be the same type
+Evaluate each allowed driver type:
+Driver Type	Sub-drivers per Driver
+1×96W	1
+2×96W	2
+3×96W	3
+For each type:
+driversNeeded = CEILING(Nsubs / subsPerDriver)
+totalSubsProvided = driversNeeded × subsPerDriver
+
+Choose the driver type that:
+Produces the fewest drivers
+If tied → produces the fewest total sub-drivers
+If still tied → prefer the smaller driver type
+
+7. Expected Output
+Return:
+Number of drivers
+Driver type selected
+Sub-driver count per driver
+Sub-driver loads
+Fixture-to-sub-driver assignment
+Any segments that were split (with final wattages)
+
+Ensure:
+No sub-driver exceeds 96W
+All drivers are the same type if more than one driver is used
+Driver count is minimized
+Sub-driver waste is minimized

@@ -1,0 +1,38 @@
+TurboSuite Development
+
+========== COMMANDS ==========
+- TurboBubble
+	• Tag fixtures with switchleg bubble
+	- Update switchleg tag selection based on Dimming Protocol
+	- Fix Switchleg Remote to work with rotated point-based RPS fixtures
+	- Tag for Electrical Fixtures
+	- Fix for 2D downlights
+- TurboTag
+	• Automatically tag and place fixture types
+	- Tag for Lighting Devices (Switch ID tag)
+- TurboWire
+	• Automatically create wire objects between fixtures
+	- Add support for Electrical Fixtures (receptacles)
+	- Update wire types based on Dimming Protocol
+	- Fix for 2D downlights / 2D families with arrows
+- TurboCompact
+	• Simple command script targetting Revit 2022 that compacts familes when saving
+
+========== UTILITIES ==========
+- TurboDriver
+	• Generate driver suggestions
+	• Make selections for driver types
+	- Build/Re-arrange and tag driver box
+- TurboZones
+	• Update load names using linked model room names
+	• Build new window for full utility
+	- Build suggestions for required panels/modules
+- TurboNumber
+	• Review and arrange zones for all panels (circuit number)
+		- Force two-digit (01-09)
+		• See if the API has access to moving Circuits in the panels
+	• Automatically number/re-number keypads (switch ID)
+	• Automatically number/re-number drivers (switch ID)
+
+Build Revit Debugging Tool
+

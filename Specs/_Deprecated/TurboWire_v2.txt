@@ -1,0 +1,595 @@
+using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Selection;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+[Transaction(TransactionMode.Manual)]
+public class TurboWire : IExternalCommand
+{
+    private const double ArcAngleDegrees = 24.0;
+    private const double MinDistanceTolerance = 1e-6;
+    private const string WallSconceFamilyName = "AL_Decorative_Wall Sconce (Hosted)";
+
+    // Wall sconce spline offsets (in feet) - baseline for 4' apart
+    private const double BaselineDistance = 4.0;                      // 4' baseline
+    private const double SplineOffsetAlongWall = 6.0 / 12.0;          // 6"
+    private const double SplineOffsetNearWall = 1.5 / 12.0;           // 1.5"
+    private const double SplineOffsetMidFromWall = 6.5 / 12.0;        // 6.5"
+    private const double SplineConnectorOffset = 2.5 / 12.0;          // 2.5" (not scaled)
+
+    public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+    {
+        UIDocument uiDoc = commandData.Application.ActiveUIDocument;
+        Document doc = uiDoc.Document;
+
+        try
+        {
+            // Check for pre-selected lighting fixtures
+            List<FamilyInstance> preSelectedFixtures = GetPreSelectedLightingFixtures(uiDoc);
+
+            if (preSelectedFixtures.Count >= 2)
+            {
+                // Multiple fixtures pre-selected: wire them by proximity with tag-aware arc direction
+                return WireMultipleFixtures(doc, preSelectedFixtures, ref message);
+            }
+            else
+            {
+                // 0 or 1 fixtures selected: use manual pick selection with default arc direction
+                var (fixture1, fixture2) = SelectLightingFixtures(uiDoc);
+                return WireTwoFixtures(doc, fixture1, fixture2, useTagAwareArc: false, ref message);
+            }
+        }
+        catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+        {
+            return Result.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            return Result.Failed;
+        }
+    }
+
+    private static List<FamilyInstance> GetPreSelectedLightingFixtures(UIDocument uiDoc)
+    {
+        Document doc = uiDoc.Document;
+        ICollection<ElementId> selectedIds = uiDoc.Selection.GetElementIds();
+
+        return selectedIds
+            .Select(id => doc.GetElement(id))
+            .Where(e => e is FamilyInstance fi &&
+                        fi.Category?.Id.IntegerValue == (int)BuiltInCategory.OST_LightingFixtures)
+            .Cast<FamilyInstance>()
+            .ToList();
+    }
+
+    private static Result WireMultipleFixtures(Document doc, List<FamilyInstance> fixtures, ref string message)
+    {
+        // Sort fixtures by proximity to create a chain
+        List<FamilyInstance> orderedFixtures = OrderFixturesByProximity(fixtures);
+
+        // Wire each adjacent pair
+        for (int i = 0; i < orderedFixtures.Count - 1; i++)
+        {
+            FamilyInstance fixture1 = orderedFixtures[i];
+            FamilyInstance fixture2 = orderedFixtures[i + 1];
+
+            Result result = WireTwoFixtures(doc, fixture1, fixture2, useTagAwareArc: true, ref message);
+            if (result != Result.Succeeded)
+            {
+                return result;
+            }
+        }
+
+        return Result.Succeeded;
+    }
+
+    private static List<FamilyInstance> OrderFixturesByProximity(List<FamilyInstance> fixtures)
+    {
+        if (fixtures.Count <= 2)
+            return fixtures;
+
+        List<FamilyInstance> ordered = new List<FamilyInstance>();
+        HashSet<ElementId> remaining = new HashSet<ElementId>(fixtures.Select(f => f.Id));
+
+        // Start with the first fixture
+        FamilyInstance current = fixtures[0];
+        ordered.Add(current);
+        remaining.Remove(current.Id);
+
+        // Iteratively find the closest remaining fixture
+        while (remaining.Count > 0)
+        {
+            XYZ currentLocation = ((LocationPoint)current.Location).Point;
+            FamilyInstance closest = null;
+            double closestDistance = double.MaxValue;
+
+            foreach (FamilyInstance fixture in fixtures)
+            {
+                if (!remaining.Contains(fixture.Id))
+                    continue;
+
+                XYZ fixtureLocation = ((LocationPoint)fixture.Location).Point;
+                double distance = currentLocation.DistanceTo(fixtureLocation);
+
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closest = fixture;
+                }
+            }
+
+            if (closest != null)
+            {
+                ordered.Add(closest);
+                remaining.Remove(closest.Id);
+                current = closest;
+            }
+        }
+
+        return ordered;
+    }
+
+    private static Result WireTwoFixtures(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, bool useTagAwareArc, ref string message)
+    {
+        Connector c1 = GetElectricalConnector(fixture1);
+        Connector c2 = GetElectricalConnector(fixture2);
+
+        if (c1 == null || c2 == null)
+        {
+            message = "Electrical connectors not found.";
+            return Result.Failed;
+        }
+
+        if (c1.Origin.DistanceTo(c2.Origin) < MinDistanceTolerance)
+        {
+            message = "Fixtures are too close together.";
+            return Result.Failed;
+        }
+
+        // Delete any existing wires connected between both fixtures
+        DeleteWiresBetweenFixtures(doc, c1, c2);
+
+        // Check if both fixtures are wall sconces with same orientation
+        bool isWallSconceCondition = IsWallSconce(fixture1) && IsWallSconce(fixture2);
+        IList<XYZ> wirePoints;
+        WiringType wiringType;
+
+        if (isWallSconceCondition)
+        {
+            XYZ wallNormal1 = GetWallFaceNormal(fixture1);
+            XYZ wallNormal2 = GetWallFaceNormal(fixture2);
+
+            // Check if wall normals are parallel (same orientation)
+            double dotProduct = wallNormal1.DotProduct(wallNormal2);
+            bool sameOrientation = Math.Abs(Math.Abs(dotProduct) - 1.0) < 0.001;
+
+            if (sameOrientation)
+            {
+                double distance = c1.Origin.DistanceTo(c2.Origin);
+                double familyScaleFactor = GetFamilyScaleFactor(fixture1);
+                bool facingSameDirection = dotProduct > 0;
+
+                wirePoints = CalculateWallSconceSplinePoints(
+                    fixture1, fixture2,
+                    c1.Origin, c2.Origin,
+                    distance, familyScaleFactor,
+                    facingSameDirection);
+                wiringType = WiringType.Arc;
+                return CreateWire(doc, wirePoints, wiringType, c1, c2,
+                    wallNormal1, wallNormal2,
+                    familyScaleFactor, facingSameDirection, ref message);
+            }
+        }
+
+        // Default: use 3-vertex arc wire
+        // Use tag-aware direction only for multi-select, otherwise default to positive
+        int arcDirection = useTagAwareArc
+            ? GetArcDirectionFromTags(doc, fixture1, fixture2, c1.Origin, c2.Origin)
+            : 1;
+        wirePoints = CalculateArcWirePoints(c1.Origin, c2.Origin, ArcAngleDegrees, arcDirection);
+        wiringType = WiringType.Arc;
+        return CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 1.0, true, ref message);
+    }
+
+    private static int GetArcDirectionFromTags(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, XYZ p1, XYZ p2)
+    {
+        // Get chord direction and perpendicular
+        XYZ p1Flat = new XYZ(p1.X, p1.Y, 0);
+        XYZ p2Flat = new XYZ(p2.X, p2.Y, 0);
+        XYZ midpoint = (p1Flat + p2Flat) * 0.5;
+        XYZ chordDir = (p2Flat - p1Flat).Normalize();
+        XYZ perpDir = XYZ.BasisZ.CrossProduct(chordDir).Normalize();
+
+        // Check for tags on either fixture
+        XYZ tagOffset = GetTagOffsetDirection(doc, fixture1);
+        if (tagOffset == null)
+        {
+            tagOffset = GetTagOffsetDirection(doc, fixture2);
+        }
+
+        if (tagOffset != null)
+        {
+            // Determine which side of the chord the tag is on
+            double dot = tagOffset.DotProduct(perpDir);
+            return dot >= 0 ? 1 : -1;
+        }
+
+        // Default to positive direction
+        return 1;
+    }
+
+    private static XYZ GetTagOffsetDirection(Document doc, FamilyInstance fixture)
+    {
+        // Find tags associated with this fixture
+        ElementId fixtureId = fixture.Id;
+        XYZ fixtureLocation = ((LocationPoint)fixture.Location).Point;
+
+        FilteredElementCollector tagCollector = new FilteredElementCollector(doc)
+            .OfClass(typeof(IndependentTag));
+
+        foreach (IndependentTag tag in tagCollector)
+        {
+            // Check if this tag is tagging our fixture
+            ICollection<Element> taggedElements = tag.GetTaggedLocalElements();
+            bool tagsThisFixture = taggedElements.Any(e => e.Id == fixtureId);
+
+            if (tagsThisFixture)
+            {
+                XYZ tagHead = tag.TagHeadPosition;
+                if (tagHead != null)
+                {
+                    XYZ offset = tagHead - fixtureLocation;
+                    XYZ offsetFlat = new XYZ(offset.X, offset.Y, 0);
+                    if (offsetFlat.GetLength() > 0.001)
+                    {
+                        return offsetFlat.Normalize();
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsWallSconce(FamilyInstance fixture)
+    {
+        return fixture?.Symbol?.Family?.Name == WallSconceFamilyName;
+    }
+
+    private static XYZ GetWallFaceNormal(FamilyInstance fixture)
+    {
+        try
+        {
+            Reference hostFaceRef = fixture.HostFace;
+            if (hostFaceRef != null)
+            {
+                Element host = fixture.Host;
+                XYZ faceNormal = null;
+
+                if (host is RevitLinkInstance linkInstance)
+                {
+                    // Linked model host
+                    Document linkedDoc = linkInstance.GetLinkDocument();
+                    if (linkedDoc != null)
+                    {
+                        GeometryObject geomObj = linkedDoc.GetElement(hostFaceRef.LinkedElementId)
+                            ?.GetGeometryObjectFromReference(hostFaceRef.CreateReferenceInLink());
+
+                        if (geomObj is PlanarFace planarFace)
+                        {
+                            // Transform normal from link coordinates to host coordinates
+                            Transform linkTransform = linkInstance.GetTotalTransform();
+                            faceNormal = linkTransform.OfVector(planarFace.FaceNormal);
+                        }
+                    }
+                }
+                else
+                {
+                    // Local host
+                    GeometryObject geomObj = host.GetGeometryObjectFromReference(hostFaceRef);
+
+                    if (geomObj is PlanarFace planarFace)
+                    {
+                        faceNormal = planarFace.FaceNormal;
+                    }
+                }
+
+                if (faceNormal != null)
+                {
+                    // Extract horizontal component only (for plan view)
+                    var horizontal = new XYZ(faceNormal.X, faceNormal.Y, 0);
+                    double length = horizontal.GetLength();
+                    if (length > 0.001)
+                        return horizontal.Normalize();
+                }
+            }
+        }
+        catch
+        {
+            // Fallback below
+        }
+
+        // Fallback: use fixture's facing orientation
+        XYZ facingOrientation = fixture.FacingOrientation;
+        var facing = new XYZ(facingOrientation.X, facingOrientation.Y, 0);
+        double facingLength = facing.GetLength();
+        return facingLength > 0.001 ? facing.Normalize() : XYZ.BasisY;
+    }
+
+    private static double GetFamilyScaleFactor(FamilyInstance fixture)
+    {
+        Parameter scaleParam = fixture.LookupParameter("Scale Factor");
+        if (scaleParam != null && scaleParam.HasValue)
+        {
+            return scaleParam.AsDouble();
+        }
+        return 1.0;  // Default to 1.0 if parameter not found
+    }
+
+    private static (FamilyInstance, FamilyInstance) SelectLightingFixtures(UIDocument uiDoc)
+    {
+        var filter = new LightingFixtureSelectionFilter();
+
+        Reference r1 = uiDoc.Selection.PickObject(
+            ObjectType.Element, filter, "Select FIRST lighting fixture");
+
+        Reference r2 = uiDoc.Selection.PickObject(
+            ObjectType.Element, filter, "Select SECOND lighting fixture");
+
+        return (
+            uiDoc.Document.GetElement(r1) as FamilyInstance,
+            uiDoc.Document.GetElement(r2) as FamilyInstance
+        );
+    }
+
+    private static IList<XYZ> CalculateWallSconceSplinePoints(
+        FamilyInstance fixture1, FamilyInstance fixture2,
+        XYZ p1, XYZ p2,
+        double distance, double familyScaleFactor,
+        bool facingSameDirection)
+    {
+        // Calculate scale factor based on actual distance vs baseline (4')
+        double scaleFactor = distance / BaselineDistance;
+
+        // Base offsets at 4' baseline
+        // Scale baseline relative to family's Scale Factor parameter
+        double baselineFromWall = SplineConnectorOffset * familyScaleFactor;  // 2.5" * family scale
+
+        // Calculate scaled offsets relative to dynamic baseline
+        double nearWallDelta = baselineFromWall - (SplineOffsetNearWall * familyScaleFactor);
+        double offsetNearWall = baselineFromWall - (nearWallDelta * scaleFactor);
+
+        double midWallDelta = (SplineOffsetMidFromWall * familyScaleFactor) - baselineFromWall;
+        double offsetMidFromWall = baselineFromWall + (midWallDelta * scaleFactor);
+
+        // Along wall offset scales with both factors
+        double offsetAlongWall = SplineOffsetAlongWall * familyScaleFactor * scaleFactor;
+
+        // Create wall-local coordinate systems for both fixtures
+        var wallCoords1 = new WallLocalCoordinateSystem(fixture1);
+        var wallCoords2 = new WallLocalCoordinateSystem(fixture2);
+
+        // Transform connector points to wall-local coordinates
+        XYZ p1Local = wallCoords1.ToLocal(p1);
+        XYZ p2Local = wallCoords1.ToLocal(p2);
+
+        // Determine direction along wall (positive or negative X in local coords)
+        double direction = Math.Sign(p2Local.X - p1Local.X);
+        if (direction == 0) direction = 1;
+
+        // Calculate midpoint X in local coordinates
+        double midX = (p1Local.X + p2Local.X) / 2.0;
+
+        // Build 5 vertices
+        // Vertex 2: offset from fixture1's wall
+        XYZ v2Local = new XYZ(
+            p1Local.X + direction * offsetAlongWall,
+            p1Local.Y + offsetNearWall,
+            p1Local.Z);
+
+        XYZ v3, v4Global;
+
+        if (facingSameDirection)
+        {
+            // Same direction: all vertices use fixture1's coordinate system
+            XYZ v3Local = new XYZ(
+                midX,
+                p1Local.Y + offsetMidFromWall,
+                p1Local.Z);
+
+            XYZ v4Local = new XYZ(
+                p2Local.X - direction * offsetAlongWall,
+                p2Local.Y + offsetNearWall,
+                p2Local.Z);
+
+            v3 = wallCoords1.ToGlobal(v3Local);
+            v4Global = wallCoords1.ToGlobal(v4Local);
+        }
+        else
+        {
+            // Opposite directions: V4 uses fixture2's coordinate system
+            XYZ p2Local2 = wallCoords2.ToLocal(p2);
+            XYZ p1Local2 = wallCoords2.ToLocal(p1);
+
+            double direction2 = Math.Sign(p1Local2.X - p2Local2.X);
+            if (direction2 == 0) direction2 = 1;
+
+            // Vertex 3: midpoint with averaged offset from both walls
+            XYZ midGlobal = (p1 + p2) * 0.5;
+            v3 = midGlobal + wallCoords1.WallNormal * offsetMidFromWall * 0.5
+                          + wallCoords2.WallNormal * offsetMidFromWall * 0.5;
+            v3 = new XYZ(v3.X, v3.Y, (p1.Z + p2.Z) / 2.0);
+
+            // Vertex 4: offset from fixture2's wall
+            XYZ v4Local2 = new XYZ(
+                p2Local2.X + direction2 * offsetAlongWall,
+                p2Local2.Y + offsetNearWall,
+                p2Local2.Z);
+
+            v4Global = wallCoords2.ToGlobal(v4Local2);
+        }
+
+        return new List<XYZ>
+        {
+            p1,
+            wallCoords1.ToGlobal(v2Local),
+            v3,
+            v4Global,
+            p2
+        };
+    }
+
+    private static IList<XYZ> CalculateArcWirePoints(XYZ p1, XYZ p2, double angleDeg, int arcDirection = 1)
+    {
+        // Project to XY plane for 2D wire geometry
+        XYZ p1Flat = new XYZ(p1.X, p1.Y, 0);
+        XYZ p2Flat = new XYZ(p2.X, p2.Y, 0);
+
+        XYZ midpoint = (p1Flat + p2Flat) * 0.5;
+        XYZ chordDirection = (p2Flat - p1Flat).Normalize();
+        XYZ perpendicular = XYZ.BasisZ.CrossProduct(chordDirection).Normalize();
+
+        double angleRad = angleDeg * Math.PI / 180.0;
+        double chordLength = p1Flat.DistanceTo(p2Flat);
+        double arcHeight = (chordLength / 2.0) * Math.Tan(angleRad / 2.0);
+
+        // Apply arc direction (1 = positive/default, -1 = flipped)
+        XYZ vertexXY = midpoint + perpendicular * arcHeight * arcDirection;
+        double vertexZ = (p1.Z + p2.Z) * 0.5;
+
+        return new List<XYZ>
+        {
+            p1,
+            new XYZ(vertexXY.X, vertexXY.Y, vertexZ),
+            p2
+        };
+    }
+
+    private static Result CreateWire(Document doc, IList<XYZ> points, WiringType wiringType,
+        Connector c1, Connector c2, XYZ wallNormal1, XYZ wallNormal2,
+        double familyScaleFactor, bool facingSameDirection, ref string message)
+    {
+        WireType wireType = new FilteredElementCollector(doc)
+            .OfClass(typeof(WireType))
+            .Cast<WireType>()
+            .FirstOrDefault();
+
+        if (wireType == null)
+        {
+            message = "No WireType found in project.";
+            return Result.Failed;
+        }
+
+        using (Transaction t = new Transaction(doc, "Create Wire"))
+        {
+            t.Start();
+
+            Wire wire = Wire.Create(doc, wireType.Id, doc.ActiveView.Id, wiringType, points, c1, c2);
+
+            // Set wire offset ends for wall sconces
+            if (wallNormal1 != null)
+            {
+                double baseOffset = SplineConnectorOffset * familyScaleFactor;
+                double initialOffset = 0.5 / 12.0;
+                int vertexCount = wire.NumberOfVertices;
+
+                // Move start vertex using fixture1's wall normal
+                wire.SetVertex(0, c1.Origin + wallNormal1 * initialOffset);
+                wire.SetVertex(0, c1.Origin + wallNormal1 * baseOffset);
+
+                // Move end vertex using fixture2's wall normal (or fixture1's if same direction)
+                XYZ endNormal = facingSameDirection ? wallNormal1 : wallNormal2;
+                wire.SetVertex(vertexCount - 1, c2.Origin + endNormal * initialOffset);
+                wire.SetVertex(vertexCount - 1, c2.Origin + endNormal * baseOffset);
+            }
+
+            t.Commit();
+        }
+
+        return Result.Succeeded;
+    }
+
+    private static Connector GetElectricalConnector(FamilyInstance fi)
+    {
+        return fi?.MEPModel?.ConnectorManager?.Connectors
+            .Cast<Connector>()
+            .FirstOrDefault(c =>
+                c.Domain == Domain.DomainElectrical &&
+                c.ConnectorType == ConnectorType.End);
+    }
+
+    private static void DeleteWiresBetweenFixtures(Document doc, Connector c1, Connector c2)
+    {
+        // Get all wires connected to connector 1
+        HashSet<ElementId> wiresAtC1 = new HashSet<ElementId>();
+        foreach (Connector connected in c1.AllRefs)
+        {
+            if (connected.Owner is Wire wire)
+            {
+                wiresAtC1.Add(wire.Id);
+            }
+        }
+
+        // Find wires that are also connected to connector 2
+        List<ElementId> wiresToDelete = new List<ElementId>();
+        foreach (Connector connected in c2.AllRefs)
+        {
+            if (connected.Owner is Wire wire && wiresAtC1.Contains(wire.Id))
+            {
+                wiresToDelete.Add(wire.Id);
+            }
+        }
+
+        // Delete the wires connected to both fixtures
+        if (wiresToDelete.Count > 0)
+        {
+            using (Transaction t = new Transaction(doc, "Delete Existing Wires"))
+            {
+                t.Start();
+                doc.Delete(wiresToDelete);
+                t.Commit();
+            }
+        }
+    }
+
+    private class LightingFixtureSelectionFilter : ISelectionFilter
+    {
+        public bool AllowElement(Element elem)
+        {
+            return elem.Category?.Id.IntegerValue == (int)BuiltInCategory.OST_LightingFixtures;
+        }
+
+        public bool AllowReference(Reference reference, XYZ position) => false;
+    }
+
+    private class WallLocalCoordinateSystem
+    {
+        public XYZ Origin { get; }
+        public XYZ WallNormal { get; }
+        public XYZ WallParallel { get; }
+        public double WallAngle { get; }
+        public Transform GlobalToLocal { get; }
+        public Transform LocalToGlobal { get; }
+
+        public WallLocalCoordinateSystem(FamilyInstance fixture)
+        {
+            Origin = ((LocationPoint)fixture.Location).Point;
+
+            WallNormal = TurboWire.GetWallFaceNormal(fixture);
+            WallParallel = new XYZ(-WallNormal.Y, WallNormal.X, 0);
+
+            WallAngle = Math.Atan2(WallNormal.Y, WallNormal.X) - Math.PI / 2.0;
+
+            GlobalToLocal = Transform.CreateRotationAtPoint(XYZ.BasisZ, -WallAngle, Origin);
+            LocalToGlobal = GlobalToLocal.Inverse;
+        }
+
+        public XYZ ToLocal(XYZ globalPoint) => GlobalToLocal.OfPoint(globalPoint);
+        public XYZ ToGlobal(XYZ localPoint) => LocalToGlobal.OfPoint(localPoint);
+    }
+}

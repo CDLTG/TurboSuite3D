@@ -1,0 +1,612 @@
+<Window
+    x:Class="TurboSuite.Zones.Views.TurboZonesWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:TurboSuite.Zones.Views"
+    Title="TurboZones"
+    Height="960" Width="1050"
+    MinHeight="450" MinWidth="600"
+    WindowStartupLocation="CenterScreen"
+    FontFamily="Segoe UI" FontSize="11"
+    KeyDown="Window_KeyDown">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <local:DimmingTypeToColorConverter x:Key="DimmingTypeToColor"/>
+        <local:EmptySlotsToVisibilityConverter x:Key="EmptySlotsToVisibility"/>
+        <local:IntToRangeConverter x:Key="IntToRange"/>
+        <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <local:PercentToWidthConverter x:Key="PercentToWidth"/>
+        <local:InverseBoolConverter x:Key="InverseBool"/>
+        <local:BoolToRedForegroundConverter x:Key="BoolToRedForeground"/>
+
+        <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
+        <SolidColorBrush x:Key="ContentBgBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
+        <SolidColorBrush x:Key="SeparatorBrush" Color="#CCCCCC"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1A"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#555555"/>
+        <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
+        <SolidColorBrush x:Key="ButtonBorderBrush" Color="#ACACAC"/>
+        <SolidColorBrush x:Key="EmptySlotBrush" Color="#F0F0F0"/>
+        <SolidColorBrush x:Key="EmptySlotBorderBrush" Color="#BBBBBB"/>
+
+        <!-- Load Names tab: Source zone (read-only reference columns) -->
+        <Style x:Key="SourceCellStyle" TargetType="DataGridCell">
+            <Setter Property="Background" Value="#F5F5F5"/>
+            <Setter Property="Foreground" Value="#666666"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <!-- Load Names tab: Action zone (editable input columns) -->
+        <Style x:Key="ActionEditableCellStyle" TargetType="DataGridCell">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <!-- Load Names tab: Action zone first column (left border separator) -->
+        <Style x:Key="ActionFirstCellStyle" TargetType="DataGridCell">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#B0BED0"/>
+            <Setter Property="BorderThickness" Value="2,0,0,0"/>
+        </Style>
+
+        <!-- Load Names tab: Action zone with subtle left separator -->
+        <Style x:Key="ActionSeparatorCellStyle" TargetType="DataGridCell">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#D8D8D8"/>
+            <Setter Property="BorderThickness" Value="1,0,0,0"/>
+        </Style>
+
+        <!-- Load Names tab: Result column -->
+        <Style x:Key="ActionResultCellStyle" TargetType="DataGridCell">
+            <Setter Property="Background" Value="#E8EEF7"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFallbackLabel}" Value="True">
+                    <Setter Property="Foreground" Value="#993333"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Load Names tab: Action zone column headers -->
+        <Style x:Key="ActionHeaderStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#D6E2F0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="4,3"/>
+        </Style>
+
+        <Style x:Key="RevitButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource ButtonBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ButtonBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="16,4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#E0E0E0"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#888888"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#D0D0D0"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#666666"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Background" Value="#F5F5F5"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#D9D9D9"/>
+                                <Setter Property="Foreground" Value="#AAAAAA"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource ContentBgBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Blue header bar -->
+        <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
+            <TextBlock Text="TurboZones - Zone &amp; Panel Manager"
+                       Foreground="White" FontSize="15" FontWeight="SemiBold"/>
+        </Border>
+
+        <!-- Tab content -->
+        <TabControl Grid.Row="1" Margin="8,6">
+
+            <!-- Load Names Tab -->
+            <TabItem Header="{Binding LoadNameTab.TabHeader}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Circuits with load name preview -->
+                    <DataGrid x:Name="LoadNamesGrid"
+                              Grid.Row="0"
+                              ItemsSource="{Binding LoadNameTab.Circuits}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserReorderColumns="False"
+                              SelectionMode="Single"
+                              SelectionUnit="Cell"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              HorizontalGridLinesBrush="{StaticResource SeparatorBrush}"
+                              BorderThickness="1"
+                              BorderBrush="{StaticResource SeparatorBrush}"
+                              RowHeaderWidth="0"
+                              CurrentCellChanged="LoadNamesGrid_CurrentCellChanged"
+                              PreviewKeyDown="LoadNamesGrid_PreviewKeyDown"
+                              Margin="4,6,4,4">
+                        <DataGrid.Columns>
+                            <!-- Source zone: read-only reference data -->
+                            <DataGridTextColumn Header="Room" Binding="{Binding RoomName}" Width="90" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <DataGridTextColumn Header="Fixture Comments" Binding="{Binding FixtureComments}" Width="119" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <DataGridTextColumn Header="Load Classification" Binding="{Binding LoadClassificationName}" Width="110" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <DataGridTextColumn Header="Current Load Name" Binding="{Binding CurrentLoadName}" Width="135" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <DataGridTextColumn Header="Circuit #" Binding="{Binding CircuitNumber}" Width="70" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <!-- Action zone: user inputs + computed result -->
+                            <DataGridTextColumn Header="Room Override" Binding="{Binding RoomOverride, UpdateSourceTrigger=LostFocus}" Width="90" CellStyle="{StaticResource ActionFirstCellStyle}" HeaderStyle="{StaticResource ActionHeaderStyle}"/>
+                            <DataGridTextColumn Header="Circuit Comments" Binding="{Binding CircuitComments, UpdateSourceTrigger=LostFocus}" Width="128" CellStyle="{StaticResource ActionSeparatorCellStyle}" HeaderStyle="{StaticResource ActionHeaderStyle}"/>
+                            <DataGridTextColumn Header="Updated Load Name" Binding="{Binding UpdatedLoadName}" Width="*" IsReadOnly="True" CellStyle="{StaticResource ActionResultCellStyle}" HeaderStyle="{StaticResource ActionHeaderStyle}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Footer with Apply button -->
+                    <Border Grid.Row="1" Background="{StaticResource FooterBgBrush}"
+                            BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0"
+                            Padding="8,6">
+                        <DockPanel>
+                            <Button Content="Apply Load Names"
+                                    Command="{Binding LoadNameTab.ApplyCommand}"
+                                    Style="{StaticResource RevitButtonStyle}" Height="28"
+                                    DockPanel.Dock="Right"/>
+                            <TextBlock VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}">
+                                <Run Text="{Binding LoadNameTab.Circuits.Count, Mode=OneWay}"/>
+                                <Run Text=" electrical circuits"/>
+                            </TextBlock>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Panel Breakdown Tab -->
+            <TabItem Header="{Binding PanelTab.TabHeader}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Top bar: Brand selector + Optimize button -->
+                    <DockPanel Grid.Row="0" Margin="4,6,4,4">
+                        <Button Content="Optimize"
+                                Command="{Binding PanelTab.OptimizeCommand}"
+                                IsEnabled="{Binding PanelTab.ShowPlaceholder, Converter={StaticResource InverseBool}}"
+                                Style="{StaticResource RevitButtonStyle}"
+                                Height="24" Padding="12,0"
+                                DockPanel.Dock="Right"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Brand:" VerticalAlignment="Center" Margin="0,0,4,0"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <ComboBox ItemsSource="{Binding PanelTab.BrandNames}"
+                                      SelectedItem="{Binding PanelTab.SelectedBrandName}"
+                                      MinWidth="100" Height="24" Margin="0,0,12,0"/>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!-- Main content: compact sidebar + visual panels -->
+                    <Grid Grid.Row="1" Margin="4,0,4,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Processor link sidebar -->
+                        <Border Grid.Column="0" BorderThickness="1"
+                                BorderBrush="{StaticResource SeparatorBrush}" Background="#FAFAFA">
+                            <Grid>
+                                <TextBlock Text="No processors placed"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="10"
+                                           FontStyle="Italic"
+                                           Visibility="{Binding PanelTab.ShowProcessorPlaceholder, Converter={StaticResource BoolToVisibility}}"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding PanelTab.ProcessorDisplays}"
+                                                  Margin="8,6,8,6">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,0,0,10">
+                                                    <!-- Processor name header -->
+                                                    <TextBlock FontSize="11" FontWeight="Bold"
+                                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                                               Margin="0,0,0,6">
+                                                        <Run Text="Processor "/>
+                                                        <Run Text="{Binding PanelName, Mode=OneWay}"/>
+                                                    </TextBlock>
+
+                                                    <!-- Link 1 -->
+                                                    <TextBlock Text="{Binding Link1.DisplayName}" FontSize="9" FontWeight="SemiBold"
+                                                               Foreground="#555555" Margin="0,0,0,2"/>
+                                                    <Grid Height="14" Margin="0,0,0,2">
+                                                        <Border Background="#E0E0E0" CornerRadius="2"/>
+                                                        <Border Background="#C2D9F0" CornerRadius="2"
+                                                                HorizontalAlignment="Left"
+                                                                Width="{Binding Link1.DevicePercent, Converter={StaticResource PercentToWidth}}"/>
+                                                        <TextBlock FontSize="9"
+                                                                   Foreground="{Binding Link1.IsOverDeviceCapacity, Converter={StaticResource BoolToRedForeground}}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Run Text="{Binding Link1.UsedDevices, Mode=OneWay}"/>
+                                                            <Run Text=" / 99 devices"/>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                    <Grid Height="14" Margin="0,0,0,6">
+                                                        <Border Background="#E0E0E0" CornerRadius="2"/>
+                                                        <Border Background="#C5E0B4" CornerRadius="2"
+                                                                HorizontalAlignment="Left"
+                                                                Width="{Binding Link1.LoadPercent, Converter={StaticResource PercentToWidth}}"/>
+                                                        <TextBlock FontSize="9"
+                                                                   Foreground="{Binding Link1.IsOverLoadCapacity, Converter={StaticResource BoolToRedForeground}}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Run Text="{Binding Link1.UsedLoads, Mode=OneWay}"/>
+                                                            <Run Text=" / 512 loads"/>
+                                                        </TextBlock>
+                                                    </Grid>
+
+                                                    <!-- Link 2 -->
+                                                    <TextBlock Text="{Binding Link2.DisplayName}" FontSize="9" FontWeight="SemiBold"
+                                                               Foreground="#555555" Margin="0,0,0,2"/>
+                                                    <Grid Height="14" Margin="0,0,0,2">
+                                                        <Border Background="#E0E0E0" CornerRadius="2"/>
+                                                        <Border Background="#C2D9F0" CornerRadius="2"
+                                                                HorizontalAlignment="Left"
+                                                                Width="{Binding Link2.DevicePercent, Converter={StaticResource PercentToWidth}}"/>
+                                                        <TextBlock FontSize="9"
+                                                                   Foreground="{Binding Link2.IsOverDeviceCapacity, Converter={StaticResource BoolToRedForeground}}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Run Text="{Binding Link2.UsedDevices, Mode=OneWay}"/>
+                                                            <Run Text=" / 99 devices"/>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                    <Grid Height="14">
+                                                        <Border Background="#E0E0E0" CornerRadius="2"/>
+                                                        <Border Background="#C5E0B4" CornerRadius="2"
+                                                                HorizontalAlignment="Left"
+                                                                Width="{Binding Link2.LoadPercent, Converter={StaticResource PercentToWidth}}"/>
+                                                        <TextBlock FontSize="9"
+                                                                   Foreground="{Binding Link2.IsOverLoadCapacity, Converter={StaticResource BoolToRedForeground}}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Run Text="{Binding Link2.UsedLoads, Mode=OneWay}"/>
+                                                            <Run Text=" / 512 loads"/>
+                                                        </TextBlock>
+                                                    </Grid>
+
+                                                    <!-- Separator -->
+                                                    <Border BorderThickness="0,0,0,1"
+                                                            BorderBrush="{StaticResource SeparatorBrush}"
+                                                            Margin="0,8,0,0"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+
+                        <!-- Visual panel area -->
+                        <Border Grid.Column="1" Margin="6,0,0,0" BorderThickness="1"
+                                BorderBrush="{StaticResource SeparatorBrush}">
+                            <Grid>
+                                <!-- Placeholder when no panels assigned -->
+                                <TextBlock Text="No circuits are assigned to panels in this project"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Visibility="{Binding PanelTab.ShowPlaceholder, Converter={StaticResource BoolToVisibility}}"/>
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                                    <StackPanel Margin="10">
+                                        <!-- Location-grouped panels -->
+                                        <ItemsControl ItemsSource="{Binding PanelTab.LocationDisplays}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                                                        <!-- Location column with overload border -->
+                                                        <Border CornerRadius="4" Padding="2" Margin="0,0,0,0">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Location.IsOverCapacity}" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="#CC0000"/>
+                                                                            <Setter Property="BorderThickness" Value="2"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                        <StackPanel>
+                                                            <!-- Location header -->
+                                                            <StackPanel Orientation="Horizontal" Margin="5,0,0,3">
+                                                                <TextBlock FontSize="9" FontWeight="SemiBold"
+                                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                                           VerticalAlignment="Center">
+                                                                    <Run Text="Location "/>
+                                                                    <Run Text="{Binding Location.LocationNumber, Mode=OneWay}"/>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                            <!-- Panels for this location -->
+                                                            <ItemsControl ItemsSource="{Binding Location.Panels}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <WrapPanel Orientation="Horizontal"/>
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <!-- Panel card -->
+                                                                        <Border CornerRadius="4" Margin="5,0,5,0"
+                                                                                Background="#FAFAFA" Width="94"
+                                                                                Padding="0,3,0,0"
+                                                                                VerticalAlignment="Bottom">
+                                                                            <Border.Style>
+                                                                                <Style TargetType="Border">
+                                                                                    <Setter Property="BorderThickness" Value="1"/>
+                                                                                    <Setter Property="BorderBrush" Value="#888888"/>
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                                                                                            <Setter Property="BorderBrush" Value="#2B579A"/>
+                                                                                            <Setter Property="BorderThickness" Value="2"/>
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </Border.Style>
+                                                                            <StackPanel>
+                                                                                <!-- Empty slots (top) -->
+                                                                                <ItemsControl Margin="3,0,3,0"
+                                                                                              Visibility="{Binding EmptySlots, Converter={StaticResource EmptySlotsToVisibility}}"
+                                                                                              ItemsSource="{Binding EmptySlots, Converter={StaticResource IntToRange}}">
+                                                                                    <ItemsControl.ItemTemplate>
+                                                                                        <DataTemplate>
+                                                                                            <Border Background="{StaticResource EmptySlotBrush}"
+                                                                                                    BorderBrush="{StaticResource EmptySlotBorderBrush}"
+                                                                                                    BorderThickness="1"
+                                                                                                    CornerRadius="2" Margin="0,0,0,2"
+                                                                                                    Height="30">
+                                                                                                <TextBlock Text="empty"
+                                                                                                           Foreground="#AAAAAA"
+                                                                                                           FontSize="8"
+                                                                                                           FontStyle="Italic"
+                                                                                                           HorizontalAlignment="Center"
+                                                                                                           VerticalAlignment="Center"/>
+                                                                                            </Border>
+                                                                                        </DataTemplate>
+                                                                                    </ItemsControl.ItemTemplate>
+                                                                                </ItemsControl>
+
+                                                                                <!-- Module blocks (reversed: first module at bottom) -->
+                                                                                <ItemsControl ItemsSource="{Binding VisibleModulesBottomUp}"
+                                                                                              Margin="3,0,3,0">
+                                                                                    <ItemsControl.ItemTemplate>
+                                                                                        <DataTemplate>
+                                                                                            <Border Background="{Binding DimmingType, Converter={StaticResource DimmingTypeToColor}}"
+                                                                                                    CornerRadius="2" Margin="0,0,0,2"
+                                                                                                    Height="30" Cursor="Hand">
+                                                                                                <Border.ToolTip>
+                                                                                                    <TextBlock>
+                                                                                                        <Run Text="{Binding PartNumber, Mode=OneWay}"/>
+                                                                                                        <Run Text=" ("/>
+                                                                                                        <Run Text="{Binding DimmingType, Mode=OneWay}"/>
+                                                                                                        <Run Text=")"/>
+                                                                                                        <LineBreak/>
+                                                                                                        <Run Text="Circuits: "/>
+                                                                                                        <Run Text="{Binding CircuitNumbersDisplay, Mode=OneWay}"/>
+                                                                                                        <LineBreak/>
+                                                                                                        <Run Text="{Binding UsedSlots, Mode=OneWay}"/>
+                                                                                                        <Run Text="/"/>
+                                                                                                        <Run Text="{Binding ModuleCapacity, Mode=OneWay}"/>
+                                                                                                        <Run Text=" slots used"/>
+                                                                                                    </TextBlock>
+                                                                                                </Border.ToolTip>
+                                                                                                <StackPanel HorizontalAlignment="Center"
+                                                                                                           VerticalAlignment="Center">
+                                                                                                    <TextBlock Text="{Binding DimmingType}"
+                                                                                                               Foreground="White"
+                                                                                                               FontWeight="SemiBold"
+                                                                                                               FontSize="9"
+                                                                                                               HorizontalAlignment="Center"/>
+                                                                                                    <TextBlock Foreground="#FFFFFFCC"
+                                                                                                               FontSize="8"
+                                                                                                               HorizontalAlignment="Center">
+                                                                                                        <Run Text="{Binding UsedSlots, Mode=OneWay}"/>
+                                                                                                        <Run Text=" / "/>
+                                                                                                        <Run Text="{Binding ModuleCapacity, Mode=OneWay}"/>
+                                                                                                    </TextBlock>
+                                                                                                </StackPanel>
+                                                                                            </Border>
+                                                                                        </DataTemplate>
+                                                                                    </ItemsControl.ItemTemplate>
+                                                                                </ItemsControl>
+
+                                                                                <!-- Special compartment (Lutron 8-slot only) -->
+                                                                                <ComboBox Visibility="{Binding HasSpecialCompartment, Converter={StaticResource BoolToVisibility}}"
+                                                                                          ItemsSource="{Binding SpecialDeviceOptions}"
+                                                                                          SelectedItem="{Binding SelectedSpecialDevice}"
+                                                                                          IsEnabled="{Binding IsSpecialDeviceLocked, Converter={StaticResource InverseBool}}"
+                                                                                          BorderBrush="#AAAAAA" BorderThickness="1"
+                                                                                          Background="#F5F5F0"
+                                                                                          Margin="3,0,3,2" Height="30"
+                                                                                          HorizontalContentAlignment="Center"
+                                                                                          VerticalContentAlignment="Center"
+                                                                                          FontSize="9" FontWeight="SemiBold"
+                                                                                          Foreground="Black" Cursor="Hand"/>
+
+                                                                                <!-- Compact panel header (bottom) -->
+                                                                                <Border CornerRadius="0,0,3,3"
+                                                                                        Padding="4,3" Background="#E8E8E8">
+                                                                                    <TextBlock HorizontalAlignment="Center"
+                                                                                               FontSize="9"
+                                                                                               Foreground="{StaticResource TextPrimaryBrush}">
+                                                                                        <Run Text="{Binding PanelName, Mode=OneWay}" FontWeight="Bold"/>
+                                                                                        <Run Text="  "/>
+                                                                                        <Run Text="{Binding TotalModuleCount, Mode=OneWay}"/>
+                                                                                        <Run Text="/"/>
+                                                                                        <Run Text="{Binding PanelCapacity, Mode=OneWay}"/>
+                                                                                    </TextBlock>
+                                                                                </Border>
+
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+
+                                                            <!-- Spacer below panels -->
+                                                            <Border Height="4"/>
+                                                        </StackPanel>
+                                                        </Border>
+
+                                                        <!-- Vertical separator between locations -->
+                                                        <Border Width="1" Background="{StaticResource SeparatorBrush}"
+                                                                Margin="5,0,5,0" VerticalAlignment="Stretch"
+                                                                Visibility="{Binding IsLastLocation, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <!-- Unassigned circuits warning -->
+                                        <Border Visibility="{Binding PanelTab.HasUnassigned, Converter={StaticResource BoolToVisibility}}"
+                                                Background="#FFF3CD" BorderBrush="#FFCC02" BorderThickness="1"
+                                                CornerRadius="4" Margin="0,8,0,0" Padding="8,6">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" FontSize="10" Foreground="#856404" Margin="0,0,0,4">
+                                                    <Run Text="Unassigned Circuits ("/>
+                                                    <Run Text="{Binding PanelTab.UnassignedCircuits.Count, Mode=OneWay}"/>
+                                                    <Run Text=")"/>
+                                                </TextBlock>
+                                                <TextBlock FontSize="9" Foreground="#856404" TextWrapping="Wrap">
+                                                    These circuits are not assigned to a panel in Revit.
+                                                </TextBlock>
+                                                <ItemsControl ItemsSource="{Binding PanelTab.UnassignedCircuits}" Margin="0,4,0,0">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock FontSize="9" Foreground="#856404">
+                                                                <Run Text="{Binding CircuitNumber, Mode=OneWay}"/>
+                                                                <Run Text=" ("/>
+                                                                <Run Text="{Binding DimmingType, Mode=OneWay}"/>
+                                                                <Run Text=")"/>
+                                                            </TextBlock>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Bill of Materials -->
+                                        <Border BorderThickness="1" BorderBrush="{StaticResource SeparatorBrush}"
+                                                CornerRadius="4" Margin="0,14,0,0" Padding="0"
+                                                Background="#FAFAFA">
+                                            <StackPanel>
+                                                <Border Background="#E8E8E8" CornerRadius="4,4,0,0" Padding="8,5">
+                                                    <TextBlock Text="Bill of Materials" FontWeight="SemiBold" FontSize="11"/>
+                                                </Border>
+                                                <ItemsControl ItemsSource="{Binding PanelTab.BomItems}"
+                                                              Margin="0">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border BorderBrush="{StaticResource SeparatorBrush}"
+                                                                    BorderThickness="0,0,0,1">
+                                                                <Grid>
+                                                                    <!-- Category header row -->
+                                                                    <Border Background="#E8EEF7" Padding="8,4"
+                                                                            Visibility="{Binding IsHeader, Converter={StaticResource BoolToVisibility}}">
+                                                                        <TextBlock Text="{Binding Description}"
+                                                                                   FontWeight="SemiBold" FontSize="10"
+                                                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                                    </Border>
+                                                                    <!-- Line item row -->
+                                                                    <Border Padding="8,4"
+                                                                            Visibility="{Binding IsHeader, Converter={StaticResource InverseBoolToVisibility}}">
+                                                                        <Border.Style>
+                                                                            <Style TargetType="Border">
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                                                                                        <Setter Property="Background" Value="#FFF3CD"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Border.Style>
+                                                                        <Grid>
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="45"/>
+                                                                                <ColumnDefinition Width="160"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <TextBlock Grid.Column="0" Text="{Binding Quantity}"
+                                                                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                                            <TextBlock Grid.Column="1" Text="{Binding PartNumber}"
+                                                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                                                       FontFamily="Consolas" FontSize="10"
+                                                                                       VerticalAlignment="Center"/>
+                                                                            <TextBlock Grid.Column="2" Text="{Binding Description}"
+                                                                                       VerticalAlignment="Center"/>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- Bottom footer -->
+        <Border Grid.Row="2" Background="{StaticResource FooterBgBrush}"
+                BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0"
+                Padding="8,6">
+            <DockPanel>
+                <Button Content="Close" Click="CloseButton_Click"
+                        Style="{StaticResource RevitButtonStyle}" Height="28"
+                        DockPanel.Dock="Right"/>
+                <TextBlock/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

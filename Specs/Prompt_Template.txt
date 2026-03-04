@@ -1,0 +1,34 @@
+Add a new TurboSuite command called **[CommandName]**.
+
+**Purpose:** [One sentence - what problem does it solve?]
+
+**Input elements:**
+- Category: [e.g., OST_LightingFixtures / OST_LightingDevices / OST_ElectricalCircuit]
+- Selection: [User picks from canvas | All in active view | All in document]
+- Filter: [Any constraints, e.g., "only wall-hosted", "only fixtures with RPS=Yes"]
+
+**What it does:**
+[2-4 bullet points describing the core logic steps, e.g.:]
+- Collect X from the model
+- For each X, compute Y using parameter Z
+- Write result back to parameter W / create element E
+
+**Parameters read:** [List custom or built-in parameters by name, e.g., "Switch ID", RBS_ELEC_CIRCUIT_NUMBER]
+**Parameters written:** [List any parameters it sets, or "none"]
+
+**Output elements created:** [e.g., IndependentTag, Wire, nothing]
+
+**UI:**
+- [ ] None - runs silently, shows TaskDialog summary at end
+- [ ] WPF dialog - [describe what user selects/reviews in the dialog]
+
+**Ribbon button:** display name "[Name]", tooltip "[Short description]"
+
+**Special geometry needs:** [e.g., wall-local coords, line-based fixtures, arc routing - "none"]
+
+====================================================================================================================
+
+- The Input/Filter section is the most critical - be specific about which elements are collected and how.
+- Parameters read/written prevents Claude from inventing parameter names; use extract strings from ParameterHelper or new ones you inted to add.
+- UI choices determines wheter Claude scaffolds a simple service chain (like Tag/Wire) or a full MVVM window (like Driver).
+- Omit any section that doesn't apply - Claude will follow existing module patterns for anything not specified.

@@ -1,0 +1,308 @@
+using System;
+using System.Collections.Generic;
+using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Selection;
+
+[Transaction(TransactionMode.Manual)]
+[Regeneration(RegenerationOption.Manual)]
+public class TurboTag : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            UIApplication uiApp = commandData.Application;
+            UIDocument uidoc = uiApp.ActiveUIDocument;
+            Document doc = uidoc.Document;
+
+            try
+            {
+                // Check if we're in a valid view type
+                View activeView = doc.ActiveView;
+                if (activeView.ViewType != ViewType.FloorPlan && 
+                    activeView.ViewType != ViewType.CeilingPlan)
+                {
+                    TaskDialog.Show("Invalid View", 
+                        "This command only works in Floor Plan or RCP (Reflected Ceiling Plan) views.");
+                    return Result.Cancelled;
+                }
+
+                // Step 1: Prompt user to select a Lighting Fixture
+                Reference lightingFixtureRef = null;
+                try
+                {
+                    lightingFixtureRef = uidoc.Selection.PickObject(
+                        ObjectType.Element,
+                        new LightingFixtureSelectionFilter(),
+                        "Select a Lighting Fixture");
+                }
+                catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+                {
+                    return Result.Cancelled;
+                }
+
+                FamilyInstance lightingFixture = doc.GetElement(lightingFixtureRef) as FamilyInstance;
+                if (lightingFixture == null)
+                {
+                    TaskDialog.Show("Error", "Selected element is not a valid Lighting Fixture.");
+                    return Result.Failed;
+                }
+
+                // Step 2: Prompt user to select a Lighting Fixture Tag
+                Reference tagRef = null;
+                try
+                {
+                    tagRef = uidoc.Selection.PickObject(
+                        ObjectType.Element,
+                        new LightingFixtureTagSelectionFilter(),
+                        "Select a Lighting Fixture Tag");
+                }
+                catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+                {
+                    return Result.Cancelled;
+                }
+
+                IndependentTag lightingTag = doc.GetElement(tagRef) as IndependentTag;
+                if (lightingTag == null)
+                {
+                    TaskDialog.Show("Error", "Selected element is not a valid tag.");
+                    return Result.Failed;
+                }
+
+                // Get the location of the lighting fixture
+                LocationPoint locationPoint = lightingFixture.Location as LocationPoint;
+                if (locationPoint == null)
+                {
+                    TaskDialog.Show("Error", "Unable to get the location of the Lighting Fixture.");
+                    return Result.Failed;
+                }
+
+                XYZ fixtureLocation = locationPoint.Point;
+
+                // Determine the X direction multiplier based on lighting fixture tag position
+                // If tag is to the right of fixture (positive X), multiplier is +1, otherwise -1
+                XYZ lightingTagLocation = lightingTag.TagHeadPosition;
+                double xDirectionMultiplier = (lightingTagLocation.X >= fixtureLocation.X) ? 1.0 : -1.0;
+
+                // Step 3: Get the electrical connector from the lighting fixture
+                // This will be used as the starting point for the wire
+                MEPModel mepModel = lightingFixture.MEPModel;
+                if (mepModel == null)
+                {
+                    TaskDialog.Show("Error", "The selected lighting fixture does not have an MEP model.");
+                    return Result.Failed;
+                }
+
+                // Get connector from the lighting fixture
+                ConnectorSet connectors = mepModel.ConnectorManager.Connectors;
+                Connector fixtureConnector = null;
+                foreach (Connector conn in connectors)
+                {
+                    if (conn.Domain == Domain.DomainElectrical)
+                    {
+                        fixtureConnector = conn;
+                        break;
+                    }
+                }
+
+                if (fixtureConnector == null)
+                {
+                    TaskDialog.Show("Error", "No electrical connector found on the lighting fixture.");
+                    return Result.Failed;
+                }
+
+                // Step 4: Create wire vertices (no Z changes - only X and Y in plan view)
+                // Vertex 1: Will be connected to the fixture's connector (not a discrete point)
+                // Vertex 2: -0.68" right/left (based on tag position) and 5.19" above the Lighting Fixture
+                // -0.68" = -0.68/12 feet, 5.19" = 5.19/12 feet
+                XYZ vertex2 = new XYZ(
+                    fixtureLocation.X + (xDirectionMultiplier * -0.68 / 12.0),
+                    fixtureLocation.Y + (5.19 / 12.0),
+                    fixtureLocation.Z);
+
+                // Vertex 3: 6.5" above and 2.5" to the left/right (based on tag position) in the view
+                // 6.5" = 6.5/12 feet in Y, 2.5" = 2.5/12 feet in X
+                XYZ vertex3 = new XYZ(
+                    fixtureLocation.X + (xDirectionMultiplier * 2.5 / 12.0), 
+                    fixtureLocation.Y + (6.5 / 12.0), 
+                    fixtureLocation.Z);
+
+                // Step 5: Create the MEP wire in a transaction
+                Wire wire = null;
+                using (Transaction trans = new Transaction(doc, "Create Wire and Tag"))
+                {
+                    trans.Start();
+
+                    try
+                    {
+                        // Get or find an appropriate wire type
+                        ElementId wireTypeId = GetWireTypeId(doc);
+                        if (wireTypeId == ElementId.InvalidElementId)
+                        {
+                            TaskDialog.Show("Error", "No wire type found in the project.");
+                            trans.RollBack();
+                            return Result.Failed;
+                        }
+
+                        // Create the wire with two vertices, connected to the fixture's connector
+                        // The first vertex will connect to fixtureConnector
+                        List<XYZ> wireVertices = new List<XYZ> { vertex2, vertex3 };
+                        
+                        wire = Wire.Create(doc, wireTypeId, activeView.Id, WiringType.Arc, wireVertices, fixtureConnector, null);
+
+                        if (wire == null)
+                        {
+                            TaskDialog.Show("Error", "Failed to create wire.");
+                            trans.RollBack();
+                            return Result.Failed;
+                        }
+
+                        // Step 6: Tag the wire with current wire tag type
+                        ElementId wireTagTypeId = GetWireTagTypeId(doc);
+                        if (wireTagTypeId == ElementId.InvalidElementId)
+                        {
+                            TaskDialog.Show("Warning", "No wire tag type found. Wire created but not tagged.");
+                            trans.Commit();
+                            return Result.Succeeded;
+                        }
+
+                        // Create tag at +/-8.625" X (based on lighting tag position) and +7.5" Y from the Lighting Fixture
+                        // 8.625" = 8.625/12 feet, 7.5" = 7.5/12 feet
+                        XYZ tagLocation = new XYZ(
+                            fixtureLocation.X + (xDirectionMultiplier * 8.625 / 12.0),
+                            fixtureLocation.Y + (7.5 / 12.0),
+                            fixtureLocation.Z);
+
+                        IndependentTag wireTag = IndependentTag.Create(
+                            doc,
+                            wireTagTypeId,
+                            activeView.Id,
+                            new Reference(wire),
+                            false,
+                            TagOrientation.Horizontal,
+                            tagLocation);
+
+                        if (wireTag == null)
+                        {
+                            TaskDialog.Show("Warning", "Wire created but failed to create tag.");
+                        }
+                        else
+                        {
+                            // Match the wire tag rotation to the lighting fixture's rotation relative to Project North
+                            double fixtureRotation = locationPoint.Rotation;
+                            ProjectLocation projectLocation = doc.ActiveProjectLocation;
+                            double projectNorthAngle = projectLocation.GetProjectPosition(XYZ.Zero).Angle;
+                            
+                            // Calculate the total rotation (fixture rotation relative to Project North)
+                            double totalRotation = fixtureRotation - projectNorthAngle;
+                            
+                            if (Math.Abs(totalRotation) > 0.0001) // Only rotate if there's a meaningful rotation
+                            {
+                                Line rotationAxis = Line.CreateBound(tagLocation, new XYZ(tagLocation.X, tagLocation.Y, tagLocation.Z + 1.0));
+                                ElementTransformUtils.RotateElement(doc, wireTag.Id, rotationAxis, totalRotation);
+                            }
+                        }
+
+                        trans.Commit();
+                        return Result.Succeeded;
+                    }
+                    catch (Exception ex)
+                    {
+                        trans.RollBack();
+                        TaskDialog.Show("Error", $"An error occurred: {ex.Message}");
+                        return Result.Failed;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return Result.Failed;
+            }
+        }
+
+        // Helper method to get a wire type
+        private ElementId GetWireTypeId(Document doc)
+        {
+            FilteredElementCollector collector = new FilteredElementCollector(doc);
+            collector.OfClass(typeof(WireType));
+            
+            foreach (WireType wireType in collector)
+            {
+                return wireType.Id;
+            }
+            
+            return ElementId.InvalidElementId;
+        }
+
+        // Helper method to get a wire tag type
+        private ElementId GetWireTagTypeId(Document doc)
+        {
+            FilteredElementCollector collector = new FilteredElementCollector(doc);
+            ICollection<Element> tagTypes = collector.OfClass(typeof(FamilySymbol))
+                .OfCategory(BuiltInCategory.OST_WireTags)
+                .ToElements();
+
+            foreach (Element tagType in tagTypes)
+            {
+                return tagType.Id;
+            }
+
+            return ElementId.InvalidElementId;
+        }
+    }
+
+    // Selection filter for Lighting Fixtures
+    public class LightingFixtureSelectionFilter : ISelectionFilter
+    {
+        public bool AllowElement(Element elem)
+        {
+            if (elem is FamilyInstance)
+            {
+                FamilyInstance famInst = elem as FamilyInstance;
+                if (famInst.Category != null && 
+                    famInst.Category.Id.IntegerValue == (int)BuiltInCategory.OST_LightingFixtures)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public bool AllowReference(Reference reference, XYZ position)
+        {
+            return false;
+        }
+    }
+
+    // Selection filter for Lighting Fixture Tags
+    public class LightingFixtureTagSelectionFilter : ISelectionFilter
+    {
+        public bool AllowElement(Element elem)
+        {
+            if (elem is IndependentTag)
+            {
+                IndependentTag tag = elem as IndependentTag;
+                ICollection<Element> taggedElements = tag.GetTaggedLocalElements();
+                
+                if (taggedElements != null && taggedElements.Count > 0)
+                {
+                    foreach (Element taggedElement in taggedElements)
+                    {
+                        if (taggedElement != null && taggedElement.Category != null &&
+                            taggedElement.Category.Id.IntegerValue == (int)BuiltInCategory.OST_LightingFixtures)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        public bool AllowReference(Reference reference, XYZ position)
+        {
+            return false;
+        }
+    }

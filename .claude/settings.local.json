@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet new:*)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" new sln -n TurboSuite --output /mnt/c/Users/jacobq/Documents/Add-Ins/TurboSuite/TurboSuite --force)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" sln:*)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" new sln -n TurboSuite --force)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" sln TurboSuite.sln add TurboSuite.csproj)",
+      "Bash(ls:*)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build TurboSuite.csproj)",
+      "Bash(dotnet build:*)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build \"/mnt/c/Users/jacobq/Documents/Add-Ins/TurboSuite/TurboSuite/TurboSuite.csproj\")",
+      "Bash(cmd.exe /c \"dotnet build C:\\\\Users\\\\jacobq\\\\Documents\\\\Add-Ins\\\\TurboSuite\\\\TurboSuite\\\\TurboSuite.csproj\")",
+      "Bash(cmd.exe /c \"where dotnet\")",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build TurboSuite/TurboSuite/TurboSuite.csproj)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build \"C:\\\\Users\\\\jacobq\\\\Documents\\\\Add-Ins\\\\TurboSuite\\\\TurboSuite\\\\TurboSuite.csproj\")",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build /mnt/c/Users/jacobq/Documents/Add-Ins/TurboSuite/TurboSuite/TurboSuite.csproj)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build \"TurboSuite/TurboSuite/TurboSuite.csproj\")",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build \"/mnt/c/Users/jacobq/Documents/Add-Ins/TurboCompact/TurboCompact.csproj\")",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build \"C:\\\\Users\\\\jacobq\\\\Documents\\\\Add-Ins\\\\TurboCompact\\\\TurboCompact.csproj\")",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build:*)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build 'C:\\\\Users\\\\jacobq\\\\Documents\\\\Add-Ins\\\\TurboSuite\\\\TurboSuite\\\\TurboSuite.csproj')",
+      "WebFetch(domain:help.autodesk.com)",
+      "WebFetch(domain:www.revitapidocs.com)",
+      "WebFetch(domain:forums.autodesk.com)",
+      "WebSearch",
+      "Bash(tail:*)",
+      "Bash(grep:*)"
+    ]
+  },
+  "outputStyle": "default"
+}

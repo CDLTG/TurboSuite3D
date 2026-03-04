@@ -1,0 +1,1548 @@
+using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Selection;
+using System;
+using System.Collections.Generic;
+
+/// <summary>
+/// Creates a switchleg tag and wire connection for lighting fixtures.
+/// Works in floor plan and ceiling plan views only.
+/// Supports both horizontal (ceiling/floor-based) and vertical (wall-based) fixtures.
+/// </summary>
+[Transaction(TransactionMode.Manual)]
+public class TurboBubble : IExternalCommand
+{
+    #region Constants
+
+    // Unit conversion
+    private const double InchesToFeet = 1.0 / 12.0;
+
+    // Required families
+    private const string SwitchlegTagFamily = "AL_Tag_Lighting Fixture (Switchleg)";
+    private const string RemoteSwitchlegTagFamily = "AL_Tag_Lighting Fixture (Remote Switchleg)";
+    private const string RemoteSwitchlegTypeRight = "Switchleg Right";
+    private const string RemoteSwitchlegTypeLeft = "Switchleg Left";
+
+    // Symbol dimension defaults (in feet)
+    private const double DefaultSymbolSizeFt = 4.5 * InchesToFeet;
+    private const double MinSymbolWidthFt = 4.0 * InchesToFeet;
+
+    // Tag width by character count (in feet)
+    private const double TagWidth2CharsFt = 7.75 * InchesToFeet;
+    private const double TagWidth3CharsFt = 11.15 * InchesToFeet;
+
+    // Wire geometry offsets (in feet)
+    private const double WireHorizontalOffsetFt = 0.613 * InchesToFeet;
+    private const double WireVerticalOffsetFt = 0.65 * InchesToFeet;
+    private const double WireToSymbolGapFt = 4.215 * InchesToFeet;
+    private const double WireToSymbolGapHorizontalFt = 4.55 * InchesToFeet;
+    private const double WireToSymbolGapWallSconceFt = 0.5 * InchesToFeet;
+    private const double WireElbowOffsetFt = 3.56 * InchesToFeet;
+
+    // Wire end offset constants
+    private const double WireOffsetEndInitialFt = 0.5 * InchesToFeet;  // Intermediate position to avoid overlap
+    private const double WireOffsetEndFinalFt = 1.0 * InchesToFeet;    // Final offset end position for line-based
+    private const double WireOffsetEndWallSconceFt = 2.5 * InchesToFeet;  // Final offset for wall sconce (multiplied by scale factor)
+
+    // Special family names
+    private const string WallSconceFamily = "AL_Decorative_Wall Sconce (Hosted)";
+
+    // Tag placement offsets (in feet)
+    private const double TagOffsetVerticalFt = 5.25 * InchesToFeet;
+    private const double TagOffsetHorizontalFt = 8.75 * InchesToFeet;
+    private const double TagXOffsetFt = 9.0 * InchesToFeet;
+
+    // Rotation/normal comparison threshold
+    private const double RotationEpsilon = 0.001;
+    private const double NormalEpsilon = 0.001;
+
+    #endregion
+
+    #region Public Methods
+
+    public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+    {
+        var uidoc = commandData.Application.ActiveUIDocument;
+        var doc = uidoc.Document;
+        var activeView = doc.ActiveView;
+
+        try
+        {
+            if (!IsValidViewType(activeView))
+                return Result.Cancelled;
+
+            var wireTypeId = FindFirstWireType(doc);
+            if (wireTypeId == null)
+            {
+                ShowError("No wire types available in the project.");
+                return Result.Failed;
+            }
+
+            var selectedTag = PromptForTagSelection(uidoc, doc);
+            if (selectedTag == null)
+                return Result.Cancelled;
+
+            var fixture = GetTaggedFixture(doc, selectedTag);
+            if (fixture == null)
+            {
+                ShowError("Tagged element is not a lighting fixture.");
+                return Result.Failed;
+            }
+
+            var fixtureConnector = GetElectricalConnector(fixture);
+            if (fixtureConnector == null)
+            {
+                ShowError("Lighting fixture has no electrical connector.");
+                return Result.Failed;
+            }
+
+            // Determine fixture type
+            var isLineBased = IsLineBasedFixture(fixture);
+            var isVerticalFace = !isLineBased && IsOnVerticalFace(fixture);
+            var isWallSconce = !isLineBased && fixture.Symbol?.FamilyName == WallSconceFamily;
+
+            // Create appropriate placement calculator
+            IPlacementCalculator placement;
+            if (isLineBased)
+                placement = new LineBasedPlacementCalculator(doc, activeView, fixture, selectedTag);
+            else if (isVerticalFace)
+                placement = new VerticalFacePlacementCalculator(doc, activeView, fixture, selectedTag);
+            else
+                placement = new HorizontalPlacementCalculator(doc, activeView, fixture, selectedTag);
+
+            var flipPoint = PromptForFlipPoint(uidoc, doc, placement.FixturePoint);
+            placement.CalculateFinalPositions(flipPoint);
+
+            // Select appropriate tag type based on fixture type and flip state
+            ElementId tagTypeId;
+            if (isLineBased)
+            {
+                // For line-based fixtures, use Left/Right type based on flip state
+                // IsFlipped = true means user clicked to the left, so use "Switchleg Right" (opposite)
+                var lineBasedPlacement = (LineBasedPlacementCalculator)placement;
+
+                // Determine effective flip state - invert if line direction is reversed (91° to 270°)
+                var effectiveFlip = lineBasedPlacement.IsLineDirectionReversed
+                    ? !placement.IsFlipped
+                    : placement.IsFlipped;
+
+                var typeName = effectiveFlip ? RemoteSwitchlegTypeRight : RemoteSwitchlegTypeLeft;
+                tagTypeId = FindTagType(doc, RemoteSwitchlegTagFamily, typeName);
+                if (tagTypeId == null)
+                {
+                    ShowError($"Load tag type '{RemoteSwitchlegTagFamily}' - '{typeName}' before using TurboBubble.");
+                    return Result.Cancelled;
+                }
+            }
+            else
+            {
+                tagTypeId = FindTagType(doc, SwitchlegTagFamily);
+                if (tagTypeId == null)
+                {
+                    ShowError($"Load tag '{SwitchlegTagFamily}' before using TurboBubble.");
+                    return Result.Cancelled;
+                }
+            }
+
+            // Get wall normal for wall sconce wire offset
+            XYZ wallNormal = null;
+            if (isWallSconce)
+            {
+                wallNormal = GetHostFaceNormal(fixture);
+                if (wallNormal != null)
+                {
+                    // Normalize to horizontal plane
+                    wallNormal = new XYZ(wallNormal.X, wallNormal.Y, 0).Normalize();
+                }
+            }
+
+            CreateTagAndWire(doc, activeView, fixture, selectedTag, placement, tagTypeId, wireTypeId, fixtureConnector, isLineBased, isWallSconce, wallNormal);
+
+            return Result.Succeeded;
+        }
+        catch (OperationCanceledException)
+        {
+            return Result.Cancelled;
+        }
+        catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+        {
+            return Result.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Unexpected error: {ex.Message}");
+            return Result.Failed;
+        }
+    }
+
+    #endregion
+
+    #region Validation
+
+    private static bool IsValidViewType(View view)
+    {
+        return view.ViewType == ViewType.FloorPlan ||
+               view.ViewType == ViewType.CeilingPlan;
+    }
+
+    /// <summary>
+    /// Determines if a fixture is a line-based family (e.g., linear light fixtures).
+    /// Line-based families have a LocationCurve instead of a LocationPoint.
+    /// </summary>
+    private static bool IsLineBasedFixture(FamilyInstance fixture)
+    {
+        return fixture.Location is LocationCurve;
+    }
+
+    /// <summary>
+    /// Determines if a fixture is mounted on a vertical face (e.g., wall).
+    /// Vertical faces have horizontal normals where the Z component is near zero.
+    /// Supports both local hosts and hosts in linked models.
+    /// </summary>
+    private static bool IsOnVerticalFace(FamilyInstance fixture)
+    {
+        var faceNormal = GetHostFaceNormal(fixture);
+        if (faceNormal == null)
+            return false;
+
+        // Vertical face has horizontal normal (Z component near zero)
+        return Math.Abs(faceNormal.Z) < NormalEpsilon;
+    }
+
+    #endregion
+
+    #region Element Discovery
+
+    /// <summary>
+    /// Finds a tag type by family name.
+    /// </summary>
+    private static ElementId FindTagType(Document doc, string familyName)
+    {
+        using (var collector = new FilteredElementCollector(doc))
+        {
+            foreach (var elem in collector
+                .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
+                .OfClass(typeof(FamilySymbol)))
+            {
+                if (elem is FamilySymbol fs && fs.FamilyName == familyName)
+                    return fs.Id;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Finds a specific tag type by family name and type name.
+    /// </summary>
+    private static ElementId FindTagType(Document doc, string familyName, string typeName)
+    {
+        using (var collector = new FilteredElementCollector(doc))
+        {
+            foreach (var elem in collector
+                .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
+                .OfClass(typeof(FamilySymbol)))
+            {
+                if (elem is FamilySymbol fs && fs.FamilyName == familyName && fs.Name == typeName)
+                    return fs.Id;
+            }
+        }
+        return null;
+    }
+
+    private static ElementId FindFirstWireType(Document doc)
+    {
+        using (var collector = new FilteredElementCollector(doc))
+        {
+            var id = collector
+                .OfCategory(BuiltInCategory.OST_Wire)
+                .OfClass(typeof(WireType))
+                .FirstElementId();
+
+            return id != ElementId.InvalidElementId ? id : null;
+        }
+    }
+
+    private static Connector GetElectricalConnector(FamilyInstance fixture)
+    {
+        var connectors = fixture.MEPModel?.ConnectorManager?.Connectors;
+        if (connectors == null) return null;
+
+        foreach (Connector conn in connectors)
+        {
+            if (conn.Domain == Domain.DomainElectrical)
+                return conn;
+        }
+        return null;
+    }
+
+    #endregion
+
+    #region User Interaction
+
+    private static IndependentTag PromptForTagSelection(UIDocument uidoc, Document doc)
+    {
+        var tagRef = uidoc.Selection.PickObject(
+            ObjectType.Element,
+            new LightingFixtureTagFilter(),
+            "Select a lighting fixture tag");
+
+        return doc.GetElement(tagRef) as IndependentTag;
+    }
+
+    private static FamilyInstance GetTaggedFixture(Document doc, IndependentTag tag)
+    {
+        foreach (var id in tag.GetTaggedLocalElementIds())
+        {
+            if (doc.GetElement(id) is FamilyInstance fixture)
+                return fixture;
+        }
+        return null;
+    }
+
+    private static XYZ PromptForFlipPoint(UIDocument uidoc, Document doc, XYZ origin)
+    {
+        var activeView = uidoc.ActiveView;
+        var originalSketchPlane = activeView.SketchPlane;
+        var tempSketchPlaneId = ElementId.InvalidElementId;
+
+        try
+        {
+            using (var trans = new Transaction(doc, "Create Temp Sketch Plane"))
+            {
+                trans.Start();
+                var plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, origin);
+                var tempPlane = SketchPlane.Create(doc, plane);
+                tempSketchPlaneId = tempPlane.Id;
+                activeView.SketchPlane = tempPlane;
+                trans.Commit();
+            }
+
+            return uidoc.Selection.PickPoint("Pick flip direction point");
+        }
+        finally
+        {
+            using (var trans = new Transaction(doc, "Cleanup Sketch Plane"))
+            {
+                trans.Start();
+                if (originalSketchPlane != null)
+                    activeView.SketchPlane = originalSketchPlane;
+                if (tempSketchPlaneId != ElementId.InvalidElementId)
+                    doc.Delete(tempSketchPlaneId);
+                trans.Commit();
+            }
+        }
+    }
+
+    #endregion
+
+    #region Element Creation
+
+    private static void CreateTagAndWire(
+        Document doc,
+        View view,
+        FamilyInstance fixture,
+        IndependentTag sourceTag,
+        IPlacementCalculator placement,
+        ElementId tagTypeId,
+        ElementId wireTypeId,
+        Connector fixtureConnector,
+        bool isLineBased = false,
+        bool isWallSconce = false,
+        XYZ wallNormal = null)
+    {
+        using (var trans = new Transaction(doc, "TurboBubble"))
+        {
+            trans.Start();
+
+            // Clean up existing switchleg tags and unconnected wires before creating new ones
+            DeleteExistingSwitchlegTags(doc, fixture, sourceTag);
+            var wiresDeleted = DeleteUnconnectedWires(doc, fixtureConnector);
+
+            // Regenerate document if wires were deleted to update connector state
+            if (wiresDeleted)
+                doc.Regenerate();
+
+            var newTag = CreateAndConfigureTag(doc, view, fixture, sourceTag, placement, tagTypeId);
+
+            if (isLineBased)
+                CreateWireWithOffsetEnd(doc, view, placement, wireTypeId, fixtureConnector);
+            else if (isWallSconce && wallNormal != null)
+                CreateWireWithWallSconceOffset(doc, view, placement, wireTypeId, fixtureConnector, wallNormal, fixture);
+            else
+                CreateWire(doc, view, placement, wireTypeId, fixtureConnector);
+
+            trans.Commit();
+        }
+    }
+
+    /// <summary>
+    /// Deletes existing switchleg tags on the fixture, except the source tag.
+    /// </summary>
+    private static void DeleteExistingSwitchlegTags(Document doc, FamilyInstance fixture, IndependentTag sourceTag)
+    {
+        var tagsToDelete = new List<ElementId>();
+
+        using (var collector = new FilteredElementCollector(doc))
+        {
+            foreach (var elem in collector
+                .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
+                .OfClass(typeof(IndependentTag)))
+            {
+                if (elem is not IndependentTag tag || tag.Id == sourceTag.Id)
+                    continue;
+
+                // Check if this tag is attached to our fixture
+                var taggedIds = tag.GetTaggedLocalElementIds();
+                if (!taggedIds.Contains(fixture.Id))
+                    continue;
+
+                // Check if this is a switchleg tag family
+                var tagSymbol = doc.GetElement(tag.GetTypeId()) as FamilySymbol;
+                if (tagSymbol?.FamilyName == SwitchlegTagFamily ||
+                    tagSymbol?.FamilyName == RemoteSwitchlegTagFamily)
+                {
+                    tagsToDelete.Add(tag.Id);
+                }
+            }
+        }
+
+        if (tagsToDelete.Count > 0)
+            doc.Delete(tagsToDelete);
+    }
+
+    /// <summary>
+    /// Deletes wires connected to the fixture connector that aren't connected to anything else.
+    /// Returns true if any wires were deleted.
+    /// </summary>
+    private static bool DeleteUnconnectedWires(Document doc, Connector fixtureConnector)
+    {
+        var wiresToDelete = new List<ElementId>();
+
+        // Get all connectors that this connector is connected to
+        var connectedRefs = fixtureConnector.AllRefs;
+        if (connectedRefs == null)
+            return false;
+
+        foreach (Connector connectedConn in connectedRefs)
+        {
+            var owner = connectedConn.Owner;
+            if (owner is not Wire wire)
+                continue;
+
+            // Check if the wire is only connected to this fixture (not to anything else electrical)
+            if (IsWireOnlyConnectedToFixture(wire, fixtureConnector))
+            {
+                wiresToDelete.Add(wire.Id);
+            }
+        }
+
+        if (wiresToDelete.Count > 0)
+        {
+            doc.Delete(wiresToDelete);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a wire is only connected to the specified fixture connector
+    /// and not electrically connected to anything else.
+    /// </summary>
+    private static bool IsWireOnlyConnectedToFixture(Wire wire, Connector fixtureConnector)
+    {
+        var wireConnectorManager = wire.ConnectorManager;
+        if (wireConnectorManager == null)
+            return true;  // No connectors means it's unconnected
+
+        foreach (Connector wireConn in wireConnectorManager.Connectors)
+        {
+            var refs = wireConn.AllRefs;
+            if (refs == null)
+                continue;
+
+            foreach (Connector connectedTo in refs)
+            {
+                // Skip if connected to the fixture we're checking
+                if (connectedTo.Owner.Id == fixtureConnector.Owner.Id)
+                    continue;
+
+                // If connected to anything else that's not a wire, it's connected
+                if (connectedTo.Owner is not Wire)
+                    return false;
+            }
+        }
+
+        return true;  // Only connected to the fixture (or other wires, but not other equipment)
+    }
+
+    private static IndependentTag CreateAndConfigureTag(
+        Document doc,
+        View view,
+        FamilyInstance fixture,
+        IndependentTag sourceTag,
+        IPlacementCalculator placement,
+        ElementId tagTypeId)
+    {
+        var newTag = IndependentTag.Create(
+            doc,
+            view.Id,
+            new Reference(fixture),
+            false,
+            TagMode.TM_ADDBY_CATEGORY,
+            TagOrientation.Horizontal,
+            placement.NewTagPosition);
+
+        newTag.ChangeTypeId(tagTypeId);
+        newTag.TagHeadPosition = placement.NewTagPosition;
+
+        ApplyTagRotation(doc, newTag, sourceTag, placement);
+
+        return newTag;
+    }
+
+    private static void ApplyTagRotation(
+        Document doc,
+        IndependentTag newTag,
+        IndependentTag sourceTag,
+        IPlacementCalculator placement)
+    {
+        if (placement.RotatesWithComponent)
+        {
+            CopyOrientationParameter(sourceTag, newTag);
+            RotateTagToMatchFixture(doc, newTag, placement);
+        }
+        else
+        {
+            SetTagToModelOrientation(newTag, placement.Rotation);
+        }
+    }
+
+    private static void CopyOrientationParameter(IndependentTag source, IndependentTag target)
+    {
+        var srcParam = source.LookupParameter("Orientation");
+        var dstParam = target.LookupParameter("Orientation");
+
+        if (srcParam != null && dstParam != null && !dstParam.IsReadOnly)
+            dstParam.Set(srcParam.AsInteger());
+    }
+
+    private static void RotateTagToMatchFixture(Document doc, IndependentTag tag, IPlacementCalculator placement)
+    {
+        if (Math.Abs(placement.Rotation) <= RotationEpsilon) return;
+
+        var axis = Line.CreateBound(
+            placement.NewTagPosition,
+            placement.NewTagPosition + XYZ.BasisZ * 10);
+
+        ElementTransformUtils.RotateElement(doc, tag.Id, axis, placement.Rotation);
+    }
+
+    private static void SetTagToModelOrientation(IndependentTag tag, double rotation)
+    {
+        var orientationParam = tag.LookupParameter("Orientation");
+        if (orientationParam != null && !orientationParam.IsReadOnly)
+            orientationParam.Set(2); // Model orientation
+
+        var angleParam = tag.LookupParameter("Angle");
+        if (angleParam != null && !angleParam.IsReadOnly)
+            angleParam.Set(rotation);
+    }
+
+    private static void CreateWire(
+        Document doc,
+        View view,
+        IPlacementCalculator placement,
+        ElementId wireTypeId,
+        Connector fixtureConnector)
+    {
+        var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
+        Wire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
+    }
+
+    /// <summary>
+    /// Creates a wire with adjusted offset end for line-based fixtures.
+    /// The wire start offset end is moved using the double SetVertex technique.
+    /// </summary>
+    private static void CreateWireWithOffsetEnd(
+        Document doc,
+        View view,
+        IPlacementCalculator placement,
+        ElementId wireTypeId,
+        Connector fixtureConnector)
+    {
+        var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
+        var wire = Wire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
+
+        // Calculate offset direction (from connector toward Vertex2)
+        var connectorOrigin = fixtureConnector.Origin;
+        var offsetDirection = (placement.Vertex2 - connectorOrigin).Normalize();
+
+        // Move the START offset end (vertex index 0) using double SetVertex technique
+        // Step 1: Move vertex to intermediate position (away from any existing vertex)
+        wire.SetVertex(0, connectorOrigin + offsetDirection * WireOffsetEndInitialFt);
+        // Step 2: Move again to set the offset end at final position
+        wire.SetVertex(0, connectorOrigin + offsetDirection * WireOffsetEndFinalFt);
+    }
+
+    /// <summary>
+    /// Creates a wire with offset end for wall sconce fixtures.
+    /// The wire start is offset away from the wall by (2.5" * Scale Factor parameter).
+    /// </summary>
+    private static void CreateWireWithWallSconceOffset(
+        Document doc,
+        View view,
+        IPlacementCalculator placement,
+        ElementId wireTypeId,
+        Connector fixtureConnector,
+        XYZ wallNormal,
+        FamilyInstance fixture)
+    {
+        var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
+        var wire = Wire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
+
+        // Get the Scale Factor parameter from the fixture
+        var scaleFactor = fixture.LookupParameter("Scale Factor")?.AsDouble() ?? 1.0;
+
+        // Calculate the offset distance: 2.5" * Scale Factor
+        var offsetDistance = WireOffsetEndWallSconceFt * scaleFactor;
+
+        // Offset direction is the wall normal (away from wall)
+        var connectorOrigin = fixtureConnector.Origin;
+
+        // Move the START offset end (vertex index 0) using double SetVertex technique
+        // Step 1: Move vertex to intermediate position (away from any existing vertex)
+        wire.SetVertex(0, connectorOrigin + wallNormal * WireOffsetEndInitialFt);
+        // Step 2: Move again to set the offset end at final position (away from wall)
+        wire.SetVertex(0, connectorOrigin + wallNormal * offsetDistance);
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static void ShowError(string message)
+    {
+        TaskDialog.Show("TurboBubble Error", message);
+    }
+
+    /// <summary>
+    /// Gets the face normal from a fixture's host face.
+    /// Supports both local hosts and hosts in linked models.
+    /// Returns null if the normal cannot be determined.
+    /// </summary>
+    private static XYZ GetHostFaceNormal(FamilyInstance fixture)
+    {
+        if (fixture.Host == null)
+            return null;
+
+        try
+        {
+            var hostFaceRef = fixture.HostFace;
+            if (hostFaceRef == null)
+                return null;
+
+            var host = fixture.Host;
+
+            if (host is RevitLinkInstance linkInstance)
+            {
+                // Host is in a linked model
+                var linkedDoc = linkInstance.GetLinkDocument();
+                if (linkedDoc == null)
+                    return null;
+
+                var linkedElement = linkedDoc.GetElement(hostFaceRef.LinkedElementId);
+                var linkRef = hostFaceRef.CreateReferenceInLink();
+                var geomObj = linkedElement?.GetGeometryObjectFromReference(linkRef);
+
+                if (geomObj is PlanarFace planarFace)
+                {
+                    // Transform the normal from link coordinates to host coordinates
+                    var linkTransform = linkInstance.GetTotalTransform();
+                    return linkTransform.OfVector(planarFace.FaceNormal);
+                }
+            }
+            else
+            {
+                // Host is in the current document
+                var geomObj = host.GetGeometryObjectFromReference(hostFaceRef);
+
+                if (geomObj is PlanarFace planarFace)
+                {
+                    return planarFace.FaceNormal;
+                }
+            }
+        }
+        catch
+        {
+            // Could not get face normal
+        }
+
+        return null;
+    }
+
+    #endregion
+
+    #region Nested Types
+
+    /// <summary>
+    /// Interface for placement calculation strategies.
+    /// </summary>
+    private interface IPlacementCalculator
+    {
+        XYZ FixturePoint { get; }
+        double Rotation { get; }
+        bool RotatesWithComponent { get; }
+        XYZ NewTagPosition { get; }
+        XYZ Vertex2 { get; }
+        XYZ Vertex3 { get; }
+        bool IsFlipped { get; }  // True if user clicked to flip the placement
+        void CalculateFinalPositions(XYZ flipPoint);
+    }
+
+    /// <summary>
+    /// Base class with shared placement calculation logic.
+    /// </summary>
+    private abstract class PlacementCalculatorBase : IPlacementCalculator
+    {
+        // Input data
+        public XYZ FixturePoint { get; }
+        public double Rotation { get; }
+        public bool RotatesWithComponent { get; }
+
+        // Calculated positions
+        public XYZ NewTagPosition { get; protected set; }
+        public XYZ Vertex2 { get; protected set; }
+        public XYZ Vertex3 { get; protected set; }
+        public bool IsFlipped { get; protected set; }
+
+        // Internal state
+        protected readonly XYZ TagPoint;
+        protected readonly XYZ FixtureLocal;
+        protected readonly XYZ TagLocal;
+        protected readonly Transform GlobalToLocal;
+        protected readonly Transform LocalToGlobal;
+        protected readonly PlacementCondition Condition;
+        protected readonly double SymbolLength;
+        protected readonly double SymbolWidth;
+
+        protected PlacementCalculatorBase(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+        {
+            FixturePoint = ((LocationPoint)fixture.Location).Point;
+            TagPoint = sourceTag.TagHeadPosition;
+
+            RotatesWithComponent = DetermineRotationMode(sourceTag);
+            Rotation = CalculateRotation(fixture, sourceTag, RotatesWithComponent);
+
+            GlobalToLocal = Transform.CreateRotationAtPoint(XYZ.BasisZ, -Rotation, FixturePoint);
+            LocalToGlobal = GlobalToLocal.Inverse;
+
+            FixtureLocal = GlobalToLocal.OfPoint(FixturePoint);
+            TagLocal = GlobalToLocal.OfPoint(TagPoint);
+
+            Condition = DetermineCondition(FixtureLocal, TagLocal);
+            (SymbolLength, SymbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag);
+        }
+
+        public abstract void CalculateFinalPositions(XYZ flipPoint);
+
+        protected static bool DetermineRotationMode(IndependentTag tag)
+        {
+            var param = tag.LookupParameter("Orientation");
+            if (param == null) return false;
+
+            var value = param.AsValueString();
+            return value == "Horizontal" || value == "Vertical";
+        }
+
+        protected static double CalculateRotation(FamilyInstance fixture, IndependentTag tag, bool rotatesWithComponent)
+        {
+            if (rotatesWithComponent)
+                return GetFixtureRotation(fixture);
+
+            return tag.LookupParameter("Angle")?.AsDouble() ?? 0.0;
+        }
+
+        protected static double GetFixtureRotation(FamilyInstance fixture)
+        {
+            using (var options = new Options { ComputeReferences = false })
+            {
+                var geometry = fixture.get_Geometry(options);
+                if (geometry != null)
+                {
+                    foreach (var obj in geometry)
+                    {
+                        if (obj is GeometryInstance instance)
+                        {
+                            var xAxis = instance.Transform.BasisX;
+                            var rotation = Math.Atan2(xAxis.Y, xAxis.X);
+                            if (Math.Abs(rotation) > RotationEpsilon)
+                                return rotation;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return ((LocationPoint)fixture.Location)?.Rotation ?? 0.0;
+        }
+
+        protected static PlacementCondition DetermineCondition(XYZ fixtureLocal, XYZ tagLocal)
+        {
+            var diffX = tagLocal.X - fixtureLocal.X;
+            var diffY = tagLocal.Y - fixtureLocal.Y;
+
+            if (Math.Abs(diffX) > Math.Abs(diffY))
+                return diffX > 0 ? PlacementCondition.Right : PlacementCondition.Left;
+
+            return diffY > 0 ? PlacementCondition.Up : PlacementCondition.Down;
+        }
+
+        protected static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
+        {
+            var length = fixture.LookupParameter("Symbol Length")?.AsDouble() ?? DefaultSymbolSizeFt;
+            var width = fixture.LookupParameter("Symbol Width")?.AsDouble() ?? DefaultSymbolSizeFt;
+
+            width = Math.Max(width, MinSymbolWidthFt);
+
+            var tagWidth = GetTagWidth(view, tag);
+            width = Math.Max(width, tagWidth);
+
+            return (length, width);
+        }
+
+        protected static double GetTagWidth(View view, IndependentTag tag)
+        {
+            var charCount = tag.TagText?.Length ?? 0;
+
+            return charCount switch
+            {
+                2 => TagWidth2CharsFt,
+                3 => TagWidth3CharsFt,
+                _ => CalculateTagWidthFromBounds(view, tag)
+            };
+        }
+
+        protected static double CalculateTagWidthFromBounds(View view, IndependentTag tag)
+        {
+            var bbox = tag.get_BoundingBox(view);
+            return bbox != null ? Math.Abs(bbox.Max.X - bbox.Min.X) : 0;
+        }
+    }
+
+    /// <summary>
+    /// Handles placement calculations for horizontal fixtures (ceiling/floor-based).
+    /// </summary>
+    private class HorizontalPlacementCalculator : PlacementCalculatorBase
+    {
+        public HorizontalPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+            : base(doc, view, fixture, sourceTag)
+        {
+        }
+
+        public override void CalculateFinalPositions(XYZ flipPoint)
+        {
+            var flipLocal = GlobalToLocal.OfPoint(flipPoint);
+            var flipState = DetermineFlipState(flipLocal);
+            IsFlipped = flipState;
+
+            var offsets = GetOffsetsForCondition(Condition, SymbolLength, SymbolWidth);
+            ApplyFlip(ref offsets, flipState);
+
+            var newTagLocal = CalculateTagPosition(offsets);
+            var vertex2Local = CalculateVertex2(offsets);
+            var vertex3Local = CalculateVertex3(newTagLocal, offsets);
+
+            NewTagPosition = LocalToGlobal.OfPoint(newTagLocal);
+            Vertex2 = LocalToGlobal.OfPoint(vertex2Local);
+            Vertex3 = LocalToGlobal.OfPoint(vertex3Local);
+        }
+
+        private bool DetermineFlipState(XYZ flipLocal)
+        {
+            return Condition is PlacementCondition.Right or PlacementCondition.Left
+                ? flipLocal.Y < TagLocal.Y
+                : flipLocal.X < TagLocal.X;
+        }
+
+        private static PlacementOffsets GetOffsetsForCondition(PlacementCondition condition, double symbolLength, double symbolWidth)
+        {
+            var halfLength = symbolLength * 0.5;
+            var halfWidth = symbolWidth * 0.5;
+
+            return condition switch
+            {
+                PlacementCondition.Right => new PlacementOffsets
+                {
+                    V2X = -WireHorizontalOffsetFt,
+                    V2Y = halfLength + WireToSymbolGapFt,
+                    V3X = -WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = 0,
+                    TagY = halfLength + TagOffsetVerticalFt,
+                    IsHorizontalCondition = true
+                },
+                PlacementCondition.Left => new PlacementOffsets
+                {
+                    V2X = WireHorizontalOffsetFt,
+                    V2Y = halfLength + WireToSymbolGapFt,
+                    V3X = WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = 0,
+                    TagY = halfLength + TagOffsetVerticalFt,
+                    IsHorizontalCondition = true
+                },
+                PlacementCondition.Up => new PlacementOffsets
+                {
+                    V2X = halfWidth + WireToSymbolGapHorizontalFt,
+                    V2Y = -WireVerticalOffsetFt,
+                    V3X = -WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = halfWidth + TagOffsetHorizontalFt,
+                    TagY = 0,
+                    IsHorizontalCondition = false
+                },
+                _ => new PlacementOffsets // Down
+                {
+                    V2X = halfWidth + WireToSymbolGapHorizontalFt,
+                    V2Y = WireVerticalOffsetFt,
+                    V3X = -WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = halfWidth + TagOffsetHorizontalFt,
+                    TagY = 0,
+                    IsHorizontalCondition = false
+                }
+            };
+        }
+
+        private static void ApplyFlip(ref PlacementOffsets offsets, bool flipState)
+        {
+            if (!flipState) return;
+
+            if (offsets.IsHorizontalCondition)
+            {
+                offsets.V2Y = -offsets.V2Y;
+                offsets.TagY = -offsets.TagY;
+            }
+            else
+            {
+                offsets.V2X = -offsets.V2X;
+                offsets.V3X = -offsets.V3X;
+                offsets.TagX = -offsets.TagX;
+            }
+        }
+
+        private XYZ CalculateTagPosition(PlacementOffsets offsets)
+        {
+            if (offsets.IsHorizontalCondition)
+            {
+                var tagXOffset = Math.Sign(TagLocal.X - FixtureLocal.X) * TagXOffsetFt;
+                return new XYZ(
+                    FixtureLocal.X + tagXOffset,
+                    FixtureLocal.Y + offsets.TagY,
+                    FixtureLocal.Z);
+            }
+
+            return new XYZ(
+                FixtureLocal.X + offsets.TagX,
+                TagLocal.Y,
+                FixtureLocal.Z);
+        }
+
+        private XYZ CalculateVertex2(PlacementOffsets offsets)
+        {
+            return new XYZ(
+                FixtureLocal.X + offsets.V2X,
+                FixtureLocal.Y + offsets.V2Y,
+                FixtureLocal.Z);
+        }
+
+        private XYZ CalculateVertex3(XYZ tagLocal, PlacementOffsets offsets)
+        {
+            var y = offsets.IsHorizontalCondition
+                ? tagLocal.Y
+                : tagLocal.Y + offsets.V3Y;
+
+            return new XYZ(tagLocal.X + offsets.V3X, y, FixtureLocal.Z);
+        }
+    }
+
+    /// <summary>
+    /// Handles placement calculations for line-based fixtures (e.g., linear light fixtures).
+    /// These fixtures have a LocationCurve instead of LocationPoint.
+    /// Tag placement is relative to the fixture's electrical connector.
+    /// Only Up/Down conditions are used (perpendicular to the fixture line).
+    /// </summary>
+    private class LineBasedPlacementCalculator : IPlacementCalculator
+    {
+        // Input data
+        public XYZ FixturePoint { get; }  // Connector position
+        public double Rotation { get; }
+        public bool RotatesWithComponent { get; }
+
+        // Calculated positions
+        public XYZ NewTagPosition { get; private set; }
+        public XYZ Vertex2 { get; private set; }
+        public XYZ Vertex3 { get; private set; }
+        public bool IsFlipped { get; private set; }
+
+        /// <summary>
+        /// True if line direction is between 91° and 270° (X component is negative).
+        /// Used to correct tag type selection.
+        /// </summary>
+        public bool IsLineDirectionReversed { get; }
+
+        // Line-based coordinate system
+        private readonly XYZ _lineDirection;    // Along the fixture's curve
+        private readonly XYZ _perpDirection;    // Perpendicular to curve (in plan)
+        private readonly Transform _globalToLocal;
+        private readonly Transform _localToGlobal;
+
+        // Positions in local coordinates
+        private readonly XYZ _connectorLocal;
+        private PlacementCondition _condition;  // Set based on flip point click position
+        private readonly double _symbolLength;
+        private readonly double _symbolWidth;
+
+        public LineBasedPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+        {
+            // Get the connector position for line-based fixtures
+            var connector = GetElectricalConnector(fixture);
+            FixturePoint = connector?.Origin ?? GetCurveMidpoint(fixture);
+
+            // Determine rotation mode from source tag
+            RotatesWithComponent = DetermineRotationMode(sourceTag);
+
+            // Get line direction from the fixture's curve
+            var locationCurve = (LocationCurve)fixture.Location;
+            var curve = locationCurve.Curve;
+            _lineDirection = (curve.GetEndPoint(1) - curve.GetEndPoint(0)).Normalize();
+            _lineDirection = new XYZ(_lineDirection.X, _lineDirection.Y, 0).Normalize();
+
+            // Check if line direction is "reversed" (91° to 270°)
+            // This occurs when X < 0, OR when X ≈ 0 and Y < 0 (270° case)
+            IsLineDirectionReversed = _lineDirection.X < -RotationEpsilon ||
+                (Math.Abs(_lineDirection.X) <= RotationEpsilon && _lineDirection.Y < 0);
+
+            // Perpendicular direction (90° CCW from line direction in plan)
+            _perpDirection = new XYZ(-_lineDirection.Y, _lineDirection.X, 0);
+
+            // Calculate rotation angle from line direction
+            Rotation = Math.Atan2(_lineDirection.Y, _lineDirection.X);
+
+            // Create transforms based on line orientation
+            // In local coords: X = along fixture, Y = perpendicular to fixture
+            _globalToLocal = Transform.CreateRotationAtPoint(XYZ.BasisZ, -Rotation, FixturePoint);
+            _localToGlobal = _globalToLocal.Inverse;
+
+            // Transform connector to local coordinates
+            _connectorLocal = _globalToLocal.OfPoint(FixturePoint);
+
+            // For line-based fixtures, condition (Up/Down) will be determined by flip point click position
+            // Initialize to Up, will be updated in CalculateFinalPositions
+            _condition = PlacementCondition.Up;
+
+            // Get symbol dimensions
+            (_symbolLength, _symbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag);
+        }
+
+        private static Connector GetElectricalConnector(FamilyInstance fixture)
+        {
+            var connectors = fixture.MEPModel?.ConnectorManager?.Connectors;
+            if (connectors == null) return null;
+
+            foreach (Connector conn in connectors)
+            {
+                if (conn.Domain == Domain.DomainElectrical)
+                    return conn;
+            }
+            return null;
+        }
+
+        private static XYZ GetCurveMidpoint(FamilyInstance fixture)
+        {
+            var locationCurve = (LocationCurve)fixture.Location;
+            return locationCurve.Curve.Evaluate(0.5, true);
+        }
+
+        private static bool DetermineRotationMode(IndependentTag tag)
+        {
+            var param = tag.LookupParameter("Orientation");
+            if (param == null) return false;
+
+            var value = param.AsValueString();
+            return value == "Horizontal" || value == "Vertical";
+        }
+
+        private static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
+        {
+            var length = fixture.LookupParameter("Symbol Length")?.AsDouble() ?? DefaultSymbolSizeFt;
+            var width = fixture.LookupParameter("Symbol Width")?.AsDouble() ?? DefaultSymbolSizeFt;
+
+            width = Math.Max(width, MinSymbolWidthFt);
+
+            var tagWidth = GetTagWidth(view, tag);
+            width = Math.Max(width, tagWidth);
+
+            return (length, width);
+        }
+
+        private static double GetTagWidth(View view, IndependentTag tag)
+        {
+            var charCount = tag.TagText?.Length ?? 0;
+
+            return charCount switch
+            {
+                2 => TagWidth2CharsFt,
+                3 => TagWidth3CharsFt,
+                _ => CalculateTagWidthFromBounds(view, tag)
+            };
+        }
+
+        private static double CalculateTagWidthFromBounds(View view, IndependentTag tag)
+        {
+            var bbox = tag.get_BoundingBox(view);
+            return bbox != null ? Math.Abs(bbox.Max.X - bbox.Min.X) : 0;
+        }
+
+        public void CalculateFinalPositions(XYZ flipPoint)
+        {
+            var flipLocal = _globalToLocal.OfPoint(flipPoint);
+
+            // Determine which side (Up/Down) based on Y position of click
+            // Positive Y = Up (outward), Negative Y = Down (inward)
+            _condition = flipLocal.Y >= _connectorLocal.Y
+                ? PlacementCondition.Up
+                : PlacementCondition.Down;
+
+            // Determine flip (Left/Right along fixture) based on X position of click
+            var flipState = DetermineFlipState(flipLocal);
+            IsFlipped = flipState;
+
+            var offsets = GetOffsetsForLineBased(_condition, _symbolLength, _symbolWidth);
+            ApplyFlip(ref offsets, flipState);
+
+            var newTagLocal = CalculateTagPosition(offsets);
+            var vertex2Local = CalculateVertex2(offsets);
+            var vertex3Local = CalculateVertex3(newTagLocal, offsets);
+
+            NewTagPosition = _localToGlobal.OfPoint(newTagLocal);
+            Vertex2 = _localToGlobal.OfPoint(vertex2Local);
+            Vertex3 = _localToGlobal.OfPoint(vertex3Local);
+        }
+
+        private bool DetermineFlipState(XYZ flipLocal)
+        {
+            // For Up/Down conditions, flip based on X position (along fixture)
+            // If flip point is to the left of connector, flip
+            return flipLocal.X < _connectorLocal.X;
+        }
+
+        /// <summary>
+        /// Gets offsets for line-based fixtures.
+        /// Only Up/Down conditions are used (perpendicular to fixture line).
+        /// In local coordinates: X = along fixture, Y = perpendicular to fixture.
+        /// Vertex 2 aligns with connector on X (horizontal) and with tag on Y (perpendicular).
+        /// </summary>
+        private PlacementOffsets GetOffsetsForLineBased(
+            PlacementCondition condition,
+            double symbolLength,
+            double symbolWidth)
+        {
+            var halfWidth = symbolWidth * 0.5;
+
+            // Tag offset along fixture (parallel): 14"
+            var tagOffsetAlongFixture = 14.0 * InchesToFeet;
+
+            // Tag offset perpendicular to fixture: 6.25"
+            var tagOffsetPerpendicular = 6.25 * InchesToFeet;
+
+            // Default direction along fixture (will be flipped if needed)
+            var tagXDirection = 1;
+
+            var isOutward = condition == PlacementCondition.Up;
+
+            if (isOutward)
+            {
+                // Tag is on the "up" side (positive Y in local coords)
+                return new PlacementOffsets
+                {
+                    V2X = 0,  // Aligned with connector on X axis
+                    V2Y = tagOffsetPerpendicular,  // Aligned with tag on Y axis
+                    V3X = -WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = tagXDirection * tagOffsetAlongFixture,
+                    TagY = tagOffsetPerpendicular,
+                    IsHorizontalCondition = true
+                };
+            }
+            else
+            {
+                // Tag is on the "down" side (negative Y in local coords)
+                return new PlacementOffsets
+                {
+                    V2X = 0,  // Aligned with connector on X axis
+                    V2Y = -tagOffsetPerpendicular,  // Aligned with tag on Y axis
+                    V3X = -WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = tagXDirection * tagOffsetAlongFixture,
+                    TagY = -tagOffsetPerpendicular,
+                    IsHorizontalCondition = true
+                };
+            }
+        }
+
+        private static void ApplyFlip(ref PlacementOffsets offsets, bool flipState)
+        {
+            if (!flipState) return;
+
+            // For Up/Down conditions, flip the X components (along fixture)
+            offsets.V2X = -offsets.V2X;
+            offsets.V3X = -offsets.V3X;
+            offsets.TagX = -offsets.TagX;
+        }
+
+        private XYZ CalculateTagPosition(PlacementOffsets offsets)
+        {
+            return new XYZ(
+                _connectorLocal.X + offsets.TagX,
+                _connectorLocal.Y + offsets.TagY,
+                _connectorLocal.Z);
+        }
+
+        private XYZ CalculateVertex2(PlacementOffsets offsets)
+        {
+            return new XYZ(
+                _connectorLocal.X + offsets.V2X,
+                _connectorLocal.Y + offsets.V2Y,
+                _connectorLocal.Z);
+        }
+
+        private XYZ CalculateVertex3(XYZ tagLocal, PlacementOffsets offsets)
+        {
+            return new XYZ(
+                tagLocal.X + offsets.V3X,
+                tagLocal.Y,
+                _connectorLocal.Z);
+        }
+    }
+
+    /// <summary>
+    /// Handles placement calculations for vertical face-based fixtures (wall-mounted).
+    /// In plan view, these fixtures appear as symbols perpendicular to the wall.
+    /// Uses wall-based coordinate system where:
+    /// - X axis = wall parallel direction (along the wall)
+    /// - Y axis = wall normal direction (perpendicular to wall, pointing outward)
+    /// </summary>
+    private class VerticalFacePlacementCalculator : IPlacementCalculator
+    {
+        // Input data
+        public XYZ FixturePoint { get; }
+        public double Rotation { get; }
+        public bool RotatesWithComponent { get; }
+
+        // Calculated positions
+        public XYZ NewTagPosition { get; private set; }
+        public XYZ Vertex2 { get; private set; }
+        public XYZ Vertex3 { get; private set; }
+        public bool IsFlipped { get; private set; }
+
+        // Wall-based coordinate system
+        private readonly XYZ _wallNormal;      // Points outward from wall (Y in local)
+        private readonly XYZ _wallParallel;    // Along the wall (X in local)
+        private readonly Transform _globalToWallLocal;
+        private readonly Transform _wallLocalToGlobal;
+
+        // Positions in wall-local coordinates
+        private readonly XYZ _fixtureLocal;
+        private readonly XYZ _tagLocal;
+        private readonly PlacementCondition _condition;
+        private readonly double _symbolLength;
+        private readonly double _symbolWidth;
+        private readonly bool _isWallSconce;
+
+        public VerticalFacePlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+        {
+            FixturePoint = ((LocationPoint)fixture.Location).Point;
+            var tagPoint = sourceTag.TagHeadPosition;
+
+            // Determine rotation mode from source tag
+            RotatesWithComponent = DetermineRotationMode(sourceTag);
+
+            // Get wall orientation vectors
+            _wallNormal = GetWallFaceNormal(fixture);
+            _wallParallel = new XYZ(-_wallNormal.Y, _wallNormal.X, 0); // 90° CCW from normal
+
+            // Calculate rotation angle from wall normal
+            // Wall normal pointing in +Y direction = 0° rotation
+            // This gives us the angle to rotate from global to wall-local
+            var wallAngle = Math.Atan2(_wallNormal.Y, _wallNormal.X) - Math.PI / 2.0;
+            Rotation = wallAngle;
+
+            // Create transforms based on wall orientation
+            // In wall-local coords: X = along wall, Y = outward from wall
+            _globalToWallLocal = Transform.CreateRotationAtPoint(XYZ.BasisZ, -wallAngle, FixturePoint);
+            _wallLocalToGlobal = _globalToWallLocal.Inverse;
+
+            // Transform points to wall-local coordinates
+            _fixtureLocal = _globalToWallLocal.OfPoint(FixturePoint);
+            _tagLocal = _globalToWallLocal.OfPoint(tagPoint);
+
+            // Determine condition based on tag position relative to fixture in wall-local coords
+            _condition = DetermineCondition(_fixtureLocal, _tagLocal);
+
+            // Get symbol dimensions
+            (_symbolLength, _symbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag);
+
+            // Check if this is a wall sconce family
+            _isWallSconce = fixture.Symbol?.FamilyName == WallSconceFamily;
+        }
+
+        private static bool DetermineRotationMode(IndependentTag tag)
+        {
+            var param = tag.LookupParameter("Orientation");
+            if (param == null) return false;
+
+            var value = param.AsValueString();
+            return value == "Horizontal" || value == "Vertical";
+        }
+
+        /// <summary>
+        /// Gets the wall face normal for a fixture, normalized to horizontal plane.
+        /// Supports both local hosts and hosts in linked models.
+        /// </summary>
+        private static XYZ GetWallFaceNormal(FamilyInstance fixture)
+        {
+            var normal = GetHostFaceNormal(fixture);
+
+            if (normal != null)
+            {
+                // Return horizontal component only (for plan view), normalized
+                var horizontal = new XYZ(normal.X, normal.Y, 0);
+                var length = horizontal.GetLength();
+                if (length > RotationEpsilon)
+                    return horizontal.Normalize();
+            }
+
+            // Default to fixture's facing orientation if we can't get wall normal
+            var facingOrientation = fixture.FacingOrientation;
+            var facing = new XYZ(facingOrientation.X, facingOrientation.Y, 0);
+            var facingLength = facing.GetLength();
+            return facingLength > RotationEpsilon ? facing.Normalize() : XYZ.BasisY;
+        }
+
+        private static PlacementCondition DetermineCondition(XYZ fixtureLocal, XYZ tagLocal)
+        {
+            // For vertical face-based fixtures, we only care about Up/Down
+            // (whether tag is outward from wall or toward wall)
+            var diffY = tagLocal.Y - fixtureLocal.Y;  // Perpendicular to wall
+
+            // Up = outward from wall (positive Y), Down = toward wall (negative Y)
+            return diffY >= 0 ? PlacementCondition.Up : PlacementCondition.Down;
+        }
+
+        private static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
+        {
+            var length = fixture.LookupParameter("Symbol Length")?.AsDouble() ?? DefaultSymbolSizeFt;
+            var width = fixture.LookupParameter("Symbol Width")?.AsDouble() ?? DefaultSymbolSizeFt;
+
+            width = Math.Max(width, MinSymbolWidthFt);
+
+            var tagWidth = GetTagWidth(view, tag);
+            width = Math.Max(width, tagWidth);
+
+            return (length, width);
+        }
+
+        private static double GetTagWidth(View view, IndependentTag tag)
+        {
+            var charCount = tag.TagText?.Length ?? 0;
+
+            return charCount switch
+            {
+                2 => TagWidth2CharsFt,
+                3 => TagWidth3CharsFt,
+                _ => CalculateTagWidthFromBounds(view, tag)
+            };
+        }
+
+        private static double CalculateTagWidthFromBounds(View view, IndependentTag tag)
+        {
+            var bbox = tag.get_BoundingBox(view);
+            return bbox != null ? Math.Abs(bbox.Max.X - bbox.Min.X) : 0;
+        }
+
+        public void CalculateFinalPositions(XYZ flipPoint)
+        {
+            var flipLocal = _globalToWallLocal.OfPoint(flipPoint);
+            var flipState = DetermineFlipState(flipLocal);
+            IsFlipped = flipState;
+
+            var offsets = GetOffsetsForVerticalFixture(_condition, _symbolLength, _symbolWidth);
+            ApplyFlip(ref offsets, flipState);
+
+            var newTagLocal = CalculateTagPosition(offsets);
+            var vertex2Local = CalculateVertex2(offsets);
+            var vertex3Local = CalculateVertex3(newTagLocal, offsets);
+
+            NewTagPosition = _wallLocalToGlobal.OfPoint(newTagLocal);
+            Vertex2 = _wallLocalToGlobal.OfPoint(vertex2Local);
+            Vertex3 = _wallLocalToGlobal.OfPoint(vertex3Local);
+        }
+
+        private bool DetermineFlipState(XYZ flipLocal)
+        {
+            // For vertical fixtures with Up/Down conditions:
+            // Flip determines which side along the wall the tag goes
+            // If flip point is to the left of the tag (negative X relative to tag), flip
+            return flipLocal.X < _tagLocal.X;
+        }
+
+        /// <summary>
+        /// Gets offsets for vertical face-based fixtures.
+        /// In wall-local coordinates:
+        /// - X = along wall (parallel)
+        /// - Y = away from wall (normal)
+        /// For vertical fixtures, tags are always placed along the wall (Up/Down only).
+        /// Symbol Width is used for the tag offset along the wall.
+        /// </summary>
+        private PlacementOffsets GetOffsetsForVerticalFixture(
+            PlacementCondition condition,
+            double symbolLength,
+            double symbolWidth)
+        {
+            var halfWidth = symbolWidth * 0.5;
+            var halfLength = symbolLength * 0.5;
+
+            // Tag offset along wall: (Symbol Width / 2) + 8.25"
+            var tagOffsetAlongWall = halfWidth + (8.25 * InchesToFeet);
+
+            // Tag offset perpendicular to wall: 5.5"
+            var tagOffsetFromWall = 5.5 * InchesToFeet;
+
+            // Wire gap from symbol - use smaller gap for wall sconces
+            var wireGapHorizontal = _isWallSconce ? WireToSymbolGapWallSconceFt : WireToSymbolGapHorizontalFt;
+
+            // Determine direction along wall based on original tag position
+            var tagXDirection = Math.Sign(_tagLocal.X - _fixtureLocal.X);
+            if (tagXDirection == 0) tagXDirection = 1; // Default to right along wall
+
+            // For vertical face-based fixtures, we only use Up/Down conditions
+            // Up = tag is outward from wall, Down = tag is toward wall
+            var isOutward = condition == PlacementCondition.Up || condition == PlacementCondition.Right;
+
+            if (isOutward)
+            {
+                // Tag is outward from wall (away)
+                return new PlacementOffsets
+                {
+                    V2X = tagXDirection * (halfWidth + wireGapHorizontal),
+                    V2Y = WireVerticalOffsetFt,
+                    V3X = -WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = tagXDirection * tagOffsetAlongWall,
+                    TagY = tagOffsetFromWall,
+                    IsHorizontalCondition = true
+                };
+            }
+            else
+            {
+                // Tag is toward wall (inward)
+                return new PlacementOffsets
+                {
+                    V2X = tagXDirection * (halfWidth + wireGapHorizontal),
+                    V2Y = -WireVerticalOffsetFt,
+                    V3X = -WireElbowOffsetFt,
+                    V3Y = 0,
+                    TagX = tagXDirection * tagOffsetAlongWall,
+                    TagY = -tagOffsetFromWall,
+                    IsHorizontalCondition = true
+                };
+            }
+        }
+
+        private static void ApplyFlip(ref PlacementOffsets offsets, bool flipState)
+        {
+            if (!flipState) return;
+
+            // For vertical fixtures (Up/Down conditions), flip the X components (along wall)
+            offsets.V2X = -offsets.V2X;
+            offsets.V3X = -offsets.V3X;
+            offsets.TagX = -offsets.TagX;
+        }
+
+        private XYZ CalculateTagPosition(PlacementOffsets offsets)
+        {
+            // For vertical fixtures, we always position the new tag relative to the fixture
+            // using the calculated offsets. The offsets already account for symbol dimensions.
+            return new XYZ(
+                _fixtureLocal.X + offsets.TagX,
+                _fixtureLocal.Y + offsets.TagY,
+                _fixtureLocal.Z);
+        }
+
+        private XYZ CalculateVertex2(PlacementOffsets offsets)
+        {
+            return new XYZ(
+                _fixtureLocal.X + offsets.V2X,
+                _fixtureLocal.Y + offsets.V2Y,
+                _fixtureLocal.Z);
+        }
+
+        private XYZ CalculateVertex3(XYZ tagLocal, PlacementOffsets offsets)
+        {
+            var y = offsets.IsHorizontalCondition
+                ? tagLocal.Y
+                : tagLocal.Y + offsets.V3Y;
+
+            return new XYZ(tagLocal.X + offsets.V3X, y, _fixtureLocal.Z);
+        }
+    }
+
+    private struct PlacementOffsets
+    {
+        public double V2X;
+        public double V2Y;
+        public double V3X;
+        public double V3Y;
+        public double TagX;
+        public double TagY;
+        public bool IsHorizontalCondition;
+    }
+
+    private enum PlacementCondition
+    {
+        Right = 1,
+        Left = 2,
+        Up = 3,
+        Down = 4
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// Selection filter that only accepts tags attached to lighting fixtures.
+/// </summary>
+public class LightingFixtureTagFilter : ISelectionFilter
+{
+    private static readonly long LightingFixturesCategoryId = (long)BuiltInCategory.OST_LightingFixtures;
+
+    public bool AllowElement(Element elem)
+    {
+        if (elem is not IndependentTag tag) return false;
+
+        foreach (var id in tag.GetTaggedLocalElementIds())
+        {
+            var taggedElem = elem.Document.GetElement(id);
+            if (taggedElem?.Category?.Id.Value == LightingFixturesCategoryId)
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool AllowReference(Reference reference, XYZ position) => false;
+}

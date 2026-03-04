@@ -1,0 +1,353 @@
+using Autodesk.Revit.ApplicationServices;
+using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Selection;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+[Transaction(TransactionMode.Manual)]
+public class TurboBubble : IExternalCommand
+{
+    private const double INCHES_TO_FEET = 1.0 / 12.0;
+
+    public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+    {
+        UIDocument uidoc = commandData.Application.ActiveUIDocument;
+        Document doc = uidoc.Document;
+        View activeView = doc.ActiveView;
+
+        try
+        {
+            // Validate prerequisites
+            ValidatePrerequisites(doc, activeView);
+
+            // Get user inputs
+            IndependentTag fixtureTag = SelectFixtureTag(uidoc);
+            FamilyInstance fixture = GetFixtureFromTag(fixtureTag);
+            XYZ secondPoint = PickPointWithTemporarySketchPlane(doc, uidoc, activeView, fixture);
+
+            // Calculate geometry
+            XYZ fixturePoint = GetFixturePoint(fixture);
+            Transform localToGlobal = CreateLocalToGlobalTransform(fixture, fixturePoint);
+            Transform globalToLocal = localToGlobal.Inverse;
+
+            int condition = DetermineCondition(globalToLocal, fixtureTag.TagHeadPosition, fixturePoint);
+            bool flipState = DetermineFlipState(globalToLocal, fixtureTag.TagHeadPosition, secondPoint, condition);
+            var offsets = CalculateOffsets(condition, flipState);
+
+            // Create elements
+            Connector fixtureConnector = GetElectricalConnector(fixture);
+            ElementId wireTypeId = GetWireTypeId(doc);
+
+            XYZ vertex2 = fixturePoint + localToGlobal.OfVector(new XYZ(offsets.v2X, offsets.v2Y, 0));
+            XYZ vertex3 = fixturePoint + localToGlobal.OfVector(new XYZ(offsets.v3X, offsets.v3Y, 0));
+
+            Wire wire = CreateWire(doc, activeView.Id, wireTypeId, fixtureConnector, vertex2, vertex3);
+
+            CreateFixtureTag(doc, activeView, fixture, condition, offsets, localToGlobal, globalToLocal,
+                           fixturePoint, fixtureTag.TagHeadPosition, GetFixtureRotation(fixture));
+
+            return Result.Succeeded;
+        }
+        catch (OperationCanceledException)
+        {
+            return Result.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            TaskDialog.Show("Error", $"Unexpected error: {ex.Message}");
+            return Result.Failed;
+        }
+    }
+
+    private void ValidatePrerequisites(Document doc, View activeView)
+    {
+        // Check tag type exists
+        ElementId tagTypeId = GetLightingFixtureSwitchlegTagTypeId(doc);
+        if (tagTypeId == ElementId.InvalidElementId)
+        {
+            TaskDialog.Show("Error", "Load tag 'AL_Tag_Lighting Fixture (Switchleg)' before using TurboBubble.");
+            throw new OperationCanceledException();
+        }
+
+        // Check view type
+        if (activeView.ViewType != ViewType.FloorPlan && activeView.ViewType != ViewType.CeilingPlan)
+        {
+            TaskDialog.Show("Error", "This command only works in Floor Plan or Reflected Ceiling Plan views.");
+            throw new OperationCanceledException();
+        }
+    }
+
+    private IndependentTag SelectFixtureTag(UIDocument uidoc)
+    {
+        Reference tagRef = uidoc.Selection.PickObject(
+            ObjectType.Element,
+            new LightingFixtureTagSelectionFilter(),
+            "Select a Lighting Fixture Tag");
+
+        return uidoc.Document.GetElement(tagRef) as IndependentTag
+            ?? throw new InvalidOperationException("Selected element is not a valid tag.");
+    }
+
+    private FamilyInstance GetFixtureFromTag(IndependentTag tag)
+    {
+        ICollection<Element> taggedElements = tag.GetTaggedLocalElements();
+        if (taggedElements == null || taggedElements.Count == 0)
+        {
+            throw new InvalidOperationException("Tag does not have a tagged element.");
+        }
+
+        FamilyInstance fixture = taggedElements.FirstOrDefault() as FamilyInstance;
+        if (fixture == null || fixture.Category?.Id.Value != (long)BuiltInCategory.OST_LightingFixtures)
+        {
+            throw new InvalidOperationException("Tagged element is not a valid lighting fixture.");
+        }
+        return fixture;
+    }
+
+    private XYZ GetFixturePoint(FamilyInstance fixture)
+    {
+        return (fixture.Location as LocationPoint)?.Point
+            ?? throw new InvalidOperationException("Unable to get fixture location.");
+    }
+
+    private double GetFixtureRotation(FamilyInstance fixture)
+    {
+        XYZ basisX = fixture.GetTransform().BasisX;
+        return Math.Atan2(basisX.Y, basisX.X);
+    }
+
+    private Transform CreateLocalToGlobalTransform(FamilyInstance fixture, XYZ fixturePoint)
+    {
+        double rotation = GetFixtureRotation(fixture);
+        return Transform.CreateRotationAtPoint(XYZ.BasisZ, rotation, fixturePoint);
+    }
+
+    private XYZ PickPointWithTemporarySketchPlane(Document doc, UIDocument uidoc, View activeView, FamilyInstance fixture)
+    {
+        SketchPlane originalSketchPlane = activeView.SketchPlane;
+        SketchPlane tempSketchPlane = null;
+
+        try
+        {
+            using (Transaction trans = new Transaction(doc, "Set Temporary Sketch Plane"))
+            {
+                trans.Start();
+                double elevation = GetFixturePoint(fixture).Z;
+                Plane plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, new XYZ(0, 0, elevation));
+                tempSketchPlane = SketchPlane.Create(doc, plane);
+                activeView.SketchPlane = tempSketchPlane;
+                trans.Commit();
+            }
+
+            return uidoc.Selection.PickPoint("Click to establish flip direction");
+        }
+        finally
+        {
+            if (tempSketchPlane != null)
+            {
+                using (Transaction trans = new Transaction(doc, "Restore Sketch Plane"))
+                {
+                    trans.Start();
+                    if (originalSketchPlane != null)
+                    {
+                        activeView.SketchPlane = originalSketchPlane;
+                    }
+                    doc.Delete(tempSketchPlane.Id);
+                    trans.Commit();
+                }
+            }
+        }
+    }
+
+    private int DetermineCondition(Transform globalToLocal, XYZ tagHeadPosition, XYZ fixturePoint)
+    {
+        XYZ diff = globalToLocal.OfPoint(tagHeadPosition) - globalToLocal.OfPoint(fixturePoint);
+        double absDiffX = Math.Abs(diff.X);
+        double absDiffY = Math.Abs(diff.Y);
+
+        return absDiffX > absDiffY
+            ? (diff.X > 0 ? 1 : 2)  // Right or Left
+            : (diff.Y > 0 ? 3 : 4); // Up or Down
+    }
+
+    private bool DetermineFlipState(Transform globalToLocal, XYZ tagHeadPosition, XYZ secondPoint, int condition)
+    {
+        XYZ tagLocal = globalToLocal.OfPoint(tagHeadPosition);
+        XYZ secondPointLocal = globalToLocal.OfPoint(secondPoint);
+        XYZ diff = secondPointLocal - tagLocal;
+
+        return (condition == 1 || condition == 2) ? diff.Y < 0 : diff.X < 0;
+    }
+
+    private Connector GetElectricalConnector(FamilyInstance fixture)
+    {
+        MEPModel mepModel = fixture.MEPModel
+            ?? throw new InvalidOperationException("Fixture does not have MEP model.");
+
+        ConnectorSet connectorSet = mepModel.ConnectorManager?.Connectors;
+        if (connectorSet != null)
+        {
+            foreach (Connector conn in connectorSet)
+            {
+                if (conn.Domain == Domain.DomainElectrical)
+                {
+                    return conn;
+                }
+            }
+        }
+
+        throw new InvalidOperationException("No electrical connector found on fixture.");
+    }
+
+    private (double v2X, double v2Y, double v3X, double v3Y, double tagX, double tagY) CalculateOffsets(int condition, bool flipState)
+    {
+        double v2X, v2Y, v3X, v3Y, tagX, tagY;
+
+        switch (condition)
+        {
+            case 1: // Right
+                (v2X, v2Y, v3X, v3Y, tagX, tagY) = (
+                    -0.68 * INCHES_TO_FEET, 5.19 * INCHES_TO_FEET,
+                    2.5 * INCHES_TO_FEET, 6.5 * INCHES_TO_FEET,
+                    8.8125 * INCHES_TO_FEET, 7.5 * INCHES_TO_FEET);
+                break;
+            case 2: // Left
+                (v2X, v2Y, v3X, v3Y, tagX, tagY) = (
+                    0.68 * INCHES_TO_FEET, 5.19 * INCHES_TO_FEET,
+                    -2.5 * INCHES_TO_FEET, 6.5 * INCHES_TO_FEET,
+                    -8.8125 * INCHES_TO_FEET, 7.5 * INCHES_TO_FEET);
+                break;
+            case 3: // Up
+                (v2X, v2Y, v3X, v3Y, tagX, tagY) = (
+                    7.34375 * INCHES_TO_FEET, -0.71875 * INCHES_TO_FEET,
+                    9.21875 * INCHES_TO_FEET, 5.0625 * INCHES_TO_FEET,
+                    12.625 * INCHES_TO_FEET, 0);
+                break;
+            case 4: // Down
+                (v2X, v2Y, v3X, v3Y, tagX, tagY) = (
+                    7.34375 * INCHES_TO_FEET, 0.71875 * INCHES_TO_FEET,
+                    9.21875 * INCHES_TO_FEET, -5.0625 * INCHES_TO_FEET,
+                    12.625 * INCHES_TO_FEET, 0);
+                break;
+            default:
+                throw new InvalidOperationException("Invalid condition value.");
+        }
+
+        // Apply flip state
+        if (flipState)
+        {
+            if (condition <= 2)
+            {
+                (v2Y, v3Y, tagY) = (-v2Y, -v3Y, -tagY);
+            }
+            else
+            {
+                (v2X, v3X, tagX) = (-v2X, -v3X, -tagX);
+            }
+        }
+
+        return (v2X, v2Y, v3X, v3Y, tagX, tagY);
+    }
+
+    private Wire CreateWire(Document doc, ElementId viewId, ElementId wireTypeId, Connector fixtureConnector, XYZ vertex2, XYZ vertex3)
+    {
+        using (Transaction trans = new Transaction(doc, "Create Wire"))
+        {
+            trans.Start();
+
+            try
+            {
+                IList<XYZ> vertices = new List<XYZ> { vertex2, vertex3 };
+                Wire wire = Wire.Create(doc, wireTypeId, viewId, WiringType.Arc, vertices, fixtureConnector, null)
+                    ?? throw new InvalidOperationException("Failed to create wire.");
+
+                trans.Commit();
+                return wire;
+            }
+            catch
+            {
+                trans.RollBack();
+                throw;
+            }
+        }
+    }
+
+    private void CreateFixtureTag(Document doc, View activeView, FamilyInstance fixture, int condition,
+                                  (double v2X, double v2Y, double v3X, double v3Y, double tagX, double tagY) offsets,
+                                  Transform localToGlobal, Transform globalToLocal, XYZ fixturePoint,
+                                  XYZ originalTagHeadPosition, double fixtureRotation)
+    {
+        using (Transaction trans = new Transaction(doc, "Create Lighting Fixture Tag"))
+        {
+            trans.Start();
+
+            try
+            {
+                ElementId tagTypeId = GetLightingFixtureSwitchlegTagTypeId(doc);
+
+                // Calculate Y offset (align with original tag for conditions 3 & 4)
+                double tagYOffset = (condition >= 3)
+                    ? globalToLocal.OfPoint(originalTagHeadPosition).Y - globalToLocal.OfPoint(fixturePoint).Y
+                    : offsets.tagY;
+
+                XYZ tagPosition = fixturePoint + localToGlobal.OfVector(new XYZ(offsets.tagX, tagYOffset, 0));
+
+                // Create and configure tag
+                IndependentTag newTag = IndependentTag.Create(
+                    doc, activeView.Id, new Reference(fixture), false,
+                    TagMode.TM_ADDBY_CATEGORY, TagOrientation.Horizontal, tagPosition);
+
+                if (newTag != null)
+                {
+                    newTag.ChangeTypeId(tagTypeId);
+                    newTag.TagHeadPosition = tagPosition;
+
+                    Line rotationAxis = Line.CreateBound(tagPosition, tagPosition + XYZ.BasisZ);
+                    ElementTransformUtils.RotateElement(doc, newTag.Id, rotationAxis, fixtureRotation);
+                }
+
+                trans.Commit();
+            }
+            catch (Exception ex)
+            {
+                TaskDialog.Show("Warning", $"Wire created successfully, but failed to create tag: {ex.Message}");
+                trans.RollBack();
+            }
+        }
+    }
+
+    private ElementId GetWireTypeId(Document doc)
+    {
+        WireType wireType = new FilteredElementCollector(doc)
+            .OfClass(typeof(WireType))
+            .FirstOrDefault() as WireType;
+
+        return wireType?.Id ?? throw new InvalidOperationException("No wire type found in project.");
+    }
+
+    private ElementId GetLightingFixtureSwitchlegTagTypeId(Document doc)
+    {
+        FamilySymbol tagType = new FilteredElementCollector(doc)
+            .OfClass(typeof(FamilySymbol))
+            .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
+            .Cast<FamilySymbol>()
+            .FirstOrDefault(fs => fs.FamilyName == "AL_Tag_Lighting Fixture (Switchleg)");
+
+        return tagType?.Id ?? ElementId.InvalidElementId;
+    }
+}
+
+public class LightingFixtureTagSelectionFilter : ISelectionFilter
+{
+    public bool AllowElement(Element elem)
+    {
+        return elem is IndependentTag tag
+            && tag.GetTaggedLocalElements().Any(e => e.Category?.Id.Value == (long)BuiltInCategory.OST_LightingFixtures);
+    }
+
+    public bool AllowReference(Reference reference, XYZ position) => false;
+}

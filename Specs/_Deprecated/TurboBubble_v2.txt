@@ -1,0 +1,308 @@
+using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Selection;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+[Transaction(TransactionMode.Manual)]
+public class TurboBubble : IExternalCommand
+{
+    public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+    {
+        UIDocument uidoc = commandData.Application.ActiveUIDocument;
+        Document doc = uidoc.Document;
+        View activeView = doc.ActiveView;
+
+        try
+        {
+            // Check if view is Floor Plan or RCP
+            if (activeView.ViewType != ViewType.FloorPlan && activeView.ViewType != ViewType.CeilingPlan)
+            {
+                TaskDialog.Show("Error", "This command only works in Floor Plan or Reflected Ceiling Plan views.");
+                return Result.Cancelled;
+            }
+
+            // Prompt user to select a lighting fixture
+            Reference fixtureRef = uidoc.Selection.PickObject(
+                ObjectType.Element,
+                new LightingFixtureSelectionFilter(),
+                "Select a Lighting Fixture");
+
+            Element fixtureElement = doc.GetElement(fixtureRef);
+            if (!(fixtureElement is FamilyInstance fixture) || fixture.Category.Id.IntegerValue != (int)BuiltInCategory.OST_LightingFixtures)
+            {
+                TaskDialog.Show("Error", "Selected element is not a valid lighting fixture.");
+                return Result.Failed;
+            }
+
+            // Prompt user to select a lighting fixture tag
+            Reference tagRef = uidoc.Selection.PickObject(
+                ObjectType.Element,
+                new LightingFixtureTagSelectionFilter(doc),
+                "Select a Lighting Fixture Tag");
+
+            Element tagElement = doc.GetElement(tagRef);
+            if (!(tagElement is IndependentTag tag))
+            {
+                TaskDialog.Show("Error", "Selected element is not a valid tag.");
+                return Result.Failed;
+            }
+
+            // Get fixture location
+            LocationPoint fixtureLoc = fixture.Location as LocationPoint;
+            if (fixtureLoc == null)
+            {
+                TaskDialog.Show("Error", "Unable to get fixture location.");
+                return Result.Failed;
+            }
+            XYZ fixturePoint = fixtureLoc.Point;
+
+            // Get tag location
+            XYZ tagPoint = tag.TagHeadPosition;
+
+            // Get MEP model and connector
+            MEPModel mepModel = fixture.MEPModel;
+            if (mepModel == null)
+            {
+                TaskDialog.Show("Error", "Fixture does not have MEP model.");
+                return Result.Failed;
+            }
+
+            ConnectorSet connectors = mepModel.ConnectorManager.Connectors;
+            Connector fixtureConnector = null;
+            foreach (Connector conn in connectors)
+            {
+                if (conn.Domain == Domain.DomainElectrical)
+                {
+                    fixtureConnector = conn;
+                    break;
+                }
+            }
+
+            if (fixtureConnector == null)
+            {
+                TaskDialog.Show("Error", "No electrical connector found on fixture.");
+                return Result.Failed;
+            }
+
+            // Calculate direction and determine condition
+            double deltaX = tagPoint.X - fixturePoint.X;
+            double deltaY = tagPoint.Y - fixturePoint.Y;
+            bool isLeftRight = Math.Abs(deltaX) > Math.Abs(deltaY);
+
+            // Calculate vertices
+            XYZ vertex2, vertex3;
+
+            if (isLeftRight)
+            {
+                // Condition 1: Left/Right
+                // Vertex 2
+                double xOffset2 = -Math.Sign(deltaX) * (0.68 / 12.0); // Opposite direction
+                double yOffset2 = 5.19 / 12.0;
+                vertex2 = new XYZ(
+                    fixturePoint.X + xOffset2,
+                    fixturePoint.Y + yOffset2,
+                    fixturePoint.Z);
+
+                // Vertex 3
+                double xOffset3 = Math.Sign(deltaX) * (2.5 / 12.0); // Same direction
+                double yOffset3 = 6.5 / 12.0;
+                vertex3 = new XYZ(
+                    fixturePoint.X + xOffset3,
+                    fixturePoint.Y + yOffset3,
+                    fixturePoint.Z);
+            }
+            else
+            {
+                // Condition 2: Up/Down
+                // Vertex 2
+                double xOffset2 = 7.34375 / 12.0;
+                double yOffset2 = -Math.Sign(deltaY) * (0.71875 / 12.0); // Opposite direction
+                vertex2 = new XYZ(
+                    fixturePoint.X + xOffset2,
+                    fixturePoint.Y + yOffset2,
+                    fixturePoint.Z);
+
+                // Vertex 3
+                double xOffset3 = 9.21875 / 12.0;
+                double yOffset3 = Math.Sign(deltaY) * (5.0625 / 12.0); // Same direction
+                vertex3 = new XYZ(
+                    fixturePoint.X + xOffset3,
+                    fixturePoint.Y + yOffset3,
+                    fixturePoint.Z);
+            }
+
+            // Get wire type
+            ElementId wireTypeId = GetWireTypeId(doc);
+            if (wireTypeId == ElementId.InvalidElementId)
+            {
+                TaskDialog.Show("Error", "No wire type found in project.");
+                return Result.Failed;
+            }
+
+            // Create wire
+            Wire wire;
+            using (Transaction trans = new Transaction(doc, "Create Wire and Tag"))
+            {
+                trans.Start();
+
+                try
+                {
+                    List<XYZ> vertices = new List<XYZ> { vertex2, vertex3 };
+                    wire = Wire.Create(doc, wireTypeId, activeView.Id, WiringType.Arc, vertices, fixtureConnector, null);
+
+                    if (wire == null)
+                    {
+                        TaskDialog.Show("Error", "Failed to create wire.");
+                        trans.RollBack();
+                        return Result.Failed;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    TaskDialog.Show("Error", $"Failed to create wire: {ex.Message}");
+                    trans.RollBack();
+                    return Result.Failed;
+                }
+
+                // Get wire tag type
+                ElementId wireTagTypeId = GetWireTagTypeId(doc);
+                if (wireTagTypeId != ElementId.InvalidElementId)
+                {
+                    try
+                    {
+                        // Calculate rotation
+                        double fixtureRotation = fixtureLoc.Rotation;
+                        ProjectLocation projLoc = doc.ActiveProjectLocation;
+                        ProjectPosition projPos = projLoc.GetProjectPosition(XYZ.Zero);
+                        double projectNorthAngle = projPos.Angle;
+                        double rotation = fixtureRotation - projectNorthAngle;
+
+                        // Calculate wire tag position based on condition
+                        XYZ wireTagPosition;
+                        if (isLeftRight)
+                        {
+                            // Condition 1: Left/Right
+                            wireTagPosition = new XYZ(
+                                fixturePoint.X + (8.8125 / 12.0),
+                                fixturePoint.Y + (7.5 / 12.0),
+                                fixturePoint.Z);
+                        }
+                        else
+                        {
+                            // Condition 2: Up/Down
+                            // Align horizontal reference plane with fixture tag
+                            wireTagPosition = new XYZ(
+                                fixturePoint.X + (12.625 / 12.0),
+                                tagPoint.Y,
+                                fixturePoint.Z);
+                        }
+
+                        // Create tag at calculated position
+                        Reference wireRef = new Reference(wire);
+                        IndependentTag wireTag = IndependentTag.Create(
+                            doc,
+                            wireTagTypeId,
+                            activeView.Id,
+                            wireRef,
+                            false,
+                            TagOrientation.Horizontal,
+                            wireTagPosition);
+
+                        // Apply rotation if significant
+                        if (wireTag != null && Math.Abs(rotation) > 0.0001)
+                        {
+                            ElementTransformUtils.RotateElement(doc, wireTag.Id, Line.CreateBound(wireTagPosition, wireTagPosition + XYZ.BasisZ), rotation);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Tag creation failed but wire was created - just show warning
+                        TaskDialog.Show("Warning", $"Wire created but failed to create tag: {ex.Message}");
+                    }
+                }
+
+                trans.Commit();
+            }
+
+            return Result.Succeeded;
+        }
+        catch (OperationCanceledException)
+        {
+            return Result.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            TaskDialog.Show("Error", $"An unexpected error occurred: {ex.Message}");
+            return Result.Failed;
+        }
+    }
+
+    private ElementId GetWireTypeId(Document doc)
+    {
+        FilteredElementCollector collector = new FilteredElementCollector(doc);
+        WireType wireType = collector.OfClass(typeof(WireType)).FirstOrDefault() as WireType;
+        return wireType?.Id ?? ElementId.InvalidElementId;
+    }
+
+    private ElementId GetWireTagTypeId(Document doc)
+    {
+        FilteredElementCollector collector = new FilteredElementCollector(doc);
+        FamilySymbol wireTagType = collector
+            .OfClass(typeof(FamilySymbol))
+            .Cast<FamilySymbol>()
+            .FirstOrDefault(fs => fs.Category != null && fs.Category.Id.IntegerValue == (int)BuiltInCategory.OST_WireTags);
+        return wireTagType?.Id ?? ElementId.InvalidElementId;
+    }
+}
+
+public class LightingFixtureSelectionFilter : ISelectionFilter
+{
+    public bool AllowElement(Element elem)
+    {
+        if (elem is FamilyInstance && elem.Category != null)
+        {
+            return elem.Category.Id.IntegerValue == (int)BuiltInCategory.OST_LightingFixtures;
+        }
+        return false;
+    }
+
+    public bool AllowReference(Reference reference, XYZ position)
+    {
+        return false;
+    }
+}
+
+public class LightingFixtureTagSelectionFilter : ISelectionFilter
+{
+    private Document _doc;
+
+    public LightingFixtureTagSelectionFilter(Document doc)
+    {
+        _doc = doc;
+    }
+
+    public bool AllowElement(Element elem)
+    {
+        if (elem is IndependentTag tag)
+        {
+            ICollection<Element> taggedElements = tag.GetTaggedLocalElements();
+            foreach (Element taggedElem in taggedElements)
+            {
+                if (taggedElem.Category != null && taggedElem.Category.Id.IntegerValue == (int)BuiltInCategory.OST_LightingFixtures)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public bool AllowReference(Reference reference, XYZ position)
+    {
+        return false;
+    }
+}

@@ -1,0 +1,337 @@
+================================================================================
+               TURBOSUITE — GITHUB INTEGRATION GUIDE
+================================================================================
+
+This guide walks you through setting up TurboSuite with GitHub so you can
+work in forks and commit changes. It assumes:
+
+  - You have a GitHub account
+  - You are using Claude Code in a WSL Ubuntu terminal
+  - Average computer knowledge
+
+
+================================================================================
+1. PREREQUISITES
+================================================================================
+
+1.1  Verify Git is installed in WSL
+     Open your WSL Ubuntu terminal and run:
+
+       git --version
+
+     If not installed:
+
+       sudo apt update && sudo apt install git -y
+
+1.2  Configure your Git identity
+     This links your commits to your name/email. Use the same email as
+     your GitHub account:
+
+       git config --global user.name "Your Name"
+       git config --global user.email "your-email@example.com"
+
+1.3  Set up GitHub authentication
+     The easiest method is GitHub CLI (gh), which Claude Code also uses:
+
+       sudo apt install gh -y
+       gh auth login
+
+     Follow the prompts:
+       - Select "GitHub.com"
+       - Select "HTTPS"
+       - Select "Login with a web browser"
+       - Copy the one-time code, press Enter, paste it in the browser
+
+     This stores credentials so both git and gh commands work without
+     entering passwords.
+
+
+================================================================================
+2. INITIAL SETUP — CREATING THE REPO
+================================================================================
+
+These steps create the TurboSuite3D repository on GitHub and push the
+existing code. You only do this once. Note: the GitHub repo is called
+"TurboSuite3D" (since "TurboSuite" is already used for AutoCAD commands),
+but the local folder remains "TurboSuite".
+
+2.1  Navigate to the project folder in WSL:
+
+       cd /mnt/c/Users/jacobq/Documents/Add-Ins/TurboSuite
+
+2.2  Initialize a git repository:
+
+       git init
+
+2.3  Stage all files and create the first commit:
+
+       git add -A
+       git status              # Review what will be committed
+       git commit -m "Initial commit"
+
+2.4  Create the GitHub repo and push:
+
+       gh repo create TurboSuite3D --private --source=. --push
+
+     This creates a private repo called "TurboSuite3D" under your GitHub
+     account, sets it as the remote, and pushes your code.
+
+     To verify, visit: https://github.com/YOUR-USERNAME/TurboSuite3D
+
+
+================================================================================
+3. FORKING WORKFLOW
+================================================================================
+
+Forks let collaborators work on their own copy without affecting the
+original. Here is how a collaborator would set up a fork.
+
+3.1  Fork on GitHub
+     - Go to https://github.com/OWNER-USERNAME/TurboSuite3D
+     - Click the "Fork" button (top right)
+     - Keep the defaults and click "Create fork"
+     - You now have: https://github.com/YOUR-USERNAME/TurboSuite3D
+
+3.2  Clone the fork in WSL
+
+       cd /mnt/c/Users/jacobq/Documents/Add-Ins
+       gh repo clone YOUR-USERNAME/TurboSuite3D
+
+     This clones into a folder called "TurboSuite3D". You can rename it
+     to "TurboSuite" if you prefer:
+
+       mv TurboSuite3D TurboSuite
+
+     Either way, "origin" is automatically set to your fork.
+
+3.3  Add the upstream remote
+     This links back to the original repo so you can pull updates:
+
+       cd TurboSuite          # or TurboSuite3D if you didn't rename
+       git remote add upstream https://github.com/OWNER-USERNAME/TurboSuite3D.git
+
+     Verify remotes:
+
+       git remote -v
+
+     You should see:
+       origin    https://github.com/YOUR-USERNAME/TurboSuite3D.git (fetch)
+       origin    https://github.com/YOUR-USERNAME/TurboSuite3D.git (push)
+       upstream  https://github.com/OWNER-USERNAME/TurboSuite3D.git (fetch)
+       upstream  https://github.com/OWNER-USERNAME/TurboSuite3D.git (push)
+
+
+================================================================================
+4. DAILY WORKFLOW — MAKING AND COMMITTING CHANGES
+================================================================================
+
+4.1  Create a feature branch
+     Always work on a branch, not directly on "main":
+
+       git checkout -b my-feature-name
+
+     Use a descriptive name like "fix-bubble-offset" or "add-zone-export".
+
+4.2  Make your changes
+     Edit code as normal. When ready to save progress:
+
+4.3  Stage your changes
+
+       git add -A               # Stage everything
+       git status               # Review what is staged
+
+     Or stage specific files:
+
+       git add path/to/file.cs
+
+4.4  Commit
+
+       git commit -m "Brief description of what you changed"
+
+     Good commit messages:
+       - "Fix tag placement offset for line-based fixtures"
+       - "Add panel breakdown export to CSV"
+     Bad commit messages:
+       - "update"
+       - "changes"
+       - "stuff"
+
+4.5  Push to your fork
+
+       git push origin my-feature-name
+
+     The first time you push a new branch, git will set up tracking
+     automatically with the gh CLI.
+
+
+================================================================================
+5. PULL REQUESTS
+================================================================================
+
+A Pull Request (PR) asks the original repo owner to review and merge
+your changes.
+
+5.1  Create a PR from the command line:
+
+       gh pr create --title "Brief title" --body "Description of changes"
+
+     Or just:
+
+       gh pr create
+
+     This opens an interactive prompt where you fill in the title and
+     description.
+
+5.2  The PR appears on the upstream repo's "Pull requests" tab on GitHub.
+     The repo owner can review, comment, request changes, or merge.
+
+5.3  If changes are requested, make them on the same branch, commit,
+     and push again. The PR updates automatically:
+
+       # Make edits...
+       git add -A
+       git commit -m "Address review feedback"
+       git push origin my-feature-name
+
+
+================================================================================
+6. SYNCING YOUR FORK
+================================================================================
+
+Over time, the original repo gets new commits. Keep your fork updated:
+
+6.1  Fetch upstream changes:
+
+       git fetch upstream
+
+6.2  Merge into your main branch:
+
+       git checkout main
+       git merge upstream/main
+
+6.3  Push updated main to your fork:
+
+       git push origin main
+
+6.4  Update a feature branch with latest main (if needed):
+
+       git checkout my-feature-name
+       git merge main
+
+     Resolve any conflicts if they arise, then commit and push.
+
+
+================================================================================
+7. USING CLAUDE CODE WITH GIT
+================================================================================
+
+Claude Code (running in your WSL terminal) can help with git tasks.
+
+7.1  Committing with Claude Code
+     After making changes, you can ask Claude Code:
+
+       "Commit my changes"
+
+     Or use the slash command:
+
+       /commit
+
+     Claude Code will:
+       - Run git status and git diff to review changes
+       - Draft a descriptive commit message
+       - Create the commit (after your approval)
+
+7.2  Other git tasks you can ask Claude Code:
+       - "What files have I changed?"
+       - "Show me the diff"
+       - "Create a PR for this branch"
+       - "Push my changes"
+
+7.3  Important notes:
+       - Claude Code will ask for confirmation before pushing or
+         creating PRs — it won't do these without your approval
+       - Claude Code adds "Co-Authored-By" to commits it creates
+       - You can still use regular git commands anytime
+
+
+================================================================================
+8. WSL-SPECIFIC NOTES
+================================================================================
+
+8.1  Path awareness
+     Your project lives at a Windows path accessed through WSL:
+
+       WSL path:     /mnt/c/Users/jacobq/Documents/Add-Ins/TurboSuite
+       Windows path: C:\Users\jacobq\Documents\Add-Ins\TurboSuite
+
+     Git commands use the WSL path. Build commands (dotnet) use the
+     Windows path. Claude Code handles this automatically.
+
+8.2  Line endings
+     Windows and Linux use different line endings. Configure git to
+     handle this:
+
+       git config --global core.autocrlf true
+
+     This converts line endings automatically so files look correct
+     on both systems.
+
+8.3  File permissions
+     WSL may show all files as changed (due to permission differences).
+     If this happens:
+
+       git config core.fileMode false
+
+8.4  Performance
+     Git operations on /mnt/c/ paths can be slower than native Linux
+     paths. This is normal for WSL filesystem bridging. For large
+     operations (clone, status on big repos), expect a brief delay.
+
+
+================================================================================
+9. QUICK REFERENCE — COMMON COMMANDS
+================================================================================
+
+  Check status:               git status
+  See changes:                git diff
+  Stage all changes:          git add -A
+  Stage one file:             git add path/to/file.cs
+  Commit:                     git commit -m "message"
+  Push:                       git push origin branch-name
+  Pull latest:                git pull origin main
+  Create branch:              git checkout -b new-branch
+  Switch branch:              git checkout branch-name
+  List branches:              git branch
+  Delete merged branch:       git branch -d branch-name
+  Create PR:                  gh pr create
+  View PR status:             gh pr status
+  Sync fork:                  git fetch upstream && git merge upstream/main
+
+
+================================================================================
+10. TROUBLESHOOTING
+================================================================================
+
+  "Permission denied (publickey)"
+    → Run: gh auth login (and re-authenticate)
+
+  "fatal: not a git repository"
+    → Make sure you are in the TurboSuite folder:
+      cd /mnt/c/Users/jacobq/Documents/Add-Ins/TurboSuite
+
+  "error: failed to push some refs"
+    → Your branch is behind the remote. Pull first:
+      git pull origin your-branch-name
+
+  Merge conflicts
+    → Git marks conflicting files. Open them, look for <<<<<<< markers,
+      choose the correct code, remove the markers, then:
+      git add the-file.cs
+      git commit -m "Resolve merge conflict"
+
+  "Changes not staged for commit" after git add -A
+    → Line ending issues. Run:
+      git config --global core.autocrlf true
+      git add -A
+
+================================================================================

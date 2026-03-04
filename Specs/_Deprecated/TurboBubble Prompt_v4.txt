@@ -1,0 +1,193 @@
+# TurboBubble Revit Add-in Specification
+
+Create a C# Revit add-in called `TurboBubble` that automates the placement of switchleg tags and wires for lighting fixtures. This is an `IExternalCommand` implementation for Autodesk Revit's electrical workflow.
+
+## Purpose
+
+When an electrical designer has a lighting fixture with an existing tag, this command:
+1. Creates a new "switchleg" tag positioned relative to the fixture
+2. Draws a wire from the fixture's electrical connector to near the new tag
+3. Handles fixture rotation and tag orientation automatically
+
+## Prerequisites & Validation
+
+- Only works in **Floor Plan** or **Ceiling Plan** views
+- Requires the tag family `"AL_Tag_Lighting Fixture (Switchleg)"` to be loaded
+- The selected tag must be attached to a lighting fixture with an electrical connector
+
+## User Workflow
+
+1. User runs the command
+2. User selects an existing lighting fixture tag (not the fixture itself)
+3. User picks a point to determine the "flip" direction (which side of the tag the wire routes)
+4. Command creates the switchleg tag and wire automatically
+
+## Coordinate System & Rotation Handling
+
+The algorithm uses a **local coordinate system** based on the tag/fixture rotation:
+
+- Get the fixture's rotation from its geometry transform (BasisX angle) or fall back to LocationPoint.Rotation
+- Check if the selected tag "rotates with component" by examining its Orientation parameter:
+  - If Orientation is "Horizontal" or "Vertical" → tag rotates with fixture
+  - Otherwise → tag has manual rotation from its "Angle" parameter
+- Create transforms to convert between global and local coordinates, rotating around the fixture point
+
+## Condition Detection (Tag Position Relative to Fixture)
+
+In local coordinates, determine which quadrant the tag is in relative to the fixture:
+
+```
+Condition 1 (Right): |diffX| > |diffY| AND diffX > 0
+Condition 2 (Left):  |diffX| > |diffY| AND diffX < 0
+Condition 3 (Up):    |diffY| >= |diffX| AND diffY > 0
+Condition 4 (Down):  |diffY| >= |diffX| AND diffY <= 0
+```
+
+## Flip State Detection
+
+Based on where the user clicks relative to the tag position:
+- For conditions 1 & 2 (horizontal): flip if click.Y < tag.Y
+- For conditions 3 & 4 (vertical): flip if click.X < tag.X
+
+## Symbol Dimensions
+
+Read from the fixture's **type** (FamilySymbol):
+- `"Symbol Length"` parameter (default: 4.5 inches)
+- `"Symbol Width"` parameter (default: 4.5 inches, minimum: 4 inches)
+
+Adjust symbol width based on tag text length:
+- 2 characters → 7.75 inches
+- 3 characters → 11.15 inches  
+- 4+ characters → use actual bounding box width
+
+## Wire Geometry Offsets (all values in inches)
+
+Define these constants for wire vertex positioning:
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| WIRE_HORIZONTAL_OFFSET | 0.613 | X offset for vertical wire runs |
+| WIRE_VERTICAL_OFFSET | 0.65 | Y offset for horizontal wire runs |
+| WIRE_TO_SYMBOL_GAP | 4.215 | Gap from symbol edge (vertical placement) |
+| WIRE_TO_SYMBOL_GAP_HORIZONTAL | 4.55 | Gap from symbol edge (horizontal placement) |
+| WIRE_ELBOW_OFFSET | 3.56 | Elbow offset near tag |
+| TAG_OFFSET_VERTICAL | 5.25 | Tag offset from symbol (vertical) |
+| TAG_OFFSET_HORIZONTAL | 8.75 | Tag offset from symbol (horizontal) |
+
+## Offset Calculations by Condition
+
+### Condition 1 (Right)
+```
+V2X = -0.613
+V2Y = (symbolLength/2) + 4.215
+V3X = -3.56
+V3Y = 0
+TagY = (symbolLength/2) + 5.25
+```
+
+### Condition 2 (Left)
+```
+V2X = +0.613
+V2Y = (symbolLength/2) + 4.215
+V3X = +3.56
+V3Y = 0
+TagY = (symbolLength/2) + 5.25
+```
+
+### Condition 3 (Up)
+```
+V2X = (symbolWidth/2) + 4.55
+V2Y = -0.65
+V3X = -3.56
+V3Y = 0
+TagX = (symbolWidth/2) + 8.75
+TagY = (existing tag Y offset from fixture, in local coords)
+```
+
+### Condition 4 (Down)
+```
+V2X = (symbolWidth/2) + 4.55
+V2Y = +0.65
+V3X = -3.56
+V3Y = 0
+TagX = (symbolWidth/2) + 8.75
+TagY = (existing tag Y offset from fixture, in local coords)
+```
+
+### Flip Application
+- If flipped AND condition 1 or 2: negate V2Y, V3Y, TagY
+- If flipped AND condition 3 or 4: negate V2X, V3X, TagX
+
+## Tag Positioning
+
+Calculate new tag position in local coordinates:
+- Conditions 1 & 2: X = existing tag's X, Y = fixture Y + TagY offset
+- Conditions 3 & 4: X = fixture X + TagX offset, Y = existing tag's Y
+
+Transform back to global coordinates.
+
+## Tag Creation
+
+1. Create `IndependentTag` using `IndependentTag.Create()` with:
+   - TagMode.TM_ADDBY_CATEGORY
+   - TagOrientation.Horizontal (initial)
+   - Reference to the fixture
+
+2. Change type to the switchleg tag family
+
+3. Apply rotation based on source tag's Orientation parameter:
+   - If Orientation is "Horizontal" or "Vertical" (rotates with component):
+     - Copy the Orientation parameter value from source tag to new tag
+     - Use `ElementTransformUtils.RotateElement()` to rotate the tag to match the fixture's rotation
+   - If Orientation is "Model" (does not rotate with component):
+     - Set new tag's Orientation parameter to 2 (Model)
+     - Set new tag's Angle parameter to the source tag's Angle value
+
+**Note**: The current implementation infers "rotates with component" behavior from the Orientation parameter value. However, Revit has a separate "Rotate with Component" checkbox that is a distinct setting. The `IndependentTag.TagOrientation` property can help distinguish:
+- `TagOrientation.Horizontal` (0) or `TagOrientation.Vertical` (1) with "Rotate with component" checked
+- `TagOrientation.AnyModelDirection` (2) when "Rotate with component" is unchecked
+However, a tag can have Horizontal orientation without "Rotate with component" checked, making this detection imperfect.
+
+## Wire Creation
+
+Create a wire with 3 implied vertices:
+1. Start: fixture's electrical connector (automatic)
+2. Vertex 2: fixture position + V2 offsets (in local coords, then transformed)
+3. Vertex 3: tag position + V3 offsets
+
+Use `Wire.Create()` with:
+- WiringType.Arc
+- Only pass vertices 2 and 3 (connector provides start point)
+- End connector is null
+
+## Temporary Sketch Plane
+
+For the flip point pick, create a temporary sketch plane at the fixture's Z elevation to enable point picking in plan views. Clean up afterward.
+
+## Selection Filter
+
+Implement `ISelectionFilter` that only allows:
+- Elements that are `IndependentTag`
+- Where the tagged element's category is `OST_LightingFixtures`
+
+## Error Handling
+
+- Use `OperationCanceledException` for user cancellation (ESC)
+- Show `TaskDialog` for user-facing errors
+- Return appropriate `Result` values
+
+## Code Organization
+
+Use helper classes:
+- `PlacementContext`: holds calculated geometry, transforms, rotation, condition, symbol dimensions
+- `WireOffsets`: holds V2X, V2Y, V3X, V3Y, TagX, TagY values
+
+Extract methods for:
+- Validation
+- Tag type lookup
+- Fixture rotation calculation
+- Condition determination
+- Offset calculations
+- Tag creation
+- Wire creation
+- Electrical connector retrieval

@@ -1,0 +1,212 @@
+Circuit Redistribution — Revit API Research
+=============================================
+Date: 2026-02-26
+
+Goal: Within a location, redistribute circuits across panels to minimize module
+usage by consolidating circuits by dimming type. Circuits must be physically
+moved on the Revit panel using the API.
+
+================================================================================
+1. CORE API PATTERN
+================================================================================
+
+The supported approach is DisconnectPanel() then SelectPanel():
+
+    ElectricalSystem circuit = ...;
+    FamilyInstance newPanel = ...;
+
+    using (Transaction tx = new Transaction(doc, "Transfer Circuit"))
+    {
+        tx.Start();
+
+        // Remove from current panel
+        if (circuit.BaseEquipment != null)
+            circuit.DisconnectPanel();
+
+        // Assign to target panel (auto-assigns next available slot)
+        circuit.SelectPanel(newPanel);
+
+        // Optionally reposition to a specific slot
+        PanelScheduleView psv = ...;
+        int currentSlot = circuit.StartSlot;
+        if (psv.CanMoveSlotTo(currentSlot, targetSlot))
+            psv.MoveSlotTo(currentSlot, targetSlot);
+
+        tx.Commit();
+    }
+
+================================================================================
+2. METHOD DETAILS
+================================================================================
+
+ElectricalSystem.SelectPanel(FamilyInstance panel)
+  - Namespace: Autodesk.Revit.DB.Electrical
+  - Available since: Revit 2011
+  - Returns: void
+  - Parameter: FamilyInstance representing the target panel
+  - Exceptions:
+    - ArgumentNullException — if panel is null
+    - DisabledDisciplineException — if MEP disciplines not enabled
+    - InvalidOperationException — if panel lacks slots, distribution system
+      mismatch, or Feed Through Lugs is unchecked/already in use
+  - Source: https://www.revitapidocs.com/2022/008dafa1-ca02-d3fb-6bb8-0b0ac7fadcbc.htm
+
+ElectricalSystem.DisconnectPanel()
+  - Available since: Revit 2015
+  - No parameters (operates on current panel)
+  - Exceptions: InvalidOperationException if panel cannot be disconnected
+  - Source: https://www.revitapidocs.com/2015/af36bfe7-48ac-c38f-dac2-5682228f8037.htm
+
+MEPSystem.BaseEquipment (read-only property)
+  - Returns: FamilyInstance of the currently assigned panel, or null
+  - Available since: Revit 2015
+  - Use to check current panel before reassignment
+  - Source: https://www.revitapidocs.com/2017.1/00d90c4f-1946-1069-7887-f12899846481.htm
+
+ElectricalSystem.StartSlot (read-only int)
+  - The slot position in the panel schedule
+  - Available since: Revit 2016
+  - Cannot set directly — use PanelScheduleView.MoveSlotTo()
+  - Source: https://www.revitapidocs.com/2025.3/d79c6b0c-b933-c376-4301-a720c1436528.htm
+
+================================================================================
+3. PARAMETER WRITABILITY
+================================================================================
+
+RBS_ELEC_CIRCUIT_PANEL_PARAM — READ-ONLY
+  - Stores the panel name string on the circuit element
+  - Cannot be set directly to reassign a circuit
+  - Use SelectPanel() instead
+  - ElectricalSystem.PanelName property is also read-only (getter only)
+  - Source: https://forums.autodesk.com/t5/revit-api-forum/change-the-panel-a-connector-is-connected-to/td-p/9024534
+
+================================================================================
+4. SLOT MANAGEMENT AFTER REASSIGNMENT
+================================================================================
+
+When SelectPanel() connects a circuit to a panel, Revit automatically assigns it
+to the next available (unlocked Spare or Space) slot. There is no API method to
+specify which slot during SelectPanel().
+
+To reposition after assignment, use PanelScheduleView:
+  - MoveSlotTo(int from, int to) — move circuit between slots
+  - CanMoveSlotTo(int from, int to) — check if move is valid
+  - GetCircuitIdByCell(int row, int col) — get circuit ElementId at a cell
+  - GetCellsBySlotNumber(int slot) — get cell range for a slot
+  - IsSpare / IsSpace — check cell type
+  - AddSpare / AddSpace — add spare/space at a cell
+  - IsSlotLocked / SetLockSlot — lock/unlock a slot
+
+If no PanelScheduleView exists for the panel:
+  PanelScheduleView.CreateInstanceView(doc, panelId);
+
+Note: TurboNumber already uses MoveSlotTo extensively for circuit repositioning
+within a single panel. The same logic can be reused.
+
+================================================================================
+5. RESTRICTIONS AND GOTCHAS
+================================================================================
+
+a) Distribution system matching (STRICT since Revit 2021)
+   - Target panel voltage, poles, and wires must exactly match the circuit's
+     distribution system
+   - Throws InvalidOperationException on mismatch
+   - Panels in the same location should typically match, but must validate
+   - Source: https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Warning-when-connecting-circuits-to-panel-after-upgrading-a-project-to-Revit-2021.html
+
+b) Panel must have available slots
+   - SelectPanel() throws InvalidOperationException if no unlocked slots
+   - Check "Max Number of Single Pole Breakers" parameter
+
+c) Feed Through Lugs
+   - SelectPanel() throws if "Feed Through Lugs is unchecked or already in use"
+
+d) MEP-only
+   - Both methods throw DisabledDisciplineException outside Revit MEP
+
+e) Transaction required
+   - Both methods must be called inside an active Transaction
+
+f) Circuit number changes
+   - After SelectPanel(), the circuit number changes to match the new slot
+   - To control numbering, use MoveSlotTo() immediately after
+
+g) Grouped slots
+   - Multi-pole breakers: MoveSlotTo() moves the entire group
+   - Check with IsSlotGrouped()
+
+h) DisconnectPanel() in macros
+   - Some reports of internal errors when run as a macro (not add-in)
+   - Not an issue for IExternalCommand implementations
+
+================================================================================
+6. OPTIMIZATION ALGORITHM (PROPOSED)
+================================================================================
+
+Goal: Within a location, redistribute circuits across panels to minimize the
+total number of dimmer modules needed.
+
+Approach:
+1. Collect all circuits from all panels in the location
+2. Group circuits by dimming type (Relay, 0-10V, ELV)
+3. Sort types by circuit count (largest group first)
+4. Bin-pack by type into panels:
+   - Fill each panel with one type as much as possible
+   - Only mix types when a single type doesn't fill a panel
+5. This minimizes partial modules (e.g., 1 relay circuit on a panel wastes
+   3 slots on that relay module with capacity 4)
+
+Example — Location 3 with panels 3-E, 3-F, 3-G:
+  Before: mixed ELV + 0-10V across all three panels = many partial modules
+  After:  0-10V consolidated on one panel, ELV distributed evenly = fewer modules
+
+Constraints:
+  - Must respect panel slot capacity (Max Single Pole Breakers)
+  - Must validate distribution system compatibility before moving
+  - Should preserve user's special device / processor selections
+  - Should show a preview diff before committing changes
+
+================================================================================
+7. IMPLEMENTATION NOTES
+================================================================================
+
+- TurboZones already reads circuits via ZonesCollectorService.GetCircuits()
+  which populates PanelName from RBS_ELEC_CIRCUIT_PANEL_PARAM
+- TurboNumber already uses PanelScheduleView for slot management
+- The FamilyInstance for each panel can be obtained via FilteredElementCollector
+  with BuiltInCategory.OST_ElectricalEquipment
+- After redistribution, TurboZones would re-read circuit assignments and
+  rebuild the module display automatically
+- A "Redistribute" or "Optimize" button per location would trigger the process
+- The entire operation should be wrapped in a single Transaction for undo support
+
+================================================================================
+8. SOURCES
+================================================================================
+
+SelectPanel Method:
+  https://www.revitapidocs.com/2022/008dafa1-ca02-d3fb-6bb8-0b0ac7fadcbc.htm
+
+DisconnectPanel Method:
+  https://www.revitapidocs.com/2015/af36bfe7-48ac-c38f-dac2-5682228f8037.htm
+
+BaseEquipment Property:
+  https://www.revitapidocs.com/2017.1/00d90c4f-1946-1069-7887-f12899846481.htm
+
+StartSlot Property:
+  https://www.revitapidocs.com/2025.3/d79c6b0c-b933-c376-4301-a720c1436528.htm
+
+ElectricalSystem Members:
+  https://www.revitapidocs.com/2019/e2380e85-d7b7-71ea-e0a0-0f72ef5b3e77.htm
+
+PanelScheduleView Members:
+  https://www.revitapidocs.com/2024/05d89377-2e7d-9e8f-7f57-192ecb2f23e8.htm
+
+Forum — Change panel connector:
+  https://forums.autodesk.com/t5/revit-api-forum/change-the-panel-a-connector-is-connected-to/td-p/9024534
+
+Forum — Select panel for circuit:
+  https://forums.autodesk.com/t5/revit-api-forum/select-panel-for-circuit/td-p/6983630
+
+Revit 2021 distribution system changes:
+  https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Warning-when-connecting-circuits-to-panel-after-upgrading-a-project-to-Revit-2021.html

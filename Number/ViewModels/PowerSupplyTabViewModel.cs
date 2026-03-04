@@ -1,0 +1,120 @@
+#nullable disable
+using System.Collections.Generic;
+using System.Linq;
+using Autodesk.Revit.DB;
+using TurboSuite.Number.Models;
+using TurboSuite.Number.Services;
+
+namespace TurboSuite.Number.ViewModels
+{
+    public class PowerSupplyTabViewModel : TabViewModelBase
+    {
+        private readonly Document _doc;
+        private readonly NumberWriterService _writerService;
+        private string _prefix = "X";
+        private string _suffix = "";
+
+        public string Prefix
+        {
+            get => _prefix;
+            set
+            {
+                if (SetProperty(ref _prefix, value ?? ""))
+                    RoomOrderStorageService.SavePrefixSuffix(_doc, _prefix, _suffix);
+            }
+        }
+
+        public string Suffix
+        {
+            get => _suffix;
+            set
+            {
+                if (SetProperty(ref _suffix, value ?? ""))
+                    RoomOrderStorageService.SavePrefixSuffix(_doc, _prefix, _suffix);
+            }
+        }
+
+        public PowerSupplyTabViewModel(Document doc, List<DeviceNumberRow> powerSupplies, NumberWriterService writerService)
+            : base("Power Supplies")
+        {
+            _doc = doc;
+            _writerService = writerService;
+
+            foreach (var d in powerSupplies)
+            {
+                AddRow(new NumberableRowViewModel(
+                    d.ElementId,
+                    d.Model,
+                    d.SwitchId,
+                    circuitNumber: d.CircuitNumber,
+                    loadName: d.LoadName,
+                    typeName: d.TypeName,
+                    mark: d.Mark));
+            }
+
+            var (savedPrefix, savedSuffix) = RoomOrderStorageService.LoadPrefixSuffix(doc);
+            if (savedPrefix != null) _prefix = savedPrefix;
+            if (savedSuffix != null) _suffix = savedSuffix;
+
+            ApplyDefaultSort();
+        }
+
+        protected override void AutoNumber()
+        {
+            var sorted = GetSortedRows();
+            int baseNumber = 0;
+            int i = 0;
+
+            while (i < sorted.Count)
+            {
+                baseNumber++;
+                string circuit = sorted[i].CircuitNumber;
+
+                // Collect consecutive rows sharing the same non-empty circuit number
+                var group = new List<NumberableRowViewModel> { sorted[i] };
+                if (!string.IsNullOrEmpty(circuit))
+                {
+                    for (int j = i + 1; j < sorted.Count; j++)
+                    {
+                        if (sorted[j].CircuitNumber == circuit)
+                            group.Add(sorted[j]);
+                        else
+                            break;
+                    }
+                }
+
+                string padded = PadNumber(baseNumber);
+
+                if (group.Count == 1)
+                {
+                    group[0].Value = $"{_prefix}{padded}{_suffix}";
+                }
+                else
+                {
+                    for (int g = 0; g < group.Count; g++)
+                    {
+                        char letter = (char)('a' + g);
+                        group[g].Value = $"{_prefix}{padded}{letter}{_suffix}";
+                    }
+                }
+
+                i += group.Count;
+            }
+        }
+
+        protected override string FormatNumber(int value)
+        {
+            return $"{_prefix}{PadNumber(value)}{_suffix}";
+        }
+
+        private static string PadNumber(int value)
+        {
+            return value < 10 ? $"0{value}" : value.ToString();
+        }
+
+        protected override void Apply()
+        {
+            _writerService.WriteDeviceSwitchIds(_doc, Rows);
+        }
+    }
+}
