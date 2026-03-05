@@ -65,7 +65,7 @@ namespace TurboSuite.Zones
             catch (Exception ex)
             {
                 message = ex.Message;
-                TaskDialog.Show("TurboZones Error", $"An error occurred:\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}");
+                TaskDialog.Show("TurboZones Error", $"An unexpected error occurred:\n{ex.Message}");
                 return Result.Failed;
             }
         }

@@ -10,6 +10,7 @@ using System.Windows.Input;
 using Autodesk.Revit.DB;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
 {
@@ -143,21 +144,21 @@ namespace TurboSuite.Number.ViewModels
 
         private class RoomOrderComparer : IComparer
         {
-            private readonly ObservableCollection<string> _order;
+            private readonly Dictionary<string, int> _orderMap;
 
             public RoomOrderComparer(ObservableCollection<string> order)
             {
-                _order = order;
+                _orderMap = new Dictionary<string, int>(order.Count);
+                for (int i = 0; i < order.Count; i++)
+                    _orderMap[order[i]] = i;
             }
 
             public int Compare(object x, object y)
             {
                 var a = (NumberableRowViewModel)x;
                 var b = (NumberableRowViewModel)y;
-                int ia = _order.IndexOf(a.RoomName);
-                int ib = _order.IndexOf(b.RoomName);
-                if (ia < 0) ia = int.MaxValue;
-                if (ib < 0) ib = int.MaxValue;
+                int ia = _orderMap.TryGetValue(a.RoomName, out int idxA) ? idxA : int.MaxValue;
+                int ib = _orderMap.TryGetValue(b.RoomName, out int idxB) ? idxB : int.MaxValue;
                 int cmp = ia.CompareTo(ib);
                 if (cmp != 0) return cmp;
                 string keyA = string.IsNullOrEmpty(a.Value) ? a.Mark : a.Value;

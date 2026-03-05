@@ -5,6 +5,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -55,6 +56,8 @@ namespace TurboSuite.Zones.Services
                     .Cast<ElectricalSystem>()
                     .ToList();
 
+                var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc);
+
                 foreach (ElectricalSystem circuit in circuits)
                 {
                     try
@@ -81,7 +84,7 @@ namespace TurboSuite.Zones.Services
                         string currentLoadName = ParameterHelper.GetLoadName(circuit);
 
                         // Resolve room name from first fixture
-                        string roomName = LinkedRoomFinderService.FindRoomName(doc, fixtures[0]);
+                        string roomName = roomCache.FindRoomName(fixtures[0]);
 
                         // Read intermediate label sources
                         string circuitComments = ParameterHelper.GetCircuitComments(circuit);

@@ -69,7 +69,7 @@ namespace TurboSuite.Number
             catch (Exception ex)
             {
                 message = ex.Message;
-                TaskDialog.Show("TurboNumber Error", $"An error occurred:\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}");
+                TaskDialog.Show("TurboNumber Error", $"An unexpected error occurred:\n{ex.Message}");
                 return Result.Failed;
             }
         }

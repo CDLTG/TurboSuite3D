@@ -12,7 +12,8 @@ namespace TurboSuite.Zones.Models
         public int TotalModules { get; set; }
         public int TotalPanels => Locations.Sum(l => l.Panels.Count);
         public int TotalCircuits { get; set; }
-        public List<PanelResult> AllPanels => Locations.SelectMany(l => l.Panels).ToList();
+        private List<PanelResult> _allPanels;
+        public List<PanelResult> AllPanels => _allPanels ??= Locations.SelectMany(l => l.Panels).ToList();
     }
 
     public class LocationResult

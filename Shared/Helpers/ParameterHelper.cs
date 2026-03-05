@@ -21,27 +21,12 @@ namespace TurboSuite.Shared.Helpers
         {
             if (element == null) return string.Empty;
 
-            // Try multiple possible parameter names
-            string[] possibleNames = new string[]
+            Parameter param = element.LookupParameter("Switch ID");
+            if (param != null && param.HasValue)
             {
-                "Switch ID",
-                "SwitchID",
-                "Switch_ID",
-                "SWITCH_ID",
-                "Switch Id"
-            };
-
-            foreach (string paramName in possibleNames)
-            {
-                Parameter param = element.LookupParameter(paramName);
-                if (param != null && param.HasValue)
-                {
-                    string value = param.AsString();
-                    if (!string.IsNullOrWhiteSpace(value))
-                    {
-                        return value;
-                    }
-                }
+                string value = param.AsString();
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
             }
 
             return string.Empty;
@@ -338,18 +323,6 @@ namespace TurboSuite.Shared.Helpers
             }
 
             return string.Empty;
-        }
-
-        /// <summary>
-        /// Get Number of Elements from ElectricalSystem
-        /// </summary>
-        public static int GetNumberOfElements(ElectricalSystem circuit)
-        {
-            if (circuit == null) return 0;
-
-            // We'll populate this from our own device/fixture counting
-            // Don't try to iterate circuit.Elements as it causes casting issues
-            return 0;
         }
 
         /// <summary>

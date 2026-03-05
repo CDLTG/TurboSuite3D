@@ -1,4 +1,5 @@
 #nullable disable
+using TurboSuite.Shared.ViewModels;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.ViewModels

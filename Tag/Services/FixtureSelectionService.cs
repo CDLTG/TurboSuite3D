@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
-using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Tag.Services;
 
@@ -24,15 +23,5 @@ internal static class FixtureSelectionService
         }
 
         return fixtures;
-    }
-
-    public static bool IsLineBased(FamilyInstance fixture)
-    {
-        return GeometryHelper.IsLineBasedFixture(fixture);
-    }
-
-    public static bool IsOnVerticalFace(FamilyInstance fixture)
-    {
-        return GeometryHelper.IsOnVerticalFace(fixture);
     }
 }

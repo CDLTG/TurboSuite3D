@@ -1,6 +1,7 @@
 using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Shared.Helpers;
 
@@ -115,8 +116,8 @@ public static class GeometryHelper
     public static bool IsWallSconce(FamilyInstance fixture)
     {
         string familyName = fixture.Symbol?.Family?.Name ?? "";
-        return string.Equals(familyName, "AL_Decorative_Wall Sconce (Hosted)", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(familyName, "Z_Wall Sconce", StringComparison.OrdinalIgnoreCase);
+        var settings = FamilyNameSettingsCache.Get(fixture.Document);
+        return settings.WallSconceFamilies.Contains(familyName);
     }
 
     /// <summary>
@@ -125,8 +126,40 @@ public static class GeometryHelper
     public static bool IsReceptacle(FamilyInstance fixture)
     {
         string familyName = fixture.Symbol?.Family?.Name ?? "";
-        return string.Equals(familyName, "AL_Electrical Fixture_Receptacle (Hosted)", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(familyName, "Receptacle", StringComparison.OrdinalIgnoreCase);
+        var settings = FamilyNameSettingsCache.Get(fixture.Document);
+        return settings.ReceptacleFamilies.Contains(familyName);
+    }
+
+    /// <summary>
+    /// Gets the location point of a fixture, handling both LocationPoint and LocationCurve.
+    /// For line-based fixtures (LocationCurve), returns the curve midpoint.
+    /// Returns null if location cannot be determined.
+    /// </summary>
+    public static XYZ? GetFixtureLocation(FamilyInstance fixture)
+    {
+        if (fixture.Location is LocationPoint lp)
+            return lp.Point;
+        if (fixture.Location is LocationCurve lc && lc.Curve != null)
+            return lc.Curve.Evaluate(0.5, true);
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the rotation of a fixture from its Location property.
+    /// For LocationPoint, returns the Rotation property.
+    /// For LocationCurve, returns the angle of the curve direction.
+    /// Returns 0.0 if rotation cannot be determined.
+    /// </summary>
+    public static double GetFixtureLocationRotation(FamilyInstance fixture)
+    {
+        if (fixture.Location is LocationPoint lp)
+            return lp.Rotation;
+        if (fixture.Location is LocationCurve lc && lc.Curve != null)
+        {
+            var dir = (lc.Curve.GetEndPoint(1) - lc.Curve.GetEndPoint(0)).Normalize();
+            return Math.Atan2(dir.Y, dir.X);
+        }
+        return 0.0;
     }
 
     /// <summary>

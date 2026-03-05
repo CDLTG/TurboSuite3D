@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates seven commands (TurboDriver, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact) into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register a ribbon panel with seven `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates seven commands (TurboDriver, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with eight `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -69,16 +69,18 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 
 ### Entry Point
 
-`TurboSuite.App.TurboSuiteApplication` (IExternalApplication) registers a "TurboSuite" ribbon panel with seven buttons, each pointing to a command class.
+`TurboSuite.App.TurboSuiteApplication` (IExternalApplication) registers three ribbon panels under a "TurboSuite" tab: Settings (far left), Commands, and Utilities. `TurboSuite.App.SettingsCommand` opens a WPF dialog for configuring family name settings stored in ExtensibleStorage.
 
 ### Namespace / Folder Structure
 
 | Namespace | Purpose |
 |-----------|---------|
-| `TurboSuite.App` | Entry point (`TurboSuiteApplication`) |
-| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `CalculationHelper` |
-| `TurboSuite.Shared.Filters` | `LightingFixtureSelectionFilter` (accepts both Lighting + Electrical Fixtures), `LightingFixtureTagFilter` |
-| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem` |
+| `TurboSuite.App` | Entry point (`TurboSuiteApplication`), `SettingsCommand`, ViewModels, Views |
+| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper` |
+| `TurboSuite.Shared.Filters` | `FixtureSelectionFilter` (accepts both Lighting + Electrical Fixtures), `LightingFixtureTagFilter` |
+| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings` |
+| `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `FamilyNameSettingsStorageService`, `FamilyNameSettingsCache` |
+| `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` (shared MVVM base classes) |
 | `TurboSuite.Driver` | `DriverCommand` + Services, Models, ViewModels, Views (MVVM) |
 | `TurboSuite.Bubble` | `BubbleCommand` + Placement calculators, Services, Constants, Filters |
 | `TurboSuite.Tag` | `TagCommand` + Services, Helpers, Constants |
@@ -99,9 +101,11 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 
 ### Shared Layer
 
-- `GeometryHelper` — geometry utilities: `IsOnVerticalFace`, `IsLineBasedFixture`, `GetHostFaceNormal`, `GetWallFaceNormal`, `GetElectricalConnector`, `IsWallSconce`, `IsReceptacle`.
+- `GeometryHelper` — geometry utilities: `IsOnVerticalFace`, `IsLineBasedFixture`, `GetHostFaceNormal`, `GetWallFaceNormal`, `GetElectricalConnector`, `IsWallSconce`, `IsReceptacle`, `GetFixtureLocation`, `GetFixtureLocationRotation`.
 - `ParameterHelper` — centralizes all Revit parameter reads (element and circuit parameters).
-- `CalculationHelper` — aggregation utilities (e.g., `CalculateTotalLinearLength`).
+- `FamilyNameSettingsCache` / `FamilyNameSettingsStorageService` — per-document configurable family name lists (wall sconces, receptacles, vertical electrical families) stored in ExtensibleStorage. `IsWallSconce` and `IsReceptacle` read from this cache rather than hardcoded strings.
+- `LinkedRoomFinderService` — finds the Room containing a fixture, checking host doc then linked docs. Includes `RoomLookupCache` inner class for batch lookups.
+- `DataStorageHelper` — shared `FindDataStorage` utility for ExtensibleStorage queries.
 
 ### Known Namespace Collision
 

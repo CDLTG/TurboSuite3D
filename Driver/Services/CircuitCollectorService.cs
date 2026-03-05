@@ -41,13 +41,14 @@ namespace TurboSuite.Driver.Services
                         if (string.IsNullOrWhiteSpace(circuitNumber))
                             continue;
 
-                        if (!devicesByCircuit.ContainsKey(circuitNumber))
+                        if (!devicesByCircuit.TryGetValue(circuitNumber, out var deviceList))
                         {
-                            devicesByCircuit[circuitNumber] = new List<FamilyInstance>();
+                            deviceList = new List<FamilyInstance>();
+                            devicesByCircuit[circuitNumber] = deviceList;
                         }
-                        devicesByCircuit[circuitNumber].Add(device);
+                        deviceList.Add(device);
                     }
-                    catch
+                    catch (Exception)
                     {
                         continue;
                     }
@@ -71,16 +72,17 @@ namespace TurboSuite.Driver.Services
                         if (string.IsNullOrWhiteSpace(circuitNumber))
                             continue;
 
-                        if (!fixturesByCircuit.ContainsKey(circuitNumber))
+                        if (!fixturesByCircuit.TryGetValue(circuitNumber, out var fixtureList))
                         {
-                            fixturesByCircuit[circuitNumber] = new List<FamilyInstance>();
+                            fixtureList = new List<FamilyInstance>();
+                            fixturesByCircuit[circuitNumber] = fixtureList;
                         }
-                        fixturesByCircuit[circuitNumber].Add(fixture);
+                        fixtureList.Add(fixture);
 
                         if (ParameterHelper.HasRemotePowerSupply(fixture))
                             qualifyingCircuits.Add(circuitNumber);
                     }
-                    catch
+                    catch (Exception)
                     {
                         continue;
                     }
@@ -112,9 +114,9 @@ namespace TurboSuite.Driver.Services
                             Panel = ParameterHelper.GetPanelName(circuit)
                         };
 
-                        if (fixturesByCircuit.ContainsKey(circuitNumber))
+                        if (fixturesByCircuit.TryGetValue(circuitNumber, out var circuitFixtures))
                         {
-                            foreach (FamilyInstance fixture in fixturesByCircuit[circuitNumber])
+                            foreach (FamilyInstance fixture in circuitFixtures)
                             {
                                 try
                                 {
@@ -128,19 +130,20 @@ namespace TurboSuite.Driver.Services
                             }
                         }
 
-                        if (devicesByCircuit.ContainsKey(circuitNumber))
+                        if (devicesByCircuit.TryGetValue(circuitNumber, out var circuitDevices))
                         {
-                            foreach (FamilyInstance device in devicesByCircuit[circuitNumber])
+                            foreach (FamilyInstance device in circuitDevices)
                             {
                                 try
                                 {
                                     DeviceData deviceData = CreateDeviceData(device);
 
-                                    if (!data.DevicesByType.ContainsKey(deviceData.CurrentFamilyTypeName))
+                                    if (!data.DevicesByType.TryGetValue(deviceData.CurrentFamilyTypeName, out var typeList))
                                     {
-                                        data.DevicesByType[deviceData.CurrentFamilyTypeName] = new List<DeviceData>();
+                                        typeList = new List<DeviceData>();
+                                        data.DevicesByType[deviceData.CurrentFamilyTypeName] = typeList;
                                     }
-                                    data.DevicesByType[deviceData.CurrentFamilyTypeName].Add(deviceData);
+                                    typeList.Add(deviceData);
                                 }
                                 catch
                                 {
@@ -154,7 +157,7 @@ namespace TurboSuite.Driver.Services
 
                         circuitDataList.Add(data);
                     }
-                    catch
+                    catch (Exception)
                     {
                         continue;
                     }

@@ -1,5 +1,6 @@
 #nullable disable
 using TurboSuite.Driver.Models;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Driver.ViewModels
 {

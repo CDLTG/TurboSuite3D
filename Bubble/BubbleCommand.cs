@@ -13,6 +13,7 @@ using TurboSuite.Bubble.Placement;
 using TurboSuite.Bubble.Services;
 using TurboSuite.Shared.Filters;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Bubble;
 
@@ -32,7 +33,10 @@ public class BubbleCommand : IExternalCommand
         try
         {
             if (!IsValidViewType(activeView))
+            {
+                ShowError("Active view must be a Floor Plan or Reflected Ceiling Plan.");
                 return Result.Cancelled;
+            }
 
             var wireTypeId = FixtureAnalysisService.FindFirstWireType(doc);
             if (wireTypeId == null)
@@ -180,7 +184,12 @@ public class BubbleCommand : IExternalCommand
             return Result.Cancelled;
         }
 
-        var fixtureOrigin = ((LocationPoint)fixture.Location).Point;
+        var fixtureOrigin = GeometryHelper.GetFixtureLocation(fixture);
+        if (fixtureOrigin == null)
+        {
+            ShowError("Cannot determine fixture location.");
+            return Result.Failed;
+        }
 
         var rotation = GetElectricalFixtureRotation(fixture);
         var cosR = Math.Cos(rotation);
@@ -309,7 +318,8 @@ public class BubbleCommand : IExternalCommand
     {
         var familyName = fixture.Symbol?.FamilyName;
         return familyName != null &&
-               BubbleConstants.ElectricalVerticalFamilies.Contains(familyName);
+               FamilyNameSettingsCache.Get(fixture.Document)
+                   .ElectricalVerticalFamilies.Contains(familyName);
     }
 
     /// <summary>
@@ -337,33 +347,13 @@ public class BubbleCommand : IExternalCommand
             }
         }
 
-        return ((LocationPoint)fixture.Location)?.Rotation ?? 0.0;
+        return GeometryHelper.GetFixtureLocationRotation(fixture);
     }
 
     private static void DeleteExistingElectricalSwitchlegTags(Document doc, FamilyInstance fixture)
     {
-        var tagsToDelete = new List<ElementId>();
-
-        using (var collector = new FilteredElementCollector(doc))
-        {
-            foreach (var elem in collector
-                .OfCategory(BuiltInCategory.OST_ElectricalFixtureTags)
-                .OfClass(typeof(IndependentTag)))
-            {
-                if (elem is not IndependentTag tag)
-                    continue;
-
-                if (!tag.GetTaggedLocalElementIds().Contains(fixture.Id))
-                    continue;
-
-                var tagSymbol = doc.GetElement(tag.GetTypeId()) as FamilySymbol;
-                if (tagSymbol?.FamilyName == BubbleConstants.ElectricalSwitchlegTagFamily)
-                    tagsToDelete.Add(tag.Id);
-            }
-        }
-
-        if (tagsToDelete.Count > 0)
-            doc.Delete(tagsToDelete);
+        DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_ElectricalFixtureTags,
+            name => name == BubbleConstants.ElectricalSwitchlegTagFamily);
     }
 
     #endregion
@@ -476,27 +466,34 @@ public class BubbleCommand : IExternalCommand
 
     private static void DeleteExistingSwitchlegTags(Document doc, FamilyInstance fixture, IndependentTag sourceTag)
     {
+        DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_LightingFixtureTags,
+            name => name == BubbleConstants.SwitchlegTagFamily || name == BubbleConstants.RemoteSwitchlegTagFamily,
+            excludeTagId: sourceTag.Id);
+    }
+
+    private static void DeleteSwitchlegTagsByCategory(Document doc, FamilyInstance fixture,
+        BuiltInCategory tagCategory, Func<string, bool> familyNameMatch, ElementId? excludeTagId = null)
+    {
         var tagsToDelete = new List<ElementId>();
 
         using (var collector = new FilteredElementCollector(doc))
         {
             foreach (var elem in collector
-                .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
+                .OfCategory(tagCategory)
                 .OfClass(typeof(IndependentTag)))
             {
-                if (elem is not IndependentTag tag || tag.Id == sourceTag.Id)
+                if (elem is not IndependentTag tag)
                     continue;
 
-                var taggedIds = tag.GetTaggedLocalElementIds();
-                if (!taggedIds.Contains(fixture.Id))
+                if (excludeTagId != null && tag.Id == excludeTagId)
+                    continue;
+
+                if (!tag.GetTaggedLocalElementIds().Contains(fixture.Id))
                     continue;
 
                 var tagSymbol = doc.GetElement(tag.GetTypeId()) as FamilySymbol;
-                if (tagSymbol?.FamilyName == BubbleConstants.SwitchlegTagFamily ||
-                    tagSymbol?.FamilyName == BubbleConstants.RemoteSwitchlegTagFamily)
-                {
+                if (tagSymbol != null && familyNameMatch(tagSymbol.FamilyName))
                     tagsToDelete.Add(tag.Id);
-                }
             }
         }
 

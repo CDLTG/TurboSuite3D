@@ -10,6 +10,7 @@ using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
 {

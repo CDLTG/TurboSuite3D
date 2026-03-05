@@ -7,7 +7,7 @@ using Autodesk.Revit.DB.Architecture;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Number.Models;
 using TurboSuite.Shared.Helpers;
-using TurboSuite.Zones.Services;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Number.Services
 {
@@ -32,6 +32,7 @@ namespace TurboSuite.Number.Services
 
         public List<DeviceNumberRow> GetKeypads(Document doc)
         {
+            var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc);
             return new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_LightingDevices)
                 .OfClass(typeof(FamilyInstance))
@@ -43,7 +44,7 @@ namespace TurboSuite.Number.Services
                 })
                 .Select(fi =>
                 {
-                    Room room = LinkedRoomFinderService.FindRoom(doc, fi);
+                    Room room = roomCache.FindRoom(fi);
                     return new DeviceNumberRow
                     {
                         ElementId = fi.Id,

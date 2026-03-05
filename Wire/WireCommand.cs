@@ -79,7 +79,7 @@ public class WireCommand : IExternalCommand
 
     private static Result ManualSelection(UIDocument uiDoc, Document doc, ref string message)
     {
-        var filter = new LightingFixtureSelectionFilter();
+        var filter = new FixtureSelectionFilter();
 
         Reference r1 = uiDoc.Selection.PickObject(
             ObjectType.Element, filter, "Select FIRST fixture");
@@ -91,7 +91,7 @@ public class WireCommand : IExternalCommand
 
         FamilyInstance? fixture2 = uiDoc.Document.GetElement(r2) as FamilyInstance;
 
-        return WireTwoFixtures(doc, fixture1!, fixture2!, useTagAwareArc: false, ref message);
+        return WireTwoFixtures(doc, fixture1!, fixture2!, useTagAwareArc: false, ref message, tagLookup: null);
     }
 
     private static List<ElectricalSystem> GetPreSelectedElectricalCircuits(UIDocument uiDoc)
@@ -140,13 +140,14 @@ public class WireCommand : IExternalCommand
     private static Result WireMultipleFixtures(Document doc, List<FamilyInstance> fixtures, ref string message)
     {
         List<FamilyInstance> orderedFixtures = FixtureOrderingService.OrderFixturesByProximity(fixtures);
+        var tagLookup = ArcCalculator.BuildTagLookup(doc);
 
         for (int i = 0; i < orderedFixtures.Count - 1; i++)
         {
             FamilyInstance fixture1 = orderedFixtures[i];
             FamilyInstance fixture2 = orderedFixtures[i + 1];
 
-            Result result = WireTwoFixtures(doc, fixture1, fixture2, useTagAwareArc: true, ref message);
+            Result result = WireTwoFixtures(doc, fixture1, fixture2, useTagAwareArc: true, ref message, tagLookup);
             if (result != Result.Succeeded)
             {
                 return result;
@@ -156,7 +157,8 @@ public class WireCommand : IExternalCommand
         return Result.Succeeded;
     }
 
-    private static Result WireTwoFixtures(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, bool useTagAwareArc, ref string message)
+    private static Result WireTwoFixtures(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, bool useTagAwareArc, ref string message,
+        Dictionary<ElementId, IndependentTag>? tagLookup = null)
     {
         Connector? c1 = GeometryHelper.GetElectricalConnector(fixture1, endTypeOnly: true);
         Connector? c2 = GeometryHelper.GetElectricalConnector(fixture2, endTypeOnly: true);
@@ -213,7 +215,7 @@ public class WireCommand : IExternalCommand
         }
 
         int arcDirection = useTagAwareArc
-            ? ArcCalculator.GetArcDirectionFromTags(doc, fixture1, fixture2, c1.Origin, c2.Origin)
+            ? ArcCalculator.GetArcDirectionFromTags(doc, fixture1, fixture2, c1.Origin, c2.Origin, tagLookup)
             : 1;
 
         wirePoints = ArcCalculator.CalculateArcWirePoints(c1.Origin, c2.Origin, WireConstants.ArcAngleDegrees, arcDirection);

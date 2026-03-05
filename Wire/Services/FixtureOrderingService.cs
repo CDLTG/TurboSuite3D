@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Wire.Services;
 
@@ -20,7 +21,8 @@ internal static class FixtureOrderingService
 
         while (remaining.Count > 0)
         {
-            XYZ currentLocation = ((LocationPoint)current.Location).Point;
+            XYZ? currentLocation = GeometryHelper.GetFixtureLocation(current);
+            if (currentLocation == null) break;
             FamilyInstance? closest = null;
             double closestDistance = double.MaxValue;
 
@@ -29,7 +31,8 @@ internal static class FixtureOrderingService
                 if (!remaining.Contains(fixture.Id))
                     continue;
 
-                XYZ fixtureLocation = ((LocationPoint)fixture.Location).Point;
+                XYZ? fixtureLocation = GeometryHelper.GetFixtureLocation(fixture);
+                if (fixtureLocation == null) continue;
                 double distance = currentLocation.DistanceTo(fixtureLocation);
 
                 if (distance < closestDistance)

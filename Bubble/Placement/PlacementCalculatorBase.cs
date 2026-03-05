@@ -34,7 +34,8 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
 
     protected PlacementCalculatorBase(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
     {
-        FixturePoint = ((LocationPoint)fixture.Location).Point;
+        FixturePoint = GeometryHelper.GetFixtureLocation(fixture)
+            ?? throw new InvalidOperationException("Fixture has no valid location for placement calculation.");
         TagPoint = sourceTag.TagHeadPosition;
 
         RotatesWithComponent = DetermineRotationMode(sourceTag);
@@ -52,7 +53,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
 
     public abstract void CalculateFinalPositions(XYZ flipPoint);
 
-    protected static bool DetermineRotationMode(IndependentTag tag)
+    internal static bool DetermineRotationMode(IndependentTag tag)
     {
         var param = tag.LookupParameter("Orientation");
         if (param == null) return false;
@@ -90,7 +91,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
             }
         }
 
-        return ((LocationPoint)fixture.Location)?.Rotation ?? 0.0;
+        return GeometryHelper.GetFixtureLocationRotation(fixture);
     }
 
     protected static PlacementCondition DetermineCondition(XYZ fixtureLocal, XYZ tagLocal)
@@ -104,7 +105,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
         return diffY > 0 ? PlacementCondition.Up : PlacementCondition.Down;
     }
 
-    protected static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
+    internal static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
     {
         var length = fixture.LookupParameter("Symbol Length")?.AsDouble() ?? BubbleConstants.DefaultSymbolSizeFt;
         var width = fixture.LookupParameter("Symbol Width")?.AsDouble() ?? BubbleConstants.DefaultSymbolSizeFt;
@@ -117,7 +118,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
         return (length, width);
     }
 
-    protected static double GetTagWidth(View view, IndependentTag tag)
+    internal static double GetTagWidth(View view, IndependentTag tag)
     {
         var charCount = tag.TagText?.Length ?? 0;
 
@@ -129,7 +130,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
         };
     }
 
-    protected static double CalculateTagWidthFromBounds(View view, IndependentTag tag)
+    internal static double CalculateTagWidthFromBounds(View view, IndependentTag tag)
     {
         var bbox = tag.get_BoundingBox(view);
         return bbox != null ? Math.Abs(bbox.Max.X - bbox.Min.X) : 0;

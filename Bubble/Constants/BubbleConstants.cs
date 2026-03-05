@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace TurboSuite.Bubble.Constants;
 
 /// <summary>
@@ -39,7 +42,7 @@ internal static class BubbleConstants
     public const string ElectricalSwitchlegTagFamily = "AL_Tag_Electrical Fixture (Switchleg)";
 
     // Electrical Fixture families with vertical (up/down) switchleg placement
-    public static readonly string[] ElectricalVerticalFamilies =
+    public static readonly HashSet<string> ElectricalVerticalFamilies = new(StringComparer.OrdinalIgnoreCase)
     {
         "AL_Electrical Fixture_Exhaust (Hosted)",
         "AL_Electrical Fixture_Exhaust",

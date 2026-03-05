@@ -11,7 +11,7 @@ namespace TurboSuite.Zones.Services
         private const double SparePercentage = 0.05;
 
         // Module ordering inside panels: Relay first, then 0-10V, then ELV
-        private static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
+        internal static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
 
         /// <summary>
         /// Groups circuits by their Revit panel assignment, creates modules per panel,

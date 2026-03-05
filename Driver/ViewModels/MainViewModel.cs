@@ -8,6 +8,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Driver.Models;
 using TurboSuite.Driver.Services;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Driver.ViewModels
 {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
 {

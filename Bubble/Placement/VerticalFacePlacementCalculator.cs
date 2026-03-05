@@ -37,10 +37,11 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
 
     public VerticalFacePlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
     {
-        FixturePoint = ((LocationPoint)fixture.Location).Point;
+        FixturePoint = GeometryHelper.GetFixtureLocation(fixture)
+            ?? throw new InvalidOperationException("Fixture has no valid location for vertical face placement.");
         var tagPoint = sourceTag.TagHeadPosition;
 
-        RotatesWithComponent = DetermineRotationMode(sourceTag);
+        RotatesWithComponent = PlacementCalculatorBase.DetermineRotationMode(sourceTag);
 
         _wallNormal = GeometryHelper.GetWallFaceNormal(fixture);
         _wallParallel = new XYZ(-_wallNormal.Y, _wallNormal.X, 0);
@@ -56,55 +57,15 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
 
         _condition = DetermineCondition(_fixtureLocal, _tagLocal);
 
-        (_symbolLength, _symbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag);
+        (_symbolLength, _symbolWidth) = PlacementCalculatorBase.CalculateSymbolDimensions(view, fixture, sourceTag);
 
         _isWallSconce = GeometryHelper.IsWallSconce(fixture);
-    }
-
-    private static bool DetermineRotationMode(IndependentTag tag)
-    {
-        var param = tag.LookupParameter("Orientation");
-        if (param == null) return false;
-
-        var value = param.AsValueString();
-        return value == "Horizontal" || value == "Vertical";
     }
 
     private static PlacementCondition DetermineCondition(XYZ fixtureLocal, XYZ tagLocal)
     {
         var diffY = tagLocal.Y - fixtureLocal.Y;
         return diffY >= 0 ? PlacementCondition.Up : PlacementCondition.Down;
-    }
-
-    private static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
-    {
-        var length = fixture.LookupParameter("Symbol Length")?.AsDouble() ?? BubbleConstants.DefaultSymbolSizeFt;
-        var width = fixture.LookupParameter("Symbol Width")?.AsDouble() ?? BubbleConstants.DefaultSymbolSizeFt;
-
-        width = Math.Max(width, BubbleConstants.MinSymbolWidthFt);
-
-        var tagWidth = GetTagWidth(view, tag);
-        width = Math.Max(width, tagWidth);
-
-        return (length, width);
-    }
-
-    private static double GetTagWidth(View view, IndependentTag tag)
-    {
-        var charCount = tag.TagText?.Length ?? 0;
-
-        return charCount switch
-        {
-            2 => BubbleConstants.TagWidth2CharsFt,
-            3 => BubbleConstants.TagWidth3CharsFt,
-            _ => CalculateTagWidthFromBounds(view, tag)
-        };
-    }
-
-    private static double CalculateTagWidthFromBounds(View view, IndependentTag tag)
-    {
-        var bbox = tag.get_BoundingBox(view);
-        return bbox != null ? Math.Abs(bbox.Max.X - bbox.Min.X) : 0;
     }
 
     public void CalculateFinalPositions(XYZ flipPoint)

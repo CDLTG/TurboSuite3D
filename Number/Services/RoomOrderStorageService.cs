@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Number.Services
 {
@@ -63,15 +64,7 @@ namespace TurboSuite.Number.Services
         }
 
         private static DataStorage FindDataStorage(Document doc, Schema schema)
-        {
-            using (var collector = new FilteredElementCollector(doc))
-            {
-                return collector
-                    .OfClass(typeof(DataStorage))
-                    .Cast<DataStorage>()
-                    .FirstOrDefault(ds => ds.GetEntity(schema).IsValid());
-            }
-        }
+            => DataStorageHelper.FindDataStorage(doc, schema);
 
         public static List<string> Load(Document doc)
         {

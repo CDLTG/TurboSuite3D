@@ -15,9 +15,18 @@ public class TurboSuiteApplication : IExternalApplication
         try
         {
             application.CreateRibbonTab("TurboSuite");
+            RibbonPanel settingsPanel = application.CreateRibbonPanel("TurboSuite", "Settings");
             RibbonPanel commandsPanel = application.CreateRibbonPanel("TurboSuite", "Commands");
             RibbonPanel utilitiesPanel = application.CreateRibbonPanel("TurboSuite", "Utilities");
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
+
+            // Settings
+            CreateButtonNoIcon(settingsPanel, assemblyPath,
+                "TurboSettings",
+                "Settings",
+                "TurboSuite.App.SettingsCommand",
+                "Configure TurboSuite settings",
+                "Opens a dialog to configure which family names are treated as wall sconces, receptacles, and vertical electrical fixtures.");
 
             // Commands: Compact, Tag, Wire, Bubble
             CreateButton(commandsPanel, assemblyPath,
@@ -95,5 +104,14 @@ public class TurboSuiteApplication : IExternalApplication
             new Uri($"pack://application:,,,/TurboSuite;component/Resources/Icons/{name}_32.png"));
         button.Image = new BitmapImage(
             new Uri($"pack://application:,,,/TurboSuite;component/Resources/Icons/{name}_16.png"));
+    }
+
+    private static void CreateButtonNoIcon(RibbonPanel panel, string assemblyPath,
+        string name, string text, string className, string tooltip, string longDescription)
+    {
+        PushButtonData buttonData = new PushButtonData(name, text, assemblyPath, className);
+        PushButton button = (PushButton)panel.AddItem(buttonData);
+        button.ToolTip = tooltip;
+        button.LongDescription = longDescription;
     }
 }

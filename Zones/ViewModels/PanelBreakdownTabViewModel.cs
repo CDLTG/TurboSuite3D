@@ -10,13 +10,14 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
+using TurboSuite.Shared.ViewModels;
 using TurboSuite.Zones.Views;
 
 namespace TurboSuite.Zones.ViewModels
 {
     public class PanelBreakdownTabViewModel : ViewModelBase
     {
-        private static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
+        private static string[] ModuleTypeOrder => PanelAllocationService.ModuleTypeOrder;
 
         private string _selectedBrandName;
         private PanelAllocationResult _allocationResult;
@@ -544,7 +545,8 @@ namespace TurboSuite.Zones.ViewModels
             }
         }
 
-        public ICommand OptimizeCommand => new RelayCommand(RunOptimize);
+        private ICommand _optimizeCommand;
+        public ICommand OptimizeCommand => _optimizeCommand ??= new RelayCommand(RunOptimize);
 
         private void RunOptimize()
         {

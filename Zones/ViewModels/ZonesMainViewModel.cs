@@ -1,6 +1,7 @@
 #nullable disable
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
+using TurboSuite.Shared.ViewModels;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.ViewModels

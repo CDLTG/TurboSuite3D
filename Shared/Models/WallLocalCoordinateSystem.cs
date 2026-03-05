@@ -19,7 +19,8 @@ public class WallLocalCoordinateSystem
 
     public WallLocalCoordinateSystem(FamilyInstance fixture)
     {
-        Origin = ((LocationPoint)fixture.Location).Point;
+        Origin = GeometryHelper.GetFixtureLocation(fixture)
+            ?? throw new InvalidOperationException("Fixture has no valid location.");
 
         WallNormal = GeometryHelper.GetWallFaceNormal(fixture);
         WallParallel = new XYZ(-WallNormal.Y, WallNormal.X, 0);

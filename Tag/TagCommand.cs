@@ -35,9 +35,9 @@ public class TagCommand : IExternalCommand
                 return Result.Cancelled;
             }
 
-            var faceBasedFixtures = selectedFixtures.Where(f => FixtureSelectionService.IsOnVerticalFace(f) || GeometryHelper.IsWallSconce(f)).ToList();
-            var lineBasedFixtures = selectedFixtures.Where(f => !FixtureSelectionService.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && FixtureSelectionService.IsLineBased(f)).ToList();
-            var pointBasedFixtures = selectedFixtures.Where(f => !FixtureSelectionService.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !FixtureSelectionService.IsLineBased(f)).ToList();
+            var faceBasedFixtures = selectedFixtures.Where(f => GeometryHelper.IsOnVerticalFace(f) || GeometryHelper.IsWallSconce(f)).ToList();
+            var lineBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && GeometryHelper.IsLineBasedFixture(f)).ToList();
+            var pointBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsLineBasedFixture(f)).ToList();
 
             int totalTagged = 0;
 
@@ -46,7 +46,7 @@ public class TagCommand : IExternalCommand
                 FamilySymbol? tagType = TagTypeService.GetTagType(doc);
                 if (tagType == null)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.TAG_FAMILY_NAME}' not found.\nLoad this tag family into the project.");
+                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.TagFamilyName}' not found.\nLoad this tag family into the project.");
                     return Result.Cancelled;
                 }
 
@@ -65,7 +65,7 @@ public class TagCommand : IExternalCommand
                 FamilySymbol? linearTagType = TagTypeService.GetLinearTagType(doc, linearTypeName);
                 if (linearTagType == null)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag type '{linearTypeName}' in family '{TagConstants.LINEAR_TAG_FAMILY_NAME}' not found.\nLoad this tag family into the project.");
+                    TaskDialog.Show("TurboTag", $"Tag type '{linearTypeName}' in family '{TagConstants.LinearTagFamilyName}' not found.\nLoad this tag family into the project.");
                     return Result.Cancelled;
                 }
 
@@ -77,7 +77,7 @@ public class TagCommand : IExternalCommand
                 FamilySymbol? tagType = TagTypeService.GetTagType(doc);
                 if (tagType == null)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.TAG_FAMILY_NAME}' not found.\nLoad this tag family into the project.");
+                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.TagFamilyName}' not found.\nLoad this tag family into the project.");
                     return Result.Cancelled;
                 }
 
@@ -115,43 +115,33 @@ public class TagCommand : IExternalCommand
     }
 
     private static TagDirection PromptForDirectionLinear()
-    {
-        var dialog = new TaskDialog("Tag Direction")
-        {
-            MainInstruction = "Select tag placement direction for line-based families:",
-            CommonButtons = TaskDialogCommonButtons.Cancel
-        };
-
-        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Up");
-        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Down");
-
-        return dialog.Show() switch
-        {
-            TaskDialogResult.CommandLink1 => TagDirection.Up,
-            TaskDialogResult.CommandLink2 => TagDirection.Down,
-            _ => TagDirection.None
-        };
-    }
+        => PromptForDirection("Select tag placement direction for line-based families:", includeLeftRight: false);
 
     private static TagDirection PromptForDirection()
+        => PromptForDirection("Select tag placement direction for point-based families:", includeLeftRight: true);
+
+    private static TagDirection PromptForDirection(string instruction, bool includeLeftRight)
     {
         var dialog = new TaskDialog("Tag Direction")
         {
-            MainInstruction = "Select tag placement direction for point-based families:",
+            MainInstruction = instruction,
             CommonButtons = TaskDialogCommonButtons.Cancel
         };
 
         dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Up");
         dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Down");
-        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink3, "Right");
-        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink4, "Left");
+        if (includeLeftRight)
+        {
+            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink3, "Right");
+            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink4, "Left");
+        }
 
         return dialog.Show() switch
         {
             TaskDialogResult.CommandLink1 => TagDirection.Up,
             TaskDialogResult.CommandLink2 => TagDirection.Down,
-            TaskDialogResult.CommandLink3 => TagDirection.Right,
-            TaskDialogResult.CommandLink4 => TagDirection.Left,
+            TaskDialogResult.CommandLink3 when includeLeftRight => TagDirection.Right,
+            TaskDialogResult.CommandLink4 when includeLeftRight => TagDirection.Left,
             _ => TagDirection.None
         };
     }
@@ -266,8 +256,8 @@ public class TagCommand : IExternalCommand
             if (tag == null)
                 return false;
 
-            double symbolLength = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Length", TagConstants.DEFAULT_SYMBOL_SIZE_FEET);
-            double offsetDistance = symbolLength + TagConstants.VERTICAL_OFFSET_FEET;
+            double symbolLength = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Length", TagConstants.DefaultSymbolSizeFeet);
+            double offsetDistance = symbolLength + TagConstants.VerticalOffsetFeet;
 
             XYZ offsetDirection = XYZ.Zero;
             Reference? hostFaceRef = fixture.HostFace;
@@ -372,8 +362,8 @@ public class TagCommand : IExternalCommand
             }
             else
             {
-                double symbolLength = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Length", TagConstants.DEFAULT_SYMBOL_SIZE_FEET);
-                double symbolWidth = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Width", TagConstants.DEFAULT_SYMBOL_SIZE_FEET);
+                double symbolLength = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Length", TagConstants.DefaultSymbolSizeFeet);
+                double symbolWidth = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Width", TagConstants.DefaultSymbolSizeFeet);
                 double tagWidth = TagPlacementService.EstimateTagWidth(tag, doc, viewId);
                 localOffset = TagPlacementService.CalculateOffset(direction, symbolLength, symbolWidth, tagWidth);
             }

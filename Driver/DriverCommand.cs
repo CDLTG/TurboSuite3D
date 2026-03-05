@@ -60,6 +60,9 @@ namespace TurboSuite.Driver
                     DataContext = viewModel
                 };
 
+                var revitHandle = commandData.Application.MainWindowHandle;
+                var helper = new System.Windows.Interop.WindowInteropHelper(window) { Owner = revitHandle };
+
                 bool? result = window.ShowDialog();
 
                 return Result.Succeeded;
@@ -67,7 +70,7 @@ namespace TurboSuite.Driver
             catch (Exception ex)
             {
                 message = ex.Message;
-                TaskDialog.Show("TurboDriver Error", $"An error occurred:\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}");
+                TaskDialog.Show("TurboDriver Error", $"An unexpected error occurred:\n{ex.Message}");
                 return Result.Failed;
             }
         }

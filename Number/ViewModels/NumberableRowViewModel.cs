@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using Autodesk.Revit.DB;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
 {

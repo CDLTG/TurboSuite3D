@@ -8,6 +8,8 @@ using System.Linq;
 using System.Windows.Data;
 using System.Windows.Input;
 
+using TurboSuite.Shared.ViewModels;
+
 namespace TurboSuite.Number.ViewModels
 {
     public abstract class TabViewModelBase : ViewModelBase

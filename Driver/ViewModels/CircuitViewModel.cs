@@ -5,7 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using TurboSuite.Driver.Models;
 using TurboSuite.Driver.Services;
-using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Driver.ViewModels
 {
@@ -45,7 +45,8 @@ namespace TurboSuite.Driver.ViewModels
             set => SetProperty(ref _totalLinearLength, value);
         }
 
-        public List<GroupedFixture> GroupedFixtures => _data.LightingFixtures
+        private List<GroupedFixture> _groupedFixtures;
+        public List<GroupedFixture> GroupedFixtures => _groupedFixtures ??= _data.LightingFixtures
             .GroupBy(f => new { f.TypeMark, f.Comments, LinearLength = Math.Round(f.LinearLength, 4) })
             .Select(g => new GroupedFixture
             {
@@ -95,7 +96,7 @@ namespace TurboSuite.Driver.ViewModels
 
         public void CalculateTotals()
         {
-            TotalLinearLength = CalculationHelper.CalculateTotalLinearLength(_data.LightingFixtures);
+            TotalLinearLength = _data.LightingFixtures?.Sum(f => f.LinearLength) ?? 0.0;
         }
 
         private void CalculateDriverRecommendation()

@@ -4,9 +4,9 @@ using Autodesk.Revit.UI.Selection;
 namespace TurboSuite.Shared.Filters;
 
 /// <summary>
-/// Selection filter that only accepts lighting fixture elements.
+/// Selection filter that accepts both Lighting Fixture and Electrical Fixture elements.
 /// </summary>
-public class LightingFixtureSelectionFilter : ISelectionFilter
+public class FixtureSelectionFilter : ISelectionFilter
 {
     public bool AllowElement(Element elem)
     {

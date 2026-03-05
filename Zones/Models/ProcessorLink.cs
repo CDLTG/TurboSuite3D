@@ -1,6 +1,6 @@
 #nullable disable
 using System;
-using TurboSuite.Zones.ViewModels;
+using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Zones.Models
 {

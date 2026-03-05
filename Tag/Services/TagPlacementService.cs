@@ -28,10 +28,10 @@ internal static class TagPlacementService
     {
         return direction switch
         {
-            TagDirection.Up => new XYZ(0, (symbolLength / 2.0) + TagConstants.VERTICAL_OFFSET_FEET, 0),
-            TagDirection.Down => new XYZ(0, -((symbolLength / 2.0) + TagConstants.VERTICAL_OFFSET_FEET), 0),
-            TagDirection.Right => new XYZ((symbolWidth / 2.0) + (tagWidth / 2.0) + TagConstants.OFFSET_MARGIN_RIGHT_FEET, 0, 0),
-            TagDirection.Left => new XYZ(-((symbolWidth / 2.0) + (tagWidth / 2.0) + TagConstants.OFFSET_MARGIN_LEFT_FEET), 0, 0),
+            TagDirection.Up => new XYZ(0, (symbolLength / 2.0) + TagConstants.VerticalOffsetFeet, 0),
+            TagDirection.Down => new XYZ(0, -((symbolLength / 2.0) + TagConstants.VerticalOffsetFeet), 0),
+            TagDirection.Right => new XYZ((symbolWidth / 2.0) + (tagWidth / 2.0) + TagConstants.OffsetMarginRightFeet, 0, 0),
+            TagDirection.Left => new XYZ(-((symbolWidth / 2.0) + (tagWidth / 2.0) + TagConstants.OffsetMarginLeftFeet), 0, 0),
             _ => XYZ.Zero
         };
     }
@@ -51,7 +51,7 @@ internal static class TagPlacementService
 
     public static XYZ CalculateLinearOffset(TagDirection direction, bool isReversed)
     {
-        double offset = isReversed ? -TagConstants.LINEAR_OFFSET_FEET : TagConstants.LINEAR_OFFSET_FEET;
+        double offset = isReversed ? -TagConstants.LinearOffsetFeet : TagConstants.LinearOffsetFeet;
 
         return direction switch
         {
@@ -67,14 +67,14 @@ internal static class TagPlacementService
         {
             string? tagText = tag.TagText;
 
-            if (string.IsNullOrEmpty(tagText) || tagText.Length <= TagConstants.SHORT_TEXT_THRESHOLD)
+            if (string.IsNullOrEmpty(tagText) || tagText.Length <= TagConstants.ShortTextThreshold)
             {
-                return TagConstants.DEFAULT_TAG_WIDTH_SHORT;
+                return TagConstants.DefaultTagWidthShort;
             }
 
-            if (tagText.Length == TagConstants.MEDIUM_TEXT_THRESHOLD)
+            if (tagText.Length == TagConstants.MediumTextThreshold)
             {
-                return TagConstants.DEFAULT_TAG_WIDTH_MEDIUM;
+                return TagConstants.DefaultTagWidthMedium;
             }
 
             View? view = viewId != ElementId.InvalidElementId ? doc.GetElement(viewId) as View : null;
@@ -85,11 +85,11 @@ internal static class TagPlacementService
                 return bbox.Max.X - bbox.Min.X;
             }
 
-            return TagConstants.DEFAULT_TAG_WIDTH_MEDIUM;
+            return TagConstants.DefaultTagWidthMedium;
         }
         catch
         {
-            return TagConstants.DEFAULT_TAG_WIDTH_SHORT;
+            return TagConstants.DefaultTagWidthShort;
         }
     }
 

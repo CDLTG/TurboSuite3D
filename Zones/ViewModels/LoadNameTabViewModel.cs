@@ -6,6 +6,7 @@ using System.Windows.Input;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Zones.Models;
+using TurboSuite.Shared.ViewModels;
 using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Zones.ViewModels
