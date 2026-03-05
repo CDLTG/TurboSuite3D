@@ -16,6 +16,13 @@ Platform target is **x64**. There are no automated tests or linting configuratio
 
 **IMPORTANT**: Always use Windows-style paths for `dotnet`/MSBuild commands (e.g., `'C:\Users\jacobq\...\TurboSuite.csproj'`). Never use WSL-style `/mnt/c/...` paths — they cause `MSB1001` errors.
 
+## Git Repository
+
+- **Remote:** GitHub (CDLTG/TurboSuite3D), default branch `main`
+- **Ignored:** `Specs/` (local-only reference docs), `bin/`, `obj/`, `.vs/`, `.idea/`
+- Do NOT commit files from `Specs/` — they are historical reference documents kept locally only.
+- Always commit and push `.gitignore` changes so they take effect on GitHub.
+
 ## Deployment
 
 The post-build target copies `TurboSuite.addin` and `TurboSuite.dll`/`.pdb` to:
