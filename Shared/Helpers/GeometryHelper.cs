@@ -230,41 +230,21 @@ public static class GeometryHelper
         Document doc = fixture.Document;
         var annotationCatId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
 
-        // Level 1: top-level GeometryInstance (the family symbol)
+        // GetInstanceGeometry() flattens all nested families to global coords
+        // but preserves GraphicsStyleId on each piece, so we can filter by category.
         foreach (GeometryObject obj in geomElement)
         {
             if (obj is not GeometryInstance topGi) continue;
 
-            GeometryElement topGeom = topGi.GetInstanceGeometry();
-
-            // Level 2: nested families within the host family
-            foreach (GeometryObject subObj in topGeom)
-            {
-                if (subObj is not GeometryInstance nestedGi) continue;
-
-                GeometryElement nestedGeom = nestedGi.GetInstanceGeometry();
-                if (!ContainsCategory(doc, nestedGeom, annotationCatId)) continue;
-
-                return ComputeCurveBounds(nestedGeom);
-            }
+            GeometryElement globalGeom = topGi.GetInstanceGeometry();
+            return ComputeCurveBoundsForCategory(doc, globalGeom, annotationCatId);
         }
 
         return null;
     }
 
-    private static bool ContainsCategory(Document doc, GeometryElement geom, ElementId categoryId)
-    {
-        foreach (GeometryObject obj in geom)
-        {
-            if (obj.GraphicsStyleId == ElementId.InvalidElementId) continue;
-            if (doc.GetElement(obj.GraphicsStyleId) is GraphicsStyle style &&
-                style.GraphicsStyleCategory?.Id == categoryId)
-                return true;
-        }
-        return false;
-    }
-
-    private static (double minX, double minY, double maxX, double maxY)? ComputeCurveBounds(GeometryElement geom)
+    private static (double minX, double minY, double maxX, double maxY)? ComputeCurveBoundsForCategory(
+        Document doc, GeometryElement geom, ElementId categoryId)
     {
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
@@ -273,6 +253,10 @@ public static class GeometryHelper
         foreach (GeometryObject obj in geom)
         {
             if (obj is not Curve curve) continue;
+
+            if (obj.GraphicsStyleId == ElementId.InvalidElementId) continue;
+            if (doc.GetElement(obj.GraphicsStyleId) is not GraphicsStyle style) continue;
+            if (style.GraphicsStyleCategory?.Id != categoryId) continue;
 
             for (int i = 0; i <= 1; i++)
             {
