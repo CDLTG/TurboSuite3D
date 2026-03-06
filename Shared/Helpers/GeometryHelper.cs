@@ -230,14 +230,23 @@ public static class GeometryHelper
         Document doc = fixture.Document;
         var annotationCatId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
 
+        // Level 1: top-level GeometryInstance (the family symbol)
         foreach (GeometryObject obj in geomElement)
         {
-            if (obj is not GeometryInstance gi) continue;
+            if (obj is not GeometryInstance topGi) continue;
 
-            GeometryElement instanceGeom = gi.GetInstanceGeometry();
-            if (!ContainsCategory(doc, instanceGeom, annotationCatId)) continue;
+            GeometryElement topGeom = topGi.GetInstanceGeometry();
 
-            return ComputeCurveBounds(instanceGeom);
+            // Level 2: nested families within the host family
+            foreach (GeometryObject subObj in topGeom)
+            {
+                if (subObj is not GeometryInstance nestedGi) continue;
+
+                GeometryElement nestedGeom = nestedGi.GetInstanceGeometry();
+                if (!ContainsCategory(doc, nestedGeom, annotationCatId)) continue;
+
+                return ComputeCurveBounds(nestedGeom);
+            }
         }
 
         return null;
