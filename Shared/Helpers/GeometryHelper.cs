@@ -223,56 +223,43 @@ public static class GeometryHelper
 
     private static (double minX, double minY, double maxX, double maxY)? GetAnnotationGeometryBounds(FamilyInstance fixture, View view)
     {
-        using var options = new Options { View = view };
+        // IncludeNonVisibleObjects exposes the nested annotation symbol geometry
+        // as top-level Curve objects, separate from the GeometryInstance (3D geometry).
+        // Filter to Generic Annotations category to exclude Light Source wireframe edges.
+        using var options = new Options { View = view, IncludeNonVisibleObjects = true };
         GeometryElement? geomElement = fixture.get_Geometry(options);
         if (geomElement == null) return null;
 
-        // GetInstanceGeometry() flattens all nested families to global coords.
-        // Annotation geometry (nested "Symbol" family) is Curve objects.
-        // 3D geometry (Housing, Light Source, Trim) is Solid objects.
-        // Computing bounds from curves only isolates the annotation symbol.
-        foreach (GeometryObject obj in geomElement)
-        {
-            if (obj is not GeometryInstance topGi) continue;
+        Document doc = fixture.Document;
+        var annotationCatId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
 
-            GeometryElement globalGeom = topGi.GetInstanceGeometry();
-            return ComputeCurveBounds(globalGeom);
-        }
-
-        return null;
-    }
-
-    private static (double minX, double minY, double maxX, double maxY)? ComputeCurveBounds(GeometryElement geom)
-    {
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
         bool found = false;
 
-        foreach (GeometryObject obj in geom)
+        foreach (GeometryObject obj in geomElement)
         {
             if (obj is not Curve curve) continue;
+            if (!IsAnnotationCurve(doc, obj, annotationCatId)) continue;
 
-            for (int i = 0; i <= 1; i++)
+            foreach (XYZ pt in curve.Tessellate())
             {
-                XYZ pt = curve.GetEndPoint(i);
                 minX = Math.Min(minX, pt.X);
                 minY = Math.Min(minY, pt.Y);
                 maxX = Math.Max(maxX, pt.X);
                 maxY = Math.Max(maxY, pt.Y);
                 found = true;
             }
-
-            if (curve is Arc)
-            {
-                XYZ mid = curve.Evaluate(0.5, true);
-                minX = Math.Min(minX, mid.X);
-                minY = Math.Min(minY, mid.Y);
-                maxX = Math.Max(maxX, mid.X);
-                maxY = Math.Max(maxY, mid.Y);
-            }
         }
 
         return found ? (minX, minY, maxX, maxY) : null;
+    }
+
+    private static bool IsAnnotationCurve(Document doc, GeometryObject obj, ElementId annotationCatId)
+    {
+        if (obj.GraphicsStyleId == ElementId.InvalidElementId) return false;
+        if (doc.GetElement(obj.GraphicsStyleId) is not GraphicsStyle style) return false;
+        return style.GraphicsStyleCategory?.Id == annotationCatId;
     }
 
     /// <summary>
