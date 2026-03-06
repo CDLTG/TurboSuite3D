@@ -227,24 +227,22 @@ public static class GeometryHelper
         GeometryElement? geomElement = fixture.get_Geometry(options);
         if (geomElement == null) return null;
 
-        Document doc = fixture.Document;
-        var annotationCatId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
-
-        // GetInstanceGeometry() flattens all nested families to global coords
-        // but preserves GraphicsStyleId on each piece, so we can filter by category.
+        // GetInstanceGeometry() flattens all nested families to global coords.
+        // Annotation geometry (nested "Symbol" family) is Curve objects.
+        // 3D geometry (Housing, Light Source, Trim) is Solid objects.
+        // Computing bounds from curves only isolates the annotation symbol.
         foreach (GeometryObject obj in geomElement)
         {
             if (obj is not GeometryInstance topGi) continue;
 
             GeometryElement globalGeom = topGi.GetInstanceGeometry();
-            return ComputeCurveBoundsForCategory(doc, globalGeom, annotationCatId);
+            return ComputeCurveBounds(globalGeom);
         }
 
         return null;
     }
 
-    private static (double minX, double minY, double maxX, double maxY)? ComputeCurveBoundsForCategory(
-        Document doc, GeometryElement geom, ElementId categoryId)
+    private static (double minX, double minY, double maxX, double maxY)? ComputeCurveBounds(GeometryElement geom)
     {
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
@@ -253,10 +251,6 @@ public static class GeometryHelper
         foreach (GeometryObject obj in geom)
         {
             if (obj is not Curve curve) continue;
-
-            if (obj.GraphicsStyleId == ElementId.InvalidElementId) continue;
-            if (doc.GetElement(obj.GraphicsStyleId) is not GraphicsStyle style) continue;
-            if (style.GraphicsStyleCategory?.Id != categoryId) continue;
 
             for (int i = 0; i <= 1; i++)
             {
