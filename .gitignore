@@ -22,3 +22,6 @@ Desktop.ini
 
 # Specs
 Specs/
+
+# Claude Code local settings
+.claude/settings.local.json
