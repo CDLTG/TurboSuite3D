@@ -256,7 +256,7 @@ public class TagCommand : IExternalCommand
             if (tag == null)
                 return false;
 
-            double symbolLength = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Length", TagConstants.DefaultSymbolSizeFeet);
+            var (symbolLength, _) = GeometryHelper.GetSymbolExtents(fixture, doc.ActiveView, TagConstants.DefaultSymbolSizeFeet);
             double offsetDistance = symbolLength + TagConstants.VerticalOffsetFeet;
 
             XYZ offsetDirection = XYZ.Zero;
@@ -362,8 +362,7 @@ public class TagCommand : IExternalCommand
             }
             else
             {
-                double symbolLength = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Length", TagConstants.DefaultSymbolSizeFeet);
-                double symbolWidth = TagPlacementService.GetParameterValueOrDefault(fixture, "Symbol Width", TagConstants.DefaultSymbolSizeFeet);
+                var (symbolLength, symbolWidth) = GeometryHelper.GetSymbolExtents(fixture, doc.ActiveView, TagConstants.DefaultSymbolSizeFeet);
                 double tagWidth = TagPlacementService.EstimateTagWidth(tag, doc, viewId);
                 localOffset = TagPlacementService.CalculateOffset(direction, symbolLength, symbolWidth, tagWidth);
             }

@@ -163,6 +163,45 @@ public static class GeometryHelper
     }
 
     /// <summary>
+    /// Returns (length, width) of the fixture symbol in fixture-local coordinates
+    /// by deriving dimensions from the element's bounding box in the given view.
+    /// Length = local Y extent, Width = local X extent.
+    /// </summary>
+    public static (double length, double width) GetSymbolExtents(FamilyInstance fixture, View view, double defaultSize)
+    {
+        BoundingBoxXYZ? bbox = fixture.get_BoundingBox(view);
+        if (bbox == null)
+            return (defaultSize, defaultSize);
+
+        double globalDx = bbox.Max.X - bbox.Min.X;
+        double globalDy = bbox.Max.Y - bbox.Min.Y;
+
+        Transform transform = fixture.GetTransform();
+        double angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+
+        double absC = Math.Abs(Math.Cos(angle));
+        double absS = Math.Abs(Math.Sin(angle));
+        double det = absC * absC - absS * absS;
+
+        double localWidth, localLength;
+
+        if (Math.Abs(det) < 0.1)
+        {
+            localWidth = Math.Max(globalDx, globalDy);
+            localLength = localWidth;
+        }
+        else
+        {
+            localWidth  = (globalDx * absC - globalDy * absS) / det;
+            localLength = (globalDy * absC - globalDx * absS) / det;
+            localWidth  = Math.Max(localWidth, 0);
+            localLength = Math.Max(localLength, 0);
+        }
+
+        return (localLength, localWidth);
+    }
+
+    /// <summary>
     /// Gets the first electrical connector from a fixture.
     /// </summary>
     public static Connector? GetElectricalConnector(FamilyInstance fixture)

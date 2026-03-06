@@ -85,8 +85,7 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
 
     private static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
     {
-        var length = fixture.LookupParameter("Symbol Length")?.AsDouble() ?? BubbleConstants.DefaultSymbolSizeFt;
-        var width = fixture.LookupParameter("Symbol Width")?.AsDouble() ?? BubbleConstants.DefaultSymbolSizeFt;
+        var (length, width) = GeometryHelper.GetSymbolExtents(fixture, view, BubbleConstants.DefaultSymbolSizeFt);
 
         width = Math.Max(width, BubbleConstants.MinSymbolWidthFt);
 
