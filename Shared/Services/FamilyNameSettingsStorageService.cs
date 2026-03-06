@@ -14,6 +14,7 @@ public static class FamilyNameSettingsStorageService
     private const string WallSconceField = "WallSconceFamilies";
     private const string ReceptacleField = "ReceptacleFamilies";
     private const string ElectricalVerticalField = "ElectricalVerticalFamilies";
+    private const string VerticalField = "VerticalFamilies";
 
     private static Schema GetOrCreateSchema()
     {
@@ -27,6 +28,7 @@ public static class FamilyNameSettingsStorageService
         builder.AddArrayField(WallSconceField, typeof(string));
         builder.AddArrayField(ReceptacleField, typeof(string));
         builder.AddArrayField(ElectricalVerticalField, typeof(string));
+        builder.AddArrayField(VerticalField, typeof(string));
         return builder.Finish();
     }
 
@@ -45,7 +47,8 @@ public static class FamilyNameSettingsStorageService
         {
             WallSconceFamilies = ToHashSet(entity.Get<IList<string>>(WallSconceField)),
             ReceptacleFamilies = ToHashSet(entity.Get<IList<string>>(ReceptacleField)),
-            ElectricalVerticalFamilies = ToHashSet(entity.Get<IList<string>>(ElectricalVerticalField))
+            ElectricalVerticalFamilies = ToHashSet(entity.Get<IList<string>>(ElectricalVerticalField)),
+            VerticalFamilies = ToHashSet(entity.Get<IList<string>>(VerticalField))
         };
     }
 
@@ -61,6 +64,7 @@ public static class FamilyNameSettingsStorageService
         entity.Set(WallSconceField, (IList<string>)settings.WallSconceFamilies.ToList());
         entity.Set(ReceptacleField, (IList<string>)settings.ReceptacleFamilies.ToList());
         entity.Set(ElectricalVerticalField, (IList<string>)settings.ElectricalVerticalFamilies.ToList());
+        entity.Set(VerticalField, (IList<string>)settings.VerticalFamilies.ToList());
         storage.SetEntity(entity);
 
         tx.Commit();

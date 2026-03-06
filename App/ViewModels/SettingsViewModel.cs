@@ -13,6 +13,7 @@ public class SettingsViewModel : ViewModelBase
     private string _wallSconceFamiliesText;
     private string _receptacleFamiliesText;
     private string _electricalVerticalFamiliesText;
+    private string _verticalFamiliesText;
 
     public string WallSconceFamiliesText
     {
@@ -30,6 +31,12 @@ public class SettingsViewModel : ViewModelBase
     {
         get => _electricalVerticalFamiliesText;
         set => SetProperty(ref _electricalVerticalFamiliesText, value);
+    }
+
+    public string VerticalFamiliesText
+    {
+        get => _verticalFamiliesText;
+        set => SetProperty(ref _verticalFamiliesText, value);
     }
 
     public ICommand SaveCommand { get; }
@@ -59,13 +66,15 @@ public class SettingsViewModel : ViewModelBase
         WallSconceFamiliesText = string.Join(Environment.NewLine, settings.WallSconceFamilies);
         ReceptacleFamiliesText = string.Join(Environment.NewLine, settings.ReceptacleFamilies);
         ElectricalVerticalFamiliesText = string.Join(Environment.NewLine, settings.ElectricalVerticalFamilies);
+        VerticalFamiliesText = string.Join(Environment.NewLine, settings.VerticalFamilies);
     }
 
     public FamilyNameSettings ToModel() => new()
     {
         WallSconceFamilies = ParseLines(WallSconceFamiliesText),
         ReceptacleFamilies = ParseLines(ReceptacleFamiliesText),
-        ElectricalVerticalFamilies = ParseLines(ElectricalVerticalFamiliesText)
+        ElectricalVerticalFamilies = ParseLines(ElectricalVerticalFamiliesText),
+        VerticalFamilies = ParseLines(VerticalFamiliesText)
     };
 
     private static HashSet<string> ParseLines(string text)

@@ -35,9 +35,9 @@ public class TagCommand : IExternalCommand
                 return Result.Cancelled;
             }
 
-            var faceBasedFixtures = selectedFixtures.Where(f => GeometryHelper.IsOnVerticalFace(f) || GeometryHelper.IsWallSconce(f)).ToList();
-            var lineBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && GeometryHelper.IsLineBasedFixture(f)).ToList();
-            var pointBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsLineBasedFixture(f)).ToList();
+            var faceBasedFixtures = selectedFixtures.Where(f => GeometryHelper.IsOnVerticalFace(f) || GeometryHelper.IsWallSconce(f) || GeometryHelper.IsVerticalFamily(f)).ToList();
+            var lineBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f) && GeometryHelper.IsLineBasedFixture(f)).ToList();
+            var pointBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f) && !GeometryHelper.IsLineBasedFixture(f)).ToList();
 
             int totalTagged = 0;
 
@@ -256,9 +256,6 @@ public class TagCommand : IExternalCommand
             if (tag == null)
                 return false;
 
-            var (symbolLength, _) = GeometryHelper.GetSymbolExtents(fixture, doc.ActiveView, TagConstants.DefaultSymbolSizeFeet);
-            double offsetDistance = symbolLength + TagConstants.VerticalOffsetFeet;
-
             XYZ offsetDirection = XYZ.Zero;
             Reference? hostFaceRef = fixture.HostFace;
             if (hostFaceRef != null)
@@ -302,10 +299,13 @@ public class TagCommand : IExternalCommand
                     offsetDirection = horizontal.Normalize();
             }
 
-            XYZ globalOffset = offsetDirection * offsetDistance;
-
-            if (!globalOffset.IsZeroLength())
+            if (!offsetDirection.IsZeroLength())
             {
+                double symbolExtent = GeometryHelper.GetSymbolExtentInDirection(
+                    fixture, doc.ActiveView, offsetDirection, TagConstants.DefaultSymbolSizeFeet);
+                double offsetDistance = symbolExtent + TagConstants.VerticalOffsetFeet;
+
+                XYZ globalOffset = offsetDirection * offsetDistance;
                 ElementTransformUtils.MoveElement(doc, tag.Id, globalOffset);
             }
 
