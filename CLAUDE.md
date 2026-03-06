@@ -101,9 +101,9 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 
 ### Shared Layer
 
-- `GeometryHelper` — geometry utilities: `IsOnVerticalFace`, `IsLineBasedFixture`, `GetHostFaceNormal`, `GetWallFaceNormal`, `GetElectricalConnector`, `IsWallSconce`, `IsReceptacle`, `GetFixtureLocation`, `GetFixtureLocationRotation`.
+- `GeometryHelper` — geometry utilities: `IsOnVerticalFace`, `IsLineBasedFixture`, `GetHostFaceNormal`, `GetWallFaceNormal`, `GetElectricalConnector`, `IsWallSconce`, `IsVerticalFamily`, `IsReceptacle`, `GetFixtureLocation`, `GetFixtureLocationRotation`, `GetSymbolExtents`, `GetSymbolExtentInDirection`.
 - `ParameterHelper` — centralizes all Revit parameter reads (element and circuit parameters).
-- `FamilyNameSettingsCache` / `FamilyNameSettingsStorageService` — per-document configurable family name lists (wall sconces, receptacles, vertical electrical families) stored in ExtensibleStorage. `IsWallSconce` and `IsReceptacle` read from this cache rather than hardcoded strings.
+- `FamilyNameSettingsCache` / `FamilyNameSettingsStorageService` — per-document configurable family name lists (wall sconces, receptacles, vertical electrical families, vertical lighting families) stored in ExtensibleStorage. `IsWallSconce`, `IsVerticalFamily`, and `IsReceptacle` read from this cache rather than hardcoded strings.
 - `LinkedRoomFinderService` — finds the Room containing a fixture, checking host doc then linked docs. Includes `RoomLookupCache` inner class for batch lookups.
 - `DataStorageHelper` — shared `FindDataStorage` utility for ExtensibleStorage queries.
 
@@ -116,7 +116,7 @@ The `TurboSuite.Wire` namespace conflicts with `Autodesk.Revit.DB.Electrical.Wir
 - All model modifications must occur inside a `Transaction`.
 - Element queries use `FilteredElementCollector` with category filters (e.g., `OST_LightingDevices`, `OST_LightingFixtures`, `OST_ElectricalFixtures`, `OST_ElectricalCircuit`).
 - Key built-in parameters: `RBS_ELEC_CIRCUIT_NUMBER`, `RBS_ELEC_CIRCUIT_NAME`, `RBS_ELEC_APPARENT_LOAD`, `RBS_ELEC_CIRCUIT_PANEL_PARAM`, `ALL_MODEL_TYPE_MARK`, `ALL_MODEL_MANUFACTURER`, `ALL_MODEL_INSTANCE_COMMENTS`.
-- Custom parameters accessed by name: "Symbol Length", "Symbol Width", "Scale Factor", "Switch ID", "Linear Length", "Linear Power", "Power", "Sub-Driver Power", "Dimming Protocol", "Voltage", "Maximum Fixtures", "Remote Power Supply", "Load Classification Abbreviation", "Catalog Number1".
+- Custom parameters accessed by name: "Scale Factor", "Switch ID", "Linear Length", "Linear Power", "Power", "Sub-Driver Power", "Dimming Protocol", "Voltage", "Maximum Fixtures", "Remote Power Supply", "Load Classification Abbreviation", "Catalog Number1".
 - Selection filtering uses `ISelectionFilter` implementations.
 - Circuit filtering for Driver uses "Remote Power Supply" (Yes/No type parameter on Lighting Fixture types).
 - **IMPORTANT**: Room name must be read via `room.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString()` — `room.Name` returns "Number Name" format and must not be used.
