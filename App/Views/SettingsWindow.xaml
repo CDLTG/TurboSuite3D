@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="TurboSuite Settings"
-    Height="720" Width="500"
+    Height="820" Width="500"
     MinHeight="420" MinWidth="400"
     WindowStartupLocation="CenterScreen"
     FontFamily="Segoe UI" FontSize="11">
@@ -55,7 +55,7 @@
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
                         <TextBox Text="{Binding WallSconceFamiliesText, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="60"/>
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
                     </StackPanel>
                 </GroupBox>
 
@@ -65,7 +65,17 @@
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
                         <TextBox Text="{Binding ReceptacleFamiliesText, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="60"/>
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Vertical Families" Margin="0,0,0,10">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Lighting fixture families treated as wall-mounted for tag placement (one per line):"
+                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding VerticalFamiliesText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
                     </StackPanel>
                 </GroupBox>
 
@@ -75,7 +85,7 @@
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
                         <TextBox Text="{Binding ElectricalVerticalFamiliesText, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="80"/>
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
                     </StackPanel>
                 </GroupBox>
             </StackPanel>

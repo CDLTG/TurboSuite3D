@@ -121,6 +121,17 @@ public static class GeometryHelper
     }
 
     /// <summary>
+    /// Determines if a fixture is a vertical/wall-mounted family (2D unhosted families
+    /// that should receive face-based tag placement).
+    /// </summary>
+    public static bool IsVerticalFamily(FamilyInstance fixture)
+    {
+        string familyName = fixture.Symbol?.Family?.Name ?? "";
+        var settings = FamilyNameSettingsCache.Get(fixture.Document);
+        return settings.VerticalFamilies.Contains(familyName);
+    }
+
+    /// <summary>
     /// Determines if a fixture is a receptacle family (3D hosted or 2D unhosted).
     /// </summary>
     public static bool IsReceptacle(FamilyInstance fixture)
@@ -160,6 +171,169 @@ public static class GeometryHelper
             return Math.Atan2(dir.Y, dir.X);
         }
         return 0.0;
+    }
+
+    /// <summary>
+    /// Returns (length, width) of the fixture's 2D plan symbol in fixture-local coordinates.
+    /// For 3D families, isolates the nested Generic Annotation geometry ("Symbol" family).
+    /// For 2D families (no nested annotation), uses the full element bounding box.
+    /// Length = local Y extent, Width = local X extent.
+    /// </summary>
+    public static (double length, double width) GetSymbolExtents(FamilyInstance fixture, View view, double defaultSize)
+    {
+        double globalDx, globalDy;
+
+        var annotationBounds = GetAnnotationGeometryBounds(fixture, view);
+        if (annotationBounds.HasValue)
+        {
+            globalDx = annotationBounds.Value.maxX - annotationBounds.Value.minX;
+            globalDy = annotationBounds.Value.maxY - annotationBounds.Value.minY;
+        }
+        else
+        {
+            BoundingBoxXYZ? bbox = fixture.get_BoundingBox(view);
+            if (bbox == null)
+                return (defaultSize, defaultSize);
+
+            globalDx = bbox.Max.X - bbox.Min.X;
+            globalDy = bbox.Max.Y - bbox.Min.Y;
+        }
+
+        return GlobalToLocalExtents(fixture, globalDx, globalDy, defaultSize);
+    }
+
+    /// <summary>
+    /// Returns the distance from the fixture origin to the far edge of its annotation symbol
+    /// in the given global direction. Projects actual annotation curve points (not AABB corners)
+    /// onto the direction vector for accurate results at any rotation.
+    /// Falls back to defaultSize if annotation geometry cannot be determined.
+    /// </summary>
+    public static double GetSymbolExtentInDirection(FamilyInstance fixture, View view, XYZ direction, double defaultSize)
+    {
+        XYZ? origin = GetFixtureLocation(fixture);
+        if (origin == null)
+            return defaultSize;
+
+        double maxProjection = GetAnnotationMaxProjection(fixture, view, origin, direction);
+
+        if (maxProjection <= NormalEpsilon)
+        {
+            // Fallback to bounding box corners
+            BoundingBoxXYZ? bbox = fixture.get_BoundingBox(view);
+            if (bbox == null)
+                return defaultSize;
+
+            foreach (var corner in new[]
+            {
+                new XYZ(bbox.Min.X, bbox.Min.Y, 0),
+                new XYZ(bbox.Max.X, bbox.Min.Y, 0),
+                new XYZ(bbox.Min.X, bbox.Max.Y, 0),
+                new XYZ(bbox.Max.X, bbox.Max.Y, 0)
+            })
+            {
+                double projection = (corner - origin).DotProduct(direction);
+                maxProjection = Math.Max(maxProjection, projection);
+            }
+        }
+
+        return maxProjection > NormalEpsilon ? maxProjection : defaultSize;
+    }
+
+    private static double GetAnnotationMaxProjection(FamilyInstance fixture, View view, XYZ origin, XYZ direction)
+    {
+        using var options = new Options { View = view, IncludeNonVisibleObjects = true };
+        GeometryElement? geomElement = fixture.get_Geometry(options);
+        if (geomElement == null) return 0;
+
+        Document doc = fixture.Document;
+        var annotationCatId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
+
+        double maxProjection = 0;
+
+        foreach (GeometryObject obj in geomElement)
+        {
+            if (obj is not Curve curve) continue;
+            if (!IsAnnotationCurve(doc, obj, annotationCatId)) continue;
+
+            foreach (XYZ pt in curve.Tessellate())
+            {
+                double projection = (pt - origin).DotProduct(direction);
+                maxProjection = Math.Max(maxProjection, projection);
+            }
+        }
+
+        return maxProjection;
+    }
+
+    private static (double length, double width) GlobalToLocalExtents(FamilyInstance fixture, double globalDx, double globalDy, double defaultSize)
+    {
+        Transform transform = fixture.GetTransform();
+        double angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+
+        double absC = Math.Abs(Math.Cos(angle));
+        double absS = Math.Abs(Math.Sin(angle));
+        double det = absC * absC - absS * absS;
+
+        double localWidth, localLength;
+
+        if (Math.Abs(det) < 0.1)
+        {
+            localWidth = Math.Max(globalDx, globalDy);
+            localLength = localWidth;
+        }
+        else
+        {
+            localWidth  = (globalDx * absC - globalDy * absS) / det;
+            localLength = (globalDy * absC - globalDx * absS) / det;
+            localWidth  = Math.Max(localWidth, 0);
+            localLength = Math.Max(localLength, 0);
+        }
+
+        if (localLength < NormalEpsilon || localWidth < NormalEpsilon)
+            return (defaultSize, defaultSize);
+
+        return (localLength, localWidth);
+    }
+
+    private static (double minX, double minY, double maxX, double maxY)? GetAnnotationGeometryBounds(FamilyInstance fixture, View view)
+    {
+        // IncludeNonVisibleObjects exposes the nested annotation symbol geometry
+        // as top-level Curve objects, separate from the GeometryInstance (3D geometry).
+        // Filter to Generic Annotations category to exclude Light Source wireframe edges.
+        using var options = new Options { View = view, IncludeNonVisibleObjects = true };
+        GeometryElement? geomElement = fixture.get_Geometry(options);
+        if (geomElement == null) return null;
+
+        Document doc = fixture.Document;
+        var annotationCatId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
+
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        bool found = false;
+
+        foreach (GeometryObject obj in geomElement)
+        {
+            if (obj is not Curve curve) continue;
+            if (!IsAnnotationCurve(doc, obj, annotationCatId)) continue;
+
+            foreach (XYZ pt in curve.Tessellate())
+            {
+                minX = Math.Min(minX, pt.X);
+                minY = Math.Min(minY, pt.Y);
+                maxX = Math.Max(maxX, pt.X);
+                maxY = Math.Max(maxY, pt.Y);
+                found = true;
+            }
+        }
+
+        return found ? (minX, minY, maxX, maxY) : null;
+    }
+
+    private static bool IsAnnotationCurve(Document doc, GeometryObject obj, ElementId annotationCatId)
+    {
+        if (obj.GraphicsStyleId == ElementId.InvalidElementId) return false;
+        if (doc.GetElement(obj.GraphicsStyleId) is not GraphicsStyle style) return false;
+        return style.GraphicsStyleCategory?.Id == annotationCatId;
     }
 
     /// <summary>

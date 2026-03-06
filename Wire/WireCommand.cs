@@ -177,6 +177,21 @@ public class WireCommand : IExternalCommand
 
         WireCreationService.DeleteWiresBetweenFixtures(doc, c1, c2);
 
+        bool rps1 = ParameterHelper.HasRemotePowerSupply(fixture1);
+        bool rps2 = ParameterHelper.HasRemotePowerSupply(fixture2);
+
+        if (rps1 && rps2)
+        {
+            IList<XYZ> straightPoints = new List<XYZ> { c1.Origin, c2.Origin };
+            return WireCreationService.CreateWire(doc, straightPoints, WiringType.Chamfer,
+                c1, c2, null, null, 0, true, ref message);
+        }
+
+        if (rps1 != rps2)
+        {
+            TaskDialog.Show("TurboWire", "Mismatched Voltage - Review power supply parameter");
+        }
+
         bool isWallSconce = WallSconceService.IsWallSconce(fixture1) && WallSconceService.IsWallSconce(fixture2);
         bool isReceptacle = WallSconceService.IsReceptacle(fixture1) && WallSconceService.IsReceptacle(fixture2);
         bool isSplineCondition = isWallSconce || isReceptacle;

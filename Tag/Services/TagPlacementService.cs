@@ -92,10 +92,4 @@ internal static class TagPlacementService
             return TagConstants.DefaultTagWidthShort;
         }
     }
-
-    public static double GetParameterValueOrDefault(FamilyInstance element, string parameterName, double defaultValue)
-    {
-        Parameter? param = element.LookupParameter(parameterName);
-        return (param != null && param.HasValue) ? param.AsDouble() : defaultValue;
-    }
 }
