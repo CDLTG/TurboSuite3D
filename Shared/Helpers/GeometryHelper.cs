@@ -163,19 +163,36 @@ public static class GeometryHelper
     }
 
     /// <summary>
-    /// Returns (length, width) of the fixture symbol in fixture-local coordinates
-    /// by deriving dimensions from the element's bounding box in the given view.
+    /// Returns (length, width) of the fixture's 2D plan symbol in fixture-local coordinates.
+    /// For 3D families, isolates the nested Generic Annotation geometry ("Symbol" family).
+    /// For 2D families (no nested annotation), uses the full element bounding box.
     /// Length = local Y extent, Width = local X extent.
     /// </summary>
     public static (double length, double width) GetSymbolExtents(FamilyInstance fixture, View view, double defaultSize)
     {
-        BoundingBoxXYZ? bbox = fixture.get_BoundingBox(view);
-        if (bbox == null)
-            return (defaultSize, defaultSize);
+        double globalDx, globalDy;
 
-        double globalDx = bbox.Max.X - bbox.Min.X;
-        double globalDy = bbox.Max.Y - bbox.Min.Y;
+        var annotationBounds = GetAnnotationGeometryBounds(fixture, view);
+        if (annotationBounds.HasValue)
+        {
+            globalDx = annotationBounds.Value.maxX - annotationBounds.Value.minX;
+            globalDy = annotationBounds.Value.maxY - annotationBounds.Value.minY;
+        }
+        else
+        {
+            BoundingBoxXYZ? bbox = fixture.get_BoundingBox(view);
+            if (bbox == null)
+                return (defaultSize, defaultSize);
 
+            globalDx = bbox.Max.X - bbox.Min.X;
+            globalDy = bbox.Max.Y - bbox.Min.Y;
+        }
+
+        return GlobalToLocalExtents(fixture, globalDx, globalDy, defaultSize);
+    }
+
+    private static (double length, double width) GlobalToLocalExtents(FamilyInstance fixture, double globalDx, double globalDy, double defaultSize)
+    {
         Transform transform = fixture.GetTransform();
         double angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
 
@@ -198,7 +215,77 @@ public static class GeometryHelper
             localLength = Math.Max(localLength, 0);
         }
 
+        if (localLength < NormalEpsilon || localWidth < NormalEpsilon)
+            return (defaultSize, defaultSize);
+
         return (localLength, localWidth);
+    }
+
+    private static (double minX, double minY, double maxX, double maxY)? GetAnnotationGeometryBounds(FamilyInstance fixture, View view)
+    {
+        using var options = new Options { View = view };
+        GeometryElement? geomElement = fixture.get_Geometry(options);
+        if (geomElement == null) return null;
+
+        Document doc = fixture.Document;
+        var annotationCatId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
+
+        foreach (GeometryObject obj in geomElement)
+        {
+            if (obj is not GeometryInstance gi) continue;
+
+            GeometryElement instanceGeom = gi.GetInstanceGeometry();
+            if (!ContainsCategory(doc, instanceGeom, annotationCatId)) continue;
+
+            return ComputeCurveBounds(instanceGeom);
+        }
+
+        return null;
+    }
+
+    private static bool ContainsCategory(Document doc, GeometryElement geom, ElementId categoryId)
+    {
+        foreach (GeometryObject obj in geom)
+        {
+            if (obj.GraphicsStyleId == ElementId.InvalidElementId) continue;
+            if (doc.GetElement(obj.GraphicsStyleId) is GraphicsStyle style &&
+                style.GraphicsStyleCategory?.Id == categoryId)
+                return true;
+        }
+        return false;
+    }
+
+    private static (double minX, double minY, double maxX, double maxY)? ComputeCurveBounds(GeometryElement geom)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        bool found = false;
+
+        foreach (GeometryObject obj in geom)
+        {
+            if (obj is not Curve curve) continue;
+
+            for (int i = 0; i <= 1; i++)
+            {
+                XYZ pt = curve.GetEndPoint(i);
+                minX = Math.Min(minX, pt.X);
+                minY = Math.Min(minY, pt.Y);
+                maxX = Math.Max(maxX, pt.X);
+                maxY = Math.Max(maxY, pt.Y);
+                found = true;
+            }
+
+            if (curve is Arc)
+            {
+                XYZ mid = curve.Evaluate(0.5, true);
+                minX = Math.Min(minX, mid.X);
+                minY = Math.Min(minY, mid.Y);
+                maxX = Math.Max(maxX, mid.X);
+                maxY = Math.Max(maxY, mid.Y);
+            }
+        }
+
+        return found ? (minX, minY, maxX, maxY) : null;
     }
 
     /// <summary>
