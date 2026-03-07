@@ -51,7 +51,9 @@ internal static class ArcCalculator
         return lookup;
     }
 
-    public static int GetArcDirectionFromTags(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, XYZ p1, XYZ p2,
+    private const double PerpThreshold = 0.3;
+
+    public static int? GetArcDirectionFromTags(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, XYZ p1, XYZ p2,
         Dictionary<ElementId, IndependentTag>? tagLookup = null)
     {
         XYZ p1Flat = new XYZ(p1.X, p1.Y, 0);
@@ -59,19 +61,32 @@ internal static class ArcCalculator
         XYZ chordDir = (p2Flat - p1Flat).Normalize();
         XYZ perpDir = XYZ.BasisZ.CrossProduct(chordDir).Normalize();
 
-        XYZ? tagOffset = GetTagOffsetDirection(doc, fixture1, tagLookup);
-        if (tagOffset == null)
+        XYZ? tagOffset1 = GetTagOffsetDirection(doc, fixture1, tagLookup);
+        XYZ? tagOffset2 = GetTagOffsetDirection(doc, fixture2, tagLookup);
+
+        double? dot1 = tagOffset1 != null ? tagOffset1.DotProduct(perpDir) : null;
+        double? dot2 = tagOffset2 != null ? tagOffset2.DotProduct(perpDir) : null;
+
+        bool vote1 = dot1.HasValue && Math.Abs(dot1.Value) >= PerpThreshold;
+        bool vote2 = dot2.HasValue && Math.Abs(dot2.Value) >= PerpThreshold;
+
+        if (vote1 && vote2)
         {
-            tagOffset = GetTagOffsetDirection(doc, fixture2, tagLookup);
+            // Both tags have strong perpendicular component — use if they agree
+            if ((dot1!.Value > 0) == (dot2!.Value > 0))
+                return dot1.Value >= 0 ? 1 : -1;
+            // Tags disagree — can't determine
+            return null;
         }
 
-        if (tagOffset != null)
-        {
-            double dot = tagOffset.DotProduct(perpDir);
-            return dot >= 0 ? 1 : -1;
-        }
+        if (vote1)
+            return dot1!.Value >= 0 ? 1 : -1;
 
-        return -1;
+        if (vote2)
+            return dot2!.Value >= 0 ? 1 : -1;
+
+        // Tags are parallel to chord or absent — can't determine
+        return null;
     }
 
     public static XYZ? GetTagOffsetDirection(Document doc, FamilyInstance fixture,
