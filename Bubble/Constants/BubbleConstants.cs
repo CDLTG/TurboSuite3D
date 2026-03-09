@@ -22,6 +22,7 @@ internal static class BubbleConstants
     public const double MinSymbolWidthFt = 4.0 * InchesToFeet;
 
     // Tag width by character count (in feet)
+    public const double TagWidth1CharFt = 6.25 * InchesToFeet;
     public const double TagWidth2CharsFt = 7.75 * InchesToFeet;
     public const double TagWidth3CharsFt = 11.15 * InchesToFeet;
 

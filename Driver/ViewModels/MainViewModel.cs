@@ -192,5 +192,6 @@ namespace TurboSuite.Driver.ViewModels
 
             OnPropertyChanged(nameof(TotalPowerSupplies));
         }
+
     }
 }

@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Seven commands consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
+A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Eight commands consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
 
 ## Installation
 
@@ -18,6 +18,7 @@ The ribbon tab has two panels:
 | [TurboTag](Tag/README.md) | `TT` | Batch-place type tags on selected lighting fixtures |
 | [TurboWire](Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
 | [TurboBubble](Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
+| [TurboDriver](Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
 
 ### Utilities Panel
 
@@ -25,7 +26,7 @@ The ribbon tab has two panels:
 |--------|-------------|
 | [TurboZones](Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
-| [TurboDriver](Driver/README.md) | Assign driver family types to RPS circuits via bin-packing |
+| [TurboRPS](Driver/README.md) | Review power supply assignments across all RPS circuits |
 
 ## Supported Workflows
 

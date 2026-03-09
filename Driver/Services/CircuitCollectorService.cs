@@ -172,6 +172,89 @@ namespace TurboSuite.Driver.Services
             return circuitDataList;
         }
 
+        /// <summary>
+        /// Build CircuitData for a single pre-selected electrical circuit.
+        /// No "Remote Power Supply" filter — the user explicitly chose this circuit.
+        /// </summary>
+        public CircuitData GetCircuitData(Document doc, ElectricalSystem circuit)
+        {
+            var data = new CircuitData
+            {
+                CircuitId = circuit.Id,
+                CircuitNumber = ParameterHelper.GetCircuitNumber(circuit),
+                LoadName = ParameterHelper.GetLoadName(circuit),
+                LoadClassificationAbbreviation = ParameterHelper.GetLoadClassification(circuit),
+                NumberOfElements = 0,
+                ApparentPower = ParameterHelper.GetApparentLoad(circuit),
+                Panel = ParameterHelper.GetPanelName(circuit)
+            };
+
+            if (circuit.Elements != null)
+            {
+                foreach (Element el in circuit.Elements)
+                {
+                    if (el is not FamilyInstance fi)
+                        continue;
+
+                    try
+                    {
+                        if (fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingFixtures)
+                        {
+                            data.LightingFixtures.Add(CreateFixtureData(fi));
+                        }
+                        else if (fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingDevices)
+                        {
+                            var deviceData = CreateDeviceData(fi);
+                            if (!data.DevicesByType.TryGetValue(deviceData.CurrentFamilyTypeName, out var typeList))
+                            {
+                                typeList = new List<DeviceData>();
+                                data.DevicesByType[deviceData.CurrentFamilyTypeName] = typeList;
+                            }
+                            typeList.Add(deviceData);
+                        }
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                }
+            }
+
+            data.NumberOfElements = data.LightingFixtures.Count +
+                                    data.DevicesByType.Values.Sum(list => list.Count);
+            return data;
+        }
+
+        /// <summary>
+        /// Get the Switch ID for a circuit from existing devices or fixtures.
+        /// </summary>
+        public static string GetCircuitSwitchId(Document doc, CircuitData data)
+        {
+            // Try existing devices first
+            foreach (var kvp in data.DevicesByType)
+            {
+                foreach (var device in kvp.Value)
+                {
+                    if (!string.IsNullOrWhiteSpace(device.SwitchID))
+                        return device.SwitchID;
+                }
+            }
+
+            // Fall back to reading Switch ID from fixtures
+            foreach (var fixture in data.LightingFixtures)
+            {
+                var element = doc.GetElement(fixture.FixtureId);
+                if (element != null)
+                {
+                    string switchId = ParameterHelper.GetSwitchID(element);
+                    if (!string.IsNullOrWhiteSpace(switchId))
+                        return switchId;
+                }
+            }
+
+            return string.Empty;
+        }
+
         private FixtureData CreateFixtureData(FamilyInstance element)
         {
             return new FixtureData

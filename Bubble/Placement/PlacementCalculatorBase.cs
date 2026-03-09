@@ -123,6 +123,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
 
         return charCount switch
         {
+            1 => BubbleConstants.TagWidth1CharFt,
             2 => BubbleConstants.TagWidth2CharsFt,
             3 => BubbleConstants.TagWidth3CharsFt,
             _ => CalculateTagWidthFromBounds(view, tag)

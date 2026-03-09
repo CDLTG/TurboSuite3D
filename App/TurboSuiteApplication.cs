@@ -72,12 +72,20 @@ public class TurboSuiteApplication : IExternalApplication
                 "Update numbering for switchlegs, keypads, and power supplies.",
                 "Opens a window to view and renumber electrical circuit numbers, device marks, and switch IDs for Keypad and Power Supply lighting devices.");
 
-            CreateButton(utilitiesPanel, assemblyPath,
+            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+                "TurboRPS",
+                "TurboRPS",
+                "TurboSuite.Driver.RPSCommand",
+                "Review power supply assignments for RPS circuits",
+                "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.");
+
+            // TurboDriver: headless per-fixture power supply deployment
+            CreateButtonNoIcon(commandsPanel, assemblyPath,
                 "TurboDriver",
                 "TurboDriver",
                 "TurboSuite.Driver.DriverCommand",
-                "Manage Lighting Device family types based on circuit information",
-                "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.");
+                "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
+                "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.");
 
             return Result.Succeeded;
         }

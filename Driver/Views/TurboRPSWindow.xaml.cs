@@ -2,7 +2,6 @@
 using System;
 using System.Linq;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using TurboSuite.Driver.Models;
@@ -10,9 +9,9 @@ using TurboSuite.Driver.ViewModels;
 
 namespace TurboSuite.Driver.Views
 {
-    public partial class TurboDriverWindow : Window
+    public partial class TurboRPSWindow : Window
     {
-        public TurboDriverWindow()
+        public TurboRPSWindow()
         {
             InitializeComponent();
         }

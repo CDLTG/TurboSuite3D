@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates seven commands (TurboDriver, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with eight `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates eight commands (TurboDriver, TurboRPS, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with nine `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -81,7 +81,7 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 | `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings` |
 | `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `FamilyNameSettingsStorageService`, `FamilyNameSettingsCache` |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` (shared MVVM base classes) |
-| `TurboSuite.Driver` | `DriverCommand` + Services, Models, ViewModels, Views (MVVM) |
+| `TurboSuite.Driver` | `DriverCommand` (TurboDriver), `RPSCommand` (TurboRPS) + Services, Models, ViewModels, Views |
 | `TurboSuite.Bubble` | `BubbleCommand` + Placement calculators, Services, Constants, Filters |
 | `TurboSuite.Tag` | `TagCommand` + Services, Helpers, Constants |
 | `TurboSuite.Wire` | `WireCommand` + Services, Helpers, Constants |
@@ -91,7 +91,9 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 
 ### Command Modules
 
-- **Driver** (MVVM) — Manages lighting device family types for circuits with "Remote Power Supply" enabled. `DriverSelectionService` recommends driver types by matching fixture wattage, manufacturer, dimming protocol, and voltage. Uses First-Fit Decreasing bin-packing with recursive fixture splitting. Opens `TurboDriverWindow`.
+- **Driver** — Contains two commands sharing the same services and models:
+  - **TurboDriver** (`DriverCommand`) — Headless command: pre-select lighting fixtures with RPS, deploys recommended power supplies (place, circuit-connect, set Switch ID, tag). Creates circuit if needed. Deletes and replaces existing power supplies on re-run.
+  - **TurboRPS** (`RPSCommand`, MVVM) — Review window for inspecting power supply assignments across all RPS circuits. `DriverSelectionService` recommends driver types by matching fixture wattage, manufacturer, dimming protocol, and voltage. Uses First-Fit Decreasing bin-packing with recursive fixture splitting. Opens `TurboRPSWindow`.
 - **Bubble** — Creates switchleg tags and wires for lighting fixtures and electrical fixtures. Lighting Fixtures are selected via their tags and use strategy pattern with `IPlacementCalculator` (Horizontal, LineBased, VerticalFace). Electrical Fixtures are selected directly; default path places tag left/right along localX, while vertical families (Exhaust, Fireplace Igniter) place tag up/down along localY with arc-approximated wire vertices. Uses `BubbleSelectionFilter` to accept both element types.
 - **Tag** — Auto-places lighting fixture type tags. Handles point-based, line-based, and face-based fixtures.
 - **Wire** — Creates wire connections between lighting fixtures and electrical fixtures with arc routing. Multi-fixture ordering uses nearest-neighbor from both endpoints (double-farthest-point method), picking the shorter total path. Arc direction priority: (1) tag perpendicular component if `|dot| >= 0.3` and tags agree, (2) bulge away from group centroid, (3) default. Wall sconces and receptacles use spline routing with wall-normal offsets (sconces 2.5", receptacles 3"). Fixtures are grouped by category — no mixing of Lighting Fixtures and Electrical Fixtures in a single wire chain.
@@ -129,6 +131,14 @@ Key methods:
 - **Create**: `PanelScheduleView.CreateInstanceView(doc, panelId)` — find existing first via `FilteredElementCollector.OfClass(typeof(PanelScheduleView))`
 - `IsSlotGrouped` is **read-only** — there is no `GroupCircuits`/`UngroupCircuits` method in any Revit API version.
 - `GetCellsBySlotNumber` returns multiple rows/cols for multi-pole breakers; use `slotRows.Last()` / `slotCols.First()` as the canonical anchor cell.
+
+### Switch System API Limitations
+
+Revit Switch Systems (`MEPSystem` with category `OST_SwitchSystem`) **cannot be created or modified via the public API**. Confirmed infeasible:
+- **No creation API**: No `MEPSystem.Create` static method, no `ElectricalSystem.Create` for switch type, no `PostableCommand` for SwitchSystem.
+- **Cannot add fixtures**: `MEPSystem.Add(ConnectorSet)` rejects connectors already consumed by an electrical circuit (`ArgumentException: Some connectors to be added into the system have been used`).
+- **Cannot assign base equipment**: `MEPSystem.BaseEquipment` is read-only — no setter to programmatically assign a power supply as the "switch" for a system.
+- **Workaround**: TurboDriver sets the "Switch ID" parameter on placed power supplies. Users must manually create/assign switch systems in the Revit UI afterward. Matching Switch ID values on the same circuit cause Revit to auto-associate devices when creating switch systems manually.
 
 ### Modal Dialogs and View Navigation
 
