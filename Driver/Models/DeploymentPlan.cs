@@ -37,5 +37,6 @@ namespace TurboSuite.Driver.Models
         public FamilySymbol DriverSymbol { get; set; }
         public int QuantityToPlace { get; set; }
         public string SwitchId { get; set; }
+        public List<SubDriverAssignment> Assignments { get; set; } = new List<SubDriverAssignment>();
     }
 }

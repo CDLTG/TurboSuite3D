@@ -34,6 +34,9 @@ namespace TurboSuite.Driver
                     return Result.Failed;
                 }
 
+                // Clear color overrides from previous TurboDriver run
+                VisualFeedbackService.ClearPreviousOverrides(doc);
+
                 // Step 1: Get pre-selected lighting fixtures with Remote Power Supply
                 var selectedIds = uidoc.Selection.GetElementIds();
                 var rpsFixtures = new List<FamilyInstance>();
@@ -86,6 +89,27 @@ namespace TurboSuite.Driver
                 var recommendation = selectionService.GetRecommendation(
                     circuitData.LightingFixtures, driverCandidates);
 
+                if (recommendation == null)
+                {
+                    // Fixtures have no wattage — Power and Linear Power parameters are missing or zero
+                    var missingPowerFixtures = circuitData.LightingFixtures
+                        .Where(f => f.EffectiveWattage <= 0)
+                        .Select(f => f.TypeMark)
+                        .Where(t => !string.IsNullOrWhiteSpace(t))
+                        .Distinct()
+                        .ToList();
+
+                    string typeList = missingPowerFixtures.Count > 0
+                        ? string.Join(", ", missingPowerFixtures)
+                        : "(no Type Mark)";
+
+                    TaskDialog.Show("TurboDriver",
+                        $"No fixtures have wattage defined.\n\n" +
+                        $"Set the 'Power' type parameter (or 'Linear Power' instance parameter for linear fixtures) " +
+                        $"on the following fixture types: {typeList}");
+                    return Result.Cancelled;
+                }
+
                 if (!recommendation.HasMatch)
                 {
                     TaskDialog.Show("TurboDriver",
@@ -106,9 +130,14 @@ namespace TurboSuite.Driver
 
                 if (existingDeviceIds.Count > 0)
                 {
+                    // Collect wires between existing devices before deleting them
+                    var wireIds = DeploymentService.GetWiresBetweenDevices(doc, existingDeviceIds);
+
                     using (Transaction t = new Transaction(doc, "TurboDriver — Remove existing power supplies"))
                     {
                         t.Start();
+                        if (wireIds.Count > 0)
+                            doc.Delete(wireIds);
                         doc.Delete(existingDeviceIds);
                         t.Commit();
                     }
@@ -122,7 +151,8 @@ namespace TurboSuite.Driver
                     CircuitNumber = circuitData.CircuitNumber,
                     DriverSymbol = recommendation.RecommendedCandidate.FamilySymbol,
                     QuantityToPlace = recommendation.DriverCount,
-                    SwitchId = switchId
+                    SwitchId = switchId,
+                    Assignments = recommendation.SubDriverAssignments
                 });
 
                 // Step 7: Execute deployment (pick point → place → connect → set Switch ID)

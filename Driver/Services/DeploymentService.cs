@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Structure;
 using TurboSuite.Shared.Helpers;
+using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
 
 namespace TurboSuite.Driver.Services
 {
@@ -74,19 +75,23 @@ namespace TurboSuite.Driver.Services
             return true;
         }
 
+        private const string SwitchlegTagFamily = "AL_Tag_Lighting Device (Switchleg)";
+
         private static readonly string[] TagFamilyNames =
         {
             "AL_Tag_Lighting Device (SwitchID)",
-            "AL_Tag_Lighting Device (Switchleg)"
+            SwitchlegTagFamily
         };
 
         private Dictionary<string, ElementId> _tagTypeCache;
 
         /// <summary>
-        /// Place two tags (SwitchID and Switchleg) on a lighting device instance.
-        /// Tags are placed at the device location. Returns number of tags placed.
+        /// Place tags on a lighting device instance.
+        /// When includeSwitchleg is true (default), places both SwitchID and Switchleg tags.
+        /// When false, places only the SwitchID tag.
+        /// Returns number of tags placed.
         /// </summary>
-        public int TagDevice(FamilyInstance instance, View activeView)
+        public int TagDevice(FamilyInstance instance, View activeView, bool includeSwitchleg = true)
         {
             if (_tagTypeCache == null)
                 _tagTypeCache = ResolveTagTypes();
@@ -100,6 +105,9 @@ namespace TurboSuite.Driver.Services
 
             foreach (string familyName in TagFamilyNames)
             {
+                if (!includeSwitchleg && familyName == SwitchlegTagFamily)
+                    continue;
+
                 if (!_tagTypeCache.TryGetValue(familyName, out var tagTypeId))
                     continue;
 
@@ -113,6 +121,69 @@ namespace TurboSuite.Driver.Services
             }
 
             return placed;
+        }
+
+        /// <summary>
+        /// Collect wire ElementIds connected between any of the given devices.
+        /// Must be called before deleting the devices.
+        /// </summary>
+        public static List<ElementId> GetWiresBetweenDevices(Document doc, List<ElementId> deviceIds)
+        {
+            var deviceIdSet = new HashSet<ElementId>(deviceIds);
+            var wireIds = new HashSet<ElementId>();
+
+            foreach (var deviceId in deviceIds)
+            {
+                var device = doc.GetElement(deviceId) as FamilyInstance;
+                if (device == null) continue;
+
+                var connector = GeometryHelper.GetElectricalConnector(device);
+                if (connector == null) continue;
+
+                foreach (Connector connected in connector.AllRefs)
+                {
+                    if (connected.Owner is ElectricalWire wire)
+                    {
+                        wireIds.Add(wire.Id);
+                    }
+                }
+            }
+
+            return wireIds.ToList();
+        }
+
+        /// <summary>
+        /// Create a straight wire between two power supply instances.
+        /// Returns true on success.
+        /// </summary>
+        public bool CreateWireBetween(FamilyInstance device1, FamilyInstance device2, View activeView)
+        {
+            var c1 = GeometryHelper.GetElectricalConnector(device1);
+            var c2 = GeometryHelper.GetElectricalConnector(device2);
+            if (c1 == null || c2 == null)
+                return false;
+
+            if (_wireTypeId == null)
+                _wireTypeId = ResolveWireTypeId();
+
+            if (_wireTypeId == ElementId.InvalidElementId)
+                return false;
+
+            IList<XYZ> points = new List<XYZ> { c1.Origin, c2.Origin };
+            ElectricalWire.Create(_doc, _wireTypeId, activeView.Id, WiringType.Chamfer, points, c1, c2);
+            return true;
+        }
+
+        private ElementId _wireTypeId;
+
+        private ElementId ResolveWireTypeId()
+        {
+            var wireType = new FilteredElementCollector(_doc)
+                .OfClass(typeof(WireType))
+                .Cast<WireType>()
+                .FirstOrDefault();
+
+            return wireType?.Id ?? ElementId.InvalidElementId;
         }
 
         private Dictionary<string, ElementId> ResolveTagTypes()

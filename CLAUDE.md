@@ -92,7 +92,7 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 ### Command Modules
 
 - **Driver** — Contains two commands sharing the same services and models:
-  - **TurboDriver** (`DriverCommand`) — Headless command: pre-select lighting fixtures with RPS, deploys recommended power supplies (place, circuit-connect, set Switch ID, tag). Creates circuit if needed. Deletes and replaces existing power supplies on re-run.
+  - **TurboDriver** (`DriverCommand`) — Headless command: pre-select lighting fixtures with RPS, deploys recommended power supplies (place, circuit-connect, set Switch ID, tag, wire between multi-driver chains). Creates circuit if needed. Deletes and replaces existing power supplies (and their wires) on re-run. Applies per-view color overrides to fixtures and power supplies to visualize driver assignments (auto-cleared on next run).
   - **TurboRPS** (`RPSCommand`, MVVM) — Review window for inspecting power supply assignments across all RPS circuits. `DriverSelectionService` recommends driver types by matching fixture wattage, manufacturer, dimming protocol, and voltage. Uses First-Fit Decreasing bin-packing with recursive fixture splitting. Opens `TurboRPSWindow`.
 - **Bubble** — Creates switchleg tags and wires for lighting fixtures and electrical fixtures. Lighting Fixtures are selected via their tags and use strategy pattern with `IPlacementCalculator` (Horizontal, LineBased, VerticalFace). Electrical Fixtures are selected directly; default path places tag left/right along localX, while vertical families (Exhaust, Fireplace Igniter) place tag up/down along localY with arc-approximated wire vertices. Uses `BubbleSelectionFilter` to accept both element types.
 - **Tag** — Auto-places lighting fixture type tags. Handles point-based, line-based, and face-based fixtures.
@@ -138,7 +138,7 @@ Revit Switch Systems (`MEPSystem` with category `OST_SwitchSystem`) **cannot be 
 - **No creation API**: No `MEPSystem.Create` static method, no `ElectricalSystem.Create` for switch type, no `PostableCommand` for SwitchSystem.
 - **Cannot add fixtures**: `MEPSystem.Add(ConnectorSet)` rejects connectors already consumed by an electrical circuit (`ArgumentException: Some connectors to be added into the system have been used`).
 - **Cannot assign base equipment**: `MEPSystem.BaseEquipment` is read-only — no setter to programmatically assign a power supply as the "switch" for a system.
-- **Workaround**: TurboDriver sets the "Switch ID" parameter on placed power supplies. Users must manually create/assign switch systems in the Revit UI afterward. Matching Switch ID values on the same circuit cause Revit to auto-associate devices when creating switch systems manually.
+- **Workaround**: TurboDriver sets the "Switch ID" parameter on placed power supplies and applies color overrides (`View.SetElementOverrides`) to visually group fixtures by driver assignment. Users must manually create/assign switch systems in the Revit UI afterward. Matching Switch ID values on the same circuit cause Revit to auto-associate devices when creating switch systems manually. Color overrides are auto-cleared on the next TurboDriver invocation via `VisualFeedbackService.ClearPreviousOverrides`.
 
 ### Modal Dialogs and View Navigation
 

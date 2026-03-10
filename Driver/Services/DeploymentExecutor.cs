@@ -19,10 +19,12 @@ namespace TurboSuite.Driver.Services
         public int TotalConnected { get; set; }
         public int TotalSwitchIdSet { get; set; }
         public int TotalTagsPlaced { get; set; }
+        public int TotalWiresPlaced { get; set; }
         public int TotalFailed { get; set; }
         public bool WasCancelled { get; set; }
         public List<ElementId> PlacedInstanceIds { get; set; } = new List<ElementId>();
         public List<string> Warnings { get; set; } = new List<string>();
+        public List<ElementId> OverriddenElementIds { get; set; } = new List<ElementId>();
     }
 
     /// <summary>
@@ -83,6 +85,7 @@ namespace TurboSuite.Driver.Services
                     {
                         // Strip any existing suffix from base Switch ID (e.g., "X01a" → "X01")
                         string baseSwitchId = StripSwitchIdSuffix(circuit.SwitchId);
+                        var circuitInstances = new List<FamilyInstance>();
 
                         for (int i = 0; i < circuit.QuantityToPlace; i++)
                         {
@@ -100,6 +103,7 @@ namespace TurboSuite.Driver.Services
 
                             result.TotalPlaced++;
                             result.PlacedInstanceIds.Add(instance.Id);
+                            circuitInstances.Add(instance);
 
                             // Add to circuit
                             bool connected = service.AddToCircuit(instance, circuit.CircuitId);
@@ -129,17 +133,31 @@ namespace TurboSuite.Driver.Services
                                     $"Circuit {circuit.CircuitNumber}: Could not set Switch ID '{switchId}'.");
                             }
 
-                            // Tag the device
-                            int tagsPlaced = service.TagDevice(instance, doc.ActiveView);
+                            // Tag the device: Switchleg tag only on first, SwitchID tag on all
+                            bool isFirst = (i == 0);
+                            bool multipleDevices = circuit.QuantityToPlace > 1;
+                            int tagsPlaced = service.TagDevice(instance, doc.ActiveView,
+                                includeSwitchleg: !multipleDevices || isFirst);
                             result.TotalTagsPlaced += tagsPlaced;
-                            if (tagsPlaced < 2)
+
+                            int expectedTags = (!multipleDevices || isFirst) ? 2 : 1;
+                            if (tagsPlaced < expectedTags)
                             {
                                 result.Warnings.Add(
-                                    $"Circuit {circuit.CircuitNumber}: Only {tagsPlaced}/2 tags placed. " +
+                                    $"{tagsPlaced}/{expectedTags} tags placed. " +
                                     "Ensure tag families are loaded: AL_Tag_Lighting Device (SwitchID), AL_Tag_Lighting Device (Switchleg).");
                             }
 
                             globalIndex++;
+                        }
+
+                        // Wire consecutive power supplies in this circuit
+                        for (int w = 1; w < circuitInstances.Count; w++)
+                        {
+                            bool wired = service.CreateWireBetween(
+                                circuitInstances[w - 1], circuitInstances[w], doc.ActiveView);
+                            if (wired)
+                                result.TotalWiresPlaced++;
                         }
                     }
 
@@ -150,6 +168,19 @@ namespace TurboSuite.Driver.Services
                     result.Warnings.Add($"Transaction failed: {ex.Message}");
                     if (trans.HasStarted())
                         trans.RollBack();
+                }
+            }
+
+            // Apply color overrides to show fixture-to-driver assignments
+            if (result.PlacedInstanceIds.Count > 0
+                && plan.Circuits.Exists(c => c.Assignments != null && c.Assignments.Count > 0))
+            {
+                using (Transaction visTrans = new Transaction(doc, "TurboDriver — Visual Feedback"))
+                {
+                    visTrans.Start();
+                    result.OverriddenElementIds = VisualFeedbackService.ApplyOverrides(
+                        doc.ActiveView, plan.Circuits, result.PlacedInstanceIds);
+                    visTrans.Commit();
                 }
             }
 
@@ -164,7 +195,7 @@ namespace TurboSuite.Driver.Services
                 if (result.TotalFailed > 0)
                     sb.AppendLine($"Failed to place: {result.TotalFailed}");
                 foreach (var w in result.Warnings)
-                    sb.AppendLine($"- {w}");
+                    sb.AppendLine(w);
                 TaskDialog.Show("TurboDriver", sb.ToString());
             }
 
