@@ -7,6 +7,9 @@
     <PlatformTarget>x64</PlatformTarget>
     <RootNamespace>TurboSuite</RootNamespace>
     <AssemblyName>TurboSuite</AssemblyName>
+    <Company>CDLTG</Company>
+    <Authors>CDLTG</Authors>
+    <Product>TurboSuite</Product>
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
   <ItemGroup>

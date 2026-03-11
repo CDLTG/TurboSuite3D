@@ -12,6 +12,7 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
 {
     private readonly bool _hasRemotePowerSupply;
     private XYZ _flipLocal = XYZ.Zero;
+    private double _newTagLocalX;
 
     public HorizontalPlacementCalculator(Document doc, View view, FamilyInstance fixture,
         IndependentTag sourceTag, bool hasRemotePowerSupply = false)
@@ -31,6 +32,7 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
         ApplyFlip(ref offsets, flipState);
 
         var newTagLocal = CalculateTagPosition(offsets);
+        _newTagLocalX = newTagLocal.X;
         var vertex2Local = CalculateVertex2(offsets);
 
         // V3 uses the base tag position (without RPS offset) so the wire elbow
@@ -147,12 +149,17 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
 
     public bool DetermineEffectiveFlipForRPS()
     {
-        return Condition switch
-        {
-            PlacementCondition.Left => false,
-            PlacementCondition.Right => true,
-            _ => !IsFlipped
-        };
+        var tagIsRight = _newTagLocalX >= FixtureLocal.X;
+
+        // The Remote Switchleg tag types ("Left"/"Right") define a fixed visual layout
+        // that rotates with the fixture. At rotations in (π/2, π] ∪ (-π, -π/2]
+        // (91°-270°), the rotation's visual flip means the local-space check gives
+        // the correct type directly. At rotations in [-π/2, π/2] (270°-90°),
+        // we must invert. Epsilon tolerance is required because float π/2 and -π/2
+        // differ slightly from their mathematical values.
+        var eps = BubbleConstants.RotationEpsilon;
+        var needsInversion = Rotation > -Math.PI / 2 + eps && Rotation <= Math.PI / 2 + eps;
+        return needsInversion ? !tagIsRight : tagIsRight;
     }
 
     private XYZ CalculateVertex2(PlacementOffsets offsets)
