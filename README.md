@@ -38,5 +38,5 @@ All commands work in both:
 ## Dependencies
 
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2025)
-- [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation. Used by TurboName to parse linked DWG files and extract block attributes, text entities, layer data, and coordinate information for room name assignment.
+- [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation.
 - .NET 8.0-windows / WPF
