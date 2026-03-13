@@ -34,9 +34,6 @@ namespace TurboSuite.Driver
                     return Result.Failed;
                 }
 
-                // Clear color overrides from previous TurboDriver run
-                VisualFeedbackService.ClearPreviousOverrides(doc);
-
                 // Step 1: Get pre-selected lighting fixtures with Remote Power Supply
                 var selectedIds = uidoc.Selection.GetElementIds();
                 var rpsFixtures = new List<FamilyInstance>();
@@ -120,6 +117,8 @@ namespace TurboSuite.Driver
 
                 // Step 5: Preserve Switch ID, then delete existing power supplies
                 string switchId = CircuitCollectorService.GetCircuitSwitchId(doc, circuitData);
+                if (string.IsNullOrEmpty(switchId))
+                    switchId = "\u2014"; // em dash default
 
                 var existingDeviceIds = new List<ElementId>();
                 foreach (var kvp in circuitData.DevicesByType)

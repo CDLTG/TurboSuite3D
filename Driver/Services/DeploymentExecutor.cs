@@ -24,7 +24,6 @@ namespace TurboSuite.Driver.Services
         public bool WasCancelled { get; set; }
         public List<ElementId> PlacedInstanceIds { get; set; } = new List<ElementId>();
         public List<string> Warnings { get; set; } = new List<string>();
-        public List<ElementId> OverriddenElementIds { get; set; } = new List<ElementId>();
     }
 
     /// <summary>
@@ -168,19 +167,6 @@ namespace TurboSuite.Driver.Services
                     result.Warnings.Add($"Transaction failed: {ex.Message}");
                     if (trans.HasStarted())
                         trans.RollBack();
-                }
-            }
-
-            // Apply color overrides to show fixture-to-driver assignments
-            if (result.PlacedInstanceIds.Count > 0
-                && plan.Circuits.Exists(c => c.Assignments != null && c.Assignments.Count > 0))
-            {
-                using (Transaction visTrans = new Transaction(doc, "TurboDriver — Visual Feedback"))
-                {
-                    visTrans.Start();
-                    result.OverriddenElementIds = VisualFeedbackService.ApplyOverrides(
-                        doc.ActiveView, plan.Circuits, result.PlacedInstanceIds);
-                    visTrans.Commit();
                 }
             }
 
