@@ -77,14 +77,18 @@ public static class LinkedRoomFinderService
     /// <summary>
     /// Pre-collects all rooms and link transforms once for batch fixture lookups.
     /// Create once per command invocation, use for all fixtures, then discard.
+    /// Optionally accepts a RegionRoomLookupService for 2D fallback when no Room is found.
     /// </summary>
     public class RoomLookupCache
     {
         private readonly List<Room> _hostRooms;
         private readonly List<(Transform HostToLink, List<Room> Rooms)> _linkedRooms;
+        private readonly RegionRoomLookupService? _regionFallback;
 
-        public RoomLookupCache(Document hostDoc)
+        public RoomLookupCache(Document hostDoc, RegionRoomLookupService? regionFallback = null)
         {
+            _regionFallback = regionFallback;
+
             _hostRooms = new FilteredElementCollector(hostDoc)
                 .OfCategory(BuiltInCategory.OST_Rooms)
                 .OfClass(typeof(SpatialElement))
@@ -130,10 +134,32 @@ public static class LinkedRoomFinderService
             return null;
         }
 
+        /// <summary>
+        /// Returns room name from Revit Room lookup, falling back to
+        /// "Room Region" FilledRegion Comments if no Room is found.
+        /// </summary>
         public string? FindRoomName(FamilyInstance fixture)
         {
             Room? room = FindRoom(fixture);
-            return room?.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString();
+            if (room != null)
+                return room.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString();
+
+            // 2D fallback: check region Comments
+            if (_regionFallback != null && TryGetFixturePoint(fixture, out XYZ point))
+                return _regionFallback.FindRoomName(point);
+
+            return null;
+        }
+
+        /// <summary>
+        /// Returns the ElementId of the "Room Region" containing the fixture,
+        /// or InvalidElementId if no region fallback is configured or no region matches.
+        /// </summary>
+        public ElementId FindRegionId(FamilyInstance fixture)
+        {
+            if (_regionFallback == null || !TryGetFixturePoint(fixture, out XYZ point))
+                return ElementId.InvalidElementId;
+            return _regionFallback.FindRegionId(point);
         }
     }
 }

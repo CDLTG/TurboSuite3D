@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -41,6 +42,16 @@ namespace TurboSuite.Zones.Services
                     if (commentsParam != null && !commentsParam.IsReadOnly)
                     {
                         commentsParam.Set(circuitData.CircuitComments ?? string.Empty);
+                        updated = true;
+                    }
+
+                    // Write RoomOverride back to the "Room Region" FilledRegion Comments
+                    if (!string.IsNullOrWhiteSpace(circuitData.RoomOverride)
+                        && circuitData.RegionId != null
+                        && circuitData.RegionId != ElementId.InvalidElementId)
+                    {
+                        RegionRoomLookupService.WriteRoomNameToRegion(
+                            doc, circuitData.RegionId, circuitData.RoomOverride);
                         updated = true;
                     }
 

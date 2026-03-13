@@ -32,7 +32,8 @@ namespace TurboSuite.Number.Services
 
         public List<DeviceNumberRow> GetKeypads(Document doc)
         {
-            var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc);
+            var regionFallback = new RegionRoomLookupService(doc);
+            var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
             return new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_LightingDevices)
                 .OfClass(typeof(FamilyInstance))
@@ -45,6 +46,10 @@ namespace TurboSuite.Number.Services
                 .Select(fi =>
                 {
                     Room room = roomCache.FindRoom(fi);
+                    string roomName = room != null
+                        ? room.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString() ?? ""
+                        : roomCache.FindRoomName(fi) ?? "";
+                    string roomNumber = room?.get_Parameter(BuiltInParameter.ROOM_NUMBER)?.AsString() ?? "";
                     return new DeviceNumberRow
                     {
                         ElementId = fi.Id,
@@ -52,8 +57,8 @@ namespace TurboSuite.Number.Services
                         TypeName = TrimTypePrefix(fi.Symbol?.Name ?? ""),
                         Model = fi.Symbol?.get_Parameter(BuiltInParameter.ALL_MODEL_MODEL)?.AsString() ?? "",
                         SwitchId = ParameterHelper.GetSwitchID(fi) ?? "",
-                        RoomName = room?.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString() ?? "",
-                        RoomNumber = room?.get_Parameter(BuiltInParameter.ROOM_NUMBER)?.AsString() ?? "",
+                        RoomName = roomName,
+                        RoomNumber = roomNumber,
                         Mark = fi.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() ?? ""
                     };
                 })

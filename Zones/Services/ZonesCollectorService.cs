@@ -18,36 +18,8 @@ namespace TurboSuite.Zones.Services
 
             try
             {
-                // Collect all lighting and electrical fixtures grouped by circuit number
-                var fixturesByCircuit = new Dictionary<string, List<FamilyInstance>>();
-                var categories = new[]
-                {
-                    BuiltInCategory.OST_LightingFixtures,
-                    BuiltInCategory.OST_ElectricalFixtures
-                };
-
-                foreach (var category in categories)
-                {
-                    var collector = new FilteredElementCollector(doc)
-                        .OfCategory(category)
-                        .OfClass(typeof(FamilyInstance));
-
-                    foreach (FamilyInstance fixture in collector)
-                    {
-                        try
-                        {
-                            Parameter circuitParam = fixture.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_NUMBER);
-                            string circuitNumber = circuitParam?.AsString();
-                            if (string.IsNullOrWhiteSpace(circuitNumber))
-                                continue;
-
-                            if (!fixturesByCircuit.ContainsKey(circuitNumber))
-                                fixturesByCircuit[circuitNumber] = new List<FamilyInstance>();
-                            fixturesByCircuit[circuitNumber].Add(fixture);
-                        }
-                        catch { continue; }
-                    }
-                }
+                var lightingCatId = new ElementId(BuiltInCategory.OST_LightingFixtures);
+                var electricalCatId = new ElementId(BuiltInCategory.OST_ElectricalFixtures);
 
                 // Collect all electrical circuits
                 var circuits = new FilteredElementCollector(doc)
@@ -56,7 +28,8 @@ namespace TurboSuite.Zones.Services
                     .Cast<ElectricalSystem>()
                     .ToList();
 
-                var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc);
+                var regionFallback = new RegionRoomLookupService(doc);
+                var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
 
                 foreach (ElectricalSystem circuit in circuits)
                 {
@@ -66,11 +39,16 @@ namespace TurboSuite.Zones.Services
                         if (string.IsNullOrWhiteSpace(circuitNumber))
                             continue;
 
-                        // Only include circuits that have lighting or electrical fixtures
-                        if (!fixturesByCircuit.ContainsKey(circuitNumber))
-                            continue;
-
-                        var fixtures = fixturesByCircuit[circuitNumber];
+                        // Get fixtures directly from the circuit's connected elements
+                        // (avoids grouping by circuit number string, which fails when
+                        // multiple circuits share the same number like "<unnamed>")
+                        var fixtures = new List<FamilyInstance>();
+                        foreach (Element el in circuit.Elements)
+                        {
+                            if (el is FamilyInstance fi &&
+                                (fi.Category.Id == lightingCatId || fi.Category.Id == electricalCatId))
+                                fixtures.Add(fi);
+                        }
                         if (fixtures.Count == 0)
                             continue;
 
@@ -83,8 +61,9 @@ namespace TurboSuite.Zones.Services
                         // Read current Load Name from Revit
                         string currentLoadName = ParameterHelper.GetLoadName(circuit);
 
-                        // Resolve room name from first fixture
+                        // Resolve room name from first fixture (falls back to region Comments in 2D)
                         string roomName = roomCache.FindRoomName(fixtures[0]);
+                        ElementId regionId = roomCache.FindRegionId(fixtures[0]);
 
                         // Read intermediate label sources
                         string circuitComments = ParameterHelper.GetCircuitComments(circuit);
@@ -114,6 +93,7 @@ namespace TurboSuite.Zones.Services
                             DimmingType = dimmingType ?? string.Empty,
                             PanelName = panelName ?? string.Empty,
                             RoomName = roomName ?? string.Empty,
+                            RegionId = regionId,
                             CurrentLoadName = currentLoadName ?? string.Empty,
                             CircuitComments = circuitComments ?? string.Empty,
                             FixtureComments = fixtureComments ?? string.Empty,
