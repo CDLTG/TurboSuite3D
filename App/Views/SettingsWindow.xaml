@@ -3,8 +3,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="TurboSuite Settings"
-    Height="820" Width="500"
-    MinHeight="420" MinWidth="400"
+    Height="920" Width="500"
+    MinHeight="520" MinWidth="400"
     WindowStartupLocation="CenterScreen"
     FontFamily="Segoe UI" FontSize="11">
 
@@ -13,6 +13,7 @@
         <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
         <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
         <SolidColorBrush x:Key="ButtonBorderBrush" Color="#ACACAC"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </Window.Resources>
 
     <DockPanel>
@@ -46,6 +47,86 @@
         <!-- Content -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
             <StackPanel>
+                <!-- CAD Room Source Settings -->
+                <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,10"
+                          BorderBrush="#2B579A" BorderThickness="1.5">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Configure how room names and ceiling heights are extracted from linked CAD files."
+                                   Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                        <!-- Mode selection -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <RadioButton Content="Block Attributes" IsChecked="{Binding IsBlockMode}"
+                                         Margin="0,0,16,0" VerticalContentAlignment="Center"/>
+                            <RadioButton Content="Text on Layer" IsChecked="{Binding IsTextMode}"
+                                         VerticalContentAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Block mode fields -->
+                        <StackPanel Visibility="{Binding IsBlockMode, Converter={StaticResource BoolToVis}}"
+                                    Margin="0,0,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Block Name:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="0" Grid.Column="1"
+                                         Text="{Binding BlockName, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Room Name Tags:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding RoomNameTagsText, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Tag:"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Grid.Row="2" Grid.Column="1"
+                                         Text="{Binding CeilingHeightTag, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+                            <TextBlock Text="Room Name Tags: comma-separated, concatenated in order (e.g., 003, 002)"
+                                       Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <!-- Text mode fields -->
+                        <StackPanel Visibility="{Binding IsTextMode, Converter={StaticResource BoolToVis}}"
+                                    Margin="0,0,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Room Name Layer:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="0" Grid.Column="1"
+                                         Text="{Binding RoomNameLayer, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Ceiling Height Layer:"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding CeilingHeightLayer, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+                            <TextBlock Text="Leave Ceiling Height Layer blank if heights are on the same layer as room names."
+                                       Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
                 <TextBlock Text="Configure which family names receive special routing behavior."
                            Foreground="#555555" Margin="0,0,0,12" TextWrapping="Wrap"/>
 

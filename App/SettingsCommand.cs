@@ -5,7 +5,6 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.App.ViewModels;
 using TurboSuite.App.Views;
-using TurboSuite.Shared.Models;
 using TurboSuite.Shared.Services;
 
 namespace TurboSuite.App;
@@ -24,15 +23,19 @@ public class SettingsCommand : IExternalCommand
                 return Result.Failed;
             }
 
-            var settings = FamilyNameSettingsCache.Get(doc);
-            var viewModel = new SettingsViewModel(settings);
+            var familySettings = FamilyNameSettingsCache.Get(doc);
+            var cadSettings = CadRoomSourceSettingsCache.Get(doc);
+            var viewModel = new SettingsViewModel(familySettings, cadSettings);
             var window = new SettingsWindow { DataContext = viewModel };
             var helper = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
 
             if (window.ShowDialog() == true)
             {
-                FamilyNameSettingsStorageService.Save(doc, viewModel.ToModel());
+                FamilyNameSettingsStorageService.Save(doc, viewModel.ToFamilyModel());
                 FamilyNameSettingsCache.Invalidate();
+
+                CadRoomSourceStorageService.Save(doc, viewModel.ToCadModel());
+                CadRoomSourceSettingsCache.Invalidate();
             }
 
             return Result.Succeeded;

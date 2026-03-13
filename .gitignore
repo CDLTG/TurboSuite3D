@@ -23,5 +23,8 @@ Desktop.ini
 # Specs
 Specs/
 
+# Spike (local-only diagnostic command)
+Spike/
+
 # Claude Code local settings
 .claude/settings.local.json

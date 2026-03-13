@@ -15,6 +15,15 @@ public class SettingsViewModel : ViewModelBase
     private string _electricalVerticalFamiliesText;
     private string _verticalFamiliesText;
 
+    // CAD Room Source
+    private bool _isBlockMode = true;
+    private bool _isTextMode;
+    private string _blockName;
+    private string _roomNameTagsText;
+    private string _ceilingHeightTag;
+    private string _roomNameLayer;
+    private string _ceilingHeightLayer;
+
     public string WallSconceFamiliesText
     {
         get => _wallSconceFamiliesText;
@@ -39,14 +48,66 @@ public class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _verticalFamiliesText, value);
     }
 
+    // CAD Room Source properties
+    public bool IsBlockMode
+    {
+        get => _isBlockMode;
+        set
+        {
+            if (SetProperty(ref _isBlockMode, value) && value)
+                IsTextMode = false;
+        }
+    }
+
+    public bool IsTextMode
+    {
+        get => _isTextMode;
+        set
+        {
+            if (SetProperty(ref _isTextMode, value) && value)
+                IsBlockMode = false;
+        }
+    }
+
+    public string BlockName
+    {
+        get => _blockName;
+        set => SetProperty(ref _blockName, value);
+    }
+
+    public string RoomNameTagsText
+    {
+        get => _roomNameTagsText;
+        set => SetProperty(ref _roomNameTagsText, value);
+    }
+
+    public string CeilingHeightTag
+    {
+        get => _ceilingHeightTag;
+        set => SetProperty(ref _ceilingHeightTag, value);
+    }
+
+    public string RoomNameLayer
+    {
+        get => _roomNameLayer;
+        set => SetProperty(ref _roomNameLayer, value);
+    }
+
+    public string CeilingHeightLayer
+    {
+        get => _ceilingHeightLayer;
+        set => SetProperty(ref _ceilingHeightLayer, value);
+    }
+
     public ICommand SaveCommand { get; }
     public ICommand ResetDefaultsCommand { get; }
 
     public Action<bool?> CloseAction { get; set; }
 
-    public SettingsViewModel(FamilyNameSettings settings)
+    public SettingsViewModel(FamilyNameSettings familySettings, CadRoomSourceSettings cadSettings)
     {
-        LoadFrom(settings);
+        LoadFrom(familySettings);
+        LoadCadSettings(cadSettings);
         SaveCommand = new RelayCommand(OnSave);
         ResetDefaultsCommand = new RelayCommand(OnResetDefaults);
     }
@@ -59,6 +120,7 @@ public class SettingsViewModel : ViewModelBase
     private void OnResetDefaults()
     {
         LoadFrom(FamilyNameSettings.CreateDefaults());
+        LoadCadSettings(CadRoomSourceSettings.CreateDefaults());
     }
 
     private void LoadFrom(FamilyNameSettings settings)
@@ -69,13 +131,45 @@ public class SettingsViewModel : ViewModelBase
         VerticalFamiliesText = string.Join(Environment.NewLine, settings.VerticalFamilies);
     }
 
-    public FamilyNameSettings ToModel() => new()
+    private void LoadCadSettings(CadRoomSourceSettings settings)
+    {
+        IsBlockMode = settings.Mode != "Text";
+        IsTextMode = settings.Mode == "Text";
+        BlockName = settings.BlockName ?? "";
+        RoomNameTagsText = string.Join(", ", settings.RoomNameTags ?? new List<string>());
+        CeilingHeightTag = settings.CeilingHeightTag ?? "";
+        RoomNameLayer = settings.RoomNameLayer ?? "";
+        CeilingHeightLayer = settings.CeilingHeightLayer ?? "";
+    }
+
+    public FamilyNameSettings ToFamilyModel() => new()
     {
         WallSconceFamilies = ParseLines(WallSconceFamiliesText),
         ReceptacleFamilies = ParseLines(ReceptacleFamiliesText),
         ElectricalVerticalFamilies = ParseLines(ElectricalVerticalFamiliesText),
         VerticalFamilies = ParseLines(VerticalFamiliesText)
     };
+
+    public CadRoomSourceSettings ToCadModel() => new()
+    {
+        Mode = IsTextMode ? "Text" : "Block",
+        BlockName = (BlockName ?? "").Trim(),
+        RoomNameTags = ParseCommaSeparated(RoomNameTagsText),
+        CeilingHeightTag = (CeilingHeightTag ?? "").Trim(),
+        RoomNameLayer = (RoomNameLayer ?? "").Trim(),
+        CeilingHeightLayer = (CeilingHeightLayer ?? "").Trim()
+    };
+
+    private static List<string> ParseCommaSeparated(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return new List<string>();
+
+        return text.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+    }
 
     private static HashSet<string> ParseLines(string text)
     {

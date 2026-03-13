@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Eight commands consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
+A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Nine commands consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
 
 ## Installation
 
@@ -19,6 +19,7 @@ The ribbon tab has two panels:
 | [TurboWire](Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
 | [TurboBubble](Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
 | [TurboDriver](Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
+| [TurboName](Name/README.md) | | Assign CAD room names and ceiling heights to filled regions |
 
 ### Utilities Panel
 
@@ -37,4 +38,5 @@ All commands work in both:
 ## Dependencies
 
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2025)
-- .NET 8.0-windows / WPF (no external NuGet packages)
+- [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation. Used by TurboName to parse linked DWG files and extract block attributes, text entities, layer data, and coordinate information for room name assignment.
+- .NET 8.0-windows / WPF

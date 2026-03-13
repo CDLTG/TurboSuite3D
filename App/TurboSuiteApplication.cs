@@ -18,6 +18,7 @@ public class TurboSuiteApplication : IExternalApplication
             RibbonPanel settingsPanel = application.CreateRibbonPanel("TurboSuite", "Settings");
             RibbonPanel commandsPanel = application.CreateRibbonPanel("TurboSuite", "Commands");
             RibbonPanel utilitiesPanel = application.CreateRibbonPanel("TurboSuite", "Utilities");
+            RibbonPanel debugPanel = application.CreateRibbonPanel("TurboSuite", "Debug");
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
             // Settings
@@ -86,6 +87,22 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Driver.DriverCommand",
                 "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
                 "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.");
+
+            // TurboName: headless CAD room name assignment
+            CreateButtonNoIcon(commandsPanel, assemblyPath,
+                "TurboName",
+                "TurboName",
+                "TurboSuite.Name.NameCommand",
+                "Assign CAD room names to filled regions",
+                "Reads linked DWG files to extract room names and ceiling heights, assigns them to Room Region filled region Comments, and places TextNotes at CAD source locations.");
+
+            // TurboSpike: diagnostic/troubleshooting command
+            CreateButtonNoIcon(debugPanel, assemblyPath,
+                "TurboSpike",
+                "TurboSpike",
+                "TurboSuite.Spike.SpikeCommand",
+                "Diagnostic command for troubleshooting",
+                "Runs diagnostic probes against the Revit API. Swap out the Execute body as needed for each investigation.");
 
             return Result.Succeeded;
         }

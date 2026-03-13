@@ -11,7 +11,11 @@
     <Authors>CDLTG</Authors>
     <Product>TurboSuite</Product>
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ACadSharp" Version="3.0.0" />
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="RevitAPI">
       <HintPath>C:\Program Files\Autodesk\Revit 2025\RevitAPI.dll</HintPath>
@@ -30,7 +34,11 @@
       <RevitAddinsFolder>$(APPDATA)\Autodesk\Revit\Addins\2025</RevitAddinsFolder>
     </PropertyGroup>
     <Copy SourceFiles="$(ProjectDir)TurboSuite.addin" DestinationFolder="$(RevitAddinsFolder)" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
-    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+    <ItemGroup>
+      <OutputDlls Include="$(TargetDir)*.dll" Exclude="$(TargetDir)RevitAPI.dll;$(TargetDir)RevitAPIUI.dll" />
+      <OutputPdbs Include="$(TargetDir)*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OutputDlls)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
+    <Copy SourceFiles="@(OutputPdbs)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
   </Target>
 </Project>

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates eight commands (TurboDriver, TurboRPS, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with nine `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates nine commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with ten `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -78,9 +78,10 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 | `TurboSuite.App` | Entry point (`TurboSuiteApplication`), `SettingsCommand`, ViewModels, Views |
 | `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper` |
 | `TurboSuite.Shared.Filters` | `FixtureSelectionFilter` (accepts both Lighting + Electrical Fixtures), `LightingFixtureTagFilter` |
-| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings` |
-| `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `FamilyNameSettingsStorageService`, `FamilyNameSettingsCache` |
+| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings` |
+| `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `FamilyNameSettingsStorageService`, `FamilyNameSettingsCache`, `CadRoomSourceSettingsCache`, `CadRoomSourceStorageService` |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` (shared MVVM base classes) |
+| `TurboSuite.Name` | `NameCommand` (TurboName) + Services, Models |
 | `TurboSuite.Driver` | `DriverCommand` (TurboDriver), `RPSCommand` (TurboRPS) + Services, Models, ViewModels, Views |
 | `TurboSuite.Bubble` | `BubbleCommand` + Placement calculators, Services, Constants, Filters |
 | `TurboSuite.Tag` | `TagCommand` + Services, Helpers, Constants |
@@ -91,6 +92,7 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 
 ### Command Modules
 
+- **Name** — Headless command for 2D CAD-based workflows. Reads linked DWG files via ACadSharp to extract room names and ceiling heights from block attributes (Block mode) or layer-based text (Text mode). Assigns room names to "Room Region" type `FilledRegion` Comments and places `TextNote` elements at CAD source locations. Supports re-run safety (skips regions with existing TextNotes), ambiguity detection (multiple distinct room names in one region), ceiling description preservation (Vault, Slope, Barrel, etc.), and confirmation dialog before execution. Ceiling descriptions are placed as separate smaller TextNotes (`AL_Annotation_3"`). Uses `CadRoomSourceSettings` from shared ExtensibleStorage for per-document configuration.
 - **Driver** — Contains two commands sharing the same services and models:
   - **TurboDriver** (`DriverCommand`) — Headless command: pre-select lighting fixtures with RPS, deploys recommended power supplies (place, circuit-connect, set Switch ID, tag, wire between multi-driver chains). Creates circuit if needed. Deletes and replaces existing power supplies (and their wires) on re-run. Applies per-view color overrides to fixtures and power supplies to visualize driver assignments (auto-cleared on next run).
   - **TurboRPS** (`RPSCommand`, MVVM) — Review window for inspecting power supply assignments across all RPS circuits. `DriverSelectionService` recommends driver types by matching fixture wattage, manufacturer, dimming protocol, and voltage. Uses First-Fit Decreasing bin-packing with recursive fixture splitting. Opens `TurboRPSWindow`.
@@ -140,6 +142,10 @@ Revit Switch Systems (`MEPSystem` with category `OST_SwitchSystem`) **cannot be 
 - **Cannot assign base equipment**: `MEPSystem.BaseEquipment` is read-only — no setter to programmatically assign a power supply as the "switch" for a system.
 - **Workaround**: TurboDriver sets the "Switch ID" parameter on placed power supplies and applies color overrides (`View.SetElementOverrides`) to visually group fixtures by driver assignment. Users must manually create/assign switch systems in the Revit UI afterward. Matching Switch ID values on the same circuit cause Revit to auto-associate devices when creating switch systems manually. Color overrides are auto-cleared on the next TurboDriver invocation via `VisualFeedbackService.ClearPreviousOverrides`.
 
+### Light Group API
+
+Light Groups (`Autodesk.Revit.DB.Lighting`) are document-level fixture collections for rendering/analysis. Access via `LightGroupManager.GetLightGroupManager(doc)`. Full CRUD supported: `CreateGroup`, `DeleteGroup`, `AddLight`, `RemoveLight`, rename via `Name` setter. All writes require a `Transaction` — calling outside a transaction crashes Revit (hard crash, not an exception). On/off and dimmer methods require a `View3D`; CRUD works from any view. Fixtures can belong to multiple groups. Groups are not Revit elements — they cannot be found via `FilteredElementCollector`. See `Specs/LightGroupAPI.txt` for full method signatures.
+
 ### Modal Dialogs and View Navigation
 
 WPF windows shown via `ShowDialog()` block the Revit UI. Pattern: store the target view on the ViewModel, close the dialog, then call `uidoc.RequestViewChange(view)` from the `IExternalCommand` after `ShowDialog()` returns.
@@ -150,8 +156,8 @@ WPF windows shown via `ShowDialog()` block the Revit UI. Pattern: store the targ
 
 ## Dependencies
 
-No external NuGet packages. References only:
 - `RevitAPI.dll` and `RevitAPIUI.dll` (from `C:\Program Files\Autodesk\Revit 2025\`)
+- `ACadSharp` (NuGet) — .NET library for reading/writing AutoCAD DWG/DXF files without AutoCAD. Used by TurboName's `CadRoomExtractorService` to parse linked DWG files and extract block attributes, text entities, and coordinate data.
 - .NET 8.0-windows / WPF assemblies
 
 ## Compact Instructions
