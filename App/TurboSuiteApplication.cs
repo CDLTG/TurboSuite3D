@@ -58,7 +58,14 @@ public class TurboSuiteApplication : IExternalApplication
                 "Suggested shortcut: TB\nCreate switchleg tag and wire for a lighting fixture",
                 "Creates a switchleg tag and wire connection for the selected lighting fixture tag. Works in floor plan and ceiling plan views.");
 
-            // Utilities: Zones, Number, Driver
+            // Utilities: Name, Zones, Number, Driver
+            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+                "TurboName",
+                "TurboName",
+                "TurboSuite.Name.NameCommand",
+                "Assign CAD room names to filled regions",
+                "Opens a window to assign room names from linked DWG files to Room Region filled regions and place TextNotes. Also provides region generation (under construction).");
+
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboZones",
                 "TurboZones",
@@ -87,14 +94,6 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Driver.DriverCommand",
                 "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
                 "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.");
-
-            // TurboName: headless CAD room name assignment
-            CreateButtonNoIcon(commandsPanel, assemblyPath,
-                "TurboName",
-                "TurboName",
-                "TurboSuite.Name.NameCommand",
-                "Assign CAD room names to filled regions",
-                "Reads linked DWG files to extract room names and ceiling heights, assigns them to Room Region filled region Comments, and places TextNotes at CAD source locations.");
 
             // TurboSpike: diagnostic/troubleshooting command
             CreateButtonNoIcon(debugPanel, assemblyPath,

@@ -69,7 +69,7 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 
 ### Entry Point
 
-`TurboSuite.App.TurboSuiteApplication` (IExternalApplication) registers three ribbon panels under a "TurboSuite" tab: Settings (far left), Commands, and Utilities. `TurboSuite.App.SettingsCommand` opens a WPF dialog for configuring family name settings stored in ExtensibleStorage.
+`TurboSuite.App.TurboSuiteApplication` (IExternalApplication) registers ribbon panels under a "TurboSuite" tab: Settings (far left), Commands, Utilities, and Debug. `TurboSuite.App.SettingsCommand` opens a WPF dialog for configuring family name settings stored in ExtensibleStorage.
 
 ### Namespace / Folder Structure
 
@@ -81,7 +81,7 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 | `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings` |
 | `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `FamilyNameSettingsStorageService`, `FamilyNameSettingsCache`, `CadRoomSourceSettingsCache`, `CadRoomSourceStorageService` |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` (shared MVVM base classes) |
-| `TurboSuite.Name` | `NameCommand` (TurboName) + Services, Models |
+| `TurboSuite.Name` | `NameCommand` (TurboName) + Services, Models, ViewModels, Views (MVVM) |
 | `TurboSuite.Driver` | `DriverCommand` (TurboDriver), `RPSCommand` (TurboRPS) + Services, Models, ViewModels, Views |
 | `TurboSuite.Bubble` | `BubbleCommand` + Placement calculators, Services, Constants, Filters |
 | `TurboSuite.Tag` | `TagCommand` + Services, Helpers, Constants |
@@ -92,7 +92,7 @@ Versioned spec `.txt` files are in `Specs/`. These are historical reference docu
 
 ### Command Modules
 
-- **Name** — Headless command for 2D CAD-based workflows. Reads linked DWG files via ACadSharp to extract room names and ceiling heights from block attributes (Block mode) or layer-based text (Text mode). Assigns room names to "Room Region" type `FilledRegion` Comments and places `TextNote` elements at CAD source locations. Supports re-run safety (skips regions with existing TextNotes), ambiguity detection (multiple distinct room names in one region), ceiling description preservation (Vault, Slope, Barrel, etc.), and confirmation dialog before execution. Ceiling descriptions are placed as separate smaller TextNotes (`AL_Annotation_3"`). Uses `CadRoomSourceSettings` from shared ExtensibleStorage for per-document configuration.
+- **Name** (MVVM) — `TurboNameWindow` with two sections: "Assign Room Names" (active) and "Generate Regions" (under construction). Reads linked DWG files via ACadSharp to extract room names and ceiling heights from block attributes (Block mode) or layer-based text (Text mode). Assigns room names to "Room Region" type `FilledRegion` Comments and places `TextNote` elements at CAD source locations. Supports re-run safety (skips regions with existing TextNotes), ambiguity detection (multiple distinct room names in one region), ceiling description preservation (Vault, Slope, Barrel, etc.). Ceiling descriptions are placed as separate smaller TextNotes (`AL_Annotation_3"`). Uses `CadRoomSourceSettings` from shared ExtensibleStorage for per-document configuration.
 - **Driver** — Contains two commands sharing the same services and models:
   - **TurboDriver** (`DriverCommand`) — Headless command: pre-select lighting fixtures with RPS, deploys recommended power supplies (place, circuit-connect, set Switch ID, tag, wire between multi-driver chains). Creates circuit if needed. Deletes and replaces existing power supplies (and their wires) on re-run. Applies per-view color overrides to fixtures and power supplies to visualize driver assignments (auto-cleared on next run).
   - **TurboRPS** (`RPSCommand`, MVVM) — Review window for inspecting power supply assignments across all RPS circuits. `DriverSelectionService` recommends driver types by matching fixture wattage, manufacturer, dimming protocol, and voltage. Uses First-Fit Decreasing bin-packing with recursive fixture splitting. Opens `TurboRPSWindow`.

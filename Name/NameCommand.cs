@@ -5,13 +5,14 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Name.Services;
+using TurboSuite.Name.ViewModels;
+using TurboSuite.Name.Views;
 using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Name
 {
     /// <summary>
-    /// TurboName — Reads linked DWG files to extract room names and ceiling heights,
-    /// assigns them to "Room Region" filled regions, and places TextNotes at CAD source locations.
+    /// TurboName — Opens a window for CAD-based room name assignment and region generation.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -68,6 +69,28 @@ namespace TurboSuite.Name
 
                 // Collect Room Region filled regions
                 var regions = RegionCollectorService.CollectRegions(doc, view);
+
+                // Extract CAD room data
+                var cadRoomData = CadRoomExtractorService.ExtractRoomData(doc, view, settings);
+
+                // Show the TurboName window
+                var vm = new TurboNameViewModel
+                {
+                    RegionCount = regions.Count,
+                    CadEntryCount = cadRoomData.Count
+                };
+
+                var window = new TurboNameWindow { DataContext = vm };
+                vm.CloseRequested += () =>
+                {
+                    window.DialogResult = true;
+                    window.Close();
+                };
+                window.ShowDialog();
+
+                if (!vm.ShouldRun)
+                    return Result.Cancelled;
+
                 if (regions.Count == 0)
                 {
                     TaskDialog.Show("TurboName",
@@ -76,8 +99,6 @@ namespace TurboSuite.Name
                     return Result.Cancelled;
                 }
 
-                // Extract CAD room data
-                var cadRoomData = CadRoomExtractorService.ExtractRoomData(doc, view, settings);
                 if (cadRoomData.Count == 0)
                 {
                     TaskDialog.Show("TurboName",
@@ -85,27 +106,6 @@ namespace TurboSuite.Name
                         "Verify the CAD Room Source settings match the linked DWG content.");
                     return Result.Cancelled;
                 }
-
-                // Confirmation dialog
-                int withComments = regions.Count(r => !string.IsNullOrWhiteSpace(r.ExistingComments));
-                int withoutComments = regions.Count - withComments;
-                string modeDesc = settings.Mode == "Block"
-                    ? $"Block: {settings.BlockName}"
-                    : $"Text: {settings.RoomNameLayer}";
-
-                var confirm = new TaskDialog("TurboName")
-                {
-                    MainInstruction = "Ready to assign room names",
-                    MainContent =
-                        $"View: {view.Name}\n" +
-                        $"CAD source: {modeDesc}\n" +
-                        $"Room Regions: {regions.Count} ({withoutComments} new, {withComments} with existing Comments)\n" +
-                        $"CAD room entries: {cadRoomData.Count}",
-                    CommonButtons = TaskDialogCommonButtons.Ok | TaskDialogCommonButtons.Cancel
-                };
-
-                if (confirm.Show() == TaskDialogResult.Cancel)
-                    return Result.Cancelled;
 
                 // Assign room names inside a single transaction
                 Models.NamingResult result;
