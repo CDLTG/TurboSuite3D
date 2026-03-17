@@ -6,7 +6,7 @@ Creates electrical circuits and wire connections between lighting fixtures and e
 
 ## Entry Modes
 
-1. **Pre-selected circuits** — Wires all fixtures on each selected circuit, sorted by proximity (nearest-neighbor). No circuit creation or comments dialog.
+1. **Pre-selected circuits** — Wires all fixtures on each selected circuit, sorted by proximity (nearest-neighbor). No circuit creation. Prompts for circuit comments if any selected circuit has no existing comment.
 2. **Pre-selected fixtures (2+)** — Creates or joins circuits as needed, wires the selected fixtures, then prompts for circuit comments. Lighting and Electrical fixtures are processed as separate groups (cannot share a circuit). Rejects selections spanning multiple existing circuits.
 3. **Pre-selected fixture (1)** — Creates a circuit if none exists and prompts for circuit comments. If the circuit already has a comment, silently deselects and does nothing.
 4. **Manual pick** — If nothing is selected, prompts for first and second fixture. Wire only — no circuit creation or comments dialog.
