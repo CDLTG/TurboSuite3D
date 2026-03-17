@@ -44,6 +44,14 @@ public class WireCommand : IExternalCommand
                         }
                     }
                 }
+
+                // Show comments dialog for pre-selected circuits that have no comment
+                var circuitsToComment = preSelectedCircuits
+                    .Where(c => string.IsNullOrEmpty(ParameterHelper.GetCircuitComments(c)))
+                    .ToList();
+                if (circuitsToComment.Count > 0)
+                    ShowCommentsDialogAndApply(doc, circuitsToComment);
+
                 return Result.Succeeded;
             }
 
