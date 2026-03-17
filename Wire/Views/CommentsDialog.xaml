@@ -1,0 +1,23 @@
+<Window x:Class="TurboSuite.Wire.Views.CommentsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Circuit Comments"
+        Width="350" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="PromptText" Text="Enter circuit comment:" Margin="0,0,0,8" />
+        <ComboBox x:Name="CommentsComboBox"
+                  IsEditable="True"
+                  IsTextSearchEnabled="True"
+                  StaysOpenOnEdit="True"
+                  Margin="0,0,0,16" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="OK" Width="75" Margin="0,0,8,0"
+                    IsDefault="True" Click="OkButton_Click" />
+            <Button Content="Cancel" Width="75"
+                    IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

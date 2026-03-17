@@ -8,9 +8,11 @@ using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 using TurboSuite.Shared.Filters;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using TurboSuite.Wire.Constants;
 using TurboSuite.Wire.Helpers;
 using TurboSuite.Wire.Services;
+using TurboSuite.Wire.Views;
 
 namespace TurboSuite.Wire;
 
@@ -47,24 +49,17 @@ public class WireCommand : IExternalCommand
 
             List<FamilyInstance> preSelectedFixtures = GetPreSelectedFixtures(uiDoc);
 
+            if (preSelectedFixtures.Count == 1)
+            {
+                return HandleSingleFixture(uiDoc, doc, preSelectedFixtures[0]);
+            }
+
             if (preSelectedFixtures.Count >= 2)
             {
-                foreach (var group in preSelectedFixtures.GroupBy(f => f.Category.BuiltInCategory))
-                {
-                    List<FamilyInstance> groupList = group.ToList();
-                    if (groupList.Count >= 2)
-                    {
-                        Result result = WireMultipleFixtures(doc, groupList, ref message);
-                        if (result != Result.Succeeded)
-                            return result;
-                    }
-                }
-                return Result.Succeeded;
+                return HandleMultipleFixtures(uiDoc, doc, preSelectedFixtures, ref message);
             }
-            else
-            {
-                return ManualSelection(uiDoc, doc, ref message);
-            }
+
+            return ManualSelection(uiDoc, doc, ref message);
         }
         catch (Autodesk.Revit.Exceptions.OperationCanceledException)
         {
@@ -74,6 +69,111 @@ public class WireCommand : IExternalCommand
         {
             message = ex.Message;
             return Result.Failed;
+        }
+    }
+
+    private static Result HandleSingleFixture(UIDocument uiDoc, Document doc, FamilyInstance fixture)
+    {
+        var analysis = CircuitService.AnalyzeFixtures(new List<FamilyInstance> { fixture });
+
+        ElectricalSystem? circuit;
+
+        if (analysis.SingleCircuit)
+        {
+            circuit = analysis.SingleCircuitRef!;
+            string existingComment = ParameterHelper.GetCircuitComments(circuit);
+            if (!string.IsNullOrEmpty(existingComment))
+            {
+                // Circuit already has a comment — deselect and do nothing
+                uiDoc.Selection.SetElementIds(new List<ElementId>());
+                return Result.Succeeded;
+            }
+            // Circuit exists but no comment — show dialog below
+        }
+        else
+        {
+            // No circuit — create one
+            circuit = CircuitService.CreateCircuit(doc, new List<FamilyInstance> { fixture });
+            if (circuit == null)
+                return Result.Failed;
+        }
+
+        ShowCommentsDialogAndApply(doc, new List<ElectricalSystem> { circuit });
+        return Result.Succeeded;
+    }
+
+    private static Result HandleMultipleFixtures(UIDocument uiDoc, Document doc,
+        List<FamilyInstance> fixtures, ref string message)
+    {
+        // Check for multiple circuits across entire selection — abort if found
+        var fullAnalysis = CircuitService.AnalyzeFixtures(fixtures);
+        if (fullAnalysis.MultipleCircuits)
+        {
+            TaskDialog.Show("TurboWire",
+                $"Selected fixtures are on {fullAnalysis.CircuitMap.Count} different circuits.\n" +
+                "Select fixtures from a single circuit.");
+            return Result.Failed;
+        }
+
+        var circuitsToComment = new List<ElectricalSystem>();
+
+        foreach (var group in fixtures.GroupBy(f => f.Category.BuiltInCategory))
+        {
+            List<FamilyInstance> groupList = group.ToList();
+            var analysis = CircuitService.AnalyzeFixtures(groupList);
+
+            ElectricalSystem? resultCircuit = null;
+
+            if (analysis.AllUncircuited)
+            {
+                resultCircuit = CircuitService.CreateCircuit(doc, groupList);
+            }
+            else if (analysis.SingleCircuit && analysis.UncircuitedFixtures.Count > 0)
+            {
+                CircuitService.AddFixturesToCircuit(doc, analysis.SingleCircuitRef!, analysis.UncircuitedFixtures);
+                resultCircuit = analysis.SingleCircuitRef;
+            }
+            else if (analysis.SingleCircuit)
+            {
+                resultCircuit = analysis.SingleCircuitRef;
+            }
+
+            if (groupList.Count >= 2)
+            {
+                Result result = WireMultipleFixtures(doc, groupList, ref message);
+                if (result != Result.Succeeded)
+                    return result;
+            }
+
+            if (resultCircuit != null)
+            {
+                string existingComment = ParameterHelper.GetCircuitComments(resultCircuit);
+                if (string.IsNullOrEmpty(existingComment))
+                    circuitsToComment.Add(resultCircuit);
+            }
+        }
+
+        if (circuitsToComment.Count > 0)
+            ShowCommentsDialogAndApply(doc, circuitsToComment);
+
+        return Result.Succeeded;
+    }
+
+    private static void ShowCommentsDialogAndApply(Document doc, List<ElectricalSystem> circuits)
+    {
+        if (!GeneralSettingsCache.Get(doc).ShowCircuitCommentsDialog)
+            return;
+
+        var circuitNumbers = string.Join(", ", circuits
+            .Select(c => ParameterHelper.GetCircuitNumber(c))
+            .Where(n => !string.IsNullOrEmpty(n)));
+
+        var existingComments = CircuitService.GetExistingComments(doc);
+        var dialog = new CommentsDialog(existingComments, circuitNumbers);
+        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.CommentsText))
+        {
+            foreach (var circuit in circuits)
+                CircuitService.SetCircuitComments(doc, circuit, dialog.CommentsText);
         }
     }
 

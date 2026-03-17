@@ -47,6 +47,16 @@
         <!-- Content -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
             <StackPanel>
+                <!-- General Settings -->
+                <GroupBox Header="General" Margin="0,0,0,10"
+                          BorderBrush="#2B579A" BorderThickness="1.5">
+                    <StackPanel Margin="4">
+                        <CheckBox Content="Show circuit comments dialog when creating circuits (TurboWire)"
+                                  IsChecked="{Binding ShowCircuitCommentsDialog}"
+                                  VerticalContentAlignment="Center"/>
+                    </StackPanel>
+                </GroupBox>
+
                 <!-- CAD Room Source Settings -->
                 <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,10"
                           BorderBrush="#2B579A" BorderThickness="1.5">

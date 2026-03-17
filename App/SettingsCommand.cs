@@ -25,7 +25,8 @@ public class SettingsCommand : IExternalCommand
 
             var familySettings = FamilyNameSettingsCache.Get(doc);
             var cadSettings = CadRoomSourceSettingsCache.Get(doc);
-            var viewModel = new SettingsViewModel(familySettings, cadSettings);
+            var generalSettings = GeneralSettingsCache.Get(doc);
+            var viewModel = new SettingsViewModel(familySettings, cadSettings, generalSettings);
             var window = new SettingsWindow { DataContext = viewModel };
             var helper = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
 
@@ -36,6 +37,9 @@ public class SettingsCommand : IExternalCommand
 
                 CadRoomSourceStorageService.Save(doc, viewModel.ToCadModel());
                 CadRoomSourceSettingsCache.Invalidate();
+
+                GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel());
+                GeneralSettingsCache.Invalidate();
             }
 
             return Result.Succeeded;

@@ -15,6 +15,9 @@ public class SettingsViewModel : ViewModelBase
     private string _electricalVerticalFamiliesText;
     private string _verticalFamiliesText;
 
+    // General
+    private bool _showCircuitCommentsDialog = true;
+
     // CAD Room Source
     private bool _isBlockMode = true;
     private bool _isTextMode;
@@ -99,15 +102,22 @@ public class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _ceilingHeightLayer, value);
     }
 
+    public bool ShowCircuitCommentsDialog
+    {
+        get => _showCircuitCommentsDialog;
+        set => SetProperty(ref _showCircuitCommentsDialog, value);
+    }
+
     public ICommand SaveCommand { get; }
     public ICommand ResetDefaultsCommand { get; }
 
     public Action<bool?> CloseAction { get; set; }
 
-    public SettingsViewModel(FamilyNameSettings familySettings, CadRoomSourceSettings cadSettings)
+    public SettingsViewModel(FamilyNameSettings familySettings, CadRoomSourceSettings cadSettings, GeneralSettings generalSettings)
     {
         LoadFrom(familySettings);
         LoadCadSettings(cadSettings);
+        LoadGeneralSettings(generalSettings);
         SaveCommand = new RelayCommand(OnSave);
         ResetDefaultsCommand = new RelayCommand(OnResetDefaults);
     }
@@ -121,6 +131,7 @@ public class SettingsViewModel : ViewModelBase
     {
         LoadFrom(FamilyNameSettings.CreateDefaults());
         LoadCadSettings(CadRoomSourceSettings.CreateDefaults());
+        LoadGeneralSettings(GeneralSettings.CreateDefaults());
     }
 
     private void LoadFrom(FamilyNameSettings settings)
@@ -129,6 +140,11 @@ public class SettingsViewModel : ViewModelBase
         ReceptacleFamiliesText = string.Join(Environment.NewLine, settings.ReceptacleFamilies);
         ElectricalVerticalFamiliesText = string.Join(Environment.NewLine, settings.ElectricalVerticalFamilies);
         VerticalFamiliesText = string.Join(Environment.NewLine, settings.VerticalFamilies);
+    }
+
+    private void LoadGeneralSettings(GeneralSettings settings)
+    {
+        ShowCircuitCommentsDialog = settings.ShowCircuitCommentsDialog;
     }
 
     private void LoadCadSettings(CadRoomSourceSettings settings)
@@ -148,6 +164,11 @@ public class SettingsViewModel : ViewModelBase
         ReceptacleFamilies = ParseLines(ReceptacleFamiliesText),
         ElectricalVerticalFamilies = ParseLines(ElectricalVerticalFamiliesText),
         VerticalFamilies = ParseLines(VerticalFamiliesText)
+    };
+
+    public GeneralSettings ToGeneralModel() => new()
+    {
+        ShowCircuitCommentsDialog = ShowCircuitCommentsDialog
     };
 
     public CadRoomSourceSettings ToCadModel() => new()
