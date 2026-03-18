@@ -141,6 +141,13 @@ public static class GeometryHelper
         return settings.ReceptacleFamilies.Contains(familyName);
     }
 
+    public static bool IsSwitch(FamilyInstance fixture)
+    {
+        string familyName = fixture.Symbol?.Family?.Name ?? "";
+        var settings = FamilyNameSettingsCache.Get(fixture.Document);
+        return settings.SwitchFamilies.Contains(familyName);
+    }
+
     /// <summary>
     /// Gets the location point of a fixture, handling both LocationPoint and LocationCurve.
     /// For line-based fixtures (LocationCurve), returns the curve midpoint.

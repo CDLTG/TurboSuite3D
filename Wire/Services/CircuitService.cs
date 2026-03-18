@@ -59,7 +59,7 @@ public static class CircuitService
     /// Create a new electrical circuit from the given fixtures and assign it to the
     /// most recently used panel in the document (matching Revit's default UI behavior).
     /// </summary>
-    public static ElectricalSystem? CreateCircuit(Document doc, List<FamilyInstance> fixtures)
+    public static ElectricalSystem? CreateCircuit(Document doc, List<FamilyInstance> fixtures, bool assignPanel = true)
     {
         using var t = new Transaction(doc, "TurboWire — Create circuit");
         t.Start();
@@ -72,12 +72,15 @@ public static class CircuitService
             return null;
         }
 
-        // Assign to the most recently used panel (highest circuit number)
-        var lastPanel = FindLastUsedPanel(doc);
-        if (lastPanel != null)
+        if (assignPanel)
         {
-            try { circuit.SelectPanel(lastPanel); }
-            catch { /* Panel may be incompatible — leave unassigned */ }
+            // Assign to the most recently used panel (highest circuit number)
+            var lastPanel = FindLastUsedPanel(doc);
+            if (lastPanel != null)
+            {
+                try { circuit.SelectPanel(lastPanel); }
+                catch { /* Panel may be incompatible — leave unassigned */ }
+            }
         }
 
         t.Commit();

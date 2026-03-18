@@ -19,6 +19,11 @@ internal static class WallSconceService
         return GeometryHelper.IsReceptacle(fixture);
     }
 
+    public static bool IsSwitch(FamilyInstance fixture)
+    {
+        return GeometryHelper.IsSwitch(fixture);
+    }
+
     public static double GetFamilyScaleFactor(FamilyInstance fixture)
     {
         Parameter? scaleParam = fixture.LookupParameter("Scale Factor");

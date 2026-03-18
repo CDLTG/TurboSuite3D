@@ -40,7 +40,8 @@ internal static class WireCreationService
 
     public static Result CreateWire(Document doc, IList<XYZ> points, WiringType wiringType,
         Connector c1, Connector c2, XYZ? wallNormal1, XYZ? wallNormal2,
-        double connectorOffset, bool facingSameDirection, ref string message)
+        double connectorOffset, bool facingSameDirection, ref string message,
+        XYZ? endOffset1 = null, XYZ? endOffset2 = null)
     {
         WireType? wireType = GetWireType(doc);
         if (wireType == null)
@@ -69,6 +70,11 @@ internal static class WireCreationService
                 wire.SetVertex(vertexCount - 1, c2.Origin + endNormal * initialOffset);
                 wire.SetVertex(vertexCount - 1, c2.Origin + endNormal * baseOffset);
             }
+
+            if (endOffset1 != null)
+                wire.SetVertex(0, c1.Origin + endOffset1);
+            if (endOffset2 != null)
+                wire.SetVertex(vertexCount - 1, c2.Origin + endOffset2);
 
             t.Commit();
         }

@@ -14,6 +14,7 @@ public class SettingsViewModel : ViewModelBase
     private string _receptacleFamiliesText;
     private string _electricalVerticalFamiliesText;
     private string _verticalFamiliesText;
+    private string _switchFamiliesText;
 
     // General
     private bool _showCircuitCommentsDialog = true;
@@ -50,6 +51,12 @@ public class SettingsViewModel : ViewModelBase
     {
         get => _verticalFamiliesText;
         set => SetProperty(ref _verticalFamiliesText, value);
+    }
+
+    public string SwitchFamiliesText
+    {
+        get => _switchFamiliesText;
+        set => SetProperty(ref _switchFamiliesText, value);
     }
 
     // CAD Room Source properties
@@ -147,6 +154,7 @@ public class SettingsViewModel : ViewModelBase
         ReceptacleFamiliesText = string.Join(Environment.NewLine, settings.ReceptacleFamilies);
         ElectricalVerticalFamiliesText = string.Join(Environment.NewLine, settings.ElectricalVerticalFamilies);
         VerticalFamiliesText = string.Join(Environment.NewLine, settings.VerticalFamilies);
+        SwitchFamiliesText = string.Join(Environment.NewLine, settings.SwitchFamilies);
     }
 
     private void LoadGeneralSettings(GeneralSettings settings)
@@ -171,7 +179,8 @@ public class SettingsViewModel : ViewModelBase
         WallSconceFamilies = ParseLines(WallSconceFamiliesText),
         ReceptacleFamilies = ParseLines(ReceptacleFamiliesText),
         ElectricalVerticalFamilies = ParseLines(ElectricalVerticalFamiliesText),
-        VerticalFamilies = ParseLines(VerticalFamiliesText)
+        VerticalFamilies = ParseLines(VerticalFamiliesText),
+        SwitchFamilies = ParseLines(SwitchFamiliesText)
     };
 
     public GeneralSettings ToGeneralModel() => new()

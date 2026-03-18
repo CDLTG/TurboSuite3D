@@ -12,6 +12,7 @@ using TurboSuite.Shared.Services;
 using TurboSuite.Wire.Constants;
 using TurboSuite.Wire.Helpers;
 using TurboSuite.Wire.Services;
+using TurboSuite.Tag.Services;
 using TurboSuite.Wire.Views;
 
 namespace TurboSuite.Wire;
@@ -82,6 +83,7 @@ public class WireCommand : IExternalCommand
 
     private static Result HandleSingleFixture(UIDocument uiDoc, Document doc, FamilyInstance fixture)
     {
+        bool isSwitch = GeometryHelper.IsSwitch(fixture);
         var analysis = CircuitService.AnalyzeFixtures(new List<FamilyInstance> { fixture });
 
         ElectricalSystem? circuit;
@@ -96,17 +98,21 @@ public class WireCommand : IExternalCommand
                 uiDoc.Selection.SetElementIds(new List<ElementId>());
                 return Result.Succeeded;
             }
-            // Circuit exists but no comment — show dialog below
+            // Circuit exists but no comment — set below
         }
         else
         {
-            // No circuit — create one
-            circuit = CircuitService.CreateCircuit(doc, new List<FamilyInstance> { fixture });
+            circuit = CircuitService.CreateCircuit(doc, new List<FamilyInstance> { fixture },
+                assignPanel: !isSwitch);
             if (circuit == null)
                 return Result.Failed;
         }
 
-        ShowCommentsDialogAndApply(doc, new List<ElectricalSystem> { circuit });
+        if (isSwitch)
+            CircuitService.SetCircuitComments(doc, circuit, "Switched");
+        else
+            ShowCommentsDialogAndApply(doc, new List<ElectricalSystem> { circuit });
+
         return Result.Succeeded;
     }
 
@@ -121,6 +127,46 @@ public class WireCommand : IExternalCommand
                 $"Selected fixtures are on {fullAnalysis.CircuitMap.Count} different circuits.\n" +
                 "Select fixtures from a single circuit.");
             return Result.Failed;
+        }
+
+        bool hasSwitch = fixtures.Any(f => GeometryHelper.IsSwitch(f));
+
+        if (hasSwitch)
+        {
+            // Switch selections: one circuit for all fixtures (no category split),
+            // no panel, "Switched" comment, no dialog
+            var analysis = CircuitService.AnalyzeFixtures(fixtures);
+            ElectricalSystem? resultCircuit = null;
+
+            if (analysis.AllUncircuited)
+            {
+                resultCircuit = CircuitService.CreateCircuit(doc, fixtures, assignPanel: false);
+            }
+            else if (analysis.SingleCircuit && analysis.UncircuitedFixtures.Count > 0)
+            {
+                CircuitService.AddFixturesToCircuit(doc, analysis.SingleCircuitRef!, analysis.UncircuitedFixtures);
+                resultCircuit = analysis.SingleCircuitRef;
+            }
+            else if (analysis.SingleCircuit)
+            {
+                resultCircuit = analysis.SingleCircuitRef;
+            }
+
+            if (fixtures.Count >= 2)
+            {
+                Result result = WireMultipleFixtures(doc, fixtures, ref message);
+                if (result != Result.Succeeded)
+                    return result;
+            }
+
+            if (resultCircuit != null)
+            {
+                string existingComment = ParameterHelper.GetCircuitComments(resultCircuit);
+                if (string.IsNullOrEmpty(existingComment))
+                    CircuitService.SetCircuitComments(doc, resultCircuit, "Switched");
+            }
+
+            return Result.Succeeded;
         }
 
         var circuitsToComment = new List<ElectricalSystem>();
@@ -304,6 +350,14 @@ public class WireCommand : IExternalCommand
 
         WireCreationService.DeleteWiresBetweenFixtures(doc, c1, c2);
 
+        // Switch endpoint override: Revit visually snaps wire to family center.
+        // 2D (unhosted): connector at 9" from origin, offset 0.01" via BasisX rotation.
+        // 3D (wall-hosted): connector at origin, offset 9" away from wall via wall face normal.
+        XYZ? switchOffset1 = WallSconceService.IsSwitch(fixture1)
+            ? GetSwitchOffset(fixture1) : null;
+        XYZ? switchOffset2 = WallSconceService.IsSwitch(fixture2)
+            ? GetSwitchOffset(fixture2) : null;
+
         bool rps1 = ParameterHelper.HasRemotePowerSupply(fixture1);
         bool rps2 = ParameterHelper.HasRemotePowerSupply(fixture2);
 
@@ -311,7 +365,7 @@ public class WireCommand : IExternalCommand
         {
             IList<XYZ> straightPoints = new List<XYZ> { c1.Origin, c2.Origin };
             return WireCreationService.CreateWire(doc, straightPoints, WiringType.Chamfer,
-                c1, c2, null, null, 0, true, ref message);
+                c1, c2, null, null, 0, true, ref message, switchOffset1, switchOffset2);
         }
 
         if (rps1 != rps2)
@@ -352,7 +406,7 @@ public class WireCommand : IExternalCommand
                 wiringType = WiringType.Arc;
                 return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2,
                     wallNormal1, wallNormal2,
-                    connectorOffset, facingSameDirection, ref message);
+                    connectorOffset, facingSameDirection, ref message, switchOffset1, switchOffset2);
             }
         }
 
@@ -391,12 +445,25 @@ public class WireCommand : IExternalCommand
                 wirePoints = ArcCalculator.CalculateSSplinePoints(c1.Origin, c2.Origin);
             }
             wiringType = WiringType.Arc;
-            return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message);
+            return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, switchOffset1, switchOffset2);
         }
 
         // On-axis: standard 24° arc
         wirePoints = ArcCalculator.CalculateArcWirePoints(c1.Origin, c2.Origin, WireConstants.ArcAngleDegrees, arcDirection);
         wiringType = WiringType.Arc;
-        return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message);
+        return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, switchOffset1, switchOffset2);
+    }
+
+    private static XYZ GetSwitchOffset(FamilyInstance fixture)
+    {
+        if (fixture.Host != null)
+        {
+            // 3D wall-hosted: connector at origin, offset 9" away from wall
+            XYZ wallNormal = GeometryHelper.GetWallFaceNormal(fixture);
+            return wallNormal * (9.0 / 12.0);
+        }
+
+        // 2D unhosted: connector at 9" from origin, offset 0.01" along local +Y
+        return TagPlacementService.TransformToGlobal(fixture, new XYZ(0, 0.01 / 12.0, 0));
     }
 }

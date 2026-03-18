@@ -10,6 +10,7 @@ public class FamilyNameSettings
     public HashSet<string> ReceptacleFamilies { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> ElectricalVerticalFamilies { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> VerticalFamilies { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> SwitchFamilies { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static FamilyNameSettings CreateDefaults() => new()
     {
@@ -32,6 +33,11 @@ public class FamilyNameSettings
             "Z_Lighted Mirror",
             "Z_Picture Light",
             "Z_Swing Lamp"
+        },
+        SwitchFamilies = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Switch",
+            "AL_Electrical Fixture_Switch"
         }
     };
 }

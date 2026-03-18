@@ -174,6 +174,16 @@
                     </StackPanel>
                 </GroupBox>
 
+                <GroupBox Header="Switch Families" Margin="0,0,0,10">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Families matched for switch wire endpoint offset (one per line):"
+                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding SwitchFamiliesText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
+                    </StackPanel>
+                </GroupBox>
+
                 <GroupBox Header="Equipment Box Families" Margin="0,0,0,10">
                     <StackPanel Margin="4">
                         <TextBlock Text="Families matched for vertical (up/down) switchleg placement (one per line):"
