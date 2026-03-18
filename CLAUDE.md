@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates nine commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with ten `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates ten commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with eleven `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -87,10 +87,13 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Zones` | TurboZones — load names and panel breakdown (MVVM) |
 | `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless) |
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
+| `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
 
 ### Known Namespace Collision
 
 `TurboSuite.Wire` conflicts with `Autodesk.Revit.DB.Electrical.Wire`. Use alias: `using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;`.
+
+In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Media.Color`. Use alias: `using Document = Autodesk.Revit.DB.Document;` (import only what's needed from Revit DB).
 
 ## Key Revit API Patterns
 
@@ -111,10 +114,12 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 - Modal `ShowDialog()` blocks Revit UI. Pattern: store target view on ViewModel, close dialog, call `uidoc.RequestViewChange(view)` after return.
 - **Modeless pattern** (TurboNumber): `window.Show()` with `IExternalEventHandler` for all Revit API calls. ViewModels queue typed `RevitApiRequest` objects, call `ExternalEvent.Raise()`, and receive results via completion callbacks dispatched to the WPF thread. Chain sequential requests in callbacks — never raise two events simultaneously (second is silently dropped).
 - `DataGrid.SelectedItems` cannot be bound in XAML. Use code-behind `SelectionChanged` handler. Do not set `SelectedRow` from within `SetSelectedRows` — causes feedback loop clearing multi-selection.
+- **TurboTab pattern**: Uses `UIApplication.MainWindowHandle` + `HwndSource.FromHwnd()` to get the WPF root visual, walks the AvalonDock visual tree to find `DockingManager` → `LayoutDocumentPaneControl` → `TabItem`. Maps tabs to documents via reflection on private MFC pointers (`getMFCDoc` / `GetPointerValue`). Groups tabs by project (same color), distinguishes family documents via `Document.IsFamilyDocument`. Caches original `TabItem.Style` before modification and restores on toggle-off — never use `ClearValue(StyleProperty)`. Auto-starts via `Idling` event with retry (UI not ready during `OnStartup`). Persists enabled state to `%APPDATA%\TurboSuite\TurboTabSettings.json`.
 
 ## Dependencies
 
 - `RevitAPI.dll` and `RevitAPIUI.dll` (from `C:\Program Files\Autodesk\Revit 2025\`)
+- `Xceed.Wpf.AvalonDock.dll` (from `C:\Program Files\Autodesk\Revit 2025\`) — ships with Revit, used by TurboTab for document tab coloring
 - `ACadSharp` (NuGet) — reads AutoCAD DWG/DXF files. Used by TurboName.
 - .NET 8.0-windows / WPF assemblies
 

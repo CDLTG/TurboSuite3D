@@ -2,6 +2,8 @@ using System;
 using System.Reflection;
 using System.Windows.Media.Imaging;
 using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Events;
+using TurboSuite.Tab;
 
 namespace TurboSuite.App;
 
@@ -28,6 +30,20 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.App.SettingsCommand",
                 "Configure TurboSuite settings",
                 "Opens a dialog to configure which family names are treated as wall sconces, receptacles, and vertical electrical fixtures.");
+
+            // TurboTab: document tab coloring toggle
+            CreateButtonNoIcon(settingsPanel, assemblyPath,
+                "TurboTab",
+                "TurboTab",
+                "TurboSuite.Tab.TabCommand",
+                "Toggle document tab coloring",
+                "Colors each open document tab with a distinct background color for easy visual identification. State persists across sessions.");
+
+            // Auto-start tab coloring after Revit UI is fully loaded.
+            if (TabSettingsService.LoadEnabled())
+            {
+                application.Idling += OnIdlingStartTabColoring;
+            }
 
             // Commands: Compact, Tag, Wire, Bubble
             CreateButton(commandsPanel, assemblyPath,
@@ -114,7 +130,21 @@ public class TurboSuiteApplication : IExternalApplication
 
     public Result OnShutdown(UIControlledApplication application)
     {
+        TabColoringService.Stop();
         return Result.Succeeded;
+    }
+
+    private static int _tabStartRetries;
+
+    private static void OnIdlingStartTabColoring(object? sender, IdlingEventArgs e)
+    {
+        if (sender is not UIApplication uiApp) return;
+
+        _tabStartRetries++;
+        bool started = TabColoringService.Start(uiApp.MainWindowHandle, uiApp);
+
+        if (started || _tabStartRetries > 50)
+            uiApp.Idling -= OnIdlingStartTabColoring;
     }
 
     private static void CreateButton(RibbonPanel panel, string assemblyPath,

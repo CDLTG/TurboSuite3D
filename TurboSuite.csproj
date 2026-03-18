@@ -25,6 +25,10 @@
       <HintPath>C:\Program Files\Autodesk\Revit 2025\RevitAPIUI.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock">
+      <HintPath>C:\Program Files\Autodesk\Revit 2025\Xceed.Wpf.AvalonDock.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\Icons\*.png" />
