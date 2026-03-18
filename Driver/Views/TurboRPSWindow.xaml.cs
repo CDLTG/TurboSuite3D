@@ -66,8 +66,9 @@ namespace TurboSuite.Driver.Views
                 if (feet <= 0.0001)
                     return "N/A";
                 int wholeFeet = (int)feet;
-                double remainingInches = (feet - wholeFeet) * 12.0;
-                return $"{wholeFeet}' - {remainingInches:F0}\"";
+                int remainingInches = (int)Math.Round((feet - wholeFeet) * 12.0);
+                if (remainingInches >= 12) { wholeFeet++; remainingInches = 0; }
+                return $"{wholeFeet}' - {remainingInches}\"";
             }
             return "N/A";
         }
@@ -160,8 +161,9 @@ namespace TurboSuite.Driver.Views
                     return $"{label}: {seg.Wattage:F1}W";
                 }
                 int wholeFeet = (int)seg.LinearLength;
-                double remainingInches = (seg.LinearLength - wholeFeet) * 12.0;
-                string lengthStr = $"{wholeFeet}' - {remainingInches:F0}\"";
+                int remainingInches = (int)Math.Round((seg.LinearLength - wholeFeet) * 12.0);
+                if (remainingInches >= 12) { wholeFeet++; remainingInches = 0; }
+                string lengthStr = $"{wholeFeet}' - {remainingInches}\"";
                 return $"{label}: {seg.Wattage:F1}W / {lengthStr}";
             }
             return "";

@@ -17,6 +17,7 @@ public class SettingsViewModel : ViewModelBase
 
     // General
     private bool _showCircuitCommentsDialog = true;
+    private bool _autoSplitFixtures = true;
 
     // CAD Room Source
     private bool _isBlockMode = true;
@@ -108,6 +109,12 @@ public class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _showCircuitCommentsDialog, value);
     }
 
+    public bool AutoSplitFixtures
+    {
+        get => _autoSplitFixtures;
+        set => SetProperty(ref _autoSplitFixtures, value);
+    }
+
     public ICommand SaveCommand { get; }
     public ICommand ResetDefaultsCommand { get; }
 
@@ -145,6 +152,7 @@ public class SettingsViewModel : ViewModelBase
     private void LoadGeneralSettings(GeneralSettings settings)
     {
         ShowCircuitCommentsDialog = settings.ShowCircuitCommentsDialog;
+        AutoSplitFixtures = settings.AutoSplitFixtures;
     }
 
     private void LoadCadSettings(CadRoomSourceSettings settings)
@@ -168,7 +176,8 @@ public class SettingsViewModel : ViewModelBase
 
     public GeneralSettings ToGeneralModel() => new()
     {
-        ShowCircuitCommentsDialog = ShowCircuitCommentsDialog
+        ShowCircuitCommentsDialog = ShowCircuitCommentsDialog,
+        AutoSplitFixtures = AutoSplitFixtures
     };
 
     public CadRoomSourceSettings ToCadModel() => new()

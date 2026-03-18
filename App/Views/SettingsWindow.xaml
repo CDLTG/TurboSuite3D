@@ -53,6 +53,10 @@
                     <StackPanel Margin="4">
                         <CheckBox Content="Show circuit comments dialog when creating circuits (TurboWire)"
                                   IsChecked="{Binding ShowCircuitCommentsDialog}"
+                                  VerticalContentAlignment="Center"
+                                  Margin="0,0,0,4"/>
+                        <CheckBox Content="Auto-split linear fixtures when TurboDriver splits segments (TurboDriver)"
+                                  IsChecked="{Binding AutoSplitFixtures}"
                                   VerticalContentAlignment="Center"/>
                     </StackPanel>
                 </GroupBox>

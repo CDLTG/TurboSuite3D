@@ -9,6 +9,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.Driver.Models;
 using TurboSuite.Driver.Services;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Driver
 {
@@ -142,6 +143,41 @@ namespace TurboSuite.Driver
                     }
                 }
 
+                // Step 5.5: Physically split line-based fixtures if enabled
+                FixtureSplitService.SplitResult splitResult = null;
+                var generalSettings = GeneralSettingsCache.Get(doc);
+                if (generalSettings.AutoSplitFixtures)
+                {
+                    bool hasSplitSegments = recommendation.SubDriverAssignments
+                        .SelectMany(a => a.Segments)
+                        .Any(s => s.IsSplit);
+
+                    if (hasSplitSegments)
+                    {
+                        // Store circuit ID before split — the ElectricalSystem reference
+                        // becomes stale after deleting the original fixture in the split transaction
+                        var circuitId = circuit.Id;
+
+                        var splitService = new FixtureSplitService(doc, doc.ActiveView);
+                        using (Transaction splitTx = new Transaction(doc, "TurboDriver — Split linear fixtures"))
+                        {
+                            splitTx.Start();
+                            splitResult = splitService.SplitFixtures(recommendation.SubDriverAssignments, circuit);
+                            splitTx.Commit();
+                        }
+
+                        // Re-fetch circuit after split
+                        circuit = doc.GetElement(circuitId) as ElectricalSystem;
+                        if (circuit == null)
+                        {
+                            TaskDialog.Show("TurboDriver",
+                                "The electrical circuit was lost during fixture splitting.\n" +
+                                "The fixtures were split but power supply deployment was skipped.");
+                            return Result.Failed;
+                        }
+                    }
+                }
+
                 // Step 6: Build single-circuit deployment plan (full recommended count)
                 var plan = new DeploymentPlan();
                 plan.Circuits.Add(new CircuitDeployment
@@ -158,6 +194,14 @@ namespace TurboSuite.Driver
                 var executor = new DeploymentExecutor();
                 executor.Execute(uidoc, plan);
 
+                // Step 8: Tag split fixtures with the original linear length tag
+                if (splitResult != null
+                    && splitResult.LinearTagTypeId != ElementId.InvalidElementId
+                    && splitResult.SplitFixtureIds.Count > 0)
+                {
+                    TagSplitFixtures(doc, splitResult);
+                }
+
                 return Result.Succeeded;
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
@@ -170,6 +214,105 @@ namespace TurboSuite.Driver
                 TaskDialog.Show("TurboDriver Error", $"An unexpected error occurred:\n{ex.Message}");
                 return Result.Failed;
             }
+        }
+
+        /// <summary>
+        /// Tags split fixtures with the linear length tag, matching TurboTag's offset logic.
+        /// Runs in its own transaction after all other TurboDriver operations are complete.
+        /// </summary>
+        private static void TagSplitFixtures(Document doc, FixtureSplitService.SplitResult splitResult)
+        {
+            const string linearTagFamilyName = "AL_Tag_Lighting Fixture (Linear Length)";
+            const double linearOffsetFeet = 5.0 / 12.0;
+
+            View activeView = doc.ActiveView;
+            ElementId tagTypeId = splitResult.LinearTagTypeId;
+
+            // Determine direction from tag type name (Tag_Top → Up, Tag_Bottom → Down)
+            var tagSymbol = doc.GetElement(tagTypeId) as FamilySymbol;
+            bool isTopTag = tagSymbol != null
+                && string.Equals(tagSymbol.Name, "Tag_Top", StringComparison.OrdinalIgnoreCase);
+
+            using (Transaction t = new Transaction(doc, "TurboDriver — Tag split fixtures"))
+            {
+                t.Start();
+
+                foreach (var fixtureId in splitResult.SplitFixtureIds)
+                {
+                    var fixture = doc.GetElement(fixtureId) as FamilyInstance;
+                    if (fixture?.Location is not LocationCurve locCurve) continue;
+
+                    // Delete any tags that were copied with the fixture during split
+                    var existingTagIds = new FilteredElementCollector(doc, activeView.Id)
+                        .OfClass(typeof(IndependentTag))
+                        .Cast<IndependentTag>()
+                        .Where(tag =>
+                        {
+                            if (!tag.GetTaggedLocalElementIds().Contains(fixtureId))
+                                return false;
+                            if (doc.GetElement(tag.GetTypeId()) is FamilySymbol sym
+                                && string.Equals(sym.FamilyName, linearTagFamilyName,
+                                    StringComparison.OrdinalIgnoreCase))
+                                return true;
+                            return false;
+                        })
+                        .Select(tag => tag.Id)
+                        .ToList();
+
+                    if (existingTagIds.Count > 0)
+                        doc.Delete(existingTagIds);
+
+                    // Place tag at midpoint
+                    XYZ midpoint = locCurve.Curve.Evaluate(0.5, true);
+                    var newTag = IndependentTag.Create(
+                        doc, tagTypeId, activeView.Id,
+                        new Reference(fixture),
+                        addLeader: false,
+                        TagOrientation.Horizontal,
+                        midpoint);
+
+                    if (newTag == null) continue;
+
+                    // Apply TurboTag's linear offset (5" perpendicular to fixture line)
+                    bool isReversed = IsLineReversed(locCurve.Curve);
+                    double offsetVal = isReversed ? -linearOffsetFeet : linearOffsetFeet;
+                    XYZ localOffset = isTopTag
+                        ? new XYZ(0, offsetVal, 0)
+                        : new XYZ(0, -offsetVal, 0);
+                    XYZ globalOffset = TransformToGlobal(fixture, localOffset);
+
+                    if (!globalOffset.IsZeroLength())
+                        ElementTransformUtils.MoveElement(doc, newTag.Id, globalOffset);
+                }
+
+                t.Commit();
+            }
+        }
+
+        /// <summary>
+        /// Checks if a line-based fixture's curve runs in a "reversed" direction
+        /// (right-to-left or bottom-to-top). Matches TagPlacementService.IsLineReversed.
+        /// </summary>
+        private static bool IsLineReversed(Curve curve)
+        {
+            XYZ direction = (curve.GetEndPoint(1) - curve.GetEndPoint(0)).Normalize();
+            return direction.X < -0.001 || (Math.Abs(direction.X) < 0.001 && direction.Y < -0.001);
+        }
+
+        /// <summary>
+        /// Converts a fixture-local offset to global coordinates using BasisX rotation angle.
+        /// Matches TagPlacementService.TransformToGlobal.
+        /// </summary>
+        private static XYZ TransformToGlobal(FamilyInstance fixture, XYZ localOffset)
+        {
+            Transform transform = fixture.GetTransform();
+            double angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+            double cos = Math.Cos(angle);
+            double sin = Math.Sin(angle);
+            return new XYZ(
+                localOffset.X * cos - localOffset.Y * sin,
+                localOffset.X * sin + localOffset.Y * cos,
+                0);
         }
 
         /// <summary>
