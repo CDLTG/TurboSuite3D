@@ -51,6 +51,7 @@ namespace TurboSuite.Number.ViewModels
                     d.Model,
                     d.SwitchId,
                     circuitNumber: d.CircuitNumber,
+                    circuitElementId: d.CircuitElementId,
                     loadName: d.LoadName,
                     typeName: d.TypeName,
                     mark: d.Mark));
@@ -72,14 +73,14 @@ namespace TurboSuite.Number.ViewModels
             while (i < sorted.Count)
             {
                 baseNumber++;
-                string circuit = sorted[i].CircuitNumber;
+                var circuitId = sorted[i].CircuitElementId;
 
                 var group = new List<NumberableRowViewModel> { sorted[i] };
-                if (!string.IsNullOrEmpty(circuit))
+                if (circuitId != ElementId.InvalidElementId)
                 {
                     for (int j = i + 1; j < sorted.Count; j++)
                     {
-                        if (sorted[j].CircuitNumber == circuit)
+                        if (sorted[j].CircuitElementId == circuitId)
                             group.Add(sorted[j]);
                         else
                             break;
@@ -103,6 +104,16 @@ namespace TurboSuite.Number.ViewModels
 
                 i += group.Count;
             }
+        }
+
+        protected override bool TryParseNumber(string input, out int value)
+        {
+            // Strip known prefix/suffix so "X40" parses as 40
+            if (!string.IsNullOrEmpty(_prefix) && input.StartsWith(_prefix, System.StringComparison.OrdinalIgnoreCase))
+                input = input.Substring(_prefix.Length);
+            if (!string.IsNullOrEmpty(_suffix) && input.EndsWith(_suffix, System.StringComparison.OrdinalIgnoreCase))
+                input = input.Substring(0, input.Length - _suffix.Length);
+            return int.TryParse(input, out value);
         }
 
         protected override string FormatNumber(int value)

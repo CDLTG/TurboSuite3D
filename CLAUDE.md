@@ -85,7 +85,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Tag` | TurboTag — auto-places lighting fixture type tags |
 | `TurboSuite.Wire` | TurboWire — circuit creation and wire routing |
 | `TurboSuite.Zones` | TurboZones — load names and panel breakdown (MVVM) |
-| `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM) |
+| `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless) |
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
 
 ### Known Namespace Collision
@@ -109,6 +109,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 ### WPF Patterns
 
 - Modal `ShowDialog()` blocks Revit UI. Pattern: store target view on ViewModel, close dialog, call `uidoc.RequestViewChange(view)` after return.
+- **Modeless pattern** (TurboNumber): `window.Show()` with `IExternalEventHandler` for all Revit API calls. ViewModels queue typed `RevitApiRequest` objects, call `ExternalEvent.Raise()`, and receive results via completion callbacks dispatched to the WPF thread. Chain sequential requests in callbacks — never raise two events simultaneously (second is silently dropped).
 - `DataGrid.SelectedItems` cannot be bound in XAML. Use code-behind `SelectionChanged` handler. Do not set `SelectedRow` from within `SetSelectedRows` — causes feedback loop clearing multi-selection.
 
 ## Dependencies

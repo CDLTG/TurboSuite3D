@@ -59,7 +59,7 @@ namespace TurboSuite.Number.ViewModels
             if (_isUpdating) return;
 
             var changedRow = (NumberableRowViewModel)sender;
-            if (!int.TryParse(changedRow.Value, out int startValue))
+            if (!TryParseNumber(changedRow.Value, out int startValue))
                 return;
 
             if (!IsCascadeEnabled) return;
@@ -71,6 +71,7 @@ namespace TurboSuite.Number.ViewModels
             _isUpdating = true;
             try
             {
+                changedRow.Value = FormatNumber(startValue);
                 for (int i = index + 1; i < sorted.Count; i++)
                 {
                     startValue++;
@@ -103,6 +104,11 @@ namespace TurboSuite.Number.ViewModels
             {
                 sorted[i].Value = FormatNumber(i + 1);
             }
+        }
+
+        protected virtual bool TryParseNumber(string input, out int value)
+        {
+            return int.TryParse(input, out value);
         }
 
         protected virtual string FormatNumber(int value)

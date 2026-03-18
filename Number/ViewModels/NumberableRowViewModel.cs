@@ -16,6 +16,7 @@ namespace TurboSuite.Number.ViewModels
         public string RoomName { get; }
         public string RoomNumber { get; }
         public string CircuitNumber { get; }
+        public ElementId CircuitElementId { get; }
         public string LoadName { get; }
         public string Panel { get; }
         public string Mark { get; }
@@ -43,7 +44,8 @@ namespace TurboSuite.Number.ViewModels
         public event EventHandler ValueChanged;
 
         public NumberableRowViewModel(ElementId elementId, string displayLabel, string value,
-            string roomName = "", string roomNumber = "", string circuitNumber = "", string panel = "",
+            string roomName = "", string roomNumber = "", string circuitNumber = "",
+            ElementId circuitElementId = null, string panel = "",
             string typeName = "", string loadName = "", string mark = "")
         {
             ElementId = elementId;
@@ -52,6 +54,7 @@ namespace TurboSuite.Number.ViewModels
             RoomName = roomName ?? "";
             RoomNumber = roomNumber ?? "";
             CircuitNumber = circuitNumber ?? "";
+            CircuitElementId = circuitElementId ?? ElementId.InvalidElementId;
             LoadName = loadName ?? "";
             Panel = panel ?? "";
             TypeName = typeName ?? "";

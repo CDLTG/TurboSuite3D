@@ -247,15 +247,33 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Room Order Sidebar -->
-                    <Border Grid.Column="0" Width="160" BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,0,1,0"
+                    <Border Grid.Column="0" Width="182" BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,0,1,0"
                             Background="{StaticResource FooterBgBrush}"
                             Visibility="{Binding KeypadTab.IsSidebarVisible, Converter={StaticResource BoolToVisibility}}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="Room Order" FontWeight="SemiBold" Margin="8,8,8,4"
                                        Foreground="{StaticResource TextPrimaryBrush}"/>
-                            <Button DockPanel.Dock="Bottom" Content="Reset" Margin="4,4"
-                                    Command="{Binding KeypadTab.ResetRoomOrderCommand}"
-                                    Style="{StaticResource RevitButtonStyle}" Height="24"/>
+
+                            <!-- Bottom buttons: Reset + Reorder (normal), Apply + Cancel (reorder mode) -->
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="4,4"
+                                       HorizontalAlignment="Center">
+                                <Button Content="Reset" Width="80"
+                                        Command="{Binding KeypadTab.ResetRoomOrderCommand}"
+                                        Style="{StaticResource RevitButtonStyle}" Height="24"
+                                        Visibility="{Binding KeypadTab.IsNotReordering, Converter={StaticResource BoolToVisibility}}"/>
+                                <Button Content="Reorder" Width="80" Margin="4,0,0,0"
+                                        Command="{Binding KeypadTab.StartReorderCommand}"
+                                        Style="{StaticResource RevitButtonStyle}" Height="24"
+                                        Visibility="{Binding KeypadTab.IsNotReordering, Converter={StaticResource BoolToVisibility}}"/>
+                                <Button Content="Apply" Width="80"
+                                        Command="{Binding KeypadTab.ApplyReorderCommand}"
+                                        Style="{StaticResource RevitButtonStyle}" Height="24"
+                                        Visibility="{Binding KeypadTab.IsReordering, Converter={StaticResource BoolToVisibility}}"/>
+                                <Button Content="Cancel" Width="80" Margin="4,0,0,0"
+                                        Command="{Binding KeypadTab.CancelReorderCommand}"
+                                        Style="{StaticResource RevitButtonStyle}" Height="24"
+                                        Visibility="{Binding KeypadTab.IsReordering, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
 
                             <ListBox x:Name="RoomOrderListBox" Margin="4,0,4,4"
                                      ItemsSource="{Binding KeypadTab.RoomOrder}"
@@ -265,7 +283,65 @@
                                      DragOver="RoomOrderListBox_DragOver"
                                      DragLeave="RoomOrderListBox_DragLeave"
                                      Drop="RoomOrderListBox_Drop"
-                                     BorderThickness="0" Background="Transparent"/>
+                                     BorderThickness="0" Background="Transparent">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <!-- Click order badge (always visible) -->
+                                            <Border Width="18" Height="16" CornerRadius="2" Margin="0,0,4,0">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#E0E0E0"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsClicked}" Value="True">
+                                                                <Setter Property="Background" Value="#2B579A"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock TextAlignment="Center" FontSize="10"
+                                                           VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value=""/>
+                                                            <Setter Property="Foreground" Value="#555555"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsClicked}" Value="True">
+                                                                    <Setter Property="Text" Value="{Binding ClickOrder}"/>
+                                                                    <Setter Property="Foreground" Value="White"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+                                            <!-- Room name -->
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsReordering}" Value="True"/>
+                                                                    <Condition Binding="{Binding IsClicked}" Value="False"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Foreground" Value="#AAAAAA"/>
+                                                            </MultiDataTrigger>
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsReordering}" Value="True"/>
+                                                                    <Condition Binding="{Binding IsClicked}" Value="True"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                            </MultiDataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </DockPanel>
                     </Border>
 

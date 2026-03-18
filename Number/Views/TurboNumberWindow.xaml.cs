@@ -42,6 +42,24 @@ namespace TurboSuite.Number.Views
 
         private void RoomOrderListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            var vm = DataContext as NumberMainViewModel;
+            if (vm?.KeypadTab == null) return;
+
+            // Let scrollbar clicks pass through
+            if (FindAncestor<System.Windows.Controls.Primitives.ScrollBar>((DependencyObject)e.OriginalSource) != null)
+                return;
+
+            // In reorder mode, handle click-to-order instead of drag
+            if (vm.KeypadTab.IsReordering)
+            {
+                _dragFromIndex = -1;
+                var listBoxItem = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);
+                if (listBoxItem?.DataContext is RoomOrderItem roomItem)
+                    vm.KeypadTab.ToggleRoomClick(roomItem);
+                e.Handled = true;
+                return;
+            }
+
             _dragStartPoint = e.GetPosition(null);
             var listBox = (ListBox)sender;
             var item = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);

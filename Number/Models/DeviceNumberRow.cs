@@ -13,6 +13,7 @@ namespace TurboSuite.Number.Models
         public string RoomName { get; set; }
         public string RoomNumber { get; set; }
         public string CircuitNumber { get; set; }
+        public ElementId CircuitElementId { get; set; }
         public string LoadName { get; set; }
         public string Mark { get; set; }
     }

@@ -84,6 +84,7 @@ namespace TurboSuite.Number.Services
                         Model = fi.Symbol?.get_Parameter(BuiltInParameter.ALL_MODEL_MODEL)?.AsString() ?? "",
                         SwitchId = ParameterHelper.GetSwitchID(fi) ?? "",
                         CircuitNumber = fi.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_NUMBER)?.AsString() ?? "",
+                        CircuitElementId = circuit?.Id ?? ElementId.InvalidElementId,
                         LoadName = circuit != null ? ParameterHelper.GetLoadName(circuit) ?? "" : "",
                         Mark = fi.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() ?? ""
                     };
