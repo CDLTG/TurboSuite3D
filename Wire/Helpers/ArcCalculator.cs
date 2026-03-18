@@ -9,6 +9,112 @@ namespace TurboSuite.Wire.Helpers;
 
 internal static class ArcCalculator
 {
+    // Ratio threshold: min(dx,dy)/max(dx,dy) above this → "squared" (corner arc),
+    // below → "elongated" (S-spline). 0.6 ≈ 31° from axis.
+    private const double SquaredRatioThreshold = 0.6;
+
+    /// <summary>
+    /// Determines if two points are off-axis (not aligned horizontally or vertically).
+    /// Returns true when both X and Y deltas exceed the threshold.
+    /// </summary>
+    public static bool IsOffAxis(XYZ p1, XYZ p2, double threshold = 0.5)
+    {
+        double dx = Math.Abs(p1.X - p2.X);
+        double dy = Math.Abs(p1.Y - p2.Y);
+        return dx > threshold && dy > threshold;
+    }
+
+    /// <summary>
+    /// Returns true when the two points are roughly diagonal (dx ≈ dy).
+    /// </summary>
+    public static bool IsSquared(XYZ p1, XYZ p2)
+    {
+        double dx = Math.Abs(p1.X - p2.X);
+        double dy = Math.Abs(p1.Y - p2.Y);
+        double max = Math.Max(dx, dy);
+        if (max < 1e-9) return false;
+        return Math.Min(dx, dy) / max >= SquaredRatioThreshold;
+    }
+
+    // How far the two middle vertices pull back from the corner (0–1).
+    // 1/3 keeps the curve close to the corner without overshooting.
+    private const double CornerPullBack = 11.0 / 24.0;
+
+    /// <summary>
+    /// Creates a 4-point smoothed corner arc for near-diagonal fixtures.
+    /// Two middle vertices ease into and out of the bounding-box corner,
+    /// pulled back along each leg by CornerPullBack.
+    /// </summary>
+    public static IList<XYZ> CalculateCornerArcPoints(XYZ p1, XYZ p2, int arcDirection)
+    {
+        double midZ = (p1.Z + p2.Z) * 0.5;
+
+        // Determine which bounding-box corner the perpendicular direction points to.
+        XYZ p1Flat = new XYZ(p1.X, p1.Y, 0);
+        XYZ p2Flat = new XYZ(p2.X, p2.Y, 0);
+        XYZ mid = (p1Flat + p2Flat) * 0.5;
+        XYZ chordDir = (p2Flat - p1Flat).Normalize();
+        XYZ perpDir = XYZ.BasisZ.CrossProduct(chordDir).Normalize();
+
+        XYZ cornerA = new XYZ(p1.X, p2.Y, 0);
+        double dot = (cornerA - mid).DotProduct(perpDir);
+        bool useCornerA = (dot >= 0) == (arcDirection >= 0);
+
+        XYZ corner = useCornerA
+            ? new XYZ(p1.X, p2.Y, midZ)
+            : new XYZ(p2.X, p1.Y, midZ);
+
+        // Pull back from corner toward p1 and p2
+        double t = CornerPullBack;
+        XYZ v1 = new XYZ(
+            corner.X + (p1.X - corner.X) * t,
+            corner.Y + (p1.Y - corner.Y) * t,
+            midZ);
+        XYZ v2 = new XYZ(
+            corner.X + (p2.X - corner.X) * t,
+            corner.Y + (p2.Y - corner.Y) * t,
+            midZ);
+
+        return new List<XYZ> { p1, v1, v2, p2 };
+    }
+
+    /// <summary>
+    /// Creates an S-shaped spline between two off-axis fixtures.
+    /// The S transitions along the longer axis, with the two middle vertices
+    /// offset along the shorter axis. This keeps the spline compact.
+    /// </summary>
+    public static IList<XYZ> CalculateSSplinePoints(XYZ p1, XYZ p2)
+    {
+        double dx = Math.Abs(p2.X - p1.X);
+        double dy = Math.Abs(p2.Y - p1.Y);
+        double midZ = (p1.Z + p2.Z) * 0.5;
+
+        if (dx >= dy)
+        {
+            // Longer axis is X — step along X to midpoint, short jog in Y
+            double midX = (p1.X + p2.X) * 0.5;
+            return new List<XYZ>
+            {
+                p1,
+                new XYZ(midX, p1.Y, midZ),
+                new XYZ(midX, p2.Y, midZ),
+                p2
+            };
+        }
+        else
+        {
+            // Longer axis is Y — step along Y to midpoint, short jog in X
+            double midY = (p1.Y + p2.Y) * 0.5;
+            return new List<XYZ>
+            {
+                p1,
+                new XYZ(p1.X, midY, midZ),
+                new XYZ(p2.X, midY, midZ),
+                p2
+            };
+        }
+    }
+
     public static IList<XYZ> CalculateArcWirePoints(XYZ p1, XYZ p2, double angleDeg, int arcDirection = 1)
     {
         XYZ p1Flat = new XYZ(p1.X, p1.Y, 0);

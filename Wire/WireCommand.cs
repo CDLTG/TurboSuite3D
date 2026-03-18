@@ -356,7 +356,7 @@ public class WireCommand : IExternalCommand
             }
         }
 
-        // Priority: tag direction → group centroid → default
+        // Determine arc direction: tag → centroid → default
         int? tagDirection = useTagAwareArc
             ? ArcCalculator.GetArcDirectionFromTags(doc, fixture1, fixture2, c1.Origin, c2.Origin, tagLookup)
             : null;
@@ -368,7 +368,6 @@ public class WireCommand : IExternalCommand
         }
         else if (groupCentroid != null)
         {
-            // Arc bulges away from the group centroid
             XYZ midpoint = (c1.Origin + c2.Origin) * 0.5;
             XYZ chordDir = (new XYZ(c2.Origin.X, c2.Origin.Y, 0) - new XYZ(c1.Origin.X, c1.Origin.Y, 0)).Normalize();
             XYZ perpDir = XYZ.BasisZ.CrossProduct(chordDir).Normalize();
@@ -380,6 +379,22 @@ public class WireCommand : IExternalCommand
             arcDirection = 1;
         }
 
+        // Off-axis fixtures: corner arc (squared) or S-spline (elongated)
+        if (ArcCalculator.IsOffAxis(c1.Origin, c2.Origin))
+        {
+            if (ArcCalculator.IsSquared(c1.Origin, c2.Origin))
+            {
+                wirePoints = ArcCalculator.CalculateCornerArcPoints(c1.Origin, c2.Origin, arcDirection);
+            }
+            else
+            {
+                wirePoints = ArcCalculator.CalculateSSplinePoints(c1.Origin, c2.Origin);
+            }
+            wiringType = WiringType.Arc;
+            return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message);
+        }
+
+        // On-axis: standard 24° arc
         wirePoints = ArcCalculator.CalculateArcWirePoints(c1.Origin, c2.Origin, WireConstants.ArcAngleDegrees, arcDirection);
         wiringType = WiringType.Arc;
         return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message);
