@@ -17,13 +17,6 @@ namespace TurboSuite.Number.Views
         public TurboNumberWindow()
         {
             InitializeComponent();
-            DataContextChanged += OnDataContextChanged;
-        }
-
-        private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            if (e.NewValue is NumberMainViewModel vm && vm.CircuitTab != null)
-                vm.CircuitTab.RequestClose = () => this.Close();
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)

@@ -7,7 +7,8 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Data;
 using System.Windows.Input;
-
+using Autodesk.Revit.UI;
+using TurboSuite.Number.Services;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
@@ -33,7 +34,7 @@ namespace TurboSuite.Number.ViewModels
         public ICommand ApplyCommand { get; }
         public ICommand ToggleCascadeCommand { get; }
 
-        protected TabViewModelBase(string tabHeader)
+        protected TabViewModelBase(string tabHeader, ExternalEvent externalEvent = null, RevitApiRequestHandler handler = null)
         {
             TabHeader = tabHeader;
             AutoNumberCommand = new RelayCommand(DoAutoNumber);

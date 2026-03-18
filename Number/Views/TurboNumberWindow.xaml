@@ -6,6 +6,8 @@
     Height="650" Width="900"
     MinHeight="400" MinWidth="500"
     WindowStartupLocation="CenterScreen"
+    ShowInTaskbar="True"
+    Topmost="False"
     FontFamily="Segoe UI" FontSize="11"
     KeyDown="Window_KeyDown">
 

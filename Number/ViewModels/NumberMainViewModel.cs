@@ -1,6 +1,7 @@
 #nullable disable
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
 using TurboSuite.Shared.ViewModels;
@@ -17,13 +18,13 @@ namespace TurboSuite.Number.ViewModels
             List<CircuitNumberRow> circuits,
             List<DeviceNumberRow> keypads,
             List<DeviceNumberRow> powerSupplies,
-            NumberCollectorService collectorService)
+            NumberCollectorService collectorService,
+            ExternalEvent externalEvent,
+            RevitApiRequestHandler handler)
         {
-            var writerService = new NumberWriterService();
-
-            CircuitTab = new CircuitNumberTabViewModel(doc, circuits, writerService, collectorService);
-            KeypadTab = new KeypadTabViewModel(doc, keypads, writerService);
-            PowerSupplyTab = new PowerSupplyTabViewModel(doc, powerSupplies, writerService);
+            CircuitTab = new CircuitNumberTabViewModel(doc, circuits, collectorService, externalEvent, handler);
+            KeypadTab = new KeypadTabViewModel(doc, keypads, externalEvent, handler);
+            PowerSupplyTab = new PowerSupplyTabViewModel(doc, powerSupplies, externalEvent, handler);
         }
     }
 }

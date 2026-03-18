@@ -8,6 +8,7 @@ using System.Linq;
 using System.Windows.Data;
 using System.Windows.Input;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
 using TurboSuite.Shared.ViewModels;
@@ -17,7 +18,8 @@ namespace TurboSuite.Number.ViewModels
     public class KeypadTabViewModel : TabViewModelBase
     {
         private readonly Document _doc;
-        private readonly NumberWriterService _writerService;
+        private readonly ExternalEvent _externalEvent;
+        private readonly RevitApiRequestHandler _handler;
         private bool _isSidebarVisible;
 
         public ObservableCollection<string> RoomOrder { get; } = new ObservableCollection<string>();
@@ -37,11 +39,13 @@ namespace TurboSuite.Number.ViewModels
         public ICommand ToggleSidebarCommand { get; }
         public ICommand ResetRoomOrderCommand { get; }
 
-        public KeypadTabViewModel(Document doc, List<DeviceNumberRow> keypads, NumberWriterService writerService)
-            : base("Keypads")
+        public KeypadTabViewModel(Document doc, List<DeviceNumberRow> keypads,
+            ExternalEvent externalEvent, RevitApiRequestHandler handler)
+            : base("Keypads", externalEvent, handler)
         {
             _doc = doc;
-            _writerService = writerService;
+            _externalEvent = externalEvent;
+            _handler = handler;
             ToggleSidebarCommand = new RelayCommand(ToggleSidebar);
             ResetRoomOrderCommand = new RelayCommand(ResetRoomOrder);
 
@@ -86,7 +90,7 @@ namespace TurboSuite.Number.ViewModels
             }
 
             IsSidebarVisible = !IsSidebarVisible;
-            RoomOrderStorageService.SaveSidebarVisible(_doc, IsSidebarVisible);
+            RaiseRequest(new SaveSidebarVisibleRequest { IsVisible = IsSidebarVisible });
         }
 
         public void MoveRoom(int fromIndex, int toIndex)
@@ -94,14 +98,14 @@ namespace TurboSuite.Number.ViewModels
             if (fromIndex == toIndex) return;
             RoomOrder.Move(fromIndex, toIndex);
             ApplyCustomSort();
-            RoomOrderStorageService.Save(_doc, RoomOrder.ToList());
+            RaiseRequest(new SaveRoomOrderRequest { RoomOrder = RoomOrder.ToList() });
         }
 
         private void ResetRoomOrder()
         {
             BuildRoomOrder();
             ApplyCustomSort();
-            RoomOrderStorageService.Save(_doc, RoomOrder.ToList());
+            RaiseRequest(new SaveRoomOrderRequest { RoomOrder = RoomOrder.ToList() });
         }
 
         private void BuildRoomOrder()
@@ -139,7 +143,13 @@ namespace TurboSuite.Number.ViewModels
 
         protected override void Apply()
         {
-            _writerService.WriteDeviceSwitchIds(_doc, Rows);
+            RaiseRequest(new WriteDeviceSwitchIdsRequest { Rows = Rows });
+        }
+
+        private void RaiseRequest(RevitApiRequest request)
+        {
+            _handler.CurrentRequest = request;
+            _externalEvent.Raise();
         }
 
         private class RoomOrderComparer : IComparer

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
 
@@ -10,7 +11,8 @@ namespace TurboSuite.Number.ViewModels
     public class PowerSupplyTabViewModel : TabViewModelBase
     {
         private readonly Document _doc;
-        private readonly NumberWriterService _writerService;
+        private readonly ExternalEvent _externalEvent;
+        private readonly RevitApiRequestHandler _handler;
         private string _prefix = "X";
         private string _suffix = "";
 
@@ -20,7 +22,7 @@ namespace TurboSuite.Number.ViewModels
             set
             {
                 if (SetProperty(ref _prefix, value ?? ""))
-                    RoomOrderStorageService.SavePrefixSuffix(_doc, _prefix, _suffix);
+                    RaiseRequest(new SavePrefixSuffixRequest { Prefix = _prefix, Suffix = _suffix });
             }
         }
 
@@ -30,15 +32,17 @@ namespace TurboSuite.Number.ViewModels
             set
             {
                 if (SetProperty(ref _suffix, value ?? ""))
-                    RoomOrderStorageService.SavePrefixSuffix(_doc, _prefix, _suffix);
+                    RaiseRequest(new SavePrefixSuffixRequest { Prefix = _prefix, Suffix = _suffix });
             }
         }
 
-        public PowerSupplyTabViewModel(Document doc, List<DeviceNumberRow> powerSupplies, NumberWriterService writerService)
-            : base("Power Supplies")
+        public PowerSupplyTabViewModel(Document doc, List<DeviceNumberRow> powerSupplies,
+            ExternalEvent externalEvent, RevitApiRequestHandler handler)
+            : base("Power Supplies", externalEvent, handler)
         {
             _doc = doc;
-            _writerService = writerService;
+            _externalEvent = externalEvent;
+            _handler = handler;
 
             foreach (var d in powerSupplies)
             {
@@ -70,7 +74,6 @@ namespace TurboSuite.Number.ViewModels
                 baseNumber++;
                 string circuit = sorted[i].CircuitNumber;
 
-                // Collect consecutive rows sharing the same non-empty circuit number
                 var group = new List<NumberableRowViewModel> { sorted[i] };
                 if (!string.IsNullOrEmpty(circuit))
                 {
@@ -114,7 +117,13 @@ namespace TurboSuite.Number.ViewModels
 
         protected override void Apply()
         {
-            _writerService.WriteDeviceSwitchIds(_doc, Rows);
+            RaiseRequest(new WriteDeviceSwitchIdsRequest { Rows = Rows });
+        }
+
+        private void RaiseRequest(RevitApiRequest request)
+        {
+            _handler.CurrentRequest = request;
+            _externalEvent.Raise();
         }
     }
 }

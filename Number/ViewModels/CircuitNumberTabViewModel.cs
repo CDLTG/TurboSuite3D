@@ -7,6 +7,7 @@ using System.Linq;
 using System.Windows.Input;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
 using TurboSuite.Shared.Helpers;
@@ -17,15 +18,16 @@ namespace TurboSuite.Number.ViewModels
     public class CircuitNumberTabViewModel : ViewModelBase
     {
         private readonly Document _doc;
-        private readonly NumberWriterService _writerService;
         private readonly NumberCollectorService _collectorService;
-        private readonly PanelScheduleService _panelScheduleService;
+        private readonly ExternalEvent _externalEvent;
+        private readonly RevitApiRequestHandler _handler;
 
         private string _selectedPanel;
         private NumberableRowViewModel _selectedRow;
         private PanelScheduleView _currentScheduleView;
         private PanelSettingsModel _selectedPanelSettings;
         private readonly List<NumberableRowViewModel> _selectedRows = new List<NumberableRowViewModel>();
+        private bool _isBusy;
 
         public ObservableCollection<NumberableRowViewModel> Rows { get; } = new ObservableCollection<NumberableRowViewModel>();
         public ObservableCollection<NumberableRowViewModel> AllCircuitRows { get; } = new ObservableCollection<NumberableRowViewModel>();
@@ -44,8 +46,11 @@ namespace TurboSuite.Number.ViewModels
         public ICommand RemoveSpareSpaceCommand { get; }
         public ICommand OpenScheduleCommand { get; }
 
-        public PanelScheduleView ScheduleViewToOpen { get; private set; }
-        public Action RequestClose { get; set; }
+        public bool IsBusy
+        {
+            get => _isBusy;
+            set => SetProperty(ref _isBusy, value);
+        }
 
         public string SelectedPanel
         {
@@ -63,7 +68,7 @@ namespace TurboSuite.Number.ViewModels
             set
             {
                 if (SetProperty(ref _selectedRow, value))
-                    System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+                    CommandManager.InvalidateRequerySuggested();
             }
         }
 
@@ -75,7 +80,7 @@ namespace TurboSuite.Number.ViewModels
                 if (item is NumberableRowViewModel row)
                     _selectedRows.Add(row);
             }
-            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+            CommandManager.InvalidateRequerySuggested();
         }
 
         public PanelSettingsModel SelectedPanelSettings
@@ -87,14 +92,15 @@ namespace TurboSuite.Number.ViewModels
         public int AllCircuitCount => AllCircuitRows.Count;
 
         public CircuitNumberTabViewModel(Document doc, List<CircuitNumberRow> circuits,
-            NumberWriterService writerService, NumberCollectorService collectorService)
+            NumberCollectorService collectorService,
+            ExternalEvent externalEvent, RevitApiRequestHandler handler)
         {
             _doc = doc;
-            _writerService = writerService;
             _collectorService = collectorService;
-            _panelScheduleService = new PanelScheduleService();
+            _externalEvent = externalEvent;
+            _handler = handler;
 
-            ApplyCommand = new RelayCommand(Apply);
+            ApplyCommand = new RelayCommand(Apply, () => !IsBusy);
             MoveUpCommand = new RelayCommand(ExecuteMoveUp, CanMoveUp);
             MoveDownCommand = new RelayCommand(ExecuteMoveDown, CanMoveDown);
             AssignSpareCommand = new RelayCommand(ExecuteAssignSpare, CanAssignSpareOrSpace);
@@ -131,7 +137,6 @@ namespace TurboSuite.Number.ViewModels
 
             PopulateAllCircuits(circuits);
 
-            // Auto-select first panel
             if (Panels.Count > 0)
                 SelectedPanel = Panels[0];
         }
@@ -143,8 +148,8 @@ namespace TurboSuite.Number.ViewModels
             foreach (var c in circuits)
             {
                 string loadName = c.LoadName ?? "";
-                if (loadName.Equals("SPARE", System.StringComparison.OrdinalIgnoreCase) ||
-                    loadName.Equals("SPACE", System.StringComparison.OrdinalIgnoreCase))
+                if (loadName.Equals("SPARE", StringComparison.OrdinalIgnoreCase) ||
+                    loadName.Equals("SPACE", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 AllCircuitRows.Add(new NumberableRowViewModel(
@@ -155,7 +160,6 @@ namespace TurboSuite.Number.ViewModels
                     loadName: loadName));
             }
 
-            // Duplicate detection on all circuits
             var duplicateValues = AllCircuitRows
                 .Where(r => !string.IsNullOrEmpty(r.Value))
                 .GroupBy(r => r.Value)
@@ -174,7 +178,6 @@ namespace TurboSuite.Number.ViewModels
             Rows.Clear();
             _currentScheduleView = null;
 
-            // Update selected panel settings
             SelectedPanelSettings = PanelSettings.FirstOrDefault(ps => ps.PanelName == _selectedPanel);
 
             if (string.IsNullOrEmpty(_selectedPanel)) return;
@@ -182,18 +185,43 @@ namespace TurboSuite.Number.ViewModels
             Element panelEl = ParameterHelper.GetPanelElement(_doc, _selectedPanel);
             if (panelEl == null) return;
 
-            _currentScheduleView = _panelScheduleService.GetOrCreateScheduleView(_doc, panelEl.Id);
-            if (_currentScheduleView == null) return;
-
-            PopulateFromSchedule();
+            IsBusy = true;
+            RaiseRequest(new GetOrCreateScheduleViewRequest
+            {
+                PanelId = panelEl.Id,
+                OnComplete = result =>
+                {
+                    _currentScheduleView = result as PanelScheduleView;
+                    if (_currentScheduleView != null)
+                        RequestSlotLayout();
+                    else
+                        IsBusy = false;
+                }
+            });
         }
 
-        private void PopulateFromSchedule()
+        private void RequestSlotLayout(Action onComplete = null)
+        {
+            if (_currentScheduleView == null) { IsBusy = false; return; }
+
+            RaiseRequest(new GetSlotLayoutRequest
+            {
+                ScheduleView = _currentScheduleView,
+                OnComplete = result =>
+                {
+                    PopulateFromSlots(result as List<SlotInfo>);
+                    if (onComplete != null)
+                        onComplete();
+                    else
+                        IsBusy = false;
+                }
+            });
+        }
+
+        private void PopulateFromSlots(List<SlotInfo> slots)
         {
             Rows.Clear();
-            if (_currentScheduleView == null) return;
-
-            var slots = _panelScheduleService.GetSlotLayout(_currentScheduleView, _doc);
+            if (slots == null) return;
 
             foreach (var slot in slots)
             {
@@ -240,8 +268,15 @@ namespace TurboSuite.Number.ViewModels
 
         private void RefreshAllCircuits()
         {
-            var circuits = _collectorService.GetCircuits(_doc);
-            PopulateAllCircuits(circuits);
+            RaiseRequest(new RefreshCircuitsRequest
+            {
+                OnComplete = result =>
+                {
+                    if (result is List<CircuitNumberRow> circuits)
+                        PopulateAllCircuits(circuits);
+                    IsBusy = false;
+                }
+            });
         }
 
         private bool IsSpareOrSpace(NumberableRowViewModel row)
@@ -251,7 +286,6 @@ namespace TurboSuite.Number.ViewModels
 
         private int FindMoveTargetUp(int index)
         {
-            // Skip over spare/space to find the next circuit or empty slot
             int target = index - 1;
             while (target >= 0 && IsSpareOrSpace(Rows[target]))
                 target--;
@@ -260,7 +294,6 @@ namespace TurboSuite.Number.ViewModels
 
         private int FindMoveTargetDown(int index)
         {
-            // Skip over spare/space to find the next circuit or empty slot
             int target = index + 1;
             while (target < Rows.Count && IsSpareOrSpace(Rows[target]))
                 target++;
@@ -269,7 +302,7 @@ namespace TurboSuite.Number.ViewModels
 
         private bool CanMoveUp()
         {
-            if (_selectedRows.Count != 1 || _currentScheduleView == null) return false;
+            if (_isBusy || _selectedRows.Count != 1 || _currentScheduleView == null) return false;
             var row = _selectedRows[0];
             if (row.SlotType != "Circuit") return false;
             int index = Rows.IndexOf(row);
@@ -278,7 +311,7 @@ namespace TurboSuite.Number.ViewModels
 
         private bool CanMoveDown()
         {
-            if (_selectedRows.Count != 1 || _currentScheduleView == null) return false;
+            if (_isBusy || _selectedRows.Count != 1 || _currentScheduleView == null) return false;
             var row = _selectedRows[0];
             if (row.SlotType != "Circuit") return false;
             int index = Rows.IndexOf(row);
@@ -297,13 +330,24 @@ namespace TurboSuite.Number.ViewModels
             var targetRow = Rows[targetIndex];
             int targetSlotNumber = targetRow.SlotNumber;
 
-            if (_panelScheduleService.MoveCircuit(_doc, _currentScheduleView,
-                selected.SlotRow, selected.SlotCol, targetRow.SlotRow, targetRow.SlotCol))
+            IsBusy = true;
+            RaiseRequest(new MoveCircuitRequest
             {
-                PopulateFromSchedule();
-                RefreshAllCircuits();
-                SelectedRow = Rows.FirstOrDefault(r => r.SlotNumber == targetSlotNumber);
-            }
+                ScheduleView = _currentScheduleView,
+                FromRow = selected.SlotRow,
+                FromCol = selected.SlotCol,
+                ToRow = targetRow.SlotRow,
+                ToCol = targetRow.SlotCol,
+                OnComplete = result =>
+                {
+                    if (result is true)
+                    {
+                        RequestSlotLayoutThenRefresh(targetSlotNumber);
+                    }
+                    else
+                        IsBusy = false;
+                }
+            });
         }
 
         private void ExecuteMoveDown()
@@ -318,25 +362,51 @@ namespace TurboSuite.Number.ViewModels
             var targetRow = Rows[targetIndex];
             int targetSlotNumber = targetRow.SlotNumber;
 
-            if (_panelScheduleService.MoveCircuit(_doc, _currentScheduleView,
-                selected.SlotRow, selected.SlotCol, targetRow.SlotRow, targetRow.SlotCol))
+            IsBusy = true;
+            RaiseRequest(new MoveCircuitRequest
             {
-                PopulateFromSchedule();
-                RefreshAllCircuits();
-                SelectedRow = Rows.FirstOrDefault(r => r.SlotNumber == targetSlotNumber);
-            }
+                ScheduleView = _currentScheduleView,
+                FromRow = selected.SlotRow,
+                FromCol = selected.SlotCol,
+                ToRow = targetRow.SlotRow,
+                ToCol = targetRow.SlotCol,
+                OnComplete = result =>
+                {
+                    if (result is true)
+                    {
+                        RequestSlotLayoutThenRefresh(targetSlotNumber);
+                    }
+                    else
+                        IsBusy = false;
+                }
+            });
+        }
+
+        private void RequestSlotLayoutThenRefresh(int slotNumberToSelect = -1)
+        {
+            RaiseRequest(new GetSlotLayoutRequest
+            {
+                ScheduleView = _currentScheduleView,
+                OnComplete = result =>
+                {
+                    PopulateFromSlots(result as List<SlotInfo>);
+                    if (slotNumberToSelect >= 0)
+                        SelectedRow = Rows.FirstOrDefault(r => r.SlotNumber == slotNumberToSelect);
+                    RefreshAllCircuits();
+                }
+            });
         }
 
         private bool CanAssignSpareOrSpace()
         {
-            return _currentScheduleView != null
+            return !_isBusy && _currentScheduleView != null
                 && _selectedRows.Count > 0
                 && _selectedRows.All(r => r.SlotType == "Empty");
         }
 
         private bool CanRemoveSpareSpace()
         {
-            return _currentScheduleView != null
+            return !_isBusy && _currentScheduleView != null
                 && _selectedRows.Count > 0
                 && _selectedRows.All(r => r.SlotType == "Spare" || r.SlotType == "Space");
         }
@@ -347,13 +417,21 @@ namespace TurboSuite.Number.ViewModels
             var targets = _selectedRows.OrderBy(r => r.SlotNumber).ToList();
             int firstSlot = targets[0].SlotNumber;
 
-            if (_panelScheduleService.AssignSpareMultiple(_doc, _currentScheduleView,
-                targets.Select(r => (r.SlotRow, r.SlotCol)).ToList()))
+            IsBusy = true;
+            RaiseRequest(new AssignSpareRequest
             {
-                PopulateFromSchedule();
-                RefreshAllCircuits();
-                SelectedRow = Rows.FirstOrDefault(r => r.SlotNumber == firstSlot);
-            }
+                ScheduleView = _currentScheduleView,
+                Slots = targets.Select(r => (r.SlotRow, r.SlotCol)).ToList(),
+                OnComplete = result =>
+                {
+                    if (result is true)
+                    {
+                        RequestSlotLayoutThenRefresh(firstSlot);
+                    }
+                    else
+                        IsBusy = false;
+                }
+            });
         }
 
         private void ExecuteAssignSpace()
@@ -362,13 +440,21 @@ namespace TurboSuite.Number.ViewModels
             var targets = _selectedRows.OrderBy(r => r.SlotNumber).ToList();
             int firstSlot = targets[0].SlotNumber;
 
-            if (_panelScheduleService.AssignSpaceMultiple(_doc, _currentScheduleView,
-                targets.Select(r => (r.SlotRow, r.SlotCol)).ToList()))
+            IsBusy = true;
+            RaiseRequest(new AssignSpaceRequest
             {
-                PopulateFromSchedule();
-                RefreshAllCircuits();
-                SelectedRow = Rows.FirstOrDefault(r => r.SlotNumber == firstSlot);
-            }
+                ScheduleView = _currentScheduleView,
+                Slots = targets.Select(r => (r.SlotRow, r.SlotCol)).ToList(),
+                OnComplete = result =>
+                {
+                    if (result is true)
+                    {
+                        RequestSlotLayoutThenRefresh(firstSlot);
+                    }
+                    else
+                        IsBusy = false;
+                }
+            });
         }
 
         private void ExecuteRemoveSpareSpace()
@@ -377,32 +463,57 @@ namespace TurboSuite.Number.ViewModels
             var targets = _selectedRows.OrderBy(r => r.SlotNumber).ToList();
             int firstSlot = targets[0].SlotNumber;
 
-            if (_panelScheduleService.RemoveSpareSpaceMultiple(_doc, _currentScheduleView,
-                targets.Select(r => (r.SlotRow, r.SlotCol, r.SlotType)).ToList()))
+            IsBusy = true;
+            RaiseRequest(new RemoveSpareSpaceRequest
             {
-                PopulateFromSchedule();
-                RefreshAllCircuits();
-                SelectedRow = Rows.FirstOrDefault(r => r.SlotNumber == firstSlot);
-            }
+                ScheduleView = _currentScheduleView,
+                Slots = targets.Select(r => (r.SlotRow, r.SlotCol, r.SlotType)).ToList(),
+                OnComplete = result =>
+                {
+                    if (result is true)
+                    {
+                        RequestSlotLayoutThenRefresh(firstSlot);
+                    }
+                    else
+                        IsBusy = false;
+                }
+            });
         }
 
-        private bool CanOpenSchedule() => _currentScheduleView != null;
+        private bool CanOpenSchedule() => !_isBusy && _currentScheduleView != null;
 
         private void ExecuteOpenSchedule()
         {
-            ScheduleViewToOpen = _currentScheduleView;
-            RequestClose?.Invoke();
+            RaiseRequest(new OpenScheduleViewRequest
+            {
+                ScheduleView = _currentScheduleView
+            });
         }
 
         private void Apply()
         {
-            _writerService.WritePanelSettings(_doc, PanelSettings);
+            IsBusy = true;
+            RaiseRequest(new WritePanelSettingsRequest
+            {
+                PanelSettings = PanelSettings,
+                OnComplete = _ =>
+                {
+                    if (_currentScheduleView != null)
+                    {
+                        RequestSlotLayout(onComplete: () => RefreshAllCircuits());
+                    }
+                    else
+                    {
+                        RefreshAllCircuits();
+                    }
+                }
+            });
+        }
 
-            // Re-read after panel settings change
-            if (_currentScheduleView != null)
-                PopulateFromSchedule();
-
-            RefreshAllCircuits();
+        private void RaiseRequest(RevitApiRequest request)
+        {
+            _handler.CurrentRequest = request;
+            _externalEvent.Raise();
         }
     }
 }

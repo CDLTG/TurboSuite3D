@@ -14,10 +14,19 @@ namespace TurboSuite.Number
     [Regeneration(RegenerationOption.Manual)]
     public class NumberCommand : IExternalCommand
     {
+        private static TurboNumberWindow _activeWindow;
+
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             try
             {
+                // If window is already open, bring it to front
+                if (_activeWindow != null)
+                {
+                    _activeWindow.Activate();
+                    return Result.Succeeded;
+                }
+
                 UIDocument uidoc = commandData.Application.ActiveUIDocument;
                 Document doc = uidoc?.Document;
 
@@ -48,7 +57,15 @@ namespace TurboSuite.Number
                     return Result.Cancelled;
                 }
 
-                var viewModel = new NumberMainViewModel(doc, circuits, keypads, powerSupplies, collectorService);
+                var writerService = new NumberWriterService();
+                var panelScheduleService = new PanelScheduleService();
+
+                var handler = new RevitApiRequestHandler(doc, uidoc,
+                    panelScheduleService, writerService, collectorService);
+                var externalEvent = ExternalEvent.Create(handler);
+
+                var viewModel = new NumberMainViewModel(doc, circuits, keypads, powerSupplies,
+                    collectorService, externalEvent, handler);
 
                 var window = new TurboNumberWindow
                 {
@@ -56,13 +73,16 @@ namespace TurboSuite.Number
                 };
 
                 var revitHandle = commandData.Application.MainWindowHandle;
-                var helper = new WindowInteropHelper(window) { Owner = revitHandle };
+                new WindowInteropHelper(window) { Owner = revitHandle };
 
-                window.ShowDialog();
+                window.Closed += (s, e) =>
+                {
+                    _activeWindow = null;
+                    externalEvent.Dispose();
+                };
 
-                var scheduleView = viewModel.CircuitTab.ScheduleViewToOpen;
-                if (scheduleView != null)
-                    uidoc.RequestViewChange(scheduleView);
+                _activeWindow = window;
+                window.Show();
 
                 return Result.Succeeded;
             }
