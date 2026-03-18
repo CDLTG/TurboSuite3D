@@ -31,6 +31,9 @@ public class WireCommand : IExternalCommand
 
             if (preSelectedCircuits.Count > 0)
             {
+                using var txGroup = new TransactionGroup(doc, "TurboWire");
+                txGroup.Start();
+
                 foreach (ElectricalSystem circuit in preSelectedCircuits)
                 {
                     List<FamilyInstance> fixturesOnCircuit = GetFixturesOnCircuit(circuit);
@@ -41,7 +44,10 @@ public class WireCommand : IExternalCommand
                         {
                             Result result = WireMultipleFixtures(doc, groupList, ref message);
                             if (result != Result.Succeeded)
+                            {
+                                txGroup.RollBack();
                                 return result;
+                            }
                         }
                     }
                 }
@@ -51,8 +57,15 @@ public class WireCommand : IExternalCommand
                     .Where(c => string.IsNullOrEmpty(ParameterHelper.GetCircuitComments(c)))
                     .ToList();
                 if (circuitsToComment.Count > 0)
-                    ShowCommentsDialogAndApply(doc, circuitsToComment);
+                {
+                    if (!ShowCommentsDialogAndApply(doc, circuitsToComment))
+                    {
+                        txGroup.RollBack();
+                        return Result.Cancelled;
+                    }
+                }
 
+                txGroup.Assimilate();
                 return Result.Succeeded;
             }
 
@@ -86,33 +99,50 @@ public class WireCommand : IExternalCommand
         bool isSwitch = GeometryHelper.IsSwitch(fixture);
         var analysis = CircuitService.AnalyzeFixtures(new List<FamilyInstance> { fixture });
 
+        if (analysis.SingleCircuit)
+        {
+            string existingComment = ParameterHelper.GetCircuitComments(analysis.SingleCircuitRef!);
+            if (!string.IsNullOrEmpty(existingComment))
+            {
+                uiDoc.Selection.SetElementIds(new List<ElementId>());
+                return Result.Succeeded;
+            }
+        }
+
+        using var txGroup = new TransactionGroup(doc, "TurboWire");
+        txGroup.Start();
+
         ElectricalSystem? circuit;
 
         if (analysis.SingleCircuit)
         {
             circuit = analysis.SingleCircuitRef!;
-            string existingComment = ParameterHelper.GetCircuitComments(circuit);
-            if (!string.IsNullOrEmpty(existingComment))
-            {
-                // Circuit already has a comment — deselect and do nothing
-                uiDoc.Selection.SetElementIds(new List<ElementId>());
-                return Result.Succeeded;
-            }
-            // Circuit exists but no comment — set below
         }
         else
         {
             circuit = CircuitService.CreateCircuit(doc, new List<FamilyInstance> { fixture },
                 assignPanel: !isSwitch);
             if (circuit == null)
+            {
+                txGroup.RollBack();
                 return Result.Failed;
+            }
         }
 
         if (isSwitch)
+        {
             CircuitService.SetCircuitComments(doc, circuit, "Switched");
-        else
-            ShowCommentsDialogAndApply(doc, new List<ElectricalSystem> { circuit });
+            txGroup.Assimilate();
+            return Result.Succeeded;
+        }
 
+        if (!ShowCommentsDialogAndApply(doc, new List<ElectricalSystem> { circuit }))
+        {
+            txGroup.RollBack();
+            return Result.Cancelled;
+        }
+
+        txGroup.Assimilate();
         return Result.Succeeded;
     }
 
@@ -169,6 +199,9 @@ public class WireCommand : IExternalCommand
             return Result.Succeeded;
         }
 
+        using var txGroup = new TransactionGroup(doc, "TurboWire");
+        txGroup.Start();
+
         var circuitsToComment = new List<ElectricalSystem>();
 
         foreach (var group in fixtures.GroupBy(f => f.Category.BuiltInCategory))
@@ -196,7 +229,10 @@ public class WireCommand : IExternalCommand
             {
                 Result result = WireMultipleFixtures(doc, groupList, ref message);
                 if (result != Result.Succeeded)
+                {
+                    txGroup.RollBack();
                     return result;
+                }
             }
 
             if (resultCircuit != null)
@@ -208,15 +244,26 @@ public class WireCommand : IExternalCommand
         }
 
         if (circuitsToComment.Count > 0)
-            ShowCommentsDialogAndApply(doc, circuitsToComment);
+        {
+            if (!ShowCommentsDialogAndApply(doc, circuitsToComment))
+            {
+                txGroup.RollBack();
+                return Result.Cancelled;
+            }
+        }
 
+        txGroup.Assimilate();
         return Result.Succeeded;
     }
 
-    private static void ShowCommentsDialogAndApply(Document doc, List<ElectricalSystem> circuits)
+    /// <summary>
+    /// Returns false if the user cancelled the dialog (caller should roll back).
+    /// Returns true if comments were applied, dialog was skipped, or left empty.
+    /// </summary>
+    private static bool ShowCommentsDialogAndApply(Document doc, List<ElectricalSystem> circuits)
     {
         if (!GeneralSettingsCache.Get(doc).ShowCircuitCommentsDialog)
-            return;
+            return true;
 
         var circuitNumbers = string.Join(", ", circuits
             .Select(c => ParameterHelper.GetCircuitNumber(c))
@@ -224,11 +271,17 @@ public class WireCommand : IExternalCommand
 
         var existingComments = CircuitService.GetExistingComments(doc);
         var dialog = new CommentsDialog(existingComments, circuitNumbers);
-        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.CommentsText))
+        if (dialog.ShowDialog() == true)
         {
-            foreach (var circuit in circuits)
-                CircuitService.SetCircuitComments(doc, circuit, dialog.CommentsText);
+            if (!string.IsNullOrEmpty(dialog.CommentsText))
+            {
+                foreach (var circuit in circuits)
+                    CircuitService.SetCircuitComments(doc, circuit, dialog.CommentsText);
+            }
+            return true;
         }
+
+        return false; // User cancelled
     }
 
     private static Result ManualSelection(UIDocument uiDoc, Document doc, ref string message)
