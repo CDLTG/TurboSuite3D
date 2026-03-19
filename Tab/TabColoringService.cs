@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Documents;
 using System.Windows.Media;
 using Autodesk.Revit.UI;
 using Document = Autodesk.Revit.DB.Document;
@@ -33,7 +34,7 @@ public static class TabColoringService
     private static readonly Color[] Palette =
     [
         Color.FromRgb(66, 133, 244),   // Blue
-        Color.FromRgb(52, 168, 83),    // Green
+        Color.FromRgb(34, 139, 60),    // Green (darkened for white text contrast)
         Color.FromRgb(251, 188, 4),    // Yellow
         Color.FromRgb(234, 67, 53),    // Red
         Color.FromRgb(0, 172, 193),    // Teal
@@ -266,17 +267,20 @@ public static class TabColoringService
         var style = new Style(typeof(TabItem), baseStyle);
         style.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(background)));
         style.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(foreground)));
+        style.Setters.Add(new Setter(TextElement.ForegroundProperty, new SolidColorBrush(foreground)));
         style.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(background)));
 
         var selectedTrigger = new Trigger { Property = TabItem.IsSelectedProperty, Value = true };
         selectedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(selectedBg)));
         selectedTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(selectedBg)));
         selectedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(foreground)));
+        selectedTrigger.Setters.Add(new Setter(TextElement.ForegroundProperty, new SolidColorBrush(foreground)));
         style.Triggers.Add(selectedTrigger);
 
         var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
         hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(hoverBg)));
         hoverTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(hoverBg)));
+        hoverTrigger.Setters.Add(new Setter(TextElement.ForegroundProperty, new SolidColorBrush(foreground)));
         style.Triggers.Add(hoverTrigger);
 
         style.Seal();
