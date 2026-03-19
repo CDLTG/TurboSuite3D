@@ -40,3 +40,7 @@ All commands work in both:
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2025)
 - [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation.
 - .NET 8.0-windows / WPF
+
+## Acknowledgments
+
+- [pyRevit](https://github.com/pyrevitlabs/pyRevit) — TurboTab's document tab coloring was inspired by pyRevit's tab coloring. pyRevit is developed by [Ehsan Iran-Nejad](https://github.com/eirannejad) and contributors under the GNU GPL v3 license.
