@@ -9,6 +9,7 @@ namespace TurboSuite.Tag.Services;
 internal static class TagTypeService
 {
     private static ElementId _cachedTagTypeId = ElementId.InvalidElementId;
+    private static readonly Dictionary<string, ElementId> _cachedKeypadTagTypeIds = new();
     private static readonly Dictionary<string, ElementId> _cachedLinearTagTypeIds = new();
     private static string? _cachedDocumentPath;
 
@@ -20,6 +21,7 @@ internal static class TagTypeService
 
         _cachedDocumentPath = currentPath;
         _cachedTagTypeId = ElementId.InvalidElementId;
+        _cachedKeypadTagTypeIds.Clear();
         _cachedLinearTagTypeIds.Clear();
         return false;
     }
@@ -41,6 +43,30 @@ internal static class TagTypeService
 
         if (tagType != null)
             _cachedTagTypeId = tagType.Id;
+
+        return tagType;
+    }
+
+    public static FamilySymbol? GetKeypadTagType(Document doc, string? typeName = null)
+    {
+        string cacheKey = typeName ?? string.Empty;
+
+        if (IsSameDocument(doc) && _cachedKeypadTagTypeIds.TryGetValue(cacheKey, out var cachedId))
+        {
+            var cached = doc.GetElement(cachedId) as FamilySymbol;
+            if (cached != null && cached.IsValidObject)
+                return cached;
+        }
+
+        var tagType = new FilteredElementCollector(doc)
+            .OfClass(typeof(FamilySymbol))
+            .OfCategory(BuiltInCategory.OST_LightingDeviceTags)
+            .Cast<FamilySymbol>()
+            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.KeypadTagFamilyName, StringComparison.OrdinalIgnoreCase)
+                               && (typeName == null || string.Equals(fs.Name, typeName, StringComparison.OrdinalIgnoreCase)));
+
+        if (tagType != null)
+            _cachedKeypadTagTypeIds[cacheKey] = tagType.Id;
 
         return tagType;
     }

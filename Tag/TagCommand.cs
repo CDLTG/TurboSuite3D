@@ -28,10 +28,12 @@ public class TagCommand : IExternalCommand
                 return Result.Cancelled;
             }
 
-            var selectedFixtures = FixtureSelectionService.GetSelectedLightingFixtures(doc, uidoc.Selection.GetElementIds());
-            if (selectedFixtures.Count == 0)
+            var selectedIds = uidoc.Selection.GetElementIds();
+            var selectedFixtures = FixtureSelectionService.GetSelectedLightingFixtures(doc, selectedIds);
+            var selectedKeypads = FixtureSelectionService.GetSelectedKeypads(doc, selectedIds);
+            if (selectedFixtures.Count == 0 && selectedKeypads.Count == 0)
             {
-                TaskDialog.Show("TurboTag", "No lighting fixtures selected.\nSelect at least one lighting fixture.");
+                TaskDialog.Show("TurboTag", "No lighting fixtures or keypads selected.\nSelect at least one lighting fixture or keypad.");
                 return Result.Cancelled;
             }
 
@@ -90,9 +92,24 @@ public class TagCommand : IExternalCommand
                 totalTagged += PlaceTags(doc, pointBasedFixtures, tagType, direction);
             }
 
-            if (selectedFixtures.Count > 10)
+            if (selectedKeypads.Count > 0)
             {
-                TaskDialog.Show("TurboTag", $"Successfully tagged {totalTagged} of {selectedFixtures.Count} fixtures.");
+                FamilySymbol? keypadTagType = TagTypeService.GetKeypadTagType(doc);
+                if (keypadTagType == null)
+                {
+                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.KeypadTagFamilyName}' not found.\nLoad this tag family into the project.");
+                    return Result.Cancelled;
+                }
+
+                FamilySymbol? keypadTwoGangTagType = TagTypeService.GetKeypadTagType(doc, TagConstants.KeypadTwoGangTypeName);
+
+                totalTagged += PlaceKeypadTags(doc, selectedKeypads, keypadTagType, keypadTwoGangTagType);
+            }
+
+            int totalSelected = selectedFixtures.Count + selectedKeypads.Count;
+            if (totalSelected > 10)
+            {
+                TaskDialog.Show("TurboTag", $"Successfully tagged {totalTagged} of {totalSelected} fixtures.");
             }
 
             return Result.Succeeded;
@@ -203,6 +220,151 @@ public class TagCommand : IExternalCommand
         }
 
         return successCount;
+    }
+
+    private int PlaceKeypadTags(Document doc, List<FamilyInstance> keypads, FamilySymbol tagType, FamilySymbol? twoGangTagType)
+    {
+        int successCount = 0;
+        View activeView = doc.ActiveView;
+        ElementId defaultTagTypeId = tagType.Id;
+        ElementId twoGangTagTypeId = twoGangTagType?.Id ?? ElementId.InvalidElementId;
+        ElementId viewId = activeView.Id;
+        string tagFamilyName = tagType.FamilyName;
+
+        using (var trans = new Transaction(doc, "TurboTag - Place Keypad Tags"))
+        {
+            var failureOptions = trans.GetFailureHandlingOptions();
+            failureOptions.SetFailuresPreprocessor(new TagFailurePreprocessor());
+            trans.SetFailureHandlingOptions(failureOptions);
+
+            trans.Start();
+
+            foreach (FamilyInstance keypad in keypads)
+            {
+                DeleteExistingTags(doc, keypad.Id, viewId, tagFamilyName);
+
+                bool isTwoGang = keypad.LookupParameter(TagConstants.KeypadTwoGangParamName)?.AsInteger() == 1;
+                ElementId tagTypeId = isTwoGang && twoGangTagTypeId != ElementId.InvalidElementId
+                    ? twoGangTagTypeId
+                    : defaultTagTypeId;
+
+                if (TryPlaceKeypadTag(doc, keypad, tagTypeId, viewId))
+                {
+                    successCount++;
+                }
+            }
+
+            trans.Commit();
+        }
+
+        return successCount;
+    }
+
+    private bool TryPlaceKeypadTag(Document doc, FamilyInstance keypad, ElementId tagTypeId, ElementId viewId)
+    {
+        try
+        {
+            if (keypad.Location is not LocationPoint locPoint)
+                return false;
+
+            XYZ keypadLocation = locPoint.Point;
+
+            var reference = new Reference(keypad);
+            IndependentTag? tag = IndependentTag.Create(
+                doc, tagTypeId, viewId, reference,
+                addLeader: false,
+                TagOrientation.Horizontal,
+                keypadLocation);
+
+            if (tag == null)
+                return false;
+
+            XYZ globalOffset;
+            double angle;
+
+            if (keypad.HostFace != null)
+            {
+                // Wall-hosted on linked model: derive offset from host face normal,
+                // matching the TryPlaceTagFaceBased approach for wall sconces.
+                XYZ offsetDirection = XYZ.Zero;
+                Reference hostFaceRef = keypad.HostFace;
+                Element? host = keypad.Host;
+
+                if (host is RevitLinkInstance linkInstance)
+                {
+                    Document? linkedDoc = linkInstance.GetLinkDocument();
+                    if (linkedDoc != null)
+                    {
+                        GeometryObject? geomObj = linkedDoc.GetElement(hostFaceRef.LinkedElementId)
+                            ?.GetGeometryObjectFromReference(hostFaceRef.CreateReferenceInLink());
+
+                        if (geomObj is PlanarFace planarFace)
+                        {
+                            Transform linkTransform = linkInstance.GetTotalTransform();
+                            XYZ faceNormal = linkTransform.OfVector(planarFace.FaceNormal);
+                            offsetDirection = new XYZ(faceNormal.X, faceNormal.Y, 0).Normalize();
+                        }
+                    }
+                }
+                else if (host != null)
+                {
+                    GeometryObject? geomObj = host.GetGeometryObjectFromReference(hostFaceRef);
+
+                    if (geomObj is PlanarFace planarFace)
+                    {
+                        XYZ faceNormal = planarFace.FaceNormal;
+                        offsetDirection = new XYZ(faceNormal.X, faceNormal.Y, 0).Normalize();
+                    }
+                }
+
+                if (offsetDirection.IsZeroLength())
+                {
+                    XYZ facing = keypad.FacingOrientation;
+                    XYZ horizontal = new XYZ(facing.X, facing.Y, 0);
+                    if (horizontal.GetLength() > 0.001)
+                        offsetDirection = horizontal.Normalize();
+                }
+
+                globalOffset = !offsetDirection.IsZeroLength()
+                    ? offsetDirection * TagConstants.KeypadOffsetFeet
+                    : XYZ.Zero;
+
+                // Rotate tag to align with the wall direction (perpendicular to offset)
+                XYZ hand = -keypad.HandOrientation;
+                angle = Math.Atan2(hand.Y, hand.X);
+            }
+            else
+            {
+                // Unhosted (2D): BasisX rotation works directly in the horizontal plane.
+                XYZ localOffset = new XYZ(0, TagConstants.KeypadOffsetFeet, 0);
+                globalOffset = TagPlacementService.TransformToGlobal(keypad, localOffset);
+
+                Transform transform = keypad.GetTransform();
+                angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+            }
+
+            if (!globalOffset.IsZeroLength())
+            {
+                ElementTransformUtils.MoveElement(doc, tag.Id, globalOffset);
+            }
+
+            if (Math.Abs(angle) > 0.001)
+            {
+                XYZ tagPosition = keypadLocation + globalOffset;
+                Line axis = Line.CreateBound(tagPosition, tagPosition + XYZ.BasisZ);
+                ElementTransformUtils.RotateElement(doc, tag.Id, axis, angle);
+            }
+
+            return true;
+        }
+        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+        {
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private int PlaceTagsFaceBased(Document doc, List<FamilyInstance> fixtures, FamilySymbol tagType)

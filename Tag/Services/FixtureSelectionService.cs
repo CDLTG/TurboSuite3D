@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
 
@@ -23,5 +24,26 @@ internal static class FixtureSelectionService
         }
 
         return fixtures;
+    }
+
+    public static List<FamilyInstance> GetSelectedKeypads(Document doc, ICollection<ElementId> selectedIds)
+    {
+        if (selectedIds.Count == 0)
+            return new List<FamilyInstance>();
+
+        var lightingDeviceCategoryId = new ElementId(BuiltInCategory.OST_LightingDevices);
+        var keypads = new List<FamilyInstance>();
+
+        foreach (ElementId id in selectedIds)
+        {
+            if (doc.GetElement(id) is FamilyInstance fi &&
+                fi.Category?.Id == lightingDeviceCategoryId &&
+                fi.Symbol.FamilyName.IndexOf("Keypad", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                keypads.Add(fi);
+            }
+        }
+
+        return keypads;
     }
 }

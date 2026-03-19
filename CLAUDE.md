@@ -36,7 +36,7 @@ Revit auto-discovers `.addin` files from that directory on startup.
 
 ### 3D and 2D Drafting Support
 **IMPORTANT**: All TurboSuite commands MUST work in both workflows:
-- **3D Model**: Hosted families (ceiling, wall, floor, line-based) with 3D geometry in plan/RCP views.
+- **3D Model**: Hosted families (ceiling, wall, floor, line-based) with 3D geometry in plan/RCP views. Walls, ceilings, floors, and other host elements are **always in a linked model** (RevitLinkInstance) unless otherwise indicated. Do NOT check `Host is Wall` etc. — use `HostFace != null` to detect hosted families.
 - **2D Drafting**: Unhosted families with no 3D geometry, placed in Floor Plan views over linked 2D CAD files. Same parameters/connectors, but no hosting and no Room elements.
 
 When implementing new features or modifying existing commands:
