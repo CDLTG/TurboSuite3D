@@ -30,10 +30,11 @@ public class TagCommand : IExternalCommand
 
             var selectedIds = uidoc.Selection.GetElementIds();
             var selectedFixtures = FixtureSelectionService.GetSelectedLightingFixtures(doc, selectedIds);
+            var selectedPowerSupplies = FixtureSelectionService.GetSelectedPowerSupplies(doc, selectedIds);
             var selectedKeypads = FixtureSelectionService.GetSelectedKeypads(doc, selectedIds);
-            if (selectedFixtures.Count == 0 && selectedKeypads.Count == 0)
+            if (selectedFixtures.Count == 0 && selectedPowerSupplies.Count == 0 && selectedKeypads.Count == 0)
             {
-                TaskDialog.Show("TurboTag", "No lighting fixtures or keypads selected.\nSelect at least one lighting fixture or keypad.");
+                TaskDialog.Show("TurboTag", "No lighting fixtures, power supplies, or keypads selected.\nSelect at least one.");
                 return Result.Cancelled;
             }
 
@@ -92,6 +93,18 @@ public class TagCommand : IExternalCommand
                 totalTagged += PlaceTags(doc, pointBasedFixtures, tagType, direction);
             }
 
+            if (selectedPowerSupplies.Count > 0)
+            {
+                FamilySymbol? switchIdTagType = TagTypeService.GetSwitchIdTagType(doc);
+                if (switchIdTagType == null)
+                {
+                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.SwitchIdTagFamilyName}' not found.\nLoad this tag family into the project.");
+                    return Result.Cancelled;
+                }
+
+                totalTagged += PlacePowerSupplyTags(doc, selectedPowerSupplies, switchIdTagType);
+            }
+
             if (selectedKeypads.Count > 0)
             {
                 FamilySymbol? keypadTagType = TagTypeService.GetKeypadTagType(doc);
@@ -106,7 +119,7 @@ public class TagCommand : IExternalCommand
                 totalTagged += PlaceKeypadTags(doc, selectedKeypads, keypadTagType, keypadTwoGangTagType);
             }
 
-            int totalSelected = selectedFixtures.Count + selectedKeypads.Count;
+            int totalSelected = selectedFixtures.Count + selectedPowerSupplies.Count + selectedKeypads.Count;
             if (totalSelected > 10)
             {
                 TaskDialog.Show("TurboTag", $"Successfully tagged {totalTagged} of {totalSelected} fixtures.");
@@ -220,6 +233,66 @@ public class TagCommand : IExternalCommand
         }
 
         return successCount;
+    }
+
+    private int PlacePowerSupplyTags(Document doc, List<FamilyInstance> powerSupplies, FamilySymbol tagType)
+    {
+        int successCount = 0;
+        View activeView = doc.ActiveView;
+        ElementId tagTypeId = tagType.Id;
+        ElementId viewId = activeView.Id;
+        string tagFamilyName = tagType.FamilyName;
+
+        using (var trans = new Transaction(doc, "TurboTag - Place Power Supply Tags"))
+        {
+            var failureOptions = trans.GetFailureHandlingOptions();
+            failureOptions.SetFailuresPreprocessor(new TagFailurePreprocessor());
+            trans.SetFailureHandlingOptions(failureOptions);
+
+            trans.Start();
+
+            foreach (FamilyInstance device in powerSupplies)
+            {
+                DeleteExistingTags(doc, device.Id, viewId, tagFamilyName);
+
+                if (TryPlacePowerSupplyTag(doc, device, tagTypeId, viewId))
+                {
+                    successCount++;
+                }
+            }
+
+            trans.Commit();
+        }
+
+        return successCount;
+    }
+
+    private bool TryPlacePowerSupplyTag(Document doc, FamilyInstance device, ElementId tagTypeId, ElementId viewId)
+    {
+        try
+        {
+            if (device.Location is not LocationPoint locPoint)
+                return false;
+
+            XYZ location = locPoint.Point;
+
+            var reference = new Reference(device);
+            IndependentTag? tag = IndependentTag.Create(
+                doc, tagTypeId, viewId, reference,
+                addLeader: false,
+                TagOrientation.Horizontal,
+                location);
+
+            return tag != null;
+        }
+        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+        {
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private int PlaceKeypadTags(Document doc, List<FamilyInstance> keypads, FamilySymbol tagType, FamilySymbol? twoGangTagType)

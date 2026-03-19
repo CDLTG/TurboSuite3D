@@ -47,6 +47,29 @@ internal static class TagTypeService
         return tagType;
     }
 
+    public static FamilySymbol? GetSwitchIdTagType(Document doc)
+    {
+        string cacheKey = "_switchId";
+
+        if (IsSameDocument(doc) && _cachedKeypadTagTypeIds.TryGetValue(cacheKey, out var cachedId))
+        {
+            var cached = doc.GetElement(cachedId) as FamilySymbol;
+            if (cached != null && cached.IsValidObject)
+                return cached;
+        }
+
+        var tagType = new FilteredElementCollector(doc)
+            .OfClass(typeof(FamilySymbol))
+            .OfCategory(BuiltInCategory.OST_LightingDeviceTags)
+            .Cast<FamilySymbol>()
+            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.SwitchIdTagFamilyName, StringComparison.OrdinalIgnoreCase));
+
+        if (tagType != null)
+            _cachedKeypadTagTypeIds[cacheKey] = tagType.Id;
+
+        return tagType;
+    }
+
     public static FamilySymbol? GetKeypadTagType(Document doc, string? typeName = null)
     {
         string cacheKey = typeName ?? string.Empty;

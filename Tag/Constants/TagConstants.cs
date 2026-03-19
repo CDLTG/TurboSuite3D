@@ -14,6 +14,8 @@ internal static class TagConstants
     public const int ShortTextThreshold = 2;
     public const int MediumTextThreshold = 3;
 
+    public const string SwitchIdTagFamilyName = "AL_Tag_Lighting Device (SwitchID)";
+
     public const string KeypadTagFamilyName = "AL_Tag_Lighting Device (Keypad)";
     public const double KeypadOffsetFeet = 9.0 / 12.0;
     public const string KeypadTwoGangTypeName = "2. Two Gang";
