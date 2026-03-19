@@ -131,7 +131,7 @@ public class WireCommand : IExternalCommand
 
         if (isSwitch)
         {
-            CircuitService.SetCircuitComments(doc, circuit, "Switched");
+            CircuitService.SetCircuitComments(doc, circuit, "switched");
             txGroup.Assimilate();
             return Result.Succeeded;
         }
@@ -164,7 +164,7 @@ public class WireCommand : IExternalCommand
         if (hasSwitch)
         {
             // Switch selections: one circuit for all fixtures (no category split),
-            // no panel, "Switched" comment, no dialog
+            // no panel, "switched" comment, no dialog
             var analysis = CircuitService.AnalyzeFixtures(fixtures);
             ElectricalSystem? resultCircuit = null;
 
@@ -193,7 +193,7 @@ public class WireCommand : IExternalCommand
             {
                 string existingComment = ParameterHelper.GetCircuitComments(resultCircuit);
                 if (string.IsNullOrEmpty(existingComment))
-                    CircuitService.SetCircuitComments(doc, resultCircuit, "Switched");
+                    CircuitService.SetCircuitComments(doc, resultCircuit, "switched");
             }
 
             return Result.Succeeded;
