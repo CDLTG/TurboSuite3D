@@ -60,6 +60,9 @@ When asked to explain something, provide the explanation only. Do not assume a c
 3. For `ElementId` storage type parameters, probe valid `ElementId` values rather than assuming string or integer assignment will work.
 4. Only proceed to implementation after confirming feasibility.
 
+### ExtensibleStorage Schema Changes (Temporary — remove after TurboSuite deployment)
+When adding or removing fields in `FamilyNameSettingsStorageService`, do NOT create a new schema GUID. Keep the existing GUID and remind the user to purge the existing schema from their Revit documents before testing.
+
 ### Specification Documents
 Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NOT use them unless the user explicitly asks.
 

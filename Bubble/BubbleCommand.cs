@@ -197,8 +197,34 @@ public class BubbleCommand : IExternalCommand
         var localX = new XYZ(cosR, sinR, 0);
         var localY = new XYZ(-sinR, cosR, 0);
 
-        var isVerticalPlacement = IsElectricalVerticalFamily(fixture);
+        var isCeilingFan = GeometryHelper.IsCeilingFan(fixture);
+        var isVerticalPlacement = !isCeilingFan && IsElectricalVerticalFamily(fixture);
 
+        XYZ tagPosition;
+        List<XYZ> wireVertices;
+
+        if (isCeilingFan)
+        {
+            // Fixed placement — no user flip prompt
+            // Ceiling-hosted (3D/RCP) fixtures have inverted local axes relative to
+            // floor plan (2D) fixtures, so negate all offsets for ceiling plans.
+            double d = activeView.ViewType == ViewType.CeilingPlan ? -1.0 : 1.0;
+
+            tagPosition = fixtureOrigin
+                + localX * (d * BubbleConstants.CeilingFanTagXOffsetFt)
+                + localY * (d * BubbleConstants.CeilingFanTagYOffsetFt);
+
+            var v2 = fixtureOrigin
+                + localX * (d * BubbleConstants.CeilingFanV2XOffsetFt)
+                + localY * (d * BubbleConstants.CeilingFanV2YOffsetFt);
+
+            // V3 relative to tag position, same elbow offset pattern as other conditions
+            var v3 = tagPosition - localX * (d * BubbleConstants.WireElbowOffsetFt);
+
+            wireVertices = new List<XYZ>(2) { v2, v3 };
+        }
+        else
+        {
         // Annotation midpoint is 6" from origin in the fixture's local Y direction
         var fixtureMidpoint = fixtureOrigin + localY * BubbleConstants.ElectricalMidpointOffsetFt;
 
@@ -210,8 +236,6 @@ public class BubbleCommand : IExternalCommand
         var flipLocal = globalToLocal.OfPoint(flipPoint);
         var fixtureLocal = globalToLocal.OfPoint(fixtureOrigin);
 
-        XYZ tagPosition;
-        List<XYZ> wireVertices;
         double direction;
 
         if (isVerticalPlacement)
@@ -265,6 +289,7 @@ public class BubbleCommand : IExternalCommand
 
             wireVertices = new List<XYZ>(2) { v2, v3 };
         }
+        } // end else (non-ceiling-fan)
 
         using (var trans = new Transaction(doc, "TurboBubble"))
         {
@@ -295,7 +320,15 @@ public class BubbleCommand : IExternalCommand
 
             // SetVertex to offset wire start from connector
             var connOrigin = fixtureConnector.Origin;
-            if (isVerticalPlacement)
+            if (isCeilingFan)
+            {
+                double d = activeView.ViewType == ViewType.CeilingPlan ? -1.0 : 1.0;
+                wire.SetVertex(0, connOrigin + localX * (d * BubbleConstants.WireOffsetEndInitialFt));
+                wire.SetVertex(0, fixtureOrigin
+                    + localX * (d * BubbleConstants.CeilingFanV1XOffsetFt)
+                    + localY * (d * BubbleConstants.CeilingFanV1YOffsetFt));
+            }
+            else if (isVerticalPlacement)
             {
                 wire.SetVertex(0, connOrigin + localX * (4.0 * BubbleConstants.InchesToFeet));
             }

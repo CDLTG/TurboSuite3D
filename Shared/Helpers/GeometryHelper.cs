@@ -1,6 +1,7 @@
 using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Bubble.Constants;
 using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Shared.Helpers;
@@ -139,6 +140,12 @@ public static class GeometryHelper
         string familyName = fixture.Symbol?.Family?.Name ?? "";
         var settings = FamilyNameSettingsCache.Get(fixture.Document);
         return settings.ReceptacleFamilies.Contains(familyName);
+    }
+
+    public static bool IsCeilingFan(FamilyInstance fixture)
+    {
+        string familyName = fixture.Symbol?.FamilyName ?? "";
+        return BubbleConstants.CeilingFanFamilies.Contains(familyName);
     }
 
     public static bool IsSwitch(FamilyInstance fixture)

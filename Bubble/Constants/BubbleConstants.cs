@@ -70,6 +70,19 @@ internal static class BubbleConstants
     public const double ElectricalV3YOffsetFt = 3.09 * InchesToFeet;      // V3 perpendicular
     public const double ElectricalWireStartOffsetFt = 3.0 * InchesToFeet; // wire start perpendicular offset (SetVertex)
 
+    // Ceiling Fan families with fixed switchleg placement (no user flip prompt)
+    public static readonly HashSet<string> CeilingFanFamilies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AL_Electrical Fixture_Ceiling Fan (Hosted)",
+        "Ceiling Fan"
+    };
+    public const double CeilingFanTagXOffsetFt = 15.0 * InchesToFeet;     // 1'-3" along localX
+    public const double CeilingFanTagYOffsetFt = 7.625 * InchesToFeet;    // 0'-7 5/8" along localY
+    public const double CeilingFanV1XOffsetFt = 4.1875 * InchesToFeet;    // 4 3/16" along localX
+    public const double CeilingFanV1YOffsetFt = 1.78125 * InchesToFeet;  // 1 25/32" along localY
+    public const double CeilingFanV2XOffsetFt = 9.0625 * InchesToFeet;   // 9 1/16" along localX
+    public const double CeilingFanV2YOffsetFt = 1.75 * InchesToFeet;     // 1 3/4" along localY
+
     // Special family names
     public const string WallSconceFamily = "AL_Decorative_Wall Sconce (Hosted)";
 
