@@ -392,9 +392,33 @@ namespace TurboSuite.Driver
                     return null;
                 }
 
+                // Assign to the most recently used panel (same pattern as TurboWire)
+                var lastPanel = FindLastUsedPanel(doc);
+                if (lastPanel != null)
+                {
+                    try { newCircuit.SelectPanel(lastPanel); }
+                    catch { /* Panel may be incompatible — leave unassigned */ }
+                }
+
                 t.Commit();
                 return newCircuit;
             }
+        }
+
+        /// <summary>
+        /// Find the panel used by the most recently created circuit in the document
+        /// (highest ElementId), approximating Revit's "last selected panel" behavior.
+        /// </summary>
+        private static FamilyInstance FindLastUsedPanel(Document doc)
+        {
+            return new FilteredElementCollector(doc)
+                .OfClass(typeof(ElectricalSystem))
+                .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
+                .Cast<ElectricalSystem>()
+                .Where(c => c.BaseEquipment != null)
+                .OrderByDescending(c => c.Id.Value)
+                .FirstOrDefault()
+                ?.BaseEquipment;
         }
     }
 }
