@@ -107,6 +107,13 @@ public class TurboSuiteApplication : IExternalApplication
                 "Review power supply assignments for RPS circuits",
                 "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.");
 
+            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+                "TurboCuts",
+                "    Turbo    \n    Cuts     ",
+                "TurboSuite.Cuts.CutsCommand",
+                "Generate merged cut sheet PDF",
+                "Collects spec sheet PDFs from lighting fixture types, stamps company header/footer, and merges into a single bookmarked PDF.");
+
             // TurboDriver: headless per-fixture power supply deployment
             CreateButtonNoIcon(commandsPanel, assemblyPath,
                 "TurboDriver",

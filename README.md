@@ -53,6 +53,7 @@ The "TurboSuite" ribbon tab has three panels:
 | [TurboZones](Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
 | [TurboRPS](Driver/README.md) | Review power supply assignments across all RPS circuits |
+| [TurboCuts](Cuts/README.md) | Download fixture spec sheets, stamp header/footer, merge into one bookmarked PDF |
 
 ## Supported Workflows
 
@@ -68,7 +69,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 
 | Category | Used By |
 |----------|---------|
-| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones |
+| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboCuts |
 | Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones |
 | Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones |
 | Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones |
@@ -83,6 +84,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 | `Sub-Driver Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS, TurboTag, TurboNumber |
 | `Scale Factor` | Fixture instances | Double | TurboBubble, TurboWire |
 | `Load Classification Abbreviation` | Electrical Circuits | Text | TurboZones, TurboDriver |
+| `Data Sheet URL` | Lighting Fixture types | Text (URL) | TurboCuts |
 
 ### Tag Families
 
@@ -115,6 +117,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2025)
 - Xceed.Wpf.AvalonDock.dll (ships with Revit 2025) — used by TurboTab for document tab coloring
 - [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation
+- [PdfSharpCore](https://github.com/ststeiger/PdfSharpCore) (NuGet) — PDF reading, stamping, and merging. Used by TurboCuts.
 - .NET 8.0-windows / WPF
 
 ## Acknowledgments
