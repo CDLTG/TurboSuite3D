@@ -35,3 +35,57 @@ Review window for inspecting power supply assignments across all RPS circuits.
 3. Use the **dropdown** on each device group to change the family type — changes are written to Revit immediately.
 
 Requires at least one loaded Lighting Device family type with valid `Power` and `Sub-Driver Power` parameters.
+
+## Dependencies
+
+### Required Tag Families
+
+| Family Name | Category | Purpose |
+|-------------|----------|---------|
+| `AL_Tag_Lighting Device (SwitchID)` | Lighting Device Tags | Tags Switch ID on placed power supplies |
+| `AL_Tag_Lighting Device (Switchleg)` | Lighting Device Tags | Switchleg tag on first power supply per circuit |
+| `AL_Tag_Lighting Fixture (Linear Length)` | Lighting Fixture Tags | Re-tags linear fixtures after splitting (types: `Tag_Top`, `Tag_Bottom`) |
+
+### Required Custom Parameters
+
+**On Lighting Fixture families (type level):**
+
+| Parameter | Type | Purpose |
+|-----------|------|---------|
+| `Remote Power Supply` | Yes/No (Integer) | Identifies fixtures that need remote power supplies |
+| `Power` | Double (Watts) | Fixture wattage for driver sizing |
+| `Manufacturer` | Text | Matched against driver manufacturer |
+| `Dimming Protocol` | Text | Protocol matching (e.g., 0-10V, DMX, Phase-Cut) |
+| `Voltage` | Double/Text/Integer | Operating voltage matching |
+
+**On Lighting Fixture instances:**
+
+| Parameter | Type | Purpose |
+|-----------|------|---------|
+| `Linear Power` | Double (Watts) | Instance wattage for linear fixtures |
+| `Linear Length` | Double (Length) | Segment length for linear fixtures |
+| `Switch ID` | Text | Read as fallback for circuit Switch ID |
+
+**On Lighting Device families (power supply type level):**
+
+| Parameter | Type | Purpose |
+|-----------|------|---------|
+| `Power` | Double (Watts) | Total driver capacity (must be integer multiple of Sub-Driver Power) |
+| `Sub-Driver Power` | Double (Watts) | Wattage per sub-driver channel |
+| `Maximum Fixtures` | Integer | Max fixtures per driver (0 = no limit) |
+| `Manufacturer` | Text | For manufacturer-match scoring |
+| `Dimming Protocol` | Text | For protocol-match scoring |
+| `Voltage` | Double/Text/Integer | For voltage-match scoring |
+| `Catalog Number1` | Text | Display in recommendation UI |
+
+**On Lighting Device instances:**
+
+| Parameter | Type | Purpose |
+|-----------|------|---------|
+| `Switch ID` | Text | Written by TurboDriver (e.g., X01a, X01b) |
+
+### Other Requirements
+
+- At least one **WireType** in the project (for wiring between stacked power supplies)
+- Fixtures must have **electrical connectors**
+- Active **floor plan or RCP view**

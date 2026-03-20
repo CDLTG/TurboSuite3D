@@ -35,3 +35,26 @@ After circuit creation/wiring, a comments dialog appears if the circuit has no e
 | Receptacles | Spline | Wall-normal offsets, 3.0" connector offset |
 
 For multi-fixture runs, arc direction is chosen to avoid overlapping existing tags. Existing wires between two fixtures are deleted before placing new ones.
+
+## Dependencies
+
+### Required Custom Parameters
+
+| Parameter | On | Type | Purpose |
+|-----------|----|------|---------|
+| `Scale Factor` | Fixture instances | Double | Scales spline offsets for wall sconces and receptacles |
+| `Remote Power Supply` | Lighting Fixture types | Yes/No (Integer) | Read during circuit analysis |
+
+### Recognized Fixture Families
+
+These family names trigger special wire routing (spline instead of arc):
+
+- `AL_Decorative_Wall Sconce (Hosted)` — wall-normal spline offsets
+- `AL_Electrical Fixture_Receptacle (Hosted)` / `Receptacle` — wall-normal spline offsets
+
+### Other Requirements
+
+- At least one **WireType** in the project
+- Fixtures must have **electrical connectors** (MEP domain)
+- At least one **Electrical Equipment** (panel) in the project for auto-assignment of new circuits
+- Active view must support wire placement

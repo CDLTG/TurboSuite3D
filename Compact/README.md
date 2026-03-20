@@ -16,3 +16,8 @@ Cleans and compacts the active Revit family document (.rfa). Must be run from th
 3. Click **Proceed** to execute.
 
 Shows an error if run from a project document (not a family).
+
+## Dependencies
+
+- Must be run from the **Family Editor** (`.rfa` document open and active)
+- No custom parameters, families, or project-level setup required

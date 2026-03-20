@@ -42,7 +42,57 @@ All commands work in both:
 - **3D Model** — Hosted families with 3D geometry in plan/RCP views
 - **2D Drafting** — Unhosted families placed over linked CAD in floor plan views
 
-## Dependencies
+## Revit Project Dependencies
+
+TurboSuite expects certain families, parameters, and annotation types to be loaded in the Revit project. See each command's README for specific requirements. The table below summarizes shared dependencies.
+
+### Fixture Categories
+
+| Category | Used By |
+|----------|---------|
+| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones |
+| Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones |
+| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones |
+| Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones |
+
+### Common Custom Parameters
+
+| Parameter | On | Type | Used By |
+|-----------|----|------|---------|
+| `Switch ID` | Lighting Device instances | Text | TurboDriver, TurboNumber |
+| `Remote Power Supply` | Lighting Fixture types | Yes/No (Integer) | TurboDriver, TurboWire, TurboBubble |
+| `Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS |
+| `Sub-Driver Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS, TurboTag, TurboNumber |
+| `Scale Factor` | Fixture instances | Double | TurboBubble, TurboWire |
+| `Load Classification Abbreviation` | Electrical Circuits | Text | TurboZones, TurboDriver |
+
+### Tag Families
+
+| Family Name | Category | Used By |
+|-------------|----------|---------|
+| `AL_Tag_Lighting Fixture (Type)` | Lighting Fixture Tags | TurboTag |
+| `AL_Tag_Lighting Fixture (Linear Length)` | Lighting Fixture Tags | TurboTag, TurboDriver |
+| `AL_Tag_Lighting Fixture (Switchleg)` | Lighting Fixture Tags | TurboBubble |
+| `AL_Tag_Lighting Fixture (Remote Switchleg)` | Lighting Fixture Tags | TurboBubble |
+| `AL_Tag_Electrical Fixture (Switchleg)` | Electrical Fixture Tags | TurboBubble |
+| `AL_Tag_Lighting Device (SwitchID)` | Lighting Device Tags | TurboTag, TurboDriver |
+| `AL_Tag_Lighting Device (Keypad)` | Lighting Device Tags | TurboTag |
+| `AL_Tag_Lighting Device (Switchleg)` | Lighting Device Tags | TurboDriver |
+
+### Text Note Types
+
+| Type Name | Used By |
+|-----------|---------|
+| `AL_Annotation_4.5"` | TurboName |
+| `AL_Annotation_3"` | TurboName (optional — ceiling descriptions) |
+
+### Other Requirements
+
+- At least one **WireType** must exist in the project (TurboWire, TurboBubble, TurboDriver)
+- A **Filled Region** type named `Room Region` must exist (TurboName)
+- Linked DWG files with room name blocks or text layers (TurboName)
+
+## Software Dependencies
 
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2025)
 - Xceed.Wpf.AvalonDock.dll (ships with Revit 2025) — used by TurboTab for document tab coloring

@@ -27,3 +27,23 @@ Headless command for assigning CAD room names and ceiling heights to filled regi
 
 - **Block mode**: Reads INSERT entities matching a configured block name. Room name is concatenated from ordered attribute tags. Ceiling height from a separate attribute tag.
 - **Text mode**: Reads Text/MText entities on configured layers. Pairs room names with nearest ceiling height text by proximity.
+
+## Dependencies
+
+### Required Filled Region Types
+
+| Type Name | Purpose |
+|-----------|---------|
+| `Room Region` | Only filled regions of this type are processed |
+
+### Required Text Note Types
+
+| Type Name | Required? | Purpose |
+|-----------|-----------|---------|
+| `AL_Annotation_4.5"` | Yes — command aborts if missing | Room name and ceiling height text |
+| `AL_Annotation_3"` | Optional | Ceiling description keywords (Vault, Slope, etc.) |
+
+### Required Linked Files
+
+- At least one **linked DWG/DXF** file in the active view containing room name data
+- CAD source mode (Block or Text) must be configured in TurboSuite Settings before running
