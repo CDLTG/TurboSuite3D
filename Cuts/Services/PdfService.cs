@@ -10,10 +10,10 @@ namespace TurboSuite.Cuts.Services;
 
 public static class PdfService
 {
-    private const double HeaderHeight = 66;  // header band including rule line
-    private const double FooterHeight = 46;  // footer band including rule line
-    private const double Margin = 36;        // 0.5 inch side margins for rule lines
-    private const double ContentScale = 0.88; // gentle scale — header/footer mask any overlap
+    private const double HeaderHeight = 66;
+    private const double FooterHeight = 28;
+    private const double Margin = 36;
+    private const double ContentScale = 0.89;
 
     public static void MergeAndStamp(
         List<(string typeMark, byte[] pdfData)> specSheets,
@@ -28,22 +28,17 @@ public static class PdfService
 
         foreach (var (typeMark, pdfData) in specSheets)
         {
-            // Open as XPdfForm so we can draw each page scaled
             using var formStream = new MemoryStream(pdfData);
             var form = XPdfForm.FromStream(formStream);
 
-            // Also open for import to get page count
             using var countStream = new MemoryStream(pdfData);
             using var source = PdfReader.Open(countStream, PdfDocumentOpenMode.Import);
             int pageCount = source.PageCount;
-
             int bookmarkPageIndex = output.PageCount;
 
             for (int i = 0; i < pageCount; i++)
             {
                 form.PageIndex = i;
-
-                // Create a new page matching the source page size
                 var page = output.AddPage();
                 page.Width = source.Pages[i].Width;
                 page.Height = source.Pages[i].Height;
@@ -52,110 +47,90 @@ public static class PdfService
                 double pageWidth = page.Width.Point;
                 double pageHeight = page.Height.Point;
 
-                // Draw the source page scaled to 92%, centered in the page.
-                // The header/footer white backgrounds will cleanly mask any
-                // content that falls behind them.
-                double sourceWidth = form.PointWidth;
-                double sourceHeight = form.PointHeight;
-
-                double drawWidth = sourceWidth * ContentScale;
-                double drawHeight = sourceHeight * ContentScale;
-
+                double drawWidth = form.PointWidth * ContentScale;
+                double drawHeight = form.PointHeight * ContentScale;
                 double drawX = (pageWidth - drawWidth) / 2;
                 double drawY = HeaderHeight + (pageHeight - HeaderHeight - FooterHeight - drawHeight) / 2;
 
                 gfx.DrawImage(form, drawX, drawY, drawWidth, drawHeight);
-
-                // Draw header and footer on top (white backgrounds mask overlap)
-                DrawHeader(gfx, page, logoImage, projectName, typeMark);
+                string dateText = !string.IsNullOrWhiteSpace(settings.HeaderDate)
+                    ? settings.HeaderDate
+                    : DateTime.Now.ToString("MMM dd, yyyy");
+                DrawHeader(gfx, page, logoImage, projectName, typeMark, dateText);
                 DrawFooter(gfx, page, settings);
             }
 
-            // Add bookmark pointing to first page of this fixture type
             if (!string.IsNullOrWhiteSpace(typeMark))
-            {
                 output.Outlines.Add(typeMark, output.Pages[bookmarkPageIndex]);
-            }
         }
 
         output.Save(outputPath);
     }
 
     private static void DrawHeader(XGraphics gfx, PdfPage page, XImage? logo,
-        string projectName, string typeMark)
+        string projectName, string typeMark, string headerDate)
     {
         double pageWidth = page.Width.Point;
 
-        // White background for header area
+        // White background
         gfx.DrawRectangle(XBrushes.White, 0, 0, pageWidth, HeaderHeight);
-
-        var fontNormal = new XFont("Segoe UI", 9);
-        var fontBold = new XFont("Segoe UI", 11, XFontStyle.Bold);
-        var fontTypeMark = new XFont("Segoe UI", 28, XFontStyle.Bold);
-        var fontLabel = new XFont("Segoe UI", 8);
 
         // Left: logo — top-aligned with project name
         if (logo != null)
         {
             double logoHeight = 40;
-            double logoWidth = logo.PixelWidth * (logoHeight / logo.PixelHeight);
+            double nativeW = logo is XPdfForm pdfLogo ? pdfLogo.PointWidth : logo.PixelWidth;
+            double nativeH = logo is XPdfForm pdfLogoH ? pdfLogoH.PointHeight : logo.PixelHeight;
+            double logoWidth = nativeW * (logoHeight / nativeH);
             gfx.DrawImage(logo, Margin, 28, logoWidth, logoHeight);
         }
 
         // Center: project name + date
         double centerX = pageWidth / 2;
-        gfx.DrawString(projectName, fontBold, XBrushes.Black,
-            new XPoint(centerX, 28), XStringFormats.TopCenter);
-        gfx.DrawString(DateTime.Now.ToString("MMM dd, yyyy"), fontNormal, XBrushes.Black,
-            new XPoint(centerX, 43), XStringFormats.TopCenter);
+        var fontBold = new XFont("Segoe UI", 11, XFontStyle.Bold);
+        var fontDate = new XFont("Segoe UI Light", 9);
+        var dateBrush = new XSolidBrush(XColor.FromGrayScale(0.4));
 
-        // Right: "Fixture Type:" label just above Type Mark, bottoms of date and Type Mark aligned
+        gfx.DrawString(projectName, fontBold, XBrushes.Black,
+            new XPoint(centerX, 31), XStringFormats.TopCenter);
+        gfx.DrawString(headerDate, fontDate, dateBrush,
+            new XPoint(centerX, 45), XStringFormats.TopCenter);
+
+        // Right: type mark only (no label)
         double rightEdge = pageWidth - Margin;
-        gfx.DrawString("Fixture Type:", fontLabel, XBrushes.Black,
-            new XPoint(rightEdge, 29), XStringFormats.BaseLineRight);
+        var fontTypeMark = new XFont("Segoe UI", 28, XFontStyle.Bold);
         gfx.DrawString(typeMark, fontTypeMark, XBrushes.Black,
             new XPoint(rightEdge, 24), XStringFormats.TopRight);
 
         // Horizontal rule under header
-        var pen = new XPen(XColors.Black, 0.5);
+        var pen = new XPen(XColor.FromGrayScale(0.75), 0.25);
         gfx.DrawLine(pen, Margin, HeaderHeight - 2, pageWidth - Margin, HeaderHeight - 2);
     }
 
     private static void DrawFooter(XGraphics gfx, PdfPage page, CutsSettings settings)
     {
-        double pageWidth = page.Width.Point;
-        double pageHeight = page.Height.Point;
-        double footerTop = pageHeight - FooterHeight;
+        double w = page.Width.Point;
+        double fTop = page.Height.Point - FooterHeight;
 
-        // White background for footer area
-        gfx.DrawRectangle(XBrushes.White, 0, footerTop, pageWidth, FooterHeight);
+        gfx.DrawRectangle(XBrushes.White, 0, fTop, w, FooterHeight);
 
-        // Horizontal rule above footer
-        var pen = new XPen(XColors.Black, 0.5);
-        gfx.DrawLine(pen, Margin, footerTop + 4, pageWidth - Margin, footerTop + 4);
+        // Single hairline
+        gfx.DrawLine(new XPen(XColor.FromGrayScale(0.8), 0.25),
+            Margin, fTop + 2, w - Margin, fTop + 2);
 
-        var font = new XFont("Segoe UI", 9);
-        double centerX = pageWidth / 2;
+        // All info on one line, centered, em-dash separated
+        var font = new XFont("Segoe UI Light", 7.5);
+        var brush = new XSolidBrush(XColor.FromGrayScale(0.45));
 
-        // Line 1: address + phone — tight under rule
-        var line1Parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(settings.CompanyAddress))
-            line1Parts.Add(settings.CompanyAddress);
-        if (!string.IsNullOrWhiteSpace(settings.CompanyPhone))
-            line1Parts.Add(settings.CompanyPhone);
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(settings.CompanyAddress)) parts.Add(settings.CompanyAddress);
+        if (!string.IsNullOrWhiteSpace(settings.CompanyPhone)) parts.Add(settings.CompanyPhone);
+        if (!string.IsNullOrWhiteSpace(settings.CompanyWebsite)) parts.Add(settings.CompanyWebsite);
 
-        if (line1Parts.Count > 0)
+        if (parts.Count > 0)
         {
-            string line1 = string.Join(" \u2022 ", line1Parts);
-            gfx.DrawString(line1, font, XBrushes.Black,
-                new XPoint(centerX, footerTop + 10), XStringFormats.TopCenter);
-        }
-
-        // Line 2: website — snug under address line
-        if (!string.IsNullOrWhiteSpace(settings.CompanyWebsite))
-        {
-            gfx.DrawString(settings.CompanyWebsite, font, XBrushes.Black,
-                new XPoint(centerX, footerTop + 21), XStringFormats.TopCenter);
+            gfx.DrawString(string.Join("    |    ", parts), font, brush,
+                new XPoint(w / 2, fTop + 10), XStringFormats.TopCenter);
         }
     }
 
@@ -164,6 +139,8 @@ public static class PdfService
         try
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+            if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                return XPdfForm.FromFile(path);
             return XImage.FromFile(path);
         }
         catch

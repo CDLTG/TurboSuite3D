@@ -18,6 +18,7 @@ public class TurboCutsViewModel : ViewModelBase
     private string _companyAddress = string.Empty;
     private string _companyPhone = string.Empty;
     private string _companyWebsite = string.Empty;
+    private DateTime _headerDate = DateTime.Now;
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
@@ -47,6 +48,12 @@ public class TurboCutsViewModel : ViewModelBase
     {
         get => _companyWebsite;
         set => SetProperty(ref _companyWebsite, value);
+    }
+
+    public DateTime HeaderDate
+    {
+        get => _headerDate;
+        set => SetProperty(ref _headerDate, value);
     }
 
     public double Progress
@@ -108,7 +115,7 @@ public class TurboCutsViewModel : ViewModelBase
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp",
+            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp;*.pdf",
             Title = "Select Company Logo"
         };
         if (dialog.ShowDialog() == true)
@@ -172,7 +179,8 @@ public class TurboCutsViewModel : ViewModelBase
                 LogoFilePath = LogoFilePath,
                 CompanyAddress = CompanyAddress,
                 CompanyPhone = CompanyPhone,
-                CompanyWebsite = CompanyWebsite
+                CompanyWebsite = CompanyWebsite,
+                HeaderDate = HeaderDate.ToString("MMM dd, yyyy")
             };
 
             string outputPath = saveDialog.FileName;
