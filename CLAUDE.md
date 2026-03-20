@@ -9,10 +9,10 @@ TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting autom
 ## Build Commands
 
 ```bash
-dotnet build TurboSuite.csproj
+dotnet build TurboSuite.sln
 ```
 
-Platform target is **x64**. There are no automated tests or linting configurations.
+Platform target is **x64**. The solution contains two projects: `TurboSuite.csproj` (main add-in) and `Updater/TurboSuiteUpdater.csproj` (auto-update helper). There are no automated tests or linting configurations.
 
 **IMPORTANT**: Always use Windows-style paths for `dotnet`/MSBuild commands (e.g., `'C:\Users\jacobq\...\TurboSuite.csproj'`). Never use WSL-style `/mnt/c/...` paths — they cause `MSB1001` errors.
 
@@ -30,7 +30,15 @@ The post-build target copies `TurboSuite.addin` and `TurboSuite.dll`/`.pdb` to:
 %APPDATA%\Autodesk\Revit\Addins\2025\
 %APPDATA%\Autodesk\Revit\Addins\2025\TurboSuite\
 ```
+It also copies `TurboSuiteUpdater.exe` to `%LOCALAPPDATA%\TurboSuite\`.
+
 Revit auto-discovers `.addin` files from that directory on startup.
+
+### Auto-Update (not yet finalized)
+
+An auto-update system checks a shared server (`UpdateConstants.ServerPath`) on Revit launch. If a newer `version.txt` is found, files are staged to `%LOCALAPPDATA%\TurboSuite\Staging\`. The user is prompted to accept or skip. If accepted, `TurboSuiteUpdater.exe` applies the update after Revit closes. Skipped updates remain staged and prompt again on next launch. The server path in `UpdateConstants.cs` is a placeholder (`\\SERVER_NAME\TurboSuite`) — set it before deploying.
+
+The `Updater/` subdirectory is excluded from the main project via `<DefaultItemExcludes>` in `TurboSuite.csproj` to prevent the WPF temp project from picking up Updater source files.
 
 ## Workflow Rules
 
@@ -80,7 +88,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper` |
 | `TurboSuite.Shared.Filters` | `FixtureSelectionFilter`, `LightingFixtureTagFilter` |
 | `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings` |
-| `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, settings storage/cache services |
+| `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `UpdateService`, settings storage/cache services |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` |
 | `TurboSuite.Name` | TurboName — room name assignment from linked DWG files (MVVM) |
 | `TurboSuite.Driver` | TurboDriver + TurboRPS — power supply deployment and review (MVVM) |
@@ -91,6 +99,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless) |
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
+| `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
 
 ### Known Namespace Collision
 

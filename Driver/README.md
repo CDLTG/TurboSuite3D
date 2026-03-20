@@ -55,7 +55,7 @@ Requires at least one loaded Lighting Device family type with valid `Power` and 
 | `Remote Power Supply` | Yes/No (Integer) | Identifies fixtures that need remote power supplies |
 | `Power` | Double (Watts) | Fixture wattage for driver sizing |
 | `Manufacturer` | Text | Matched against driver manufacturer |
-| `Dimming Protocol` | Text | Protocol matching (e.g., 0-10V, DMX, Phase-Cut) |
+| `Dimming Protocol` | Text | Protocol matching (e.g., 0-10V, ELV, DMX) |
 | `Voltage` | Double/Text/Integer | Operating voltage matching |
 
 **On Lighting Fixture instances:**

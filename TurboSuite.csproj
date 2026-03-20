@@ -10,8 +10,10 @@
     <Company>CDLTG</Company>
     <Authors>CDLTG</Authors>
     <Product>TurboSuite</Product>
+    <Version>1.0.0</Version>
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Updater\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ACadSharp" Version="3.0.0" />
@@ -33,9 +35,15 @@
   <ItemGroup>
     <Resource Include="Resources\Icons\*.png" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Updater\TurboSuiteUpdater.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
   <Target Name="CopyToRevitAddins" AfterTargets="Build">
     <PropertyGroup>
       <RevitAddinsFolder>$(APPDATA)\Autodesk\Revit\Addins\2025</RevitAddinsFolder>
+      <TurboSuiteLocalAppData>$(LOCALAPPDATA)\TurboSuite</TurboSuiteLocalAppData>
     </PropertyGroup>
     <Copy SourceFiles="$(ProjectDir)TurboSuite.addin" DestinationFolder="$(RevitAddinsFolder)" />
     <ItemGroup>
@@ -44,5 +52,13 @@
     </ItemGroup>
     <Copy SourceFiles="@(OutputDlls)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
     <Copy SourceFiles="@(OutputPdbs)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
+    <!-- Copy updater exe to %LOCALAPPDATA%\TurboSuite\ -->
+    <MakeDir Directories="$(TurboSuiteLocalAppData)" />
+    <Copy SourceFiles="$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\win-x64\TurboSuiteUpdater.exe"
+          DestinationFolder="$(TurboSuiteLocalAppData)"
+          Condition="Exists('$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\win-x64\TurboSuiteUpdater.exe')" />
+    <Copy SourceFiles="$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.exe"
+          DestinationFolder="$(TurboSuiteLocalAppData)"
+          Condition="Exists('$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.exe')" />
   </Target>
 </Project>

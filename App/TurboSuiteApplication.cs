@@ -1,7 +1,10 @@
 using System;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
+using TurboSuite.Shared.Services;
 using TurboSuite.Tab;
 
 namespace TurboSuite.App;
@@ -11,6 +14,8 @@ namespace TurboSuite.App;
 /// </summary>
 public class TurboSuiteApplication : IExternalApplication
 {
+    private static bool _updateAccepted;
+
     public Result OnStartup(UIControlledApplication application)
     {
         try
@@ -118,6 +123,9 @@ public class TurboSuiteApplication : IExternalApplication
                 "Diagnostic command for troubleshooting",
                 "Runs diagnostic probes against the Revit API. Swap out the Execute body as needed for each investigation.");
 
+            // Auto-update check
+            application.Idling += OnIdlingCheckForUpdate;
+
             return Result.Succeeded;
         }
         catch (Exception ex)
@@ -129,9 +137,16 @@ public class TurboSuiteApplication : IExternalApplication
 
     public Result OnShutdown(UIControlledApplication application)
     {
+        if (_updateAccepted && UpdateService.HasStagedUpdate())
+        {
+            UpdateService.LaunchUpdater();
+        }
+
         TabColoringService.Stop();
         return Result.Succeeded;
     }
+
+    #region Tab Coloring
 
     private static int _tabStartRetries;
 
@@ -145,6 +160,84 @@ public class TurboSuiteApplication : IExternalApplication
         if (started || _tabStartRetries > 50)
             uiApp.Idling -= OnIdlingStartTabColoring;
     }
+
+    #endregion
+
+    #region Auto-Update
+
+    private static string? _pendingUpdateVersion;
+
+    private static async void OnIdlingCheckForUpdate(object? sender, IdlingEventArgs e)
+    {
+        if (sender is not UIApplication uiApp) return;
+
+        // One-shot: unhook immediately
+        uiApp.Idling -= OnIdlingCheckForUpdate;
+
+        try
+        {
+            // Check if a previous staged update is already waiting
+            if (UpdateService.HasStagedUpdate())
+            {
+                _pendingUpdateVersion = UpdateService.GetStagedVersion();
+                if (_pendingUpdateVersion is not null)
+                {
+                    uiApp.Idling += OnIdlingShowUpdateNotification;
+                    return;
+                }
+            }
+
+            // Check server for new version
+            using var cts = new CancellationTokenSource(UpdateConstants.CheckTimeoutMs);
+            var newVersion = await UpdateService.CheckForUpdateAsync(cts.Token);
+
+            if (newVersion is null) return;
+
+            // Stage the update in the background
+            await Task.Run(() => UpdateService.StageUpdate());
+
+            _pendingUpdateVersion = newVersion;
+            uiApp.Idling += OnIdlingShowUpdateNotification;
+        }
+        catch
+        {
+            // Update check failed silently — TurboSuite runs normally
+        }
+    }
+
+    private static void OnIdlingShowUpdateNotification(object? sender, IdlingEventArgs e)
+    {
+        if (sender is not UIApplication uiApp) return;
+
+        // One-shot: unhook immediately
+        uiApp.Idling -= OnIdlingShowUpdateNotification;
+
+        try
+        {
+            var currentVersion = UpdateService.GetInstalledVersion().ToString(3);
+
+            var dialog = new TaskDialog("TurboSuite Update Available")
+            {
+                MainInstruction = "A new version of TurboSuite is available.",
+                MainContent = $"Current version: {currentVersion}\nNew version: {_pendingUpdateVersion}\n\n" +
+                              "The update will be applied when you close Revit.",
+                CommonButtons = TaskDialogCommonButtons.None
+            };
+
+            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Update when I close Revit");
+            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Skip this update");
+
+            var result = dialog.Show();
+
+            _updateAccepted = result == TaskDialogResult.CommandLink1;
+        }
+        catch
+        {
+            // Don't crash Revit over a notification
+        }
+    }
+
+    #endregion
 
     private static void CreateButtonNoIcon(RibbonPanel panel, string assemblyPath,
         string name, string text, string className, string tooltip, string longDescription)
