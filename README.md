@@ -1,14 +1,21 @@
 # TurboSuite
 
-A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Nine commands consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
+A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Ten commands plus a Settings dialog consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
 
 ## Installation
 
 Build with `dotnet build TurboSuite.csproj`. The post-build target copies `TurboSuite.addin` and `TurboSuite.dll` to `%APPDATA%\Autodesk\Revit\Addins\2025\`. Revit discovers `.addin` files from that directory on startup.
 
-## Commands
+## Ribbon Tab
 
-The ribbon tab has two panels:
+The "TurboSuite" ribbon tab has three panels:
+
+### Settings Panel
+
+| Button | Description |
+|--------|-------------|
+| Settings | Configure family name settings stored in ExtensibleStorage |
+| TurboTab | Toggle document tab coloring — colors each open tab by project for visual identification |
 
 ### Commands Panel
 
@@ -19,12 +26,12 @@ The ribbon tab has two panels:
 | [TurboWire](Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
 | [TurboBubble](Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
 | [TurboDriver](Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
-| [TurboName](Name/README.md) | | Assign CAD room names and ceiling heights to filled regions |
 
 ### Utilities Panel
 
 | Button | Description |
 |--------|-------------|
+| [TurboName](Name/README.md) | Assign CAD room names and ceiling heights to filled regions |
 | [TurboZones](Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
 | [TurboRPS](Driver/README.md) | Review power supply assignments across all RPS circuits |
@@ -38,7 +45,8 @@ All commands work in both:
 ## Dependencies
 
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2025)
-- [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation.
+- Xceed.Wpf.AvalonDock.dll (ships with Revit 2025) — used by TurboTab for document tab coloring
+- [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation
 - .NET 8.0-windows / WPF
 
 ## Acknowledgments
