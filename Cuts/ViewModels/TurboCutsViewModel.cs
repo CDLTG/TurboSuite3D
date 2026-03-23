@@ -79,6 +79,8 @@ public class TurboCutsViewModel : ViewModelBase
     }
 
     public RelayCommand BrowseLogoCommand { get; }
+    public RelayCommand<FixtureSpecModel> BrowseLocalPdfCommand { get; }
+    public RelayCommand<FixtureSpecModel> ClearLocalPdfCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand DeselectAllCommand { get; }
     public RelayCommand GenerateCommand { get; }
@@ -94,7 +96,16 @@ public class TurboCutsViewModel : ViewModelBase
         _companyPhone = settings.CompanyPhone;
         _companyWebsite = settings.CompanyWebsite;
 
+        // Restore persisted local PDF paths
+        foreach (var fixture in Fixtures)
+        {
+            if (settings.LocalPdfPaths.TryGetValue(fixture.TypeMark, out var path) && File.Exists(path))
+                fixture.LocalPdfPath = path;
+        }
+
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
+        BrowseLocalPdfCommand = new RelayCommand<FixtureSpecModel>(ExecuteBrowseLocalPdf);
+        ClearLocalPdfCommand = new RelayCommand<FixtureSpecModel>(f => f.LocalPdfPath = string.Empty);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
         DeselectAllCommand = new RelayCommand(() => SetAllSelected(false));
         GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && Fixtures.Any(f => f.IsSelected));
@@ -102,12 +113,17 @@ public class TurboCutsViewModel : ViewModelBase
 
     public void SaveSettings()
     {
+        var localPdfPaths = Fixtures
+            .Where(f => f.HasLocalPdf)
+            .ToDictionary(f => f.TypeMark, f => f.LocalPdfPath);
+
         CutsSettingsService.Save(new CutsSettings
         {
             LogoFilePath = LogoFilePath,
             CompanyAddress = CompanyAddress,
             CompanyPhone = CompanyPhone,
-            CompanyWebsite = CompanyWebsite
+            CompanyWebsite = CompanyWebsite,
+            LocalPdfPaths = localPdfPaths
         });
     }
 
@@ -120,6 +136,17 @@ public class TurboCutsViewModel : ViewModelBase
         };
         if (dialog.ShowDialog() == true)
             LogoFilePath = dialog.FileName;
+    }
+
+    private void ExecuteBrowseLocalPdf(FixtureSpecModel fixture)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "PDF Files|*.pdf",
+            Title = $"Select Local PDF for {fixture.TypeMark}"
+        };
+        if (dialog.ShowDialog() == true)
+            fixture.LocalPdfPath = dialog.FileName;
     }
 
     private void SetAllSelected(bool selected)
@@ -144,30 +171,36 @@ public class TurboCutsViewModel : ViewModelBase
         IsGenerating = true;
         Progress = 0;
 
-        var results = new List<(string typeMark, byte[] pdfData)>();
+        var results = new List<(string typeMark, byte[]? pdfData, string catalogNumber)>();
         var errors = new List<string>();
 
         try
         {
-            // Download phase (0–80%)
+            // Load/download phase (0–80%)
             for (int i = 0; i < selected.Count; i++)
             {
                 var fixture = selected[i];
-                StatusText = $"Downloading {i + 1} of {selected.Count}: {fixture.TypeMark}...";
                 Progress = (double)i / selected.Count * 80.0;
 
-                var data = await DownloadService.DownloadPdfAsync(fixture.DataSheetUrl, CancellationToken.None);
-                if (data != null)
-                    results.Add((fixture.TypeMark, data));
+                byte[]? data;
+                if (fixture.HasLocalPdf && File.Exists(fixture.LocalPdfPath))
+                {
+                    StatusText = $"Loading {i + 1} of {selected.Count}: {fixture.TypeMark}...";
+                    data = await DownloadService.ReadLocalPdfAsync(fixture.LocalPdfPath);
+                    if (data == null) errors.Add(fixture.TypeMark);
+                }
+                else if (!string.IsNullOrWhiteSpace(fixture.DataSheetUrl))
+                {
+                    StatusText = $"Downloading {i + 1} of {selected.Count}: {fixture.TypeMark}...";
+                    data = await DownloadService.DownloadPdfAsync(fixture.DataSheetUrl, CancellationToken.None);
+                    if (data == null) errors.Add(fixture.TypeMark);
+                }
                 else
-                    errors.Add(fixture.TypeMark);
-            }
+                {
+                    data = null;
+                }
 
-            if (results.Count == 0)
-            {
-                StatusText = "All downloads failed. No PDF generated.";
-                IsGenerating = false;
-                return;
+                results.Add((fixture.TypeMark, data, fixture.CatalogNumber));
             }
 
             // Merge phase (80–100%)

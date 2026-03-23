@@ -38,18 +38,28 @@ public class CutsCommand : IExternalCommand
             var symbol = fi.Symbol;
             if (symbol == null || !symbolIds.Add(symbol.Id)) continue;
 
-            var urlParam = symbol.LookupParameter("Data Sheet URL");
-            string url = (urlParam is { HasValue: true }) ? urlParam.AsString() ?? "" : "";
-            if (string.IsNullOrWhiteSpace(url)) continue;
-
             var tmParam = symbol.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_MARK);
             string typeMark = (tmParam is { HasValue: true }) ? tmParam.AsString() ?? "" : "";
+            if (string.IsNullOrWhiteSpace(typeMark)) continue;
+
+            var urlParam = symbol.LookupParameter("Data Sheet URL");
+            string url = (urlParam is { HasValue: true }) ? urlParam.AsString() ?? "" : "";
+
+            var catParts = new List<string>();
+            for (int c = 1; c <= 6; c++)
+            {
+                var catParam = symbol.LookupParameter($"Catalog Number{c}");
+                string val = (catParam is { HasValue: true }) ? catParam.AsString() ?? "" : "";
+                if (!string.IsNullOrWhiteSpace(val)) catParts.Add(val.Trim());
+            }
+            string catalogNumber = string.Join(" | ", catParts);
 
             fixtures.Add(new FixtureSpecModel
             {
                 TypeMark = typeMark,
                 FamilyName = symbol.FamilyName,
                 DataSheetUrl = url,
+                CatalogNumber = catalogNumber,
                 SymbolId = symbol.Id
             });
         }
@@ -58,7 +68,7 @@ public class CutsCommand : IExternalCommand
 
         if (fixtures.Count == 0)
         {
-            TaskDialog.Show("TurboCuts", "No lighting fixture types with a Data Sheet URL found.");
+            TaskDialog.Show("TurboCuts", "No lighting fixture types found in the active document.");
             return Result.Cancelled;
         }
 

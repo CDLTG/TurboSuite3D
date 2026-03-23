@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace TurboSuite.Cuts.Models;
 
 public class CutsSettings
@@ -7,4 +9,5 @@ public class CutsSettings
     public string CompanyPhone { get; set; } = string.Empty;
     public string CompanyWebsite { get; set; } = string.Empty;
     public string HeaderDate { get; set; } = string.Empty;
+    public Dictionary<string, string> LocalPdfPaths { get; set; } = new();
 }
