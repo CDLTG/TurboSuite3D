@@ -88,10 +88,41 @@ public static class CircuitService
     }
 
     /// <summary>
+    /// Get all electrical panels (distribution boards) in the document, sorted by name.
+    /// </summary>
+    public static List<FamilyInstance> GetAllPanels(Document doc)
+    {
+        return new FilteredElementCollector(doc)
+            .OfCategory(BuiltInCategory.OST_ElectricalEquipment)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>()
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Assign a circuit to a specific panel.
+    /// </summary>
+    public static void SetCircuitPanel(Document doc, ElectricalSystem circuit, FamilyInstance panel)
+    {
+        using var t = new Transaction(doc, "TurboWire — Set circuit panel");
+        t.Start();
+        try
+        {
+            circuit.SelectPanel(panel);
+            t.Commit();
+        }
+        catch
+        {
+            t.RollBack();
+        }
+    }
+
+    /// <summary>
     /// Find the panel used by the most recently created circuit in the document
     /// (highest ElementId), approximating Revit's "last selected panel" behavior.
     /// </summary>
-    private static FamilyInstance? FindLastUsedPanel(Document doc)
+    public static FamilyInstance? FindLastUsedPanel(Document doc)
     {
         return new FilteredElementCollector(doc)
             .OfClass(typeof(ElectricalSystem))

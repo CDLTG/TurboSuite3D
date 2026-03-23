@@ -270,7 +270,10 @@ public class WireCommand : IExternalCommand
             .Where(n => !string.IsNullOrEmpty(n)));
 
         var existingComments = CircuitService.GetExistingComments(doc);
-        var dialog = new CommentsDialog(existingComments, circuitNumbers);
+        var panels = CircuitService.GetAllPanels(doc);
+        var autoPanel = CircuitService.FindLastUsedPanel(doc);
+
+        var dialog = new CommentsDialog(existingComments, panels, autoPanel, circuitNumbers);
         if (dialog.ShowDialog() == true)
         {
             if (!string.IsNullOrEmpty(dialog.CommentsText))
@@ -278,6 +281,17 @@ public class WireCommand : IExternalCommand
                 foreach (var circuit in circuits)
                     CircuitService.SetCircuitComments(doc, circuit, dialog.CommentsText);
             }
+
+            if (dialog.SelectedPanel != null)
+            {
+                // Re-assign panel if user picked a different one
+                foreach (var circuit in circuits)
+                {
+                    if (circuit.BaseEquipment?.Id != dialog.SelectedPanel.Id)
+                        CircuitService.SetCircuitPanel(doc, circuit, dialog.SelectedPanel);
+                }
+            }
+
             return true;
         }
 

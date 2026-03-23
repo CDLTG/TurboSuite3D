@@ -7,12 +7,30 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False">
     <StackPanel Margin="16">
-        <TextBlock x:Name="PromptText" Text="Enter circuit comment:" Margin="0,0,0,8" />
-        <ComboBox x:Name="CommentsComboBox"
-                  IsEditable="True"
-                  IsTextSearchEnabled="True"
-                  StaysOpenOnEdit="True"
-                  Margin="0,0,0,16" />
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="PromptText" Text="Enter circuit comment:"
+                       Grid.Column="0" Grid.Row="0" Margin="0,0,0,8" />
+            <TextBlock Text="Panel:"
+                       Grid.Column="1" Grid.Row="0" Margin="8,0,0,8" />
+            <ComboBox x:Name="CommentsComboBox"
+                      Grid.Column="0" Grid.Row="1"
+                      IsEditable="True"
+                      IsTextSearchEnabled="True"
+                      StaysOpenOnEdit="True" />
+            <ComboBox x:Name="PanelComboBox"
+                      Grid.Column="1" Grid.Row="1"
+                      DisplayMemberPath="Name"
+                      MinWidth="60"
+                      Margin="8,0,0,0" />
+        </Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="OK" Width="75" Margin="0,0,8,0"
                     IsDefault="True" Click="OkButton_Click" />
