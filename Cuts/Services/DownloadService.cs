@@ -8,9 +8,16 @@ namespace TurboSuite.Cuts.Services;
 
 public static class DownloadService
 {
-    private static readonly HttpClient Client = new()
+    private static readonly HttpClient Client = new(new HttpClientHandler
     {
-        Timeout = TimeSpan.FromSeconds(30)
+        AllowAutoRedirect = true
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(30),
+        DefaultRequestHeaders =
+        {
+            { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0" }
+        }
     };
 
     public static async Task<byte[]?> DownloadPdfAsync(string url, CancellationToken ct)
