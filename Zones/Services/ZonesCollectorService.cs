@@ -160,7 +160,8 @@ namespace TurboSuite.Zones.Services
 
             foreach (var fi in keypads)
             {
-                Parameter twoGangParam = fi.Symbol?.LookupParameter("Two Gang");
+                Parameter twoGangParam = fi.LookupParameter("Two Gang")
+                    ?? fi.Symbol?.LookupParameter("Two Gang");
                 if (twoGangParam != null && twoGangParam.AsInteger() == 1)
                     twoGang++;
                 else

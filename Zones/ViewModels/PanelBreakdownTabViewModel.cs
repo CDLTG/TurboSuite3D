@@ -4,14 +4,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
-using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
 using TurboSuite.Shared.ViewModels;
-using TurboSuite.Zones.Views;
 
 namespace TurboSuite.Zones.ViewModels
 {
@@ -24,6 +22,7 @@ namespace TurboSuite.Zones.ViewModels
         private ObservableCollection<LocationDisplayViewModel> _locationDisplays;
         private ObservableCollection<BomLineItem> _bomItems;
         private readonly Dictionary<string, string> _specialDeviceSelections = new Dictionary<string, string>();
+        private readonly Dictionary<string, int> _panelSizeOverrides = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly int _keypadCount;
         private readonly int _twoGangKeypadCount;
         private readonly int _hybridRepeaterCount;
@@ -31,27 +30,16 @@ namespace TurboSuite.Zones.ViewModels
         private readonly Document _doc;
         private BrandConfig _currentBrand;
         private ObservableCollection<ZonesCircuitData> _unassignedCircuits;
-        private readonly HashSet<string> _knownPanelNames;
-        private readonly Dictionary<string, string> _panelCatalogNumbers;
 
         public PanelBreakdownTabViewModel(Document doc, List<ZonesCircuitData> circuits,
             int keypadCount = 0, int twoGangKeypadCount = 0,
-            int hybridRepeaterCount = 0, string hybridRepeaterPartNumber = null,
-            Dictionary<string, string> panelCatalogNumbers = null)
+            int hybridRepeaterCount = 0, string hybridRepeaterPartNumber = null)
         {
             _doc = doc;
-            _panelCatalogNumbers = panelCatalogNumbers ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             _keypadCount = keypadCount;
             _twoGangKeypadCount = twoGangKeypadCount;
             _hybridRepeaterCount = hybridRepeaterCount;
             _hybridRepeaterPartNumber = hybridRepeaterPartNumber;
-
-            // Capture all panel names at startup so panels are never lost from the display
-            _knownPanelNames = new HashSet<string>(
-                circuits
-                    .Where(c => !string.IsNullOrWhiteSpace(c.PanelName))
-                    .Select(c => c.PanelName),
-                StringComparer.OrdinalIgnoreCase);
 
             Circuits = new ObservableCollection<ZonesCircuitViewModel>(
                 circuits.OrderBy(c => c.CircuitNumber).Select(c => new ZonesCircuitViewModel(c)));
@@ -76,6 +64,8 @@ namespace TurboSuite.Zones.ViewModels
                 if (SetProperty(ref _selectedBrandName, value))
                 {
                     OnPropertyChanged(nameof(IsLutronSelected));
+                    // Clear panel size overrides when brand changes (sizes differ)
+                    _panelSizeOverrides.Clear();
                     BuildPanelBreakdown();
                 }
             }
@@ -147,8 +137,7 @@ namespace TurboSuite.Zones.ViewModels
             var circuitData = Circuits.Select(c => c.Data).ToList();
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
-                circuitData, _currentBrand, _panelCatalogNumbers, _specialDeviceSelections,
-                _knownPanelNames);
+                circuitData, _currentBrand, _specialDeviceSelections, _panelSizeOverrides);
 
             AllocationResult = result;
             UnassignedCircuits = new ObservableCollection<ZonesCircuitData>(unassigned);
@@ -186,6 +175,10 @@ namespace TurboSuite.Zones.ViewModels
                 // Restore special device selections
                 foreach (var kvp in settings.SpecialDeviceSelections)
                     _specialDeviceSelections[kvp.Key] = kvp.Value;
+
+                // Restore panel size overrides
+                foreach (var kvp in settings.PanelSizeOverrides)
+                    _panelSizeOverrides[kvp.Key] = kvp.Value;
             }
 
             // Auto-build on load
@@ -212,6 +205,10 @@ namespace TurboSuite.Zones.ViewModels
                     }
                 }
             }
+
+            // Save panel size overrides
+            foreach (var kvp in _panelSizeOverrides)
+                settings.PanelSizeOverrides[kvp.Key] = kvp.Value;
 
             ZonesPanelSettingsStorageService.Save(_doc, settings);
         }
@@ -241,6 +238,17 @@ namespace TurboSuite.Zones.ViewModels
                 RebuildLinkAssignments();
                 RebuildBom();
                 SaveSettings();
+            }
+            else if (e.PropertyName == nameof(PanelResult.SelectedPanelSize))
+            {
+                // Capture the user's panel size override, then defer rebuild so it runs
+                // after WPF finishes processing the ComboBox selection change event.
+                // Rebuilding synchronously destroys the visual tree mid-event, causing crashes.
+                if (sender is PanelResult panel)
+                {
+                    _panelSizeOverrides[panel.PanelName] = panel.SelectedPanelSize;
+                    Dispatcher.CurrentDispatcher.BeginInvoke(BuildPanelBreakdown, DispatcherPriority.Background);
+                }
             }
         }
 
@@ -364,21 +372,29 @@ namespace TurboSuite.Zones.ViewModels
                 });
             }
 
-            // Wire harnesses (one per panel, by size)
+            // Wire harnesses (one per panel, grouped by part number)
             if (_currentBrand.WireHarnessPartNumbers != null)
             {
+                var harnessCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (var group in panelsBySize)
                 {
                     if (_currentBrand.WireHarnessPartNumbers.TryGetValue(group.Key, out var harnessPn))
                     {
-                        accessories.Add(new BomLineItem
-                        {
-                            Quantity = group.Count(),
-                            PartNumber = harnessPn,
-                            Description = _currentBrand.GetPartDescription(harnessPn),
-                            Category = "Accessories"
-                        });
+                        if (!harnessCounts.ContainsKey(harnessPn))
+                            harnessCounts[harnessPn] = 0;
+                        harnessCounts[harnessPn] += group.Count();
                     }
+                }
+
+                foreach (var kvp in harnessCounts)
+                {
+                    accessories.Add(new BomLineItem
+                    {
+                        Quantity = kvp.Value,
+                        PartNumber = kvp.Key,
+                        Description = _currentBrand.GetPartDescription(kvp.Key),
+                        Category = "Accessories"
+                    });
                 }
             }
 
@@ -543,86 +559,6 @@ namespace TurboSuite.Zones.ViewModels
                     panel.SelectedSpecialDevice = device;
                 }
             }
-        }
-
-        private ICommand _optimizeCommand;
-        public ICommand OptimizeCommand => _optimizeCommand ??= new RelayCommand(RunOptimize);
-
-        private void RunOptimize()
-        {
-            if (_allocationResult == null || _currentBrand == null)
-                return;
-
-            // Check for overloaded locations
-            var overloadedLocations = _allocationResult.Locations
-                .Where(l => l.IsOverCapacity)
-                .ToList();
-            if (overloadedLocations.Count > 0)
-            {
-                var names = string.Join(", ", overloadedLocations.Select(l => $"Location {l.LocationNumber}"));
-                TaskDialog.Show("TurboZones - Optimize",
-                    $"Cannot optimize: the following locations are overloaded:\n{names}\n\n" +
-                    "Please add panels or reduce circuits before optimizing.");
-                return;
-            }
-
-            var circuitData = Circuits.Select(c => c.Data).ToList();
-
-            // 1. Compute redistribution plan (pure computation)
-            var plan = CircuitRedistributionService.ComputePlan(
-                circuitData, _currentBrand, _allocationResult);
-
-            // 2. Show preview dialog
-            var previewVm = new OptimizePreviewViewModel(plan);
-            var previewWindow = new OptimizePreviewWindow
-            {
-                DataContext = previewVm
-            };
-
-            if (Application.Current?.Windows.OfType<Window>()
-                    .FirstOrDefault(w => w is TurboZonesWindow) is Window parent)
-            {
-                previewWindow.Owner = parent;
-            }
-
-            previewWindow.ShowDialog();
-
-            if (!previewWindow.Confirmed)
-                return;
-
-            // 3. Execute Revit transaction
-            var moveService = new CircuitMoveService();
-            HashSet<ElementId> movedIds;
-            try
-            {
-                movedIds = moveService.ApplyPlan(_doc, plan);
-            }
-            catch (Exception ex)
-            {
-                TaskDialog.Show("TurboZones - Optimize",
-                    $"Error applying circuit moves:\n{ex.Message}");
-                return;
-            }
-
-            // 4. Update in-memory PanelName only for circuits that actually moved
-            var moveDict = plan.Moves
-                .Where(m => movedIds.Contains(m.CircuitId))
-                .ToDictionary(m => m.CircuitId, m => m.ToPanel);
-            foreach (var vm in Circuits)
-            {
-                if (moveDict.TryGetValue(vm.Data.CircuitId, out var newPanel))
-                    vm.Data.PanelName = newPanel;
-            }
-
-            // 5. Rebuild display
-            BuildPanelBreakdown();
-
-            int failed = plan.Moves.Count - movedIds.Count;
-            string message = $"Optimization complete. {movedIds.Count} circuit(s) moved.";
-            if (failed > 0)
-                message += $"\n{failed} circuit(s) could not be moved (panel may be full or incompatible).";
-
-            TaskDialog.Show("TurboZones - Optimize", message);
         }
 
         /// <summary>

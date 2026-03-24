@@ -202,14 +202,8 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Top bar: Brand selector + Optimize button -->
+                    <!-- Top bar: Brand selector -->
                     <DockPanel Grid.Row="0" Margin="4,6,4,4">
-                        <Button Content="Optimize"
-                                Command="{Binding PanelTab.OptimizeCommand}"
-                                IsEnabled="{Binding PanelTab.ShowPlaceholder, Converter={StaticResource InverseBool}}"
-                                Style="{StaticResource RevitButtonStyle}"
-                                Height="24" Padding="12,0"
-                                DockPanel.Dock="Right"/>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Brand:" VerticalAlignment="Center" Margin="0,0,4,0"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
@@ -322,7 +316,7 @@
                                 BorderBrush="{StaticResource SeparatorBrush}">
                             <Grid>
                                 <!-- Placeholder when no panels assigned -->
-                                <TextBlock Text="No circuits are assigned to panels in this project"
+                                <TextBlock Text="No circuits are assigned to zones in this project"
                                            VerticalAlignment="Center" HorizontalAlignment="Center"
                                            Foreground="{StaticResource TextSecondaryBrush}"
                                            Visibility="{Binding PanelTab.ShowPlaceholder, Converter={StaticResource BoolToVisibility}}"/>
@@ -338,7 +332,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch">
                                                         <!-- Location column with overload border -->
                                                         <Border CornerRadius="4" Padding="2" Margin="0,0,0,0">
                                                             <Border.Style>
@@ -352,9 +346,13 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Border.Style>
-                                                        <StackPanel>
-                                                            <!-- Location header -->
-                                                            <StackPanel Orientation="Horizontal" Margin="5,0,0,3">
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="*"/>
+                                                            </Grid.RowDefinitions>
+                                                            <!-- Location header (top-aligned) -->
+                                                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5,0,0,3">
                                                                 <TextBlock FontSize="9" FontWeight="SemiBold"
                                                                            Foreground="{StaticResource TextSecondaryBrush}"
                                                                            VerticalAlignment="Center">
@@ -362,8 +360,9 @@
                                                                     <Run Text="{Binding Location.LocationNumber, Mode=OneWay}"/>
                                                                 </TextBlock>
                                                             </StackPanel>
-                                                            <!-- Panels for this location -->
-                                                            <ItemsControl ItemsSource="{Binding Location.Panels}">
+                                                            <!-- Panels for this location (bottom-aligned) -->
+                                                            <ItemsControl Grid.Row="1" ItemsSource="{Binding Location.Panels}"
+                                                                          VerticalAlignment="Bottom">
                                                                 <ItemsControl.ItemsPanel>
                                                                     <ItemsPanelTemplate>
                                                                         <WrapPanel Orientation="Horizontal"/>
@@ -468,18 +467,32 @@
                                                                                           FontSize="9" FontWeight="SemiBold"
                                                                                           Foreground="Black" Cursor="Hand"/>
 
-                                                                                <!-- Compact panel header (bottom) -->
+                                                                                <!-- Panel footer: name, module count, size selector -->
                                                                                 <Border CornerRadius="0,0,3,3"
                                                                                         Padding="4,3" Background="#E8E8E8">
-                                                                                    <TextBlock HorizontalAlignment="Center"
-                                                                                               FontSize="9"
-                                                                                               Foreground="{StaticResource TextPrimaryBrush}">
-                                                                                        <Run Text="{Binding PanelName, Mode=OneWay}" FontWeight="Bold"/>
-                                                                                        <Run Text="  "/>
-                                                                                        <Run Text="{Binding TotalModuleCount, Mode=OneWay}"/>
-                                                                                        <Run Text="/"/>
-                                                                                        <Run Text="{Binding PanelCapacity, Mode=OneWay}"/>
-                                                                                    </TextBlock>
+                                                                                    <StackPanel>
+                                                                                        <TextBlock HorizontalAlignment="Center"
+                                                                                                   FontSize="9"
+                                                                                                   Foreground="{StaticResource TextPrimaryBrush}">
+                                                                                            <Run Text="{Binding PanelName, Mode=OneWay}" FontWeight="Bold"/>
+                                                                                            <Run Text="  "/>
+                                                                                            <Run Text="{Binding TotalModuleCount, Mode=OneWay}"/>
+                                                                                            <Run Text="/"/>
+                                                                                            <Run Text="{Binding PanelCapacity, Mode=OneWay}"/>
+                                                                                        </TextBlock>
+                                                                                        <ComboBox ItemsSource="{Binding AvailablePanelSizes}"
+                                                                                                  DisplayMemberPath="DisplayName"
+                                                                                                  SelectedValuePath="Size"
+                                                                                                  SelectedValue="{Binding SelectedPanelSize}"
+                                                                                                  Height="18"
+                                                                                                  FontSize="9"
+                                                                                                  Padding="0"
+                                                                                                  HorizontalContentAlignment="Center"
+                                                                                                  VerticalContentAlignment="Center"
+                                                                                                  Margin="3,2,3,0"
+                                                                                                  Cursor="Hand"
+                                                                                                  ToolTip="Panel size (module slots)"/>
+                                                                                    </StackPanel>
                                                                                 </Border>
 
                                                                             </StackPanel>
@@ -488,9 +501,7 @@
                                                                 </ItemsControl.ItemTemplate>
                                                             </ItemsControl>
 
-                                                            <!-- Spacer below panels -->
-                                                            <Border Height="4"/>
-                                                        </StackPanel>
+                                                        </Grid>
                                                         </Border>
 
                                                         <!-- Vertical separator between locations -->
@@ -513,7 +524,7 @@
                                                     <Run Text=")"/>
                                                 </TextBlock>
                                                 <TextBlock FontSize="9" Foreground="#856404" TextWrapping="Wrap">
-                                                    These circuits are not assigned to a panel in Revit.
+                                                    These circuits are not assigned to a zone panel in Revit.
                                                 </TextBlock>
                                                 <ItemsControl ItemsSource="{Binding PanelTab.UnassignedCircuits}" Margin="0,4,0,0">
                                                     <ItemsControl.ItemTemplate>

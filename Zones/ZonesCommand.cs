@@ -45,10 +45,8 @@ namespace TurboSuite.Zones
 
                 var (keypadCount, twoGangKeypadCount) = collectorService.GetKeypadCounts(doc);
                 var (hybridRepeaterCount, hybridRepeaterPartNumber) = collectorService.GetHybridRepeaterInfo(doc);
-                var panelCatalogNumbers = collectorService.GetPanelCatalogNumbers(doc);
                 var viewModel = new ZonesMainViewModel(doc, circuits,
-                    keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
-                    panelCatalogNumbers);
+                    keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber);
 
                 var window = new TurboZonesWindow
                 {

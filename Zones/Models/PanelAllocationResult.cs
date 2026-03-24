@@ -65,9 +65,10 @@ namespace TurboSuite.Zones.Models
         public List<ModuleResult> VisibleModulesBottomUp =>
             Enumerable.Reverse(Modules.Take(PanelCapacity)).ToList();
 
-        public int? SpecialCompartmentPanelSize { get; set; }
-        public bool HasSpecialCompartment => SpecialCompartmentPanelSize.HasValue
-            && _selectedPanelSize == SpecialCompartmentPanelSize.Value;
+        public HashSet<int> SpecialCompartmentPanelSizes { get; set; }
+        public List<PanelSizeOption> AvailablePanelSizes { get; set; }
+        public bool HasSpecialCompartment => SpecialCompartmentPanelSizes != null
+            && SpecialCompartmentPanelSizes.Contains(_selectedPanelSize);
         public List<string> SpecialDeviceOptions { get; set; }
         public Dictionary<string, string> SpecialDevicePartNumbers { get; set; }
 
@@ -151,6 +152,12 @@ namespace TurboSuite.Zones.Models
         public int UsedSlots => CircuitNumbers.Count;
         public int SpareSlots => ModuleCapacity - CircuitNumbers.Count;
         public string CircuitNumbersDisplay => string.Join(", ", CircuitNumbers);
+    }
+
+    public class PanelSizeOption
+    {
+        public int Size { get; set; }
+        public string DisplayName { get; set; }
     }
 
     public class BomLineItem

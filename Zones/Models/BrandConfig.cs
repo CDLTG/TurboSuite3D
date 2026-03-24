@@ -17,7 +17,7 @@ namespace TurboSuite.Zones.Models
             Dictionary<string, string> modulePartNumbers,
             Dictionary<int, string> panelPartNumbers,
             Dictionary<string, string> specialDevices = null,
-            int? specialCompartmentPanelSize = null,
+            HashSet<int> specialCompartmentPanelSizes = null,
             Dictionary<int, string> wireHarnessPartNumbers = null,
             string powerSupplyPartNumber = null,
             Dictionary<string, int> moduleCapacityOverrides = null,
@@ -29,7 +29,7 @@ namespace TurboSuite.Zones.Models
             ModulePartNumbers = modulePartNumbers;
             PanelPartNumbers = panelPartNumbers;
             SpecialDevices = specialDevices;
-            SpecialCompartmentPanelSize = specialCompartmentPanelSize;
+            SpecialCompartmentPanelSizes = specialCompartmentPanelSizes;
             WireHarnessPartNumbers = wireHarnessPartNumbers;
             PowerSupplyPartNumber = powerSupplyPartNumber;
             ModuleCapacityOverrides = moduleCapacityOverrides;
@@ -37,11 +37,13 @@ namespace TurboSuite.Zones.Models
         }
 
         public Dictionary<string, string> SpecialDevices { get; }
-        public int? SpecialCompartmentPanelSize { get; }
+        public HashSet<int> SpecialCompartmentPanelSizes { get; }
         public Dictionary<int, string> WireHarnessPartNumbers { get; }
         public string PowerSupplyPartNumber { get; }
         public Dictionary<string, int> ModuleCapacityOverrides { get; }
         public Dictionary<string, string> PartDescriptions { get; }
+
+        public int DefaultPanelSize => SpecialCompartmentPanelSizes?.Max() ?? PanelSizes.Max();
 
         public string GetModulePartNumber(string dimmingType)
             => ModulePartNumbers.TryGetValue(dimmingType, out var pn) ? pn : dimmingType;
@@ -83,7 +85,7 @@ namespace TurboSuite.Zones.Models
             return PanelSizes.Min();
         }
 
-        public static BrandConfig Lutron { get; } = new BrandConfig("Lutron", 4, new[] { 8, 9 },
+        public static BrandConfig Lutron { get; } = new BrandConfig("Lutron", 4, new[] { 2, 4, 5, 8, 9 },
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "ELV", "LQSE-4A5-120-D" },
@@ -92,6 +94,9 @@ namespace TurboSuite.Zones.Models
             },
             new Dictionary<int, string>
             {
+                { 2, "PD2-16F-120" },
+                { 4, "PD4-36F-120" },
+                { 5, "PD5-36F-120" },
                 { 8, "PD8-59F-120" },
                 { 9, "PD9-59F-120" }
             },
@@ -101,9 +106,12 @@ namespace TurboSuite.Zones.Models
                 { "Digital I/O", "QSE-IO" },
                 { "DMX", "QSE-CI-DMX" }
             },
-            specialCompartmentPanelSize: 8,
+            specialCompartmentPanelSizes: new HashSet<int> { 4, 8 },
             wireHarnessPartNumbers: new Dictionary<int, string>
             {
+                { 2, "PDW-QS-4" },
+                { 4, "PDW-QS-4" },
+                { 5, "PDW-QS-5" },
                 { 8, "PDW-QS-8" },
                 { 9, "PDW-QS-9" }
             },
@@ -111,12 +119,17 @@ namespace TurboSuite.Zones.Models
             partDescriptions: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "HQP7-2", "HomeWorks QSX 2-Link Processor" },
+                { "PD2-16F-120", "2 Module Feed-Through DIN Rail Power Panel" },
+                { "PD4-36F-120", "4 Module DIN Rail Power Panel with LV compartment" },
+                { "PD5-36F-120", "5 Module Feed-Through DIN Rail Power Panel" },
                 { "PD8-59F-120", "8 Module DIN Rail Power Panel with LV compartment" },
                 { "PD9-59F-120", "9 Module DIN Rail Power Panel" },
                 { "LQSE-4S8-120-D", "DIN Rail Power Module (Switching)" },
                 { "LQSE-4T5-120-D", "DIN Rail Power Module (0-10V and Switching)" },
                 { "LQSE-4A5-120-D", "DIN Rail Power Module (LED+ Adaptive)" },
                 { "QSPS-DH-1-75-H", "DIN Rail Power Supply" },
+                { "PDW-QS-4", "QS Wire Harness (4-Module)" },
+                { "PDW-QS-5", "QS Wire Harness (5-Module)" },
                 { "PDW-QS-8", "QS Wire Harness (8-Module)" },
                 { "PDW-QS-9", "QS Wire Harness (9-Module)" },
                 { "QSE-IO", "QS Contact Closure Input/Output Interface" },
