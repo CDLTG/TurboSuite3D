@@ -19,7 +19,6 @@ namespace TurboSuite.Driver.Models
 
         public List<FixtureData> LightingFixtures { get; set; }
 
-        // Key = FamilyType name, Value = list of devices of that type
         public Dictionary<string, List<DeviceData>> DevicesByType { get; set; }
 
         public CircuitData()

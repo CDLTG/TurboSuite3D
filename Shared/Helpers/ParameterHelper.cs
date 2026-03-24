@@ -39,8 +39,7 @@ namespace TurboSuite.Shared.Helpers
         {
             if (element == null) return string.Empty;
 
-            // Type Mark is a TYPE parameter, not an instance parameter
-            // Get it from the element's type (FamilySymbol)
+            // Type Mark is a type parameter — read from FamilySymbol, not instance
             FamilyInstance familyInstance = element as FamilyInstance;
             if (familyInstance != null && familyInstance.Symbol != null)
             {
@@ -335,10 +334,7 @@ namespace TurboSuite.Shared.Helpers
             Parameter param = circuit.get_Parameter(BuiltInParameter.RBS_ELEC_APPARENT_LOAD);
             if (param != null && param.HasValue)
             {
-                // Get the value and convert from internal units (Watts) to VA
                 double internalValue = param.AsDouble();
-
-                // Convert from Revit internal units to Volt-Amperes
                 try
                 {
                     double displayValue = Autodesk.Revit.DB.UnitUtils.ConvertFromInternalUnits(

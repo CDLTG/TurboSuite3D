@@ -12,7 +12,6 @@ internal class BubbleSelectionFilter : ISelectionFilter
 
     public bool AllowElement(Element elem)
     {
-        // Accept tags on Lighting Fixtures
         if (elem is IndependentTag tag)
         {
             foreach (var id in tag.GetTaggedLocalElementIds())
@@ -24,7 +23,6 @@ internal class BubbleSelectionFilter : ISelectionFilter
             return false;
         }
 
-        // Accept Electrical Fixture instances
         if (elem is FamilyInstance fi &&
             fi.Category?.BuiltInCategory == BuiltInCategory.OST_ElectricalFixtures)
             return true;

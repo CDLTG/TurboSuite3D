@@ -24,7 +24,6 @@ public class CutsCommand : IExternalCommand
             return Result.Failed;
         }
 
-        // Collect unique FamilySymbols from placed lighting fixtures
         var symbolIds = new HashSet<ElementId>();
         var fixtures = new List<FixtureSpecModel>();
 

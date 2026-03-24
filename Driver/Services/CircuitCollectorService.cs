@@ -23,12 +23,10 @@ namespace TurboSuite.Driver.Services
 
             try
             {
-                // Step 1: Collect ALL Lighting Devices in the project
                 FilteredElementCollector deviceCollector = new FilteredElementCollector(doc)
                     .OfCategory(BuiltInCategory.OST_LightingDevices)
                     .OfClass(typeof(FamilyInstance));
 
-                // Step 2: Group devices by circuit number
                 Dictionary<string, List<FamilyInstance>> devicesByCircuit = new Dictionary<string, List<FamilyInstance>>();
 
                 foreach (FamilyInstance device in deviceCollector)
@@ -54,7 +52,6 @@ namespace TurboSuite.Driver.Services
                     }
                 }
 
-                // Step 3: Collect ALL Lighting Fixtures in the project
                 FilteredElementCollector fixtureCollector = new FilteredElementCollector(doc)
                     .OfCategory(BuiltInCategory.OST_LightingFixtures)
                     .OfClass(typeof(FamilyInstance));
@@ -88,12 +85,10 @@ namespace TurboSuite.Driver.Services
                     }
                 }
 
-                // Step 4: Get all electrical circuits
                 FilteredElementCollector circuitCollector = new FilteredElementCollector(doc)
                     .OfClass(typeof(ElectricalSystem))
                     .OfCategory(BuiltInCategory.OST_ElectricalCircuit);
 
-                // Step 5: Create CircuitData for circuits that have fixtures with Remote Power Supply
                 foreach (ElectricalSystem circuit in circuitCollector)
                 {
                     try

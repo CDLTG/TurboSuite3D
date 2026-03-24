@@ -25,7 +25,6 @@ public static class RegionCollectorService
         {
             if (region.IsMasking) continue;
 
-            // Filter by type name — only "Room Region"
             var typeId = region.GetTypeId();
             if (typeId == ElementId.InvalidElementId) continue;
             var regionType = doc.GetElement(typeId);

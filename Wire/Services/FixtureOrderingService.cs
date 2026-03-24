@@ -12,7 +12,6 @@ internal static class FixtureOrderingService
         if (fixtures.Count <= 2)
             return fixtures;
 
-        // Get locations for all fixtures
         var locations = new Dictionary<ElementId, XYZ>();
         foreach (FamilyInstance f in fixtures)
         {

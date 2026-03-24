@@ -26,7 +26,7 @@ namespace TurboSuite.Zones.Services
 
                     bool updated = false;
 
-                    // Write Updated Load Name to RBS_ELEC_CIRCUIT_NAME
+                    // Load Name
                     if (!string.IsNullOrWhiteSpace(circuitData.UpdatedLoadName))
                     {
                         Parameter loadNameParam = circuit.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_NAME);
@@ -37,7 +37,7 @@ namespace TurboSuite.Zones.Services
                         }
                     }
 
-                    // Write Circuit Comments to ALL_MODEL_INSTANCE_COMMENTS
+                    // Circuit Comments
                     Parameter commentsParam = circuit.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
                     if (commentsParam != null && !commentsParam.IsReadOnly)
                     {
@@ -45,7 +45,7 @@ namespace TurboSuite.Zones.Services
                         updated = true;
                     }
 
-                    // Write RoomOverride back to the "Room Region" FilledRegion Comments
+                    // Room override → FilledRegion Comments
                     if (!string.IsNullOrWhiteSpace(circuitData.RoomOverride)
                         && circuitData.RegionId != null
                         && circuitData.RegionId != ElementId.InvalidElementId)

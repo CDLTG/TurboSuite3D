@@ -36,7 +36,6 @@ namespace TurboSuite.Name
 
                 View view = doc.ActiveView;
 
-                // Load CAD Room Source settings
                 var settings = CadRoomSourceSettingsCache.Get(doc);
                 if (string.IsNullOrEmpty(settings.BlockName) && string.IsNullOrEmpty(settings.RoomNameLayer))
                 {
@@ -46,7 +45,6 @@ namespace TurboSuite.Name
                     return Result.Cancelled;
                 }
 
-                // Look up TextNoteType
                 var textNoteType = new FilteredElementCollector(doc)
                     .OfClass(typeof(TextNoteType))
                     .Cast<TextNoteType>()
@@ -67,13 +65,10 @@ namespace TurboSuite.Name
                     .FirstOrDefault(t => t.Name == DescriptionTextNoteTypeName);
                 ElementId descTypeId = descTextNoteType?.Id ?? ElementId.InvalidElementId;
 
-                // Collect Room Region filled regions
                 var regions = RegionCollectorService.CollectRegions(doc, view);
 
-                // Extract CAD room data
                 var cadRoomData = CadRoomExtractorService.ExtractRoomData(doc, view, settings);
 
-                // Show the TurboName window
                 var vm = new TurboNameViewModel
                 {
                     RegionCount = regions.Count,
@@ -107,7 +102,6 @@ namespace TurboSuite.Name
                     return Result.Cancelled;
                 }
 
-                // Assign room names inside a single transaction
                 Models.NamingResult result;
                 using (var t = new Transaction(doc, "TurboName - Assign Room Names"))
                 {
@@ -117,7 +111,6 @@ namespace TurboSuite.Name
                     t.Commit();
                 }
 
-                // Summary
                 var summary = $"TurboName Complete\n\n" +
                     $"Processed: {result.Processed}\n" +
                     $"Skipped (existing Comments): {result.Skipped}\n" +

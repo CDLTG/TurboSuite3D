@@ -96,7 +96,6 @@ public class TurboCutsViewModel : ViewModelBase
         _companyPhone = settings.CompanyPhone;
         _companyWebsite = settings.CompanyWebsite;
 
-        // Restore persisted local PDF paths
         foreach (var fixture in Fixtures)
         {
             if (settings.LocalPdfPaths.TryGetValue(fixture.TypeMark, out var path) && File.Exists(path))

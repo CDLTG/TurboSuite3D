@@ -22,33 +22,28 @@ namespace TurboSuite.Driver.Services
             if (fixtures == null || fixtures.Count == 0)
                 return null;
 
-            // Filter to fixtures that have EffectiveWattage > 0
             var fixturesWithPower = fixtures.Where(f => f.EffectiveWattage > 0).ToList();
             if (fixturesWithPower.Count == 0)
                 return null;
 
-            // Collect distinct fixture manufacturers for the circuit
             var fixtureManufacturers = new HashSet<string>(
                 fixturesWithPower
                     .Where(f => !string.IsNullOrWhiteSpace(f.Manufacturer))
                     .Select(f => f.Manufacturer),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Collect distinct fixture dimming protocols for the circuit
             var fixtureDimmingProtocols = new HashSet<string>(
                 fixturesWithPower
                     .Where(f => !string.IsNullOrWhiteSpace(f.DimmingProtocol))
                     .Select(f => f.DimmingProtocol),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Collect distinct fixture voltages for the circuit
             var fixtureVoltages = new HashSet<string>(
                 fixturesWithPower
                     .Where(f => !string.IsNullOrWhiteSpace(f.Voltage))
                     .Select(f => f.Voltage),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Filter to valid driver candidates
             var validCandidates = driverCandidates?.Where(c => c.IsValidDriver).ToList()
                 ?? new List<DriverCandidateInfo>();
 
@@ -108,7 +103,6 @@ namespace TurboSuite.Driver.Services
                 };
             }
 
-            // Build recommendation from best candidate
             var best = bestEval;
 
             // Assign driver indices to sub-drivers (unless already assigned by fixture-limited packing)

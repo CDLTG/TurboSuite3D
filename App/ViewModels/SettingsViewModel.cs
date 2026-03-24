@@ -59,7 +59,6 @@ public class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _switchFamiliesText, value);
     }
 
-    // CAD Room Source properties
     public bool IsBlockMode
     {
         get => _isBlockMode;

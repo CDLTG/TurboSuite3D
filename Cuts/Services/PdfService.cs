@@ -104,7 +104,6 @@ public static class PdfService
     {
         double pageWidth = page.Width.Point;
 
-        // White background
         gfx.DrawRectangle(XBrushes.White, 0, 0, pageWidth, HeaderHeight);
 
         // Left: logo — top-aligned with project name
@@ -139,7 +138,6 @@ public static class PdfService
         gfx.DrawString(typeMark, fontTypeMark, XBrushes.Black,
             new XPoint(rightEdge, 24), XStringFormats.TopRight);
 
-        // First horizontal rule
         var pen = new XPen(XColor.FromGrayScale(0.75), 0.25);
         gfx.DrawLine(pen, Margin, 64, pageWidth - Margin, 64);
 
@@ -150,7 +148,6 @@ public static class PdfService
                 new XPoint(rightEdge, 63.6), XStringFormats.TopRight);
         }
 
-        // Second horizontal rule
         gfx.DrawLine(pen, Margin, HeaderHeight - 2, pageWidth - Margin, HeaderHeight - 2);
     }
 
@@ -161,7 +158,6 @@ public static class PdfService
 
         gfx.DrawRectangle(XBrushes.White, 0, fTop, w, FooterHeight);
 
-        // Single hairline
         gfx.DrawLine(new XPen(XColor.FromGrayScale(0.8), 0.25),
             Margin, fTop + 2, w - Margin, fTop + 2);
 

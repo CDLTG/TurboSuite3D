@@ -20,7 +20,6 @@ namespace TurboSuite.Number
         {
             try
             {
-                // If window is already open, bring it to front
                 if (_activeWindow != null)
                 {
                     _activeWindow.Activate();

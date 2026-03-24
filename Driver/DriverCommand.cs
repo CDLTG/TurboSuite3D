@@ -35,7 +35,8 @@ namespace TurboSuite.Driver
                     return Result.Failed;
                 }
 
-                // Step 1: Get pre-selected lighting fixtures with Remote Power Supply
+                // Pipeline: select RPS fixtures → get/create circuit → collect circuit data →
+                // recommend driver → delete existing devices → split linear fixtures → deploy → tag
                 var selectedIds = uidoc.Selection.GetElementIds();
                 var rpsFixtures = new List<FamilyInstance>();
 
@@ -58,7 +59,6 @@ namespace TurboSuite.Driver
                     return Result.Cancelled;
                 }
 
-                // Step 2: Determine the circuit — find existing or create new
                 ElectricalSystem circuit = GetOrCreateCircuit(doc, rpsFixtures);
                 if (circuit == null)
                 {
@@ -67,7 +67,6 @@ namespace TurboSuite.Driver
                     return Result.Failed;
                 }
 
-                // Step 3: Build circuit data from the full circuit
                 var circuitService = new CircuitCollectorService();
                 CircuitData circuitData = circuitService.GetCircuitData(doc, circuit);
 
@@ -78,7 +77,6 @@ namespace TurboSuite.Driver
                     return Result.Cancelled;
                 }
 
-                // Step 4: Get driver candidates and recommendation
                 var typeService = new FamilyTypeCollectorService();
                 var availableTypes = typeService.GetAllLightingDeviceTypes(doc);
                 var driverCandidates = typeService.GetDriverCandidates(availableTypes);
@@ -116,7 +114,7 @@ namespace TurboSuite.Driver
                     return Result.Cancelled;
                 }
 
-                // Step 5: Preserve Switch ID, then delete existing power supplies
+                // Preserve Switch ID before deleting existing power supplies
                 string switchId = CircuitCollectorService.GetCircuitSwitchId(doc, circuitData);
                 if (string.IsNullOrEmpty(switchId))
                     switchId = "\u2014"; // em dash default
@@ -143,7 +141,7 @@ namespace TurboSuite.Driver
                     }
                 }
 
-                // Step 5.5: Physically split line-based fixtures if enabled
+                // Split line-based fixtures into sub-driver segments if enabled
                 FixtureSplitService.SplitResult splitResult = null;
                 var generalSettings = GeneralSettingsCache.Get(doc);
                 if (generalSettings.AutoSplitFixtures)
@@ -178,7 +176,6 @@ namespace TurboSuite.Driver
                     }
                 }
 
-                // Step 6: Build single-circuit deployment plan (full recommended count)
                 var plan = new DeploymentPlan();
                 plan.Circuits.Add(new CircuitDeployment
                 {
@@ -190,11 +187,9 @@ namespace TurboSuite.Driver
                     Assignments = recommendation.SubDriverAssignments
                 });
 
-                // Step 7: Execute deployment (pick point → place → connect → set Switch ID)
                 var executor = new DeploymentExecutor();
                 executor.Execute(uidoc, plan);
 
-                // Step 8: Tag split fixtures with the original linear length tag
                 if (splitResult != null
                     && splitResult.LinearTagTypeId != ElementId.InvalidElementId
                     && splitResult.SplitFixtureIds.Count > 0)
@@ -321,7 +316,6 @@ namespace TurboSuite.Driver
         /// </summary>
         private static ElectricalSystem GetOrCreateCircuit(Document doc, List<FamilyInstance> fixtures)
         {
-            // Collect existing circuits from fixtures
             var circuitSet = new Dictionary<ElementId, ElectricalSystem>();
             var uncircuitedFixtures = new List<FamilyInstance>();
 
@@ -348,11 +342,11 @@ namespace TurboSuite.Driver
                 }
             }
 
-            // Case: All fixtures already on the same circuit
+            // All on same circuit
             if (circuitSet.Count == 1 && uncircuitedFixtures.Count == 0)
                 return circuitSet.Values.First();
 
-            // Case: Fixtures on multiple different circuits
+            // Multiple circuits — ambiguous
             if (circuitSet.Count > 1)
             {
                 TaskDialog.Show("TurboDriver",
@@ -361,7 +355,7 @@ namespace TurboSuite.Driver
                 return null;
             }
 
-            // Case: Some fixtures on a circuit, some not — add uncircuited to existing
+            // Mixed: add uncircuited fixtures to the existing circuit
             if (circuitSet.Count == 1 && uncircuitedFixtures.Count > 0)
             {
                 var existingCircuit = circuitSet.Values.First();
@@ -377,12 +371,10 @@ namespace TurboSuite.Driver
                 return existingCircuit;
             }
 
-            // Case: No fixtures on any circuit — create a new one
             using (Transaction t = new Transaction(doc, "TurboDriver — Create electrical circuit"))
             {
                 t.Start();
 
-                // Create circuit from all fixture element IDs
                 var fixtureIds = fixtures.Select(f => f.Id).ToList();
                 var newCircuit = ElectricalSystem.Create(doc, fixtureIds, ElectricalSystemType.PowerCircuit);
                 if (newCircuit == null)

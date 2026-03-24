@@ -21,7 +21,6 @@ namespace TurboSuite.Zones.Services
                 var lightingCatId = new ElementId(BuiltInCategory.OST_LightingFixtures);
                 var electricalCatId = new ElementId(BuiltInCategory.OST_ElectricalFixtures);
 
-                // Collect all electrical circuits
                 var circuits = new FilteredElementCollector(doc)
                     .OfClass(typeof(ElectricalSystem))
                     .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
@@ -58,14 +57,12 @@ namespace TurboSuite.Zones.Services
                         if (!string.IsNullOrEmpty(dimmingType) && dimmingType.Contains(';'))
                             dimmingType = dimmingType.Substring(0, dimmingType.IndexOf(';')).Trim();
 
-                        // Read current Load Name from Revit
                         string currentLoadName = ParameterHelper.GetLoadName(circuit);
 
                         // Resolve room name from first fixture (falls back to region Comments in 2D)
                         string roomName = roomCache.FindRoomName(fixtures[0]);
                         ElementId regionId = roomCache.FindRegionId(fixtures[0]);
 
-                        // Read intermediate label sources
                         string circuitComments = ParameterHelper.GetCircuitComments(circuit);
 
                         string fixtureComments = string.Join(", ",

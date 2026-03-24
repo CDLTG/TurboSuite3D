@@ -27,7 +27,7 @@ public class TurboSuiteApplication : IExternalApplication
             RibbonPanel debugPanel = application.CreateRibbonPanel("TurboSuite", "Debug");
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
-            // Settings
+            // ── Settings panel ──
             CreateButtonNoIcon(settingsPanel, assemblyPath,
                 "TurboSettings",
                 "  Settings   ",
@@ -35,7 +35,6 @@ public class TurboSuiteApplication : IExternalApplication
                 "Configure TurboSuite settings",
                 "Opens a dialog to configure which family names are treated as wall sconces, receptacles, and vertical electrical fixtures.");
 
-            // TurboTab: document tab coloring toggle
             CreateButtonNoIcon(settingsPanel, assemblyPath,
                 "TurboTab",
                 "    Turbo    \n     Tab     ",
@@ -49,7 +48,7 @@ public class TurboSuiteApplication : IExternalApplication
                 application.Idling += OnIdlingStartTabColoring;
             }
 
-            // Commands: Compact, Tag, Wire, Bubble
+            // ── Commands panel ──
             CreateButtonNoIcon(commandsPanel, assemblyPath,
                 "TurboCompact",
                 "    Turbo    \n   Compact   ",
@@ -78,7 +77,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "Suggested shortcut: TB\nCreate switchleg tag and wire for a lighting fixture",
                 "Creates a switchleg tag and wire connection for the selected lighting fixture tag. Works in floor plan and ceiling plan views.");
 
-            // Utilities: Name, Zones, Number, Driver
+            // ── Utilities panel ──
             CreateButtonNoIcon(utilitiesPanel, assemblyPath,
                 "TurboName",
                 "    Turbo    \n    Name     ",
@@ -114,7 +113,6 @@ public class TurboSuiteApplication : IExternalApplication
                 "Generate merged cut sheet PDF",
                 "Collects spec sheet PDFs from lighting fixture types, stamps company header/footer, and merges into a single bookmarked PDF.");
 
-            // TurboDriver: headless per-fixture power supply deployment
             CreateButtonNoIcon(commandsPanel, assemblyPath,
                 "TurboDriver",
                 "    Turbo    \n   Driver    ",
@@ -122,7 +120,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
                 "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.");
 
-            // TurboSpike: diagnostic/troubleshooting command
+            // ── Debug panel ──
             CreateButtonNoIcon(debugPanel, assemblyPath,
                 "TurboSpike",
                 "    Turbo    \n    Spike    ",
@@ -183,7 +181,6 @@ public class TurboSuiteApplication : IExternalApplication
 
         try
         {
-            // Check if a previous staged update is already waiting
             if (UpdateService.HasStagedUpdate())
             {
                 _pendingUpdateVersion = UpdateService.GetStagedVersion();
@@ -194,13 +191,11 @@ public class TurboSuiteApplication : IExternalApplication
                 }
             }
 
-            // Check server for new version
             using var cts = new CancellationTokenSource(UpdateConstants.CheckTimeoutMs);
             var newVersion = await UpdateService.CheckForUpdateAsync(cts.Token);
 
             if (newVersion is null) return;
 
-            // Stage the update in the background
             await Task.Run(() => UpdateService.StageUpdate());
 
             _pendingUpdateVersion = newVersion;

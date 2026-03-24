@@ -38,7 +38,6 @@ namespace TurboSuite.Driver.ViewModels
             _updateService = new ElementUpdateService(doc, uidoc);
             _driverCandidates = driverCandidates;
 
-            // Filter available types to only valid drivers for combo boxes
             var validDriverTypeIds = new HashSet<ElementId>(
                 driverCandidates.Where(c => c.IsValidDriver).Select(c => c.FamilySymbol.Id));
             AvailableLightingDeviceTypes = availableTypes
@@ -56,21 +55,18 @@ namespace TurboSuite.Driver.ViewModels
             {
                 CircuitViewModel circuitVM = new CircuitViewModel(data, _driverCandidates);
 
-                // Collect circuit fixture dimming protocols
                 var circuitDimmingProtocols = new HashSet<string>(
                     data.LightingFixtures
                         .Where(f => !string.IsNullOrWhiteSpace(f.DimmingProtocol))
                         .Select(f => f.DimmingProtocol),
                     StringComparer.OrdinalIgnoreCase);
 
-                // Collect circuit fixture voltages
                 var circuitVoltages = new HashSet<string>(
                     data.LightingFixtures
                         .Where(f => !string.IsNullOrWhiteSpace(f.Voltage))
                         .Select(f => f.Voltage),
                     StringComparer.OrdinalIgnoreCase);
 
-                // Get the recommended candidate from the circuit's recommendation
                 DriverCandidateInfo recommendedCandidate = circuitVM.DriverRecommendation?.RecommendedCandidate;
                 bool hasMatch = circuitVM.DriverRecommendation?.HasMatch ?? false;
 
