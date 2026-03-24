@@ -4,6 +4,7 @@ obj/
 
 # Visual Studio
 .vs/
+Properties/
 *.user
 *.suo
 *.cache
