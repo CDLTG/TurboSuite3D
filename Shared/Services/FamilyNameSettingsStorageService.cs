@@ -47,11 +47,11 @@ public static class FamilyNameSettingsStorageService
 
         return new FamilyNameSettings
         {
-            WallSconceFamilies = ToHashSet(entity.Get<IList<string>>(WallSconceField)),
-            ReceptacleFamilies = ToHashSet(entity.Get<IList<string>>(ReceptacleField)),
-            ElectricalVerticalFamilies = ToHashSet(entity.Get<IList<string>>(ElectricalVerticalField)),
-            VerticalFamilies = ToHashSet(entity.Get<IList<string>>(VerticalField)),
-            SwitchFamilies = ToHashSet(entity.Get<IList<string>>(SwitchField))
+            WallSconceFamilies = GetArrayField(entity, schema, WallSconceField),
+            ReceptacleFamilies = GetArrayField(entity, schema, ReceptacleField),
+            ElectricalVerticalFamilies = GetArrayField(entity, schema, ElectricalVerticalField),
+            VerticalFamilies = GetArrayField(entity, schema, VerticalField),
+            SwitchFamilies = GetArrayField(entity, schema, SwitchField)
         };
     }
 
@@ -64,14 +64,27 @@ public static class FamilyNameSettingsStorageService
 
         var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
         var entity = new Entity(schema);
-        entity.Set(WallSconceField, (IList<string>)settings.WallSconceFamilies.ToList());
-        entity.Set(ReceptacleField, (IList<string>)settings.ReceptacleFamilies.ToList());
-        entity.Set(ElectricalVerticalField, (IList<string>)settings.ElectricalVerticalFamilies.ToList());
-        entity.Set(VerticalField, (IList<string>)settings.VerticalFamilies.ToList());
-        entity.Set(SwitchField, (IList<string>)settings.SwitchFamilies.ToList());
+        SetArrayField(entity, schema, WallSconceField, settings.WallSconceFamilies);
+        SetArrayField(entity, schema, ReceptacleField, settings.ReceptacleFamilies);
+        SetArrayField(entity, schema, ElectricalVerticalField, settings.ElectricalVerticalFamilies);
+        SetArrayField(entity, schema, VerticalField, settings.VerticalFamilies);
+        SetArrayField(entity, schema, SwitchField, settings.SwitchFamilies);
         storage.SetEntity(entity);
 
         tx.Commit();
+    }
+
+    private static HashSet<string> GetArrayField(Entity entity, Schema schema, string fieldName)
+    {
+        if (schema.GetField(fieldName) == null)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return ToHashSet(entity.Get<IList<string>>(fieldName));
+    }
+
+    private static void SetArrayField(Entity entity, Schema schema, string fieldName, HashSet<string> values)
+    {
+        if (schema.GetField(fieldName) != null)
+            entity.Set(fieldName, (IList<string>)values.ToList());
     }
 
     private static HashSet<string> ToHashSet(IList<string>? list)

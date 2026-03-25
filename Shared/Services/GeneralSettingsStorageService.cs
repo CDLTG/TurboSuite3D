@@ -39,8 +39,8 @@ public static class GeneralSettingsStorageService
 
         return new GeneralSettings
         {
-            ShowCircuitCommentsDialog = entity.Get<bool>(ShowCommentsDialogField),
-            AutoSplitFixtures = entity.Get<bool>(AutoSplitFixturesField)
+            ShowCircuitCommentsDialog = schema.GetField(ShowCommentsDialogField) != null && entity.Get<bool>(ShowCommentsDialogField),
+            AutoSplitFixtures = schema.GetField(AutoSplitFixturesField) != null && entity.Get<bool>(AutoSplitFixturesField)
         };
     }
 
@@ -53,8 +53,10 @@ public static class GeneralSettingsStorageService
 
         var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
         var entity = new Entity(schema);
-        entity.Set(ShowCommentsDialogField, settings.ShowCircuitCommentsDialog);
-        entity.Set(AutoSplitFixturesField, settings.AutoSplitFixtures);
+        if (schema.GetField(ShowCommentsDialogField) != null)
+            entity.Set(ShowCommentsDialogField, settings.ShowCircuitCommentsDialog);
+        if (schema.GetField(AutoSplitFixturesField) != null)
+            entity.Set(AutoSplitFixturesField, settings.AutoSplitFixtures);
         storage.SetEntity(entity);
 
         tx.Commit();

@@ -49,13 +49,27 @@ public static class CadRoomSourceStorageService
 
         return new CadRoomSourceSettings
         {
-            Mode = entity.Get<string>(ModeField) ?? "Block",
-            BlockName = entity.Get<string>(BlockNameField) ?? "",
-            RoomNameTags = entity.Get<IList<string>>(RoomNameTagsField)?.ToList() ?? new List<string>(),
-            CeilingHeightTag = entity.Get<string>(CeilingHeightTagField) ?? "",
-            RoomNameLayer = entity.Get<string>(RoomNameLayerField) ?? "",
-            CeilingHeightLayer = entity.Get<string>(CeilingHeightLayerField) ?? ""
+            Mode = GetStringField(entity, schema, ModeField, "Block"),
+            BlockName = GetStringField(entity, schema, BlockNameField, ""),
+            RoomNameTags = schema.GetField(RoomNameTagsField) != null
+                ? entity.Get<IList<string>>(RoomNameTagsField)?.ToList() ?? new List<string>()
+                : new List<string>(),
+            CeilingHeightTag = GetStringField(entity, schema, CeilingHeightTagField, ""),
+            RoomNameLayer = GetStringField(entity, schema, RoomNameLayerField, ""),
+            CeilingHeightLayer = GetStringField(entity, schema, CeilingHeightLayerField, "")
         };
+    }
+
+    private static string GetStringField(Entity entity, Schema schema, string fieldName, string defaultValue)
+    {
+        if (schema.GetField(fieldName) == null) return defaultValue;
+        return entity.Get<string>(fieldName) ?? defaultValue;
+    }
+
+    private static void SetStringField(Entity entity, Schema schema, string fieldName, string value)
+    {
+        if (schema.GetField(fieldName) != null)
+            entity.Set(fieldName, value);
     }
 
     public static void Save(Document doc, CadRoomSourceSettings settings)
@@ -67,12 +81,13 @@ public static class CadRoomSourceStorageService
 
         var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
         var entity = new Entity(schema);
-        entity.Set(ModeField, settings.Mode ?? "Block");
-        entity.Set(BlockNameField, settings.BlockName ?? "");
-        entity.Set(RoomNameTagsField, (IList<string>)(settings.RoomNameTags ?? new List<string>()));
-        entity.Set(CeilingHeightTagField, settings.CeilingHeightTag ?? "");
-        entity.Set(RoomNameLayerField, settings.RoomNameLayer ?? "");
-        entity.Set(CeilingHeightLayerField, settings.CeilingHeightLayer ?? "");
+        SetStringField(entity, schema, ModeField, settings.Mode ?? "Block");
+        SetStringField(entity, schema, BlockNameField, settings.BlockName ?? "");
+        if (schema.GetField(RoomNameTagsField) != null)
+            entity.Set(RoomNameTagsField, (IList<string>)(settings.RoomNameTags ?? new List<string>()));
+        SetStringField(entity, schema, CeilingHeightTagField, settings.CeilingHeightTag ?? "");
+        SetStringField(entity, schema, RoomNameLayerField, settings.RoomNameLayer ?? "");
+        SetStringField(entity, schema, CeilingHeightLayerField, settings.CeilingHeightLayer ?? "");
         storage.SetEntity(entity);
 
         tx.Commit();
