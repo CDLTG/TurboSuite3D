@@ -18,10 +18,18 @@ Platform target is **x64**. The solution contains two projects: `TurboSuite.cspr
 
 ## Git Repository
 
-- **Remote:** GitHub (CDLTG/TurboSuite3D), default branch `main`
+- **Remote:** GitHub (CDLTG/TurboSuite3D), default branch `main`, **public repo** (GPL v3)
 - **Ignored:** `Specs/` (local-only reference docs), `bin/`, `obj/`, `.vs/`, `.idea/`
 - Do NOT commit files from `Specs/` — they are historical reference documents kept locally only.
 - Always commit and push `.gitignore` changes so they take effect on GitHub.
+
+### Public Repository Security
+
+**This repository is public.** Never introduce code that could become a security risk when the source is visible:
+- **No secrets**: Never hardcode passwords, API keys, tokens, credentials, or real server paths/UNC paths. Use placeholders or environment variables.
+- **No internal infrastructure details**: Do not commit real server names, IP addresses, network shares, or internal URLs.
+- **No sensitive data**: Do not commit user data, company-specific configuration, or proprietary file paths.
+- **Safe coding**: Sanitize any user input, avoid path traversal vulnerabilities, and follow secure coding practices for file I/O and network operations.
 
 ## Deployment
 
