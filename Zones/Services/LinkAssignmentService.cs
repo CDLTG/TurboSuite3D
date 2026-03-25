@@ -18,11 +18,9 @@ namespace TurboSuite.Zones.Services
         {
             bool hasWirelessDevices = hybridRepeaterCount > 0;
 
-            // Build processor links from panels that have Processor selected
-            var processorPanels = allPanels
-                .Where(p => p.HasSpecialCompartment
-                    && string.Equals(p.SelectedSpecialDevice, "Processor", StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            // Build processor links from panels marked as processors
+            // (IsProcessor is set by the ViewModel, checking both special device slots)
+            var processorPanels = allPanels.Where(p => p.IsProcessor).ToList();
 
             if (processorPanels.Count == 0)
                 return;
@@ -86,7 +84,7 @@ namespace TurboSuite.Zones.Services
             // Track which QS link each panel is assigned to (for special device counting)
             var panelLinkMap = new Dictionary<PanelResult, ProcessorLink>();
 
-            // Auto-assign all non-processor panels to QS links only
+            // Auto-assign all panels (including processor panels) to QS links
             if (qsLinks.Count > 0)
             {
                 int linkIndex = 0;
@@ -131,12 +129,20 @@ namespace TurboSuite.Zones.Services
             foreach (var panel in allPanels)
             {
                 if (!panel.HasSpecialCompartment) continue;
-                string selected = panel.SelectedSpecialDevice;
-                if (string.Equals(selected, "Digital I/O", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(selected, "DMX", StringComparison.OrdinalIgnoreCase))
+
+                // Check both slots (slot 2 exists on dual-compartment panels like LV21)
+                var slots = new List<string> { panel.SelectedSpecialDevice };
+                if (panel.HasDualSpecialCompartment)
+                    slots.Add(panel.SelectedSpecialDevice2);
+
+                foreach (string selected in slots)
                 {
-                    if (panelLinkMap.TryGetValue(panel, out var link))
-                        linkDevices[link] += 1;
+                    if (string.Equals(selected, "Digital I/O", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(selected, "DMX", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (panelLinkMap.TryGetValue(panel, out var link))
+                            linkDevices[link] += 1;
+                    }
                 }
             }
 

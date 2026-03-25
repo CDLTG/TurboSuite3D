@@ -42,11 +42,22 @@ namespace TurboSuite.Zones.Services
                         // (avoids grouping by circuit number string, which fails when
                         // multiple circuits share the same number like "<unnamed>")
                         var fixtures = new List<FamilyInstance>();
+                        bool hasSwitchElement = false;
                         foreach (Element el in circuit.Elements)
                         {
-                            if (el is FamilyInstance fi &&
-                                (fi.Category.Id == lightingCatId || fi.Category.Id == electricalCatId))
-                                fixtures.Add(fi);
+                            if (el is FamilyInstance fi)
+                            {
+                                if (fi.Category.Id == lightingCatId || fi.Category.Id == electricalCatId)
+                                {
+                                    fixtures.Add(fi);
+                                    if (fi.Category.Id == electricalCatId)
+                                    {
+                                        string familyName = fi.Symbol?.Family?.Name ?? "";
+                                        if (familyName.IndexOf("switch", StringComparison.OrdinalIgnoreCase) >= 0)
+                                            hasSwitchElement = true;
+                                    }
+                                }
+                            }
                         }
                         if (fixtures.Count == 0)
                             continue;
@@ -96,7 +107,8 @@ namespace TurboSuite.Zones.Services
                             FixtureComments = fixtureComments ?? string.Empty,
                             LoadClassificationName = loadClassificationName ?? string.Empty,
                             UpdatedLoadName = updatedLoadName,
-                            LabelSource = labelSource
+                            LabelSource = labelSource,
+                            IsWiredToSwitch = hasSwitchElement
                         });
                     }
                     catch { continue; }

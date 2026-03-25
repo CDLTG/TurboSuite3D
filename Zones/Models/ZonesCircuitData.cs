@@ -26,5 +26,6 @@ namespace TurboSuite.Zones.Models
         public ElementId RegionId { get; set; }
         public string UpdatedLoadName { get; set; }
         public LabelSource LabelSource { get; set; }
+        public bool IsWiredToSwitch { get; set; }
     }
 }

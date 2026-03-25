@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
-using System.Windows.Input;
 using System.Windows.Threading;
 using Autodesk.Revit.DB;
 using TurboSuite.Zones.Models;
@@ -137,7 +136,7 @@ namespace TurboSuite.Zones.ViewModels
             var circuitData = Circuits.Select(c => c.Data).ToList();
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
-                circuitData, _currentBrand, _specialDeviceSelections, _panelSizeOverrides);
+                circuitData, _currentBrand, _panelSizeOverrides);
 
             AllocationResult = result;
             UnassignedCircuits = new ObservableCollection<ZonesCircuitData>(unassigned);
@@ -203,6 +202,13 @@ namespace TurboSuite.Zones.ViewModels
                     {
                         settings.SpecialDeviceSelections[panel.PanelName] = panel.SelectedSpecialDevice;
                     }
+
+                    if (panel.HasDualSpecialCompartment
+                        && !string.IsNullOrEmpty(panel.SelectedSpecialDevice2)
+                        && panel.SelectedSpecialDevice2 != "Empty")
+                    {
+                        settings.SpecialDeviceSelections[panel.PanelName + "#2"] = panel.SelectedSpecialDevice2;
+                    }
                 }
             }
 
@@ -233,7 +239,8 @@ namespace TurboSuite.Zones.ViewModels
 
         private void OnPanelPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(PanelResult.SelectedSpecialDevice))
+            if (e.PropertyName == nameof(PanelResult.SelectedSpecialDevice)
+                || e.PropertyName == nameof(PanelResult.SelectedSpecialDevice2))
             {
                 RebuildLinkAssignments();
                 RebuildBom();
@@ -263,10 +270,17 @@ namespace TurboSuite.Zones.ViewModels
             var bom = new List<BomLineItem>();
             var allPanels = _allocationResult.AllPanels;
 
-            // Count processors placed in panel dropdowns
-            int processorCount = allPanels.Count(p =>
-                p.HasSpecialCompartment
-                && string.Equals(p.SelectedSpecialDevice, "Processor", StringComparison.OrdinalIgnoreCase));
+            // Count processors placed in panel dropdowns (both slots)
+            int processorCount = 0;
+            foreach (var panel in allPanels)
+            {
+                if (!panel.HasSpecialCompartment) continue;
+                if (string.Equals(panel.SelectedSpecialDevice, "Processor", StringComparison.OrdinalIgnoreCase))
+                    processorCount++;
+                if (panel.HasDualSpecialCompartment
+                    && string.Equals(panel.SelectedSpecialDevice2, "Processor", StringComparison.OrdinalIgnoreCase))
+                    processorCount++;
+            }
 
             // Calculate recommended processors from total device/load requirements
             int recommendedProcessors = CalculateRecommendedProcessors(allPanels);
@@ -405,15 +419,23 @@ namespace TurboSuite.Zones.ViewModels
                 foreach (var panel in allPanels)
                 {
                     if (!panel.HasSpecialCompartment) continue;
-                    string selected = panel.SelectedSpecialDevice;
-                    if (string.IsNullOrEmpty(selected)
-                        || string.Equals(selected, "Empty", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase))
-                        continue;
 
-                    if (!specialCounts.ContainsKey(selected))
-                        specialCounts[selected] = 0;
-                    specialCounts[selected]++;
+                    // Count from both slots
+                    var slots = new List<string> { panel.SelectedSpecialDevice };
+                    if (panel.HasDualSpecialCompartment)
+                        slots.Add(panel.SelectedSpecialDevice2);
+
+                    foreach (string selected in slots)
+                    {
+                        if (string.IsNullOrEmpty(selected)
+                            || string.Equals(selected, "Empty", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (!specialCounts.ContainsKey(selected))
+                            specialCounts[selected] = 0;
+                        specialCounts[selected]++;
+                    }
                 }
 
                 foreach (var kvp in specialCounts)
@@ -484,12 +506,14 @@ namespace TurboSuite.Zones.ViewModels
             bool isLutron = string.Equals(_currentBrand?.Name, "Lutron", StringComparison.OrdinalIgnoreCase);
             var allPanels = _allocationResult.AllPanels;
 
-            // Set IsLutron and IsProcessor on each panel
+            // Set IsProcessor on each panel
             foreach (var panel in allPanels)
             {
-                panel.IsLutron = isLutron;
-                panel.IsProcessor = panel.HasSpecialCompartment
+                bool hasProc = panel.HasSpecialCompartment
                     && string.Equals(panel.SelectedSpecialDevice, "Processor", StringComparison.OrdinalIgnoreCase);
+                bool hasProc2 = panel.HasDualSpecialCompartment
+                    && string.Equals(panel.SelectedSpecialDevice2, "Processor", StringComparison.OrdinalIgnoreCase);
+                panel.IsProcessor = hasProc || hasProc2;
             }
 
             if (!isLutron)
@@ -543,6 +567,19 @@ namespace TurboSuite.Zones.ViewModels
                 {
                     _specialDeviceSelections.Remove(panel.PanelName);
                 }
+
+                // Second slot (dual compartment panels like LV21)
+                string slot2Key = panel.PanelName + "#2";
+                if (panel.HasDualSpecialCompartment
+                    && !string.IsNullOrEmpty(panel.SelectedSpecialDevice2)
+                    && panel.SelectedSpecialDevice2 != "Empty")
+                {
+                    _specialDeviceSelections[slot2Key] = panel.SelectedSpecialDevice2;
+                }
+                else
+                {
+                    _specialDeviceSelections.Remove(slot2Key);
+                }
             }
         }
 
@@ -557,6 +594,15 @@ namespace TurboSuite.Zones.ViewModels
                     && panel.SpecialDeviceOptions.Contains(device))
                 {
                     panel.SelectedSpecialDevice = device;
+                }
+
+                // Second slot (dual compartment panels like LV21)
+                if (panel.HasDualSpecialCompartment
+                    && _specialDeviceSelections.TryGetValue(panel.PanelName + "#2", out var device2)
+                    && panel.SpecialDeviceOptions != null
+                    && panel.SpecialDeviceOptions.Contains(device2))
+                {
+                    panel.SelectedSpecialDevice2 = device2;
                 }
             }
         }
@@ -573,10 +619,17 @@ namespace TurboSuite.Zones.ViewModels
             foreach (var panel in allPanels)
             {
                 if (!panel.HasSpecialCompartment) continue;
-                string selected = panel.SelectedSpecialDevice;
-                if (string.Equals(selected, "Digital I/O", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(selected, "DMX", StringComparison.OrdinalIgnoreCase))
-                    specialDeviceCount++;
+
+                var slots = new List<string> { panel.SelectedSpecialDevice };
+                if (panel.HasDualSpecialCompartment)
+                    slots.Add(panel.SelectedSpecialDevice2);
+
+                foreach (string selected in slots)
+                {
+                    if (string.Equals(selected, "Digital I/O", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(selected, "DMX", StringComparison.OrdinalIgnoreCase))
+                        specialDeviceCount++;
+                }
             }
 
             int totalDevices = allPanels.Sum(p => p.DeviceCount)

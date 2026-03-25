@@ -17,12 +17,11 @@ The resolved label is combined with the room name of the first fixture: `ROOM NA
 Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selected brand.
 
 - **Brands:** Lutron or Crestron (persisted per-document)
-- **Panel allocation:** Circuits assigned to panels by name; each panel shows module counts and a compartment slot for Processor, Digital I/O, or DMX
-- **Processor links** (Lutron): QS links auto-assigned across processors (99 devices, 512 loads per link)
-- **BOM:** Categorized bill-of-materials with part numbers
-- **Optimize:** Redistributes circuits across panels to rebalance, with preview before applying
-
-Unassigned circuits (no panel name) are displayed separately.
+- **Panel allocation:** Circuits grouped by zone (ZONE N panels); recommends minimum panels per zone and distributes modules across them. Each panel supports a compartment slot for Processor, Digital I/O, or DMX. LV21 panels (dual-compartment, no modules) are supported.
+- **Panel size overrides:** Users can force any panel to a different size; modules auto-redistribute to accommodate.
+- **Processor links** (Lutron): QS links auto-assigned across processors (99 devices, 512 loads per link). Clear Connect Type A links reserved for hybrid repeaters when present.
+- **BOM:** Categorized bill-of-materials with part numbers.
+- **Unassigned circuits:** Circuits without a recognized zone panel name are flagged. Switch-wired circuits are excluded from this warning.
 
 ## Dependencies
 

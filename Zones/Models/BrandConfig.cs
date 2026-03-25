@@ -18,6 +18,8 @@ namespace TurboSuite.Zones.Models
             Dictionary<int, string> panelPartNumbers,
             Dictionary<string, string> specialDevices = null,
             HashSet<int> specialCompartmentPanelSizes = null,
+            HashSet<int> dualCompartmentPanelSizes = null,
+            Dictionary<int, string> panelDisplayNames = null,
             Dictionary<int, string> wireHarnessPartNumbers = null,
             string powerSupplyPartNumber = null,
             Dictionary<string, int> moduleCapacityOverrides = null,
@@ -30,6 +32,8 @@ namespace TurboSuite.Zones.Models
             PanelPartNumbers = panelPartNumbers;
             SpecialDevices = specialDevices;
             SpecialCompartmentPanelSizes = specialCompartmentPanelSizes;
+            DualCompartmentPanelSizes = dualCompartmentPanelSizes;
+            PanelDisplayNames = panelDisplayNames;
             WireHarnessPartNumbers = wireHarnessPartNumbers;
             PowerSupplyPartNumber = powerSupplyPartNumber;
             ModuleCapacityOverrides = moduleCapacityOverrides;
@@ -38,6 +42,8 @@ namespace TurboSuite.Zones.Models
 
         public Dictionary<string, string> SpecialDevices { get; }
         public HashSet<int> SpecialCompartmentPanelSizes { get; }
+        public HashSet<int> DualCompartmentPanelSizes { get; }
+        public Dictionary<int, string> PanelDisplayNames { get; }
         public Dictionary<int, string> WireHarnessPartNumbers { get; }
         public string PowerSupplyPartNumber { get; }
         public Dictionary<string, int> ModuleCapacityOverrides { get; }
@@ -55,6 +61,15 @@ namespace TurboSuite.Zones.Models
         public string GetPartDescription(string partNumber)
             => PartDescriptions != null
                && PartDescriptions.TryGetValue(partNumber, out var desc) ? desc : partNumber;
+
+        public string GetPanelDisplayName(int size)
+        {
+            if (PanelDisplayNames != null && PanelDisplayNames.TryGetValue(size, out var name))
+                return name;
+            if (PanelPartNumbers.TryGetValue(size, out var pn))
+                return pn.Split('-')[0];
+            return size.ToString();
+        }
 
         public int ParsePanelSizeFromCatalogNumber(string catalogNumber)
         {
@@ -85,7 +100,7 @@ namespace TurboSuite.Zones.Models
             return PanelSizes.Min();
         }
 
-        public static BrandConfig Lutron { get; } = new BrandConfig("Lutron", 4, new[] { 2, 4, 5, 8, 9 },
+        public static BrandConfig Lutron { get; } = new BrandConfig("Lutron", 4, new[] { 0, 2, 4, 5, 8, 9 },
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "ELV", "LQSE-4A5-120-D" },
@@ -94,6 +109,7 @@ namespace TurboSuite.Zones.Models
             },
             new Dictionary<int, string>
             {
+                { 0, "HQ-LV21-120" },
                 { 2, "PD2-16F-120" },
                 { 4, "PD4-36F-120" },
                 { 5, "PD5-36F-120" },
@@ -106,7 +122,9 @@ namespace TurboSuite.Zones.Models
                 { "Digital I/O", "QSE-IO" },
                 { "DMX", "QSE-CI-DMX" }
             },
-            specialCompartmentPanelSizes: new HashSet<int> { 4, 8 },
+            specialCompartmentPanelSizes: new HashSet<int> { 0, 4, 8 },
+            dualCompartmentPanelSizes: new HashSet<int> { 0 },
+            panelDisplayNames: new Dictionary<int, string> { { 0, "LV21" } },
             wireHarnessPartNumbers: new Dictionary<int, string>
             {
                 { 2, "PDW-QS-4" },
@@ -119,6 +137,7 @@ namespace TurboSuite.Zones.Models
             partDescriptions: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "HQP7-2", "HomeWorks QSX 2-Link Processor" },
+                { "HQ-LV21-120", "LV Compartment Panel (2-slot)" },
                 { "PD2-16F-120", "2 Module Feed-Through DIN Rail Power Panel" },
                 { "PD4-36F-120", "4 Module DIN Rail Power Panel with LV compartment" },
                 { "PD5-36F-120", "5 Module Feed-Through DIN Rail Power Panel" },

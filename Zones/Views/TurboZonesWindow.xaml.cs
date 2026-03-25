@@ -146,19 +146,6 @@ namespace TurboSuite.Zones.Views
         }
     }
 
-    public class InverseBoolConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return value is bool b ? !b : true;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return value is bool b ? !b : false;
-        }
-    }
-
     public class BoolToRedForegroundConverter : IValueConverter
     {
         private static readonly System.Windows.Media.SolidColorBrush RedBrush =

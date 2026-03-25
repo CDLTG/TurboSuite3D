@@ -21,7 +21,6 @@ namespace TurboSuite.Zones.Services
         public static (PanelAllocationResult Result, List<ZonesCircuitData> Unassigned) BuildPanelBreakdown(
             List<ZonesCircuitData> circuits,
             BrandConfig brand,
-            Dictionary<string, string> specialDeviceSelections = null,
             Dictionary<string, int> panelSizeOverrides = null)
         {
             var unassigned = new List<ZonesCircuitData>();
@@ -32,7 +31,9 @@ namespace TurboSuite.Zones.Services
             {
                 if (string.IsNullOrWhiteSpace(circuit.PanelName))
                 {
-                    unassigned.Add(circuit);
+                    // Switch-wired circuits are legitimately unpaneled — only warn for truly unassigned
+                    if (!circuit.IsWiredToSwitch)
+                        unassigned.Add(circuit);
                     continue;
                 }
 
@@ -41,17 +42,17 @@ namespace TurboSuite.Zones.Services
                     continue;
 
                 int zone = ParseLocationNumber(circuit.PanelName);
+                if (zone == 0)
+                {
+                    unassigned.Add(circuit);
+                    continue;
+                }
                 if (!circuitsByZone.ContainsKey(zone))
                     circuitsByZone[zone] = new List<ZonesCircuitData>();
                 circuitsByZone[zone].Add(circuit);
             }
 
-            var result = new PanelAllocationResult
-            {
-                TotalCircuits = circuits.Count
-            };
-
-            int totalModules = 0;
+            var result = new PanelAllocationResult();
 
             foreach (var zone in circuitsByZone.Keys.OrderBy(z => z))
             {
@@ -59,8 +60,8 @@ namespace TurboSuite.Zones.Services
 
                 // Group all circuits in this zone by dimming type
                 var circuitsByType = zoneCircuits
-                    .GroupBy(c => c.DimmingType)
-                    .ToDictionary(g => g.Key, g => g.OrderBy(c => c.CircuitNumber).ToList());
+                    .GroupBy(c => c.DimmingType, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.OrderBy(c => c.CircuitNumber).ToList(), StringComparer.OrdinalIgnoreCase);
 
                 // Calculate modules needed per dimming type
                 var moduleCountByType = new Dictionary<string, int>();
@@ -71,7 +72,6 @@ namespace TurboSuite.Zones.Services
                 }
 
                 int zoneTotalModules = moduleCountByType.Values.Sum();
-                totalModules += zoneTotalModules;
 
                 // Determine default panel size and recommended panel count
                 int defaultSize = brand.DefaultPanelSize;
@@ -115,8 +115,7 @@ namespace TurboSuite.Zones.Services
                 // Build PanelResults and distribute modules across panels
                 var locationResult = new LocationResult
                 {
-                    LocationNumber = zone,
-                    TotalCircuits = zoneCircuits.Count
+                    LocationNumber = zone
                 };
 
                 var panelResults = new List<PanelResult>();
@@ -127,12 +126,12 @@ namespace TurboSuite.Zones.Services
                         PanelName = name,
                         SelectedPanelSize = size,
                         SpecialCompartmentPanelSizes = brand.SpecialCompartmentPanelSizes,
+                        DualCompartmentPanelSizes = brand.DualCompartmentPanelSizes,
                         AvailablePanelSizes = brand.PanelSizes.OrderBy(s => s)
                             .Select(s => new PanelSizeOption
                             {
                                 Size = s,
-                                DisplayName = brand.PanelPartNumbers.TryGetValue(s, out var pn)
-                                    ? pn.Split('-')[0] : s.ToString()
+                                DisplayName = brand.GetPanelDisplayName(s)
                             }).ToList()
                     };
 
@@ -143,6 +142,8 @@ namespace TurboSuite.Zones.Services
                         panelResult.SpecialDeviceOptions.AddRange(brand.SpecialDevices.Keys);
                         panelResult.SpecialDevicePartNumbers = brand.SpecialDevices;
                         panelResult.SelectedSpecialDevice = "Empty";
+                        if (panelResult.HasDualSpecialCompartment)
+                            panelResult.SelectedSpecialDevice2 = "Empty";
                     }
 
                     panelResults.Add(panelResult);
@@ -160,7 +161,6 @@ namespace TurboSuite.Zones.Services
                 result.Locations.Add(locationResult);
             }
 
-            result.TotalModules = totalModules;
             return (result, unassigned);
         }
 
@@ -230,11 +230,14 @@ namespace TurboSuite.Zones.Services
                 }
             }
 
-            // Build modules for each panel using its allocated counts
+            // Build modules for each panel using its allocated counts.
+            // Track how many circuits of each type have been assigned to previous panels
+            // so each panel gets the next slice of that type's circuit list.
+            var circuitOffsetByType = new Dictionary<string, int>();
+
             foreach (var panel in panels)
             {
                 var panelAlloc = allocation[panel];
-                int circuitOffset = 0;
 
                 foreach (var type in orderedTypes)
                 {
@@ -245,6 +248,7 @@ namespace TurboSuite.Zones.Services
                         continue;
 
                     int moduleCapacity = brand.GetModuleCapacity(type);
+                    int offset = circuitOffsetByType.GetValueOrDefault(type);
 
                     // Calculate how many circuits go on this panel's modules for this type
                     int totalModulesForType = moduleCountByType[type];
@@ -253,10 +257,10 @@ namespace TurboSuite.Zones.Services
                     // Proportional circuit share for this panel
                     int circuitsForPanel = (int)Math.Ceiling((double)totalCircuitsForType * moduleCount / totalModulesForType);
                     circuitsForPanel = Math.Min(circuitsForPanel, moduleCount * moduleCapacity);
-                    circuitsForPanel = Math.Min(circuitsForPanel, totalCircuitsForType - circuitOffset);
+                    circuitsForPanel = Math.Min(circuitsForPanel, totalCircuitsForType - offset);
 
-                    var panelCircuits = typeCircuits.Skip(circuitOffset).Take(circuitsForPanel).ToList();
-                    circuitOffset += panelCircuits.Count;
+                    var panelCircuits = typeCircuits.Skip(offset).Take(circuitsForPanel).ToList();
+                    circuitOffsetByType[type] = offset + panelCircuits.Count;
 
                     var modules = BuildModules(type, panelCircuits, moduleCount, moduleCapacity, brand);
                     panel.Modules.AddRange(modules);

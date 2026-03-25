@@ -17,7 +17,6 @@
         <local:IntToRangeConverter x:Key="IntToRange"/>
         <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
         <local:PercentToWidthConverter x:Key="PercentToWidth"/>
-        <local:InverseBoolConverter x:Key="InverseBool"/>
         <local:BoolToRedForegroundConverter x:Key="BoolToRedForeground"/>
 
         <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
@@ -379,12 +378,6 @@
                                                                                 <Style TargetType="Border">
                                                                                     <Setter Property="BorderThickness" Value="1"/>
                                                                                     <Setter Property="BorderBrush" Value="#888888"/>
-                                                                                    <Style.Triggers>
-                                                                                        <DataTrigger Binding="{Binding IsEmpty}" Value="True">
-                                                                                            <Setter Property="BorderBrush" Value="#2B579A"/>
-                                                                                            <Setter Property="BorderThickness" Value="2"/>
-                                                                                        </DataTrigger>
-                                                                                    </Style.Triggers>
                                                                                 </Style>
                                                                             </Border.Style>
                                                                             <StackPanel>
@@ -454,11 +447,22 @@
                                                                                     </ItemsControl.ItemTemplate>
                                                                                 </ItemsControl>
 
-                                                                                <!-- Special compartment (Lutron 8-slot only) -->
+                                                                                <!-- Special compartment slot 1 -->
                                                                                 <ComboBox Visibility="{Binding HasSpecialCompartment, Converter={StaticResource BoolToVisibility}}"
                                                                                           ItemsSource="{Binding SpecialDeviceOptions}"
                                                                                           SelectedItem="{Binding SelectedSpecialDevice}"
-                                                                                          IsEnabled="{Binding IsSpecialDeviceLocked, Converter={StaticResource InverseBool}}"
+                                                                                          BorderBrush="#AAAAAA" BorderThickness="1"
+                                                                                          Background="#F5F5F0"
+                                                                                          Margin="3,0,3,2" Height="30"
+                                                                                          HorizontalContentAlignment="Center"
+                                                                                          VerticalContentAlignment="Center"
+                                                                                          FontSize="9" FontWeight="SemiBold"
+                                                                                          Foreground="Black" Cursor="Hand"/>
+
+                                                                                <!-- Special compartment slot 2 (LV21 dual-slot panels) -->
+                                                                                <ComboBox Visibility="{Binding HasDualSpecialCompartment, Converter={StaticResource BoolToVisibility}}"
+                                                                                          ItemsSource="{Binding SpecialDeviceOptions}"
+                                                                                          SelectedItem="{Binding SelectedSpecialDevice2}"
                                                                                           BorderBrush="#AAAAAA" BorderThickness="1"
                                                                                           Background="#F5F5F0"
                                                                                           Margin="3,0,3,2" Height="30"
@@ -530,10 +534,9 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
                                                             <TextBlock FontSize="9" Foreground="#856404">
-                                                                <Run Text="{Binding CircuitNumber, Mode=OneWay}"/>
-                                                                <Run Text=" ("/>
-                                                                <Run Text="{Binding DimmingType, Mode=OneWay}"/>
-                                                                <Run Text=")"/>
+                                                                <Run Text="{Binding CircuitNumber, Mode=OneWay}"/><Run Text=" "/><Run
+                                                                    Text="{Binding CurrentLoadName, Mode=OneWay}"/><Run Text=" ("/><Run
+                                                                    Text="{Binding DimmingType, Mode=OneWay}"/><Run Text=")"/>
                                                             </TextBlock>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
