@@ -28,13 +28,22 @@ After circuit creation/wiring, a comments dialog appears if the circuit has no e
 
 ## Wire Routing
 
-| Fixture Type | Routing | Details |
+| Condition | Routing | Details |
 |---|---|---|
-| Standard (ceiling/floor) | Arc | 24° arc angle |
-| Wall sconces | Spline | Wall-normal offsets, 2.5" connector offset, scaled to fixture distance |
-| Receptacles | Spline | Wall-normal offsets, 3.0" connector offset |
+| Wall sconces (same orientation) | Spline | Wall-normal offsets, 2.5" connector offset, scaled to fixture distance |
+| Receptacles (same orientation) | Spline | Wall-normal offsets, 3.0" connector offset |
+| Remote Power Supply pairs | Straight | Chamfer wire, no arc |
+| On-axis fixtures | 24° arc | Fixtures aligned horizontally or vertically |
+| Off-axis, roughly diagonal | Corner arc | 4-point smoothed corner (dx/dy ratio ≥ 0.6) |
+| Off-axis, elongated | S-spline | 4-point S-curve stepping along the longer axis |
 
-For multi-fixture runs, arc direction is chosen to avoid overlapping existing tags. Existing wires between two fixtures are deleted before placing new ones.
+When both fixtures share a non-axis-aligned rotation (e.g., fixtures on a rotated grid), the on-axis vs off-axis decision is evaluated in the fixtures' local coordinate frame. This ensures inline rotated fixtures receive the 24° arc rather than an incorrect S-curve.
+
+For multi-fixture runs, arc direction is determined by: (1) existing tag positions, then (2) outward from the group centroid, then (3) default. Existing wires between two fixtures are deleted before placing new ones.
+
+### Switch Handling
+
+Switches are wired with an endpoint offset to prevent visual overlap. Wall-hosted switches offset 9" along the wall normal; unhosted switches offset 0.01" along their local Y axis. Switch selections create a single circuit across all fixture categories with the comment "switched" (no comments dialog).
 
 ## Dependencies
 

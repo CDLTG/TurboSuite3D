@@ -500,17 +500,27 @@ public class WireCommand : IExternalCommand
             arcDirection = 1;
         }
 
+        // If fixtures share a non-axis-aligned rotation, evaluate off-axis in their local frame
+        bool useLocalFrame = ArcCalculator.TryGetSharedRotation(fixture1, fixture2, out double sharedAngle);
+        XYZ p1 = useLocalFrame ? ArcCalculator.RotateXY(c1.Origin, -sharedAngle) : c1.Origin;
+        XYZ p2 = useLocalFrame ? ArcCalculator.RotateXY(c2.Origin, -sharedAngle) : c2.Origin;
+
         // Off-axis fixtures: corner arc (squared) or S-spline (elongated)
-        if (ArcCalculator.IsOffAxis(c1.Origin, c2.Origin))
+        if (ArcCalculator.IsOffAxis(p1, p2))
         {
-            if (ArcCalculator.IsSquared(c1.Origin, c2.Origin))
+            IList<XYZ> localPoints;
+            if (ArcCalculator.IsSquared(p1, p2))
             {
-                wirePoints = ArcCalculator.CalculateCornerArcPoints(c1.Origin, c2.Origin, arcDirection);
+                localPoints = ArcCalculator.CalculateCornerArcPoints(p1, p2, arcDirection);
             }
             else
             {
-                wirePoints = ArcCalculator.CalculateSSplinePoints(c1.Origin, c2.Origin);
+                localPoints = ArcCalculator.CalculateSSplinePoints(p1, p2);
             }
+
+            wirePoints = useLocalFrame
+                ? localPoints.Select(pt => ArcCalculator.RotateXY(pt, sharedAngle)).ToList()
+                : localPoints;
             wiringType = WiringType.Arc;
             return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, switchOffset1, switchOffset2);
         }

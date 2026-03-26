@@ -157,6 +157,56 @@ internal static class ArcCalculator
         return lookup;
     }
 
+    // Fixtures must have BasisX dot product ≥ this to share a rotation frame (~18°)
+    private const double ParallelDotThreshold = 0.95;
+    // If fixture rotation is within this of axis-aligned (0°/90°/180°/270°), skip local frame
+    private const double AxisAlignedThreshold = 0.087; // ~5°
+
+    /// <summary>
+    /// Checks if two fixtures share a non-axis-aligned rotation. If so, returns the
+    /// shared angle so callers can rotate positions into the local frame for off-axis checks.
+    /// </summary>
+    public static bool TryGetSharedRotation(FamilyInstance f1, FamilyInstance f2, out double angle)
+    {
+        angle = 0;
+        Transform t1 = f1.GetTransform();
+        Transform t2 = f2.GetTransform();
+
+        XYZ basis1 = new XYZ(t1.BasisX.X, t1.BasisX.Y, 0);
+        XYZ basis2 = new XYZ(t2.BasisX.X, t2.BasisX.Y, 0);
+
+        if (basis1.GetLength() < 1e-9 || basis2.GetLength() < 1e-9)
+            return false;
+
+        basis1 = basis1.Normalize();
+        basis2 = basis2.Normalize();
+
+        double dot = Math.Abs(basis1.DotProduct(basis2));
+        if (dot < ParallelDotThreshold) return false;
+
+        angle = Math.Atan2(basis1.Y, basis1.X);
+
+        // If rotation is axis-aligned, global logic already handles correctly
+        double mod = ((angle % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2);
+        if (mod < AxisAlignedThreshold || (Math.PI / 2 - mod) < AxisAlignedThreshold)
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Rotates a point around the Z axis by the given angle (radians).
+    /// </summary>
+    public static XYZ RotateXY(XYZ point, double angle)
+    {
+        double cos = Math.Cos(angle);
+        double sin = Math.Sin(angle);
+        return new XYZ(
+            point.X * cos - point.Y * sin,
+            point.X * sin + point.Y * cos,
+            point.Z);
+    }
+
     private const double PerpThreshold = 0.3;
 
     public static int? GetArcDirectionFromTags(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, XYZ p1, XYZ p2,
