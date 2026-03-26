@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates eleven commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboCuts) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with twelve `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates twelve commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboCuts, TurboSpike) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with thirteen `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -25,11 +25,7 @@ Platform target is **x64**. The solution contains two projects: `TurboSuite.cspr
 
 ### Public Repository Security
 
-**This repository is public.** Never introduce code that could become a security risk when the source is visible:
-- **No secrets**: Never hardcode passwords, API keys, tokens, credentials, or real server paths/UNC paths. Use placeholders or environment variables.
-- **No internal infrastructure details**: Do not commit real server names, IP addresses, network shares, or internal URLs.
-- **No sensitive data**: Do not commit user data, company-specific configuration, or proprietary file paths.
-- **Safe coding**: Sanitize any user input, avoid path traversal vulnerabilities, and follow secure coding practices for file I/O and network operations.
+**This repository is public (GPL v3).** Never hardcode secrets, credentials, real server paths/UNC paths, internal infrastructure details, or sensitive data. Use placeholders or environment variables.
 
 ## Deployment
 
@@ -108,6 +104,8 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
 | `TurboSuite.Cuts` | TurboCuts — spec sheet PDF download, stamping, and merging (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
+| `TurboSuite.Spike` | TurboSpike — diagnostic/debug command (swap Execute body per investigation) |
+| `Guide/` | `Guide.md` — user-facing documentation |
 | `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
 
 ### Known Namespace Collision
@@ -120,8 +118,8 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 
 - All model modifications must occur inside a `Transaction`.
 - Element queries use `FilteredElementCollector` with category filters (e.g., `OST_LightingDevices`, `OST_LightingFixtures`, `OST_ElectricalFixtures`).
-- Key built-in parameters: `RBS_ELEC_CIRCUIT_NUMBER`, `RBS_ELEC_CIRCUIT_NAME`, `RBS_ELEC_APPARENT_LOAD`, `RBS_ELEC_CIRCUIT_PANEL_PARAM`, `ALL_MODEL_TYPE_MARK`, `ALL_MODEL_MANUFACTURER`, `ALL_MODEL_INSTANCE_COMMENTS`.
-- Custom parameters by name: "Scale Factor", "Switch ID", "Linear Length", "Linear Power", "Power", "Sub-Driver Power", "Dimming Protocol", "Voltage", "Maximum Fixtures", "Remote Power Supply", "Load Classification Abbreviation", "Catalog Number1", "Data Sheet URL".
+- Key built-in parameters: `RBS_ELEC_CIRCUIT_NUMBER`, `RBS_ELEC_CIRCUIT_NAME`, `RBS_ELEC_APPARENT_LOAD`, `RBS_ELEC_CIRCUIT_PANEL_PARAM`, `ALL_MODEL_TYPE_MARK`, `ALL_MODEL_MANUFACTURER`, `ALL_MODEL_INSTANCE_COMMENTS`, `ALL_MODEL_MODEL`, `ALL_MODEL_MARK`, `ROOM_NAME`, `ROOM_NUMBER`.
+- Custom parameters by name: "Switch ID", "Scale Factor", "Linear Length", "Linear Power", "Power", "Sub-Driver Power", "Dimming Protocol", "Voltage", "Maximum Fixtures", "Remote Power Supply", "Load Classification Abbreviation", "Load Classification", "Circuit Naming", "Circuit Prefix", "Circuit Prefix Separator", "Orientation", "Angle", "Two Gang", "Catalog Number1"–"Catalog Number6", "Data Sheet URL", "Manufacturer".
 - **IMPORTANT**: Room name must be read via `room.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString()` — `room.Name` returns "Number Name" format.
 
 ### API Limitations
@@ -135,15 +133,14 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 - Modal `ShowDialog()` blocks Revit UI. Pattern: store target view on ViewModel, close dialog, call `uidoc.RequestViewChange(view)` after return.
 - **Modeless pattern** (TurboNumber): `window.Show()` with `IExternalEventHandler` for all Revit API calls. ViewModels queue typed `RevitApiRequest` objects, call `ExternalEvent.Raise()`, and receive results via completion callbacks dispatched to the WPF thread. Chain sequential requests in callbacks — never raise two events simultaneously (second is silently dropped).
 - `DataGrid.SelectedItems` cannot be bound in XAML. Use code-behind `SelectionChanged` handler. Do not set `SelectedRow` from within `SetSelectedRows` — causes feedback loop clearing multi-selection.
-- **TurboTab pattern**: Uses `UIApplication.MainWindowHandle` + `HwndSource.FromHwnd()` to get the WPF root visual, walks the AvalonDock visual tree to find `DockingManager` → `LayoutDocumentPaneControl` → `TabItem`. Maps tabs to documents via reflection on private MFC pointers (`getMFCDoc` / `GetPointerValue`). Groups tabs by project (same color), distinguishes family documents via `Document.IsFamilyDocument`. Caches original `TabItem.Style` before modification and restores on toggle-off — never use `ClearValue(StyleProperty)`. Auto-starts via `Idling` event with retry (UI not ready during `OnStartup`). Persists enabled state to `%APPDATA%\TurboSuite\TurboTabSettings.json`.
+- **TurboTab**: Walks Revit's AvalonDock visual tree via `MainWindowHandle` to color document tabs. Caches original `TabItem.Style` before modification and restores on toggle-off — never use `ClearValue(StyleProperty)`.
 
 ## Dependencies
 
-- `RevitAPI.dll` and `RevitAPIUI.dll` (from `C:\Program Files\Autodesk\Revit 2025\`)
-- `Xceed.Wpf.AvalonDock.dll` (from `C:\Program Files\Autodesk\Revit 2025\`) — ships with Revit, used by TurboTab for document tab coloring
-- `ACadSharp` (NuGet) — reads AutoCAD DWG/DXF files. Used by TurboName.
-- `PdfSharpCore` (NuGet) — PDF reading, stamping, and merging. Used by TurboCuts.
-- .NET 8.0-windows / WPF assemblies
+- `RevitAPI.dll`, `RevitAPIUI.dll`, `Xceed.Wpf.AvalonDock.dll` (from Revit 2025 install)
+- `ACadSharp` (NuGet) — DWG/DXF reading for TurboName
+- `PdfSharpCore` (NuGet) — PDF operations for TurboCuts
+- .NET 8.0-windows / WPF
 
 ## Compact Instructions
 
