@@ -27,5 +27,8 @@ Specs/
 # Spike (local-only diagnostic command)
 Spike/
 
+# Design Guide (local-only working documents)
+Guide/
+
 # Claude Code local settings
 .claude/settings.local.json

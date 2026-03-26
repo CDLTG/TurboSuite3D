@@ -9,16 +9,20 @@ using TurboSuite.Tag.Constants;
 using TurboSuite.Tag.Helpers;
 using TurboSuite.Tag.Models;
 using TurboSuite.Tag.Services;
+using TurboSuite.Tag.Views;
 
 namespace TurboSuite.Tag;
 
 [Transaction(TransactionMode.Manual)]
 public class TagCommand : IExternalCommand
 {
+    private IntPtr _revitHandle;
+
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
         UIDocument uidoc = commandData.Application.ActiveUIDocument;
         Document doc = uidoc.Document;
+        _revitHandle = commandData.Application.MainWindowHandle;
 
         try
         {
@@ -144,36 +148,16 @@ public class TagCommand : IExternalCommand
         return view.ViewType == ViewType.FloorPlan || view.ViewType == ViewType.CeilingPlan;
     }
 
-    private static TagDirection PromptForDirectionLinear()
-        => PromptForDirection("Select tag placement direction for line-based families:", includeLeftRight: false);
+    private TagDirection PromptForDirectionLinear()
+        => PromptForDirection(includeLeftRight: false);
 
-    private static TagDirection PromptForDirection()
-        => PromptForDirection("Select tag placement direction for point-based families:", includeLeftRight: true);
+    private TagDirection PromptForDirection()
+        => PromptForDirection(includeLeftRight: true);
 
-    private static TagDirection PromptForDirection(string instruction, bool includeLeftRight)
+    private TagDirection PromptForDirection(bool includeLeftRight)
     {
-        var dialog = new TaskDialog("Tag Direction")
-        {
-            MainInstruction = instruction,
-            CommonButtons = TaskDialogCommonButtons.Cancel
-        };
-
-        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Up");
-        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Down");
-        if (includeLeftRight)
-        {
-            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink3, "Right");
-            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink4, "Left");
-        }
-
-        return dialog.Show() switch
-        {
-            TaskDialogResult.CommandLink1 => TagDirection.Up,
-            TaskDialogResult.CommandLink2 => TagDirection.Down,
-            TaskDialogResult.CommandLink3 when includeLeftRight => TagDirection.Right,
-            TaskDialogResult.CommandLink4 when includeLeftRight => TagDirection.Left,
-            _ => TagDirection.None
-        };
+        var dialog = new TagDirectionDialog(includeLeftRight, _revitHandle);
+        return dialog.ShowDialog() == true ? dialog.SelectedDirection : TagDirection.None;
     }
 
     private void DeleteExistingTags(Document doc, ElementId fixtureId, ElementId viewId, string tagFamilyName)
