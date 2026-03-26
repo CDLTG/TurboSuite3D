@@ -28,6 +28,10 @@ public class SettingsViewModel : ViewModelBase
     private string _ceilingHeightTag;
     private string _roomNameLayer;
     private string _ceilingHeightLayer;
+    private string _wallLayerNamesText;
+    private string _doorLayerNamesText;
+    private string _windowLayerNamesText;
+    private string _regionTypeName;
 
     public string WallSconceFamiliesText
     {
@@ -109,6 +113,30 @@ public class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _ceilingHeightLayer, value);
     }
 
+    public string WallLayerNamesText
+    {
+        get => _wallLayerNamesText;
+        set => SetProperty(ref _wallLayerNamesText, value);
+    }
+
+    public string DoorLayerNamesText
+    {
+        get => _doorLayerNamesText;
+        set => SetProperty(ref _doorLayerNamesText, value);
+    }
+
+    public string WindowLayerNamesText
+    {
+        get => _windowLayerNamesText;
+        set => SetProperty(ref _windowLayerNamesText, value);
+    }
+
+    public string RegionTypeName
+    {
+        get => _regionTypeName;
+        set => SetProperty(ref _regionTypeName, value);
+    }
+
     public bool ShowCircuitCommentsDialog
     {
         get => _showCircuitCommentsDialog;
@@ -171,6 +199,10 @@ public class SettingsViewModel : ViewModelBase
         CeilingHeightTag = settings.CeilingHeightTag ?? "";
         RoomNameLayer = settings.RoomNameLayer ?? "";
         CeilingHeightLayer = settings.CeilingHeightLayer ?? "";
+        WallLayerNamesText = string.Join(", ", settings.WallLayerNames ?? new List<string>());
+        DoorLayerNamesText = string.Join(", ", settings.DoorLayerNames ?? new List<string>());
+        WindowLayerNamesText = string.Join(", ", settings.WindowLayerNames ?? new List<string>());
+        RegionTypeName = settings.RegionTypeName ?? "Room Region";
     }
 
     public FamilyNameSettings ToFamilyModel() => new()
@@ -195,7 +227,11 @@ public class SettingsViewModel : ViewModelBase
         RoomNameTags = ParseCommaSeparated(RoomNameTagsText),
         CeilingHeightTag = (CeilingHeightTag ?? "").Trim(),
         RoomNameLayer = (RoomNameLayer ?? "").Trim(),
-        CeilingHeightLayer = (CeilingHeightLayer ?? "").Trim()
+        CeilingHeightLayer = (CeilingHeightLayer ?? "").Trim(),
+        WallLayerNames = ParseCommaSeparated(WallLayerNamesText),
+        DoorLayerNames = ParseCommaSeparated(DoorLayerNamesText),
+        WindowLayerNames = ParseCommaSeparated(WindowLayerNamesText),
+        RegionTypeName = (RegionTypeName ?? "Room Region").Trim()
     };
 
     private static List<string> ParseCommaSeparated(string text)

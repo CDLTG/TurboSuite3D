@@ -141,6 +141,52 @@
                     </StackPanel>
                 </GroupBox>
 
+                <!-- Region Generation Layers -->
+                <GroupBox Header="Region Generation Layers (2D Workflow)" Margin="0,0,0,10"
+                          BorderBrush="#2B579A" BorderThickness="1.5">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="CAD layer names used by TurboName to auto-generate Room Region filled regions."
+                                   Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Wall Layers:"
+                                       VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <TextBox Grid.Row="0" Grid.Column="1"
+                                     Text="{Binding WallLayerNamesText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Door Layers:"
+                                       VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Text="{Binding DoorLayerNamesText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Window Layers:"
+                                       VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <TextBox Grid.Row="2" Grid.Column="1"
+                                     Text="{Binding WindowLayerNamesText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Region Type Name:"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Grid.Row="3" Grid.Column="1"
+                                     Text="{Binding RegionTypeName, UpdateSourceTrigger=PropertyChanged}"/>
+                        </Grid>
+                        <TextBlock Text="Comma-separated CAD layer names (e.g., WALL_INTR_B, A-WALL)"
+                                   Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </GroupBox>
+
                 <TextBlock Text="Configure which family names receive special routing behavior."
                            Foreground="#555555" Margin="0,0,0,12" TextWrapping="Wrap"/>
 

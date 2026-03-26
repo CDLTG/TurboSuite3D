@@ -31,6 +31,20 @@ public class CadRoomSourceSettings
     /// <summary>CAD layer containing ceiling height text. May be the same as RoomNameLayer.</summary>
     public string CeilingHeightLayer { get; set; } = "";
 
+    // ── Region generation ──
+
+    /// <summary>CAD layer names containing wall lines (comma-separated in UI).</summary>
+    public List<string> WallLayerNames { get; set; } = new();
+
+    /// <summary>CAD layer names containing door geometry (comma-separated in UI).</summary>
+    public List<string> DoorLayerNames { get; set; } = new();
+
+    /// <summary>CAD layer names containing window geometry (comma-separated in UI).</summary>
+    public List<string> WindowLayerNames { get; set; } = new();
+
+    /// <summary>FilledRegionType name used for generated regions.</summary>
+    public string RegionTypeName { get; set; } = "Room Region";
+
     public static CadRoomSourceSettings CreateDefaults() => new()
     {
         Mode = "Block",
@@ -38,6 +52,10 @@ public class CadRoomSourceSettings
         RoomNameTags = new List<string>(),
         CeilingHeightTag = "",
         RoomNameLayer = "",
-        CeilingHeightLayer = ""
+        CeilingHeightLayer = "",
+        WallLayerNames = new List<string>(),
+        DoorLayerNames = new List<string>(),
+        WindowLayerNames = new List<string>(),
+        RegionTypeName = "Room Region"
     };
 }

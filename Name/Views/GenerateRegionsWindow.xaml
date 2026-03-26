@@ -1,0 +1,78 @@
+<Window
+    x:Class="TurboSuite.Name.Views.GenerateRegionsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Generate Regions"
+    Width="420" Height="160"
+    ResizeMode="NoResize"
+    ShowInTaskbar="True"
+    Topmost="False"
+    WindowStartupLocation="Manual"
+    FontFamily="Segoe UI" FontSize="12">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="4"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Status line -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <TextBlock Text="Created: " FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding CreatedCount}"/>
+            <TextBlock Text="  |  Failed: " FontWeight="SemiBold" Margin="4,0,0,0"/>
+            <TextBlock Text="{Binding FailedCount}"/>
+        </StackPanel>
+
+        <!-- Diagnostic status -->
+        <TextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="#888888" FontSize="9.5"
+                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="30"/>
+
+        <!-- Picking status text (visible when picking) -->
+        <TextBlock Grid.Row="4" Text="Click inside a room. Press Escape to pause."
+                   Foreground="#555555" FontSize="11"
+                   Visibility="{Binding IsPicking, Converter={StaticResource BoolToVis}}"/>
+
+        <!-- Paused text (visible when not picking) -->
+        <TextBlock Grid.Row="4" Text="Paused. Edit regions in Revit, then Resume or Finish."
+                   Foreground="#555555" FontSize="11">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Visible"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsPicking}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- Buttons (visible when not picking) -->
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Setter Property="Visibility" Value="Visible"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsPicking}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
+            <Button Content="Resume" Width="75" Margin="0,0,8,0"
+                    Command="{Binding ResumeCommand}"/>
+            <Button Content="Finish" Width="75"
+                    Command="{Binding FinishCommand}"/>
+        </StackPanel>
+    </Grid>
+</Window>

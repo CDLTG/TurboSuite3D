@@ -1,6 +1,8 @@
 #nullable disable
 using System;
 using System.Linq;
+using System.Windows.Interop;
+using System.Windows.Threading;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -69,10 +71,14 @@ namespace TurboSuite.Name
 
                 var cadRoomData = CadRoomExtractorService.ExtractRoomData(doc, view, settings);
 
+                var (wallSegments, doorPositions, windowPositions) =
+                    CadWallExtractorService.ExtractWallGeometry(doc, view, settings);
+
                 var vm = new TurboNameViewModel
                 {
                     RegionCount = regions.Count,
-                    CadEntryCount = cadRoomData.Count
+                    CadEntryCount = cadRoomData.Count,
+                    WallSegmentCount = wallSegments.Count
                 };
 
                 var window = new TurboNameWindow { DataContext = vm };
@@ -82,6 +88,10 @@ namespace TurboSuite.Name
                     window.Close();
                 };
                 window.ShowDialog();
+
+                if (vm.ShouldGenerate)
+                    return LaunchGenerateRegions(commandData, doc, uidoc, view, settings,
+                        wallSegments, doorPositions, windowPositions);
 
                 if (!vm.ShouldRun)
                     return Result.Cancelled;
@@ -138,6 +148,70 @@ namespace TurboSuite.Name
                 TaskDialog.Show("TurboName Error", $"An unexpected error occurred:\n{ex.Message}");
                 return Result.Failed;
             }
+        }
+
+        private static Result LaunchGenerateRegions(ExternalCommandData commandData,
+            Document doc, UIDocument uidoc, View view, Shared.Models.CadRoomSourceSettings settings,
+            System.Collections.Generic.List<Models.CadWallSegment> wallSegments,
+            System.Collections.Generic.List<XYZ> doorPositions,
+            System.Collections.Generic.List<XYZ> windowPositions)
+        {
+            if (wallSegments.Count == 0)
+            {
+                TaskDialog.Show("TurboName",
+                    "No wall segments found in linked CAD files.\n\n" +
+                    "Configure Wall Layer names in TurboSuite Settings.");
+                return Result.Cancelled;
+            }
+
+            // Find the FilledRegionType
+            string regionTypeName = string.IsNullOrEmpty(settings.RegionTypeName)
+                ? "Room Region" : settings.RegionTypeName;
+            var regionType = new FilteredElementCollector(doc)
+                .OfClass(typeof(FilledRegionType))
+                .Cast<FilledRegionType>()
+                .FirstOrDefault(t => t.Name == regionTypeName);
+
+            if (regionType == null)
+            {
+                TaskDialog.Show("TurboName",
+                    $"FilledRegionType \"{regionTypeName}\" not found in project.\n\n" +
+                    "Create this type or update the Region Type Name in Settings.");
+                return Result.Cancelled;
+            }
+
+            // Bridge gaps
+            var bridgedSegments = GapBridgingService.BridgeGaps(wallSegments, doorPositions, windowPositions);
+
+            // Create handler and external event
+            var handler = new RegionGenerationHandler(doc, uidoc, view, bridgedSegments, regionType.Id);
+            var externalEvent = ExternalEvent.Create(handler);
+
+            var genVm = new GenerateRegionsViewModel(externalEvent, handler);
+            var genWindow = new GenerateRegionsWindow { DataContext = genVm };
+
+            var revitHandle = commandData.Application.MainWindowHandle;
+            new WindowInteropHelper(genWindow) { Owner = revitHandle };
+
+            genWindow.Closed += (s, e) =>
+            {
+                externalEvent.Dispose();
+            };
+
+            genVm.CloseRequested += () =>
+            {
+                genWindow.Close();
+            };
+
+            genWindow.Show();
+
+            // Auto-start picking after the window renders
+            genWindow.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                genVm.StartPicking();
+            }));
+
+            return Result.Succeeded;
         }
     }
 }
