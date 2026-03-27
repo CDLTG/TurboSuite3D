@@ -82,7 +82,7 @@ public partial class TagDirectionDialog : Window
         IntPtr hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
         var monitorInfo = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
 
-        double workLeft = 0, workTop = 0, workRight = SystemParameters.PrimaryScreenWidth, workBottom = SystemParameters.PrimaryScreenHeight;
+        double workLeft = SystemParameters.WorkArea.Left, workTop = SystemParameters.WorkArea.Top, workRight = SystemParameters.WorkArea.Right, workBottom = SystemParameters.WorkArea.Bottom;
         if (GetMonitorInfo(hMonitor, ref monitorInfo))
         {
             workLeft = monitorInfo.rcWork.Left * dpiScaleX;
