@@ -16,7 +16,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);Updater\**;Installer\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="ACadSharp" Version="3.0.0" />
+    <PackageReference Include="ACadSharp" Version="3.4.9" />
     <PackageReference Include="PdfSharpCore" Version="1.3.65" />
   </ItemGroup>
   <ItemGroup>
