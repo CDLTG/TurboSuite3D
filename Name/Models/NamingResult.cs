@@ -10,9 +10,10 @@ public record NamingResult(
     int Skipped,
     int Ambiguous,
     int Unmatched,
-    List<AmbiguousRegion> AmbiguousDetails);
+    List<AmbiguousRegion> AmbiguousDetails,
+    List<Autodesk.Revit.DB.ElementId> UnmatchedRegionIds);
 
 /// <summary>
 /// Details for one ambiguous region — the conflicting room names found inside it.
 /// </summary>
-public record AmbiguousRegion(List<string> Names);
+public record AmbiguousRegion(Autodesk.Revit.DB.ElementId RegionId, List<string> Names);

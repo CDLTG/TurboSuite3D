@@ -15,10 +15,12 @@ public static class RegionNamingService
 {
     public static NamingResult AssignRoomNames(Document doc, View view,
         List<RegionData> regions, List<CadRoomData> cadRoomData,
-        ElementId textNoteTypeId, ElementId descriptionTextNoteTypeId)
+        ElementId textNoteTypeId, ElementId descriptionTextNoteTypeId,
+        ElementId roomRegionTypeId = null)
     {
         int processed = 0, skipped = 0, ambiguous = 0, unmatched = 0;
         var ambiguousDetails = new List<AmbiguousRegion>();
+        var unmatchedRegionIds = new List<ElementId>();
 
         // Collect all TextNotes in the view for existing-comment checks
         var viewTextNotes = new FilteredElementCollector(doc, view.Id)
@@ -37,6 +39,9 @@ public static class RegionNamingService
 
                 if (hasMatchingTextNote)
                 {
+                    // Unflag if it was flagged and now has a matching text note
+                    if (region.IsFlagged && roomRegionTypeId != null)
+                        doc.GetElement(region.RegionId)?.ChangeTypeId(roomRegionTypeId);
                     skipped++;
                     continue;
                 }
@@ -78,6 +83,10 @@ public static class RegionNamingService
                     }
                 }
 
+                // Unflag if it was flagged and we just placed a text note
+                if (region.IsFlagged && roomRegionTypeId != null)
+                    doc.GetElement(region.RegionId)?.ChangeTypeId(roomRegionTypeId);
+
                 processed++;
                 continue;
             }
@@ -88,6 +97,7 @@ public static class RegionNamingService
             if (inside.Count == 0)
             {
                 unmatched++;
+                unmatchedRegionIds.Add(region.RegionId);
                 continue;
             }
 
@@ -101,7 +111,7 @@ public static class RegionNamingService
             if (distinctNames.Count > 1)
             {
                 ambiguous++;
-                ambiguousDetails.Add(new AmbiguousRegion(distinctNames));
+                ambiguousDetails.Add(new AmbiguousRegion(region.RegionId, distinctNames));
                 continue;
             }
 
@@ -140,10 +150,14 @@ public static class RegionNamingService
                 }
             }
 
+            // Unflag if it was flagged and we just assigned a name
+            if (region.IsFlagged && roomRegionTypeId != null)
+                doc.GetElement(region.RegionId)?.ChangeTypeId(roomRegionTypeId);
+
             processed++;
         }
 
-        return new NamingResult(processed, skipped, ambiguous, unmatched, ambiguousDetails);
+        return new NamingResult(processed, skipped, ambiguous, unmatched, ambiguousDetails, unmatchedRegionIds);
     }
 
     private static readonly string[] PreservedCeilingWords =

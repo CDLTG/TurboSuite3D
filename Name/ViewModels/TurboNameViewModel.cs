@@ -6,29 +6,8 @@ namespace TurboSuite.Name.ViewModels;
 
 public class TurboNameViewModel : ViewModelBase
 {
-    private int _regionCount;
-    private int _cadEntryCount;
-    private int _wallSegmentCount;
     private bool _shouldRun;
     private bool _shouldGenerate;
-
-    public int RegionCount
-    {
-        get => _regionCount;
-        set => SetProperty(ref _regionCount, value);
-    }
-
-    public int CadEntryCount
-    {
-        get => _cadEntryCount;
-        set => SetProperty(ref _cadEntryCount, value);
-    }
-
-    public int WallSegmentCount
-    {
-        get => _wallSegmentCount;
-        set => SetProperty(ref _wallSegmentCount, value);
-    }
 
     /// <summary>
     /// Set to true when the user clicks Run; the command reads this after ShowDialog returns.
@@ -53,8 +32,8 @@ public class TurboNameViewModel : ViewModelBase
 
     public TurboNameViewModel()
     {
-        RunAssignCommand = new RelayCommand(ExecuteRun, () => RegionCount > 0 && CadEntryCount > 0);
-        RunGenerateCommand = new RelayCommand(ExecuteGenerate, () => WallSegmentCount > 0);
+        RunAssignCommand = new RelayCommand(ExecuteRun);
+        RunGenerateCommand = new RelayCommand(ExecuteGenerate);
     }
 
     private void ExecuteRun()

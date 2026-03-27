@@ -2,7 +2,6 @@
 using System;
 using System.Linq;
 using System.Windows.Interop;
-using System.Windows.Threading;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -60,28 +59,10 @@ namespace TurboSuite.Name
                     return Result.Cancelled;
                 }
 
-                // Look up description TextNoteType (non-fatal if missing)
-                var descTextNoteType = new FilteredElementCollector(doc)
-                    .OfClass(typeof(TextNoteType))
-                    .Cast<TextNoteType>()
-                    .FirstOrDefault(t => t.Name == DescriptionTextNoteTypeName);
-                ElementId descTypeId = descTextNoteType?.Id ?? ElementId.InvalidElementId;
-
-                var regions = RegionCollectorService.CollectRegions(doc, view);
-
-                var cadRoomData = CadRoomExtractorService.ExtractRoomData(doc, view, settings);
-
-                var (wallSegments, doorPositions, windowPositions) =
-                    CadWallExtractorService.ExtractWallGeometry(doc, view, settings);
-
-                var vm = new TurboNameViewModel
-                {
-                    RegionCount = regions.Count,
-                    CadEntryCount = cadRoomData.Count,
-                    WallSegmentCount = wallSegments.Count
-                };
+                var vm = new TurboNameViewModel();
 
                 var window = new TurboNameWindow { DataContext = vm };
+                new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
                 vm.CloseRequested += () =>
                 {
                     window.DialogResult = true;
@@ -90,12 +71,13 @@ namespace TurboSuite.Name
                 window.ShowDialog();
 
                 if (vm.ShouldGenerate)
-                    return LaunchGenerateRegions(commandData, doc, uidoc, view, settings,
-                        wallSegments, doorPositions, windowPositions);
+                    return LaunchGenerateRegions(commandData, doc, uidoc, view, settings);
 
                 if (!vm.ShouldRun)
                     return Result.Cancelled;
 
+                // Collect data only when Run is clicked
+                var regions = RegionCollectorService.CollectRegions(doc, view);
                 if (regions.Count == 0)
                 {
                     TaskDialog.Show("TurboName",
@@ -104,6 +86,7 @@ namespace TurboSuite.Name
                     return Result.Cancelled;
                 }
 
+                var cadRoomData = CadRoomExtractorService.ExtractRoomData(doc, view, settings);
                 if (cadRoomData.Count == 0)
                 {
                     TaskDialog.Show("TurboName",
@@ -112,12 +95,57 @@ namespace TurboSuite.Name
                     return Result.Cancelled;
                 }
 
+                // Look up description TextNoteType (non-fatal if missing)
+                var descTextNoteType = new FilteredElementCollector(doc)
+                    .OfClass(typeof(TextNoteType))
+                    .Cast<TextNoteType>()
+                    .FirstOrDefault(t => t.Name == DescriptionTextNoteTypeName);
+                ElementId descTypeId = descTextNoteType?.Id ?? ElementId.InvalidElementId;
+
+                // Look up Room Region type for unflagging
+                var roomRegionType = new FilteredElementCollector(doc)
+                    .OfClass(typeof(FilledRegionType))
+                    .Cast<FilledRegionType>()
+                    .FirstOrDefault(rt => rt.Name == "Room Region");
+                ElementId roomRegionTypeId = roomRegionType?.Id;
+
                 Models.NamingResult result;
                 using (var t = new Transaction(doc, "TurboName - Assign Room Names"))
                 {
                     t.Start();
                     result = RegionNamingService.AssignRoomNames(
-                        doc, view, regions, cadRoomData, textNoteType.Id, descTypeId);
+                        doc, view, regions, cadRoomData, textNoteType.Id, descTypeId, roomRegionTypeId);
+
+                    // Flag ambiguous regions so they're easy to find
+                    if (result.AmbiguousDetails.Count > 0)
+                    {
+                        var flaggedType = new FilteredElementCollector(doc)
+                            .OfClass(typeof(FilledRegionType))
+                            .Cast<FilledRegionType>()
+                            .FirstOrDefault(rt => rt.Name == "Room Region (Flagged)");
+
+                        if (flaggedType != null)
+                        {
+                            foreach (var ar in result.AmbiguousDetails)
+                                doc.GetElement(ar.RegionId)?.ChangeTypeId(flaggedType.Id);
+                        }
+                    }
+
+                    // Flag unmatched regions so they're easy to find
+                    if (result.UnmatchedRegionIds.Count > 0)
+                    {
+                        var emptyType = new FilteredElementCollector(doc)
+                            .OfClass(typeof(FilledRegionType))
+                            .Cast<FilledRegionType>()
+                            .FirstOrDefault(rt => rt.Name == "Room Region (Empty)");
+
+                        if (emptyType != null)
+                        {
+                            foreach (var id in result.UnmatchedRegionIds)
+                                doc.GetElement(id)?.ChangeTypeId(emptyType.Id);
+                        }
+                    }
+
                     t.Commit();
                 }
 
@@ -151,19 +179,8 @@ namespace TurboSuite.Name
         }
 
         private static Result LaunchGenerateRegions(ExternalCommandData commandData,
-            Document doc, UIDocument uidoc, View view, Shared.Models.CadRoomSourceSettings settings,
-            System.Collections.Generic.List<Models.CadWallSegment> wallSegments,
-            System.Collections.Generic.List<XYZ> doorPositions,
-            System.Collections.Generic.List<XYZ> windowPositions)
+            Document doc, UIDocument uidoc, View view, Shared.Models.CadRoomSourceSettings settings)
         {
-            if (wallSegments.Count == 0)
-            {
-                TaskDialog.Show("TurboName",
-                    "No wall segments found in linked CAD files.\n\n" +
-                    "Configure Wall Layer names in TurboSuite Settings.");
-                return Result.Cancelled;
-            }
-
             // Find the FilledRegionType
             string regionTypeName = string.IsNullOrEmpty(settings.RegionTypeName)
                 ? "Room Region" : settings.RegionTypeName;
@@ -180,11 +197,8 @@ namespace TurboSuite.Name
                 return Result.Cancelled;
             }
 
-            // Bridge gaps
-            var bridgedSegments = GapBridgingService.BridgeGaps(wallSegments, doorPositions, windowPositions);
-
             // Create handler and external event
-            var handler = new RegionGenerationHandler(doc, uidoc, view, bridgedSegments, regionType.Id);
+            var handler = new RegionPickHandler(doc, uidoc, view, regionType.Id);
             var externalEvent = ExternalEvent.Create(handler);
 
             var genVm = new GenerateRegionsViewModel(externalEvent, handler);
@@ -204,12 +218,6 @@ namespace TurboSuite.Name
             };
 
             genWindow.Show();
-
-            // Auto-start picking after the window renders
-            genWindow.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
-            {
-                genVm.StartPicking();
-            }));
 
             return Result.Succeeded;
         }

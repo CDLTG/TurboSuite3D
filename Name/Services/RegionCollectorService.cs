@@ -12,6 +12,8 @@ namespace TurboSuite.Name.Services;
 public static class RegionCollectorService
 {
     private const string RoomRegionTypeName = "Room Region";
+    private const string FlaggedRegionTypeName = "Room Region (Flagged)";
+    private const string EmptyRegionTypeName = "Room Region (Empty)";
 
     public static List<RegionData> CollectRegions(Document doc, View view)
     {
@@ -28,7 +30,11 @@ public static class RegionCollectorService
             var typeId = region.GetTypeId();
             if (typeId == ElementId.InvalidElementId) continue;
             var regionType = doc.GetElement(typeId);
-            if (regionType == null || regionType.Name != RoomRegionTypeName) continue;
+            if (regionType == null) continue;
+
+            string typeName = regionType.Name;
+            bool isFlagged = typeName == FlaggedRegionTypeName || typeName == EmptyRegionTypeName;
+            if (typeName != RoomRegionTypeName && !isFlagged) continue;
 
             string comments = region.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)
                 ?.AsString() ?? "";
@@ -49,7 +55,7 @@ public static class RegionCollectorService
                 loopPoints.Add(points);
             }
 
-            regions.Add(new RegionData(region.Id, comments, loopPoints));
+            regions.Add(new RegionData(region.Id, comments, loopPoints, isFlagged));
         }
 
         return regions;
