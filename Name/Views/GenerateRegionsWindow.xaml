@@ -37,13 +37,13 @@
         <TextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="#888888" FontSize="9.5"
                    TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="30"/>
 
-        <!-- Picking status text (visible when picking) -->
-        <TextBlock Grid.Row="4" Text="Click inside a room. Press Escape to pause."
+        <!-- Picking hint (visible when picking) -->
+        <TextBlock Grid.Row="4" Text="{Binding PickingHint}"
                    Foreground="#555555" FontSize="11"
                    Visibility="{Binding IsPicking, Converter={StaticResource BoolToVis}}"/>
 
         <!-- Paused text (visible when not picking) -->
-        <TextBlock Grid.Row="4" Text="Paused. Edit regions in Revit, then Resume or Finish."
+        <TextBlock Grid.Row="4" Text="Choose a draw mode, or Finish."
                    Foreground="#555555" FontSize="11">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
@@ -69,8 +69,10 @@
                     </Style.Triggers>
                 </Style>
             </StackPanel.Style>
-            <Button Content="Resume" Width="75" Margin="0,0,8,0"
-                    Command="{Binding ResumeCommand}"/>
+            <Button Content="Rectangle" Width="80" Margin="0,0,8,0"
+                    Command="{Binding RectangleCommand}"/>
+            <Button Content="Polygon" Width="80" Margin="0,0,8,0"
+                    Command="{Binding PolygonCommand}"/>
             <Button Content="Finish" Width="75"
                     Command="{Binding FinishCommand}"/>
         </StackPanel>

@@ -8,5 +8,8 @@ public abstract class RegionGenerationRequest
     public Action<object> OnComplete { get; set; }
 }
 
-/// <summary>First run or resume: enter the PickPoint loop.</summary>
-public class StartPickingRequest : RegionGenerationRequest { }
+/// <summary>Rectangle mode: two-click pick loop.</summary>
+public class RectanglePickRequest : RegionGenerationRequest { }
+
+/// <summary>Polygon mode: multi-click pick loop, Escape closes current polygon.</summary>
+public class PolygonPickRequest : RegionGenerationRequest { }

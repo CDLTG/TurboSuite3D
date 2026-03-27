@@ -10,12 +10,13 @@ namespace TurboSuite.Name.ViewModels;
 public class GenerateRegionsViewModel : ViewModelBase
 {
     private readonly ExternalEvent _externalEvent;
-    private readonly RegionGenerationHandler _handler;
+    private readonly RegionPickHandler _handler;
 
     private int _createdCount;
     private int _failedCount;
     private bool _isPicking;
     private string _statusText = "";
+    private string _pickingHint = "";
 
     public int CreatedCount
     {
@@ -41,30 +42,40 @@ public class GenerateRegionsViewModel : ViewModelBase
         set => SetProperty(ref _statusText, value);
     }
 
-    public ICommand ResumeCommand { get; }
+    public string PickingHint
+    {
+        get => _pickingHint;
+        set => SetProperty(ref _pickingHint, value);
+    }
+
+    public ICommand RectangleCommand { get; }
+    public ICommand PolygonCommand { get; }
     public ICommand FinishCommand { get; }
 
     public event Action CloseRequested;
 
-    public GenerateRegionsViewModel(ExternalEvent externalEvent, RegionGenerationHandler handler)
+    public GenerateRegionsViewModel(ExternalEvent externalEvent, RegionPickHandler handler)
     {
         _externalEvent = externalEvent;
         _handler = handler;
 
-        ResumeCommand = new RelayCommand(OnResume, () => !IsPicking);
+        RectangleCommand = new RelayCommand(OnRectangle, () => !IsPicking);
+        PolygonCommand = new RelayCommand(OnPolygon, () => !IsPicking);
         FinishCommand = new RelayCommand(OnFinish, () => !IsPicking);
     }
 
-    public void StartPicking()
+    private void OnRectangle()
     {
         IsPicking = true;
-        RaisePick();
+        PickingHint = "Click two corners to draw a rectangle. Escape to pause.";
+        RaisePick(new RectanglePickRequest());
     }
 
-    private void OnResume()
+    private void OnPolygon()
     {
         IsPicking = true;
-        RaisePick();
+        PickingHint = "Click corners to trace a room. Escape to close shape. Escape again to pause.";
+        RaisePick(new PolygonPickRequest());
     }
 
     private void OnFinish()
@@ -72,23 +83,21 @@ public class GenerateRegionsViewModel : ViewModelBase
         CloseRequested?.Invoke();
     }
 
-    private void RaisePick()
+    private void RaisePick(RegionGenerationRequest request)
     {
-        _handler.CurrentRequest = new StartPickingRequest
+        request.OnComplete = result =>
         {
-            OnComplete = result =>
+            if (result is PickLoopUpdate update)
             {
-                if (result is PickLoopUpdate update)
-                {
-                    CreatedCount = update.TotalCreated;
-                    FailedCount = update.TotalFailed;
-                    if (update.LastStatus != null)
-                        StatusText = update.LastStatus;
-                    if (update.LoopEnded)
-                        IsPicking = false;
-                }
+                CreatedCount = update.TotalCreated;
+                FailedCount = update.TotalFailed;
+                if (update.LastStatus != null)
+                    StatusText = update.LastStatus;
+                if (update.LoopEnded)
+                    IsPicking = false;
             }
         };
+        _handler.CurrentRequest = request;
         _externalEvent.Raise();
     }
 }
