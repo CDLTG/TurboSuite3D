@@ -95,7 +95,8 @@ if (Test-Path $updaterExe) {
     Copy-Item $updaterExe -Destination $ServerPath -Force
     Write-Host "  Copied TurboSuiteUpdater.exe"
 } else {
-    Write-Warning "TurboSuiteUpdater.exe not found - skipping."
+    Write-Error "TurboSuiteUpdater.exe not found."
+    exit 1
 }
 
 # Copy installer files
@@ -105,7 +106,8 @@ if (Test-Path $installerPublishDir) {
         Write-Host "  Copied $($_.Name)"
     }
 } else {
-    Write-Warning "Installer publish directory not found at: $installerPublishDir - skipping."
+    Write-Error "Installer publish directory not found at: $installerPublishDir"
+    exit 1
 }
 
 # Step 5: Write version.txt
