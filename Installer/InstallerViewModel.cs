@@ -196,6 +196,12 @@ public class InstallerViewModel : INotifyPropertyChanged
 
         if (result != MessageBoxResult.Yes) return;
 
+        if (System.Diagnostics.Process.GetProcessesByName("Revit").Length > 0)
+        {
+            Fail("Please close Revit before uninstalling.");
+            return;
+        }
+
         _isInstalling = true;
         CommandManager.InvalidateRequerySuggested();
 
