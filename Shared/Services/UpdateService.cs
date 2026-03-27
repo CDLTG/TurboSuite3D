@@ -28,6 +28,8 @@ public static class UpdateService
         {
             try
             {
+                if (string.IsNullOrEmpty(UpdateConstants.ServerPath)) return null;
+
                 var serverVersionFile = Path.Combine(UpdateConstants.ServerPath, "version.txt");
                 if (!File.Exists(serverVersionFile)) return null;
 
@@ -56,6 +58,7 @@ public static class UpdateService
         Directory.CreateDirectory(StagingFolder);
 
         var serverPath = UpdateConstants.ServerPath;
+        if (string.IsNullOrEmpty(serverPath)) return;
 
         foreach (var sourceFile in Directory.GetFiles(serverPath))
         {

@@ -12,7 +12,12 @@ TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting autom
 dotnet build TurboSuite.sln
 ```
 
-Platform target is **x64**. The solution contains two projects: `TurboSuite.csproj` (main add-in) and `Updater/TurboSuiteUpdater.csproj` (auto-update helper). There are no automated tests or linting configurations.
+Platform target is **x64**. The solution contains three projects: `TurboSuite.csproj` (main add-in), `Updater/TurboSuiteUpdater.csproj` (auto-update helper), and `Installer/TurboSuiteInstaller.csproj` (standalone WPF installer). There are no automated tests or linting configurations.
+
+To publish a release to the server share (run from non-admin PowerShell):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -Version "1.0.0"
+```
 
 **IMPORTANT**: Always use Windows-style paths for `dotnet`/MSBuild commands (e.g., `'C:\Users\jacobq\...\TurboSuite.csproj'`). Never use WSL-style `/mnt/c/...` paths — they cause `MSB1001` errors.
 
@@ -38,11 +43,17 @@ It also copies `TurboSuiteUpdater.exe` to `%LOCALAPPDATA%\TurboSuite\`.
 
 Revit auto-discovers `.addin` files from that directory on startup.
 
-### Auto-Update (not yet finalized)
+### Installation and Auto-Update
 
-An auto-update system checks a shared server (`UpdateConstants.ServerPath`) on Revit launch. If a newer `version.txt` is found, files are staged to `%LOCALAPPDATA%\TurboSuite\Staging\`. The user is prompted to accept or skip. If accepted, `TurboSuiteUpdater.exe` applies the update after Revit closes. Skipped updates remain staged and prompt again on next launch. The server path in `UpdateConstants.cs` is a placeholder (`\\SERVER_NAME\TurboSuite`) — set it before deploying.
+**First-time install:** Users run `TurboSuiteInstaller.exe` from the network share. It copies add-in files to the Revit addins folder, writes a `config.json` to `%LOCALAPPDATA%\TurboSuite\` with the server path (auto-detected from the installer's own directory), and writes the initial `version.txt`.
 
-The `Updater/` subdirectory is excluded from the main project via `<DefaultItemExcludes>` in `TurboSuite.csproj` to prevent the WPF temp project from picking up Updater source files.
+**Auto-update:** On Revit launch, `UpdateService` reads the server path from `%LOCALAPPDATA%\TurboSuite\config.json` and checks for a newer `version.txt`. If found, files are staged to `%LOCALAPPDATA%\TurboSuite\Staging\`. The user is prompted to accept or skip. If accepted, `TurboSuiteUpdater.exe` applies the update after Revit closes. Skipped updates remain staged and prompt again on next launch.
+
+**Publishing updates:** Run `publish.ps1` from a non-admin PowerShell (admin sessions cannot see mapped network drives). See `PUBLISHING.md` for full syntax. Bump the version each release.
+
+**Uninstall:** Users can run `TurboSuiteInstaller.exe` again and click "Uninstall" to remove all TurboSuite files.
+
+The `Updater/` and `Installer/` subdirectories are excluded from the main project via `<DefaultItemExcludes>` in `TurboSuite.csproj` to prevent the WPF temp project from picking up their source files.
 
 ## Workflow Rules
 
@@ -107,6 +118,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Spike` | TurboSpike — diagnostic/debug command (swap Execute body per investigation) |
 | `Guide/` | `Guide.md` — user-facing documentation |
 | `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
+| `Installer/` | TurboSuiteInstaller — standalone WPF installer for network share deployment |
 
 ### Known Namespace Collision
 
