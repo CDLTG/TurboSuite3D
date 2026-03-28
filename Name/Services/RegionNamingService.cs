@@ -1,4 +1,5 @@
 #nullable disable
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -21,6 +22,7 @@ public static class RegionNamingService
         int processed = 0, skipped = 0, ambiguous = 0, unmatched = 0;
         var ambiguousDetails = new List<AmbiguousRegion>();
         var unmatchedRegionIds = new List<ElementId>();
+        double northAngle = GetTextRotationAngle(doc);
 
         // Collect all TextNotes in the view for existing-comment checks
         var viewTextNotes = new FilteredElementCollector(doc, view.Id)
@@ -46,40 +48,67 @@ public static class RegionNamingService
                     continue;
                 }
 
-                // No matching TextNote — create one using CAD location or centroid fallback
+                // No matching TextNote — find CAD data and place text notes
                 var insideExisting = cadRoomData
                     .Where(cd => IsPointInZone(region.BoundaryLoops, cd.RevitPoint))
                     .ToList();
 
-                XYZ placementPoint;
-                string existingHeight = "";
-                string existingDesc = "";
+                var existingHeightEntries = insideExisting
+                    .Where(cd => !string.IsNullOrEmpty(cd.CeilingHeight)).ToList();
 
-                if (insideExisting.Count > 0)
+                if (existingHeightEntries.Count == 1)
                 {
-                    var cadEntry = insideExisting.First();
-                    placementPoint = cadEntry.RevitPoint;
-                    (existingHeight, existingDesc) = CleanCeilingHeight(cadEntry.CeilingHeight);
+                    // Single ceiling height — combine with room name at height's CAD location
+                    var heightEntry = existingHeightEntries[0];
+                    var (entryHeight, description) = CleanCeilingHeight(heightEntry.CeilingHeight);
+                    string textContent = BuildTextContent(region.ExistingComments, entryHeight);
+                    if (!string.IsNullOrEmpty(textContent))
+                    {
+                        var note = TextNote.Create(doc, view.Id, heightEntry.RevitPoint, textContent, textNoteTypeId);
+                        note.HorizontalAlignment = HorizontalTextAlignment.Center;
+                        note.VerticalAlignment = VerticalTextAlignment.Middle;
+                        RotateToProjectNorth(doc, note, heightEntry.RevitPoint, northAngle);
+
+                        if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
+                        {
+                            var descPoint = GetDescriptionPoint(heightEntry.RevitPoint, northAngle);
+                            var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
+                            descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
+                            descNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                            RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                        }
+                    }
                 }
                 else
                 {
-                    // No CAD data in region — fall back to centroid
-                    placementPoint = ComputeCentroid(region.BoundaryLoops[0]);
-                }
+                    // 0 or multiple ceiling heights — place room name separately, then each height at its location
+                    XYZ namePlacement = insideExisting.Count > 0
+                        ? insideExisting.First().RevitPoint
+                        : ComputeCentroid(region.BoundaryLoops[0]);
 
-                string textContent = BuildTextContent(region.ExistingComments, existingHeight);
-                if (!string.IsNullOrEmpty(textContent))
-                {
-                    var note = TextNote.Create(doc, view.Id, placementPoint, textContent, textNoteTypeId);
-                    note.HorizontalAlignment = HorizontalTextAlignment.Center;
-                    note.VerticalAlignment = VerticalTextAlignment.Middle;
+                    var nameNote = TextNote.Create(doc, view.Id, namePlacement, region.ExistingComments, textNoteTypeId);
+                    nameNote.HorizontalAlignment = HorizontalTextAlignment.Center;
+                    nameNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                    RotateToProjectNorth(doc, nameNote, namePlacement, northAngle);
 
-                    if (!string.IsNullOrEmpty(existingDesc) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
+                    foreach (var heightEntry in existingHeightEntries)
                     {
-                        var descPoint = new XYZ(placementPoint.X, placementPoint.Y - 0.5, placementPoint.Z);
-                        var descNote = TextNote.Create(doc, view.Id, descPoint, existingDesc, descriptionTextNoteTypeId);
-                        descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                        descNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                        var (entryHeight, description) = CleanCeilingHeight(heightEntry.CeilingHeight);
+                        if (string.IsNullOrEmpty(entryHeight)) continue;
+
+                        var heightNote = TextNote.Create(doc, view.Id, heightEntry.RevitPoint, entryHeight, textNoteTypeId);
+                        heightNote.HorizontalAlignment = HorizontalTextAlignment.Center;
+                        heightNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                        RotateToProjectNorth(doc, heightNote, heightEntry.RevitPoint, northAngle);
+
+                        if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
+                        {
+                            var descPoint = GetDescriptionPoint(heightEntry.RevitPoint, northAngle);
+                            var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
+                            descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
+                            descNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                            RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                        }
                     }
                 }
 
@@ -129,24 +158,58 @@ public static class RegionNamingService
                     ?.Set(roomName);
             }
 
-            // Place a TextNote at each CAD block location inside the region
-            foreach (var cadEntry in inside)
+            // Place a TextNote at each CAD entry location inside the region.
+            // Name-only entries get just the room name; height-only entries get just the height.
+            // If there's exactly 1 name and 1 height, combine them into a single text note
+            // at the name entry's location.
+            var nameEntries = inside.Where(cd => !string.IsNullOrEmpty(cd.RoomName)).ToList();
+            var heightEntries = inside.Where(cd => !string.IsNullOrEmpty(cd.CeilingHeight)).ToList();
+
+            if (nameEntries.Count == 1 && heightEntries.Count == 1)
             {
-                var (entryHeight, description) = CleanCeilingHeight(cadEntry.CeilingHeight);
-                string textContent = BuildTextContent(cadEntry.RoomName, entryHeight);
-                if (string.IsNullOrEmpty(textContent)) continue;
-
-                var note = TextNote.Create(doc, view.Id, cadEntry.RevitPoint, textContent, textNoteTypeId);
-                note.HorizontalAlignment = HorizontalTextAlignment.Center;
-                note.VerticalAlignment = VerticalTextAlignment.Middle;
-
-                // Place ceiling description as a separate, smaller TextNote below
-                if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
+                // Single name + single height — combine at the name location
+                var nameEntry = nameEntries[0];
+                var (entryHeight, description) = CleanCeilingHeight(heightEntries[0].CeilingHeight);
+                string textContent = BuildTextContent(nameEntry.RoomName, entryHeight);
+                if (!string.IsNullOrEmpty(textContent))
                 {
-                    var descPoint = new XYZ(cadEntry.RevitPoint.X, cadEntry.RevitPoint.Y - 0.5, cadEntry.RevitPoint.Z);
-                    var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
-                    descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                    descNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                    var note = TextNote.Create(doc, view.Id, nameEntry.RevitPoint, textContent, textNoteTypeId);
+                    note.HorizontalAlignment = HorizontalTextAlignment.Center;
+                    note.VerticalAlignment = VerticalTextAlignment.Middle;
+                    RotateToProjectNorth(doc, note, nameEntry.RevitPoint, northAngle);
+
+                    if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
+                    {
+                        var descPoint = GetDescriptionPoint(nameEntry.RevitPoint, northAngle);
+                        var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
+                        descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
+                        descNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                        RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                    }
+                }
+            }
+            else
+            {
+                // Place each entry independently at its own location
+                foreach (var cadEntry in inside)
+                {
+                    var (entryHeight, description) = CleanCeilingHeight(cadEntry.CeilingHeight);
+                    string textContent = BuildTextContent(cadEntry.RoomName, entryHeight);
+                    if (string.IsNullOrEmpty(textContent)) continue;
+
+                    var note = TextNote.Create(doc, view.Id, cadEntry.RevitPoint, textContent, textNoteTypeId);
+                    note.HorizontalAlignment = HorizontalTextAlignment.Center;
+                    note.VerticalAlignment = VerticalTextAlignment.Middle;
+                    RotateToProjectNorth(doc, note, cadEntry.RevitPoint, northAngle);
+
+                    if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
+                    {
+                        var descPoint = GetDescriptionPoint(cadEntry.RevitPoint, northAngle);
+                        var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
+                        descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
+                        descNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                        RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                    }
                 }
             }
 
@@ -175,6 +238,9 @@ public static class RegionNamingService
     private static (string Height, string Description) CleanCeilingHeight(string value)
     {
         if (string.IsNullOrEmpty(value)) return (value, "");
+
+        // Strip leading '+' (e.g., "+10'-0\"" → "10'-0\"")
+        value = value.TrimStart('+');
 
         // Extract words that match preserved keywords (case-insensitive substring match)
         var words = Regex.Matches(value, @"[a-zA-Z]+")
@@ -253,5 +319,37 @@ public static class RegionNamingService
         }
 
         return inside;
+    }
+
+    /// <summary>
+    /// Returns the angle needed to rotate TextNotes so they align with model elements
+    /// in a Project North-oriented view. ProjectPosition.Angle is the angle from True North
+    /// to Project North, but elements in the view rotate by the negative of that angle.
+    /// </summary>
+    private static double GetTextRotationAngle(Document doc)
+    {
+        ProjectPosition pp = doc.ActiveProjectLocation.GetProjectPosition(XYZ.Zero);
+        return -pp.Angle;
+    }
+
+    /// <summary>
+    /// Offsets a point "below" the anchor in the Project North coordinate frame,
+    /// accounting for the rotation angle so the description stays beneath the main text.
+    /// </summary>
+    private static XYZ GetDescriptionPoint(XYZ anchor, double northAngle)
+    {
+        double dx = 0.5 * Math.Sin(northAngle);
+        double dy = -0.5 * Math.Cos(northAngle);
+        return new XYZ(anchor.X + dx, anchor.Y + dy, anchor.Z);
+    }
+
+    /// <summary>
+    /// Rotates a TextNote to align with Project North if the angle is non-zero.
+    /// </summary>
+    private static void RotateToProjectNorth(Document doc, TextNote note, XYZ center, double northAngle)
+    {
+        if (Math.Abs(northAngle) < 1e-9) return;
+        var axis = Line.CreateBound(center, center + XYZ.BasisZ);
+        ElementTransformUtils.RotateElement(doc, note.Id, axis, northAngle);
     }
 }

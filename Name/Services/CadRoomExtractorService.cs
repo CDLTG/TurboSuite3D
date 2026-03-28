@@ -119,26 +119,64 @@ public static class CadRoomExtractorService
         var roomNameTexts = new List<(string Text, XYZ Point)>();
         var ceilingTexts = new List<(string Text, XYZ Point)>();
 
-        bool sameLayer = string.Equals(settings.RoomNameLayer, settings.CeilingHeightLayer,
+        bool hasCeilingLayer = !string.IsNullOrEmpty(settings.CeilingHeightLayer);
+        bool hasCeilingBlock = !string.IsNullOrEmpty(settings.CeilingHeightBlockName)
+                            && !string.IsNullOrEmpty(settings.CeilingHeightBlockTag);
+        bool sameLayer = hasCeilingLayer && string.Equals(settings.RoomNameLayer, settings.CeilingHeightLayer,
             StringComparison.OrdinalIgnoreCase);
 
         foreach (var entity in cadDoc.Entities)
         {
+            // Extract ceiling heights from block attributes
+            if (hasCeilingBlock && entity is Insert insert)
+            {
+                string blockName = insert.Block?.Name ?? "";
+                if (string.Equals(blockName, settings.CeilingHeightBlockName, StringComparison.OrdinalIgnoreCase)
+                    && insert.Attributes != null)
+                {
+                    foreach (var attr in insert.Attributes)
+                    {
+                        if (string.Equals(attr.Tag, settings.CeilingHeightBlockTag, StringComparison.OrdinalIgnoreCase))
+                        {
+                            string heightVal = StripCadFormatting(attr.Value ?? "").Trim();
+                            if (!string.IsNullOrEmpty(heightVal))
+                            {
+                                double cadX = insert.InsertPoint.X;
+                                double cadY = insert.InsertPoint.Y;
+                                var cadPointFeet = new XYZ(cadX * unitToFeet, cadY * unitToFeet, 0);
+                                var revitPoint = cadTransform.OfPoint(cadPointFeet);
+                                ceilingTexts.Add((heightVal, revitPoint));
+                            }
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // Extract text entities
             var extracted = ExtractTextFromEntity(entity);
             if (extracted == null) continue;
 
             var (text, x, y, layer) = extracted.Value;
-            var cadPointFeet = new XYZ(x * unitToFeet, y * unitToFeet, 0);
-            var revitPoint = cadTransform.OfPoint(cadPointFeet);
+            var textPointFeet = new XYZ(x * unitToFeet, y * unitToFeet, 0);
+            var revitPoint2 = cadTransform.OfPoint(textPointFeet);
 
             if (string.Equals(layer, settings.RoomNameLayer, StringComparison.OrdinalIgnoreCase))
-                roomNameTexts.Add((text, revitPoint));
+                roomNameTexts.Add((text, revitPoint2));
 
-            if (!sameLayer && string.Equals(layer, settings.CeilingHeightLayer, StringComparison.OrdinalIgnoreCase))
-                ceilingTexts.Add((text, revitPoint));
+            if (hasCeilingLayer && !sameLayer && !hasCeilingBlock
+                && string.Equals(layer, settings.CeilingHeightLayer, StringComparison.OrdinalIgnoreCase))
+                ceilingTexts.Add((text, revitPoint2));
         }
 
-        if (sameLayer)
+        if (!hasCeilingLayer && !hasCeilingBlock)
+        {
+            // No ceiling height source — room names only
+            foreach (var (text, point) in roomNameTexts)
+                results.Add(new CadRoomData(text.Replace("#", "").ToUpper(), "", point));
+        }
+        else if (sameLayer && !hasCeilingBlock)
         {
             // All text on the same layer — each text is a room name, no ceiling height pairing
             foreach (var (text, point) in roomNameTexts)
@@ -146,27 +184,12 @@ public static class CadRoomExtractorService
         }
         else
         {
-            // Pair room names with nearest ceiling height text
+            // Room names as entries, plus separate ceiling height entries at their own locations
             foreach (var (name, namePoint) in roomNameTexts)
-            {
-                string nearestHeight = "";
-                if (ceilingTexts.Count > 0)
-                {
-                    var nearest = ceilingTexts
-                        .OrderBy(ct => namePoint.DistanceTo(ct.Point))
-                        .First();
-                    nearestHeight = nearest.Text;
-                }
-                results.Add(new CadRoomData(name.Replace("#", "").ToUpper(), nearestHeight, namePoint));
-            }
+                results.Add(new CadRoomData(name.Replace("#", "").ToUpper(), "", namePoint));
 
-            // Also add ceiling-height-only entries that aren't near any room name
             foreach (var (heightText, heightPoint) in ceilingTexts)
-            {
-                bool hasNearbyRoomName = roomNameTexts.Any(rn => rn.Point.DistanceTo(heightPoint) < 10.0);
-                if (!hasNearbyRoomName)
-                    results.Add(new CadRoomData("", heightText, heightPoint));
-            }
+                results.Add(new CadRoomData("", heightText, heightPoint));
         }
     }
 
