@@ -128,6 +128,13 @@ public class TurboSuiteApplication : IExternalApplication
                 "Diagnostic command for troubleshooting",
                 "Runs diagnostic probes against the Revit API. Swap out the Execute body as needed for each investigation.");
 
+            CreateButtonNoIcon(debugPanel, assemblyPath,
+                "TurboPurge",
+                "    Turbo    \n    Purge    ",
+                "TurboSuite.Purge.PurgeCommand",
+                "Delete all TurboSuite settings",
+                "Scorched earth: deletes ALL DataStorage elements from the document. Restart Revit afterward and re-enter settings.");
+
             // Auto-update check
             application.Idling += OnIdlingCheckForUpdate;
 

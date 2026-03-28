@@ -83,8 +83,15 @@ When asked to explain something, provide the explanation only. Do not assume a c
 3. For `ElementId` storage type parameters, probe valid `ElementId` values rather than assuming string or integer assignment will work.
 4. Only proceed to implementation after confirming feasibility.
 
-### ExtensibleStorage Schema Changes (Temporary — remove after TurboSuite deployment)
-When adding or removing fields in `FamilyNameSettingsStorageService`, do NOT create a new schema GUID. Keep the existing GUID and remind the user to purge the existing schema from their Revit documents before testing.
+### ExtensibleStorage Schema Changes
+When adding or removing fields in any storage service (`FamilyNameSettingsStorageService`, `CadRoomSourceStorageService`, etc.), create a **new schema GUID**. Old schemas are cached in Revit's memory and cannot be updated at runtime. After changing a GUID, the user must:
+1. Close Revit
+2. Build with the new code
+3. Open Revit
+4. Run **TurboPurge** (Debug panel) to delete all DataStorage elements
+5. Open Settings, re-enter values, and save
+
+TurboPurge (`Purge/PurgeCommand.cs`) is a local-only debug command (gitignored) that deletes every `DataStorage` element in the document and invalidates all caches. It exists specifically for this workflow.
 
 ### Specification Documents
 Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NOT use them unless the user explicitly asks.

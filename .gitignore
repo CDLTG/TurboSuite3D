@@ -27,6 +27,9 @@ Specs/
 # Spike (local-only diagnostic command)
 Spike/
 
+# Purge (local-only settings reset command)
+Purge/
+
 # Design Guide (local-only working documents)
 Guide/
 
