@@ -28,6 +28,8 @@ public class SettingsViewModel : ViewModelBase
     private string _ceilingHeightTag;
     private string _roomNameLayer;
     private string _ceilingHeightLayer;
+    private string _ceilingHeightBlockName;
+    private string _ceilingHeightBlockTag;
     private string _wallLayerNamesText;
     private string _doorLayerNamesText;
     private string _windowLayerNamesText;
@@ -111,6 +113,18 @@ public class SettingsViewModel : ViewModelBase
     {
         get => _ceilingHeightLayer;
         set => SetProperty(ref _ceilingHeightLayer, value);
+    }
+
+    public string CeilingHeightBlockName
+    {
+        get => _ceilingHeightBlockName;
+        set => SetProperty(ref _ceilingHeightBlockName, value);
+    }
+
+    public string CeilingHeightBlockTag
+    {
+        get => _ceilingHeightBlockTag;
+        set => SetProperty(ref _ceilingHeightBlockTag, value);
     }
 
     public string WallLayerNamesText
@@ -199,6 +213,8 @@ public class SettingsViewModel : ViewModelBase
         CeilingHeightTag = settings.CeilingHeightTag ?? "";
         RoomNameLayer = settings.RoomNameLayer ?? "";
         CeilingHeightLayer = settings.CeilingHeightLayer ?? "";
+        CeilingHeightBlockName = settings.CeilingHeightBlockName ?? "";
+        CeilingHeightBlockTag = settings.CeilingHeightBlockTag ?? "";
         WallLayerNamesText = string.Join(", ", settings.WallLayerNames ?? new List<string>());
         DoorLayerNamesText = string.Join(", ", settings.DoorLayerNames ?? new List<string>());
         WindowLayerNamesText = string.Join(", ", settings.WindowLayerNames ?? new List<string>());
@@ -228,6 +244,8 @@ public class SettingsViewModel : ViewModelBase
         CeilingHeightTag = (CeilingHeightTag ?? "").Trim(),
         RoomNameLayer = (RoomNameLayer ?? "").Trim(),
         CeilingHeightLayer = (CeilingHeightLayer ?? "").Trim(),
+        CeilingHeightBlockName = (CeilingHeightBlockName ?? "").Trim(),
+        CeilingHeightBlockTag = (CeilingHeightBlockTag ?? "").Trim(),
         WallLayerNames = ParseCommaSeparated(WallLayerNamesText),
         DoorLayerNames = ParseCommaSeparated(DoorLayerNamesText),
         WindowLayerNames = ParseCommaSeparated(WindowLayerNamesText),

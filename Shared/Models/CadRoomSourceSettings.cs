@@ -31,6 +31,14 @@ public class CadRoomSourceSettings
     /// <summary>CAD layer containing ceiling height text. May be the same as RoomNameLayer.</summary>
     public string CeilingHeightLayer { get; set; } = "";
 
+    // ── Text mode: ceiling height from blocks (optional override) ──
+
+    /// <summary>Block name containing ceiling height attributes (used in Text mode when heights come from blocks).</summary>
+    public string CeilingHeightBlockName { get; set; } = "";
+
+    /// <summary>Attribute tag within the ceiling height block that holds the height value.</summary>
+    public string CeilingHeightBlockTag { get; set; } = "";
+
     // ── Region generation ──
 
     /// <summary>CAD layer names containing wall lines (comma-separated in UI).</summary>
@@ -53,6 +61,8 @@ public class CadRoomSourceSettings
         CeilingHeightTag = "",
         RoomNameLayer = "",
         CeilingHeightLayer = "",
+        CeilingHeightBlockName = "",
+        CeilingHeightBlockTag = "",
         WallLayerNames = new List<string>(),
         DoorLayerNames = new List<string>(),
         WindowLayerNames = new List<string>(),

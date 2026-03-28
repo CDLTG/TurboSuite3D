@@ -122,6 +122,8 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Room Name Layer:"
@@ -131,11 +133,23 @@
                                          Margin="0,0,0,6"/>
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Ceiling Height Layer:"
-                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
                                 <TextBox Grid.Row="1" Grid.Column="1"
-                                         Text="{Binding CeilingHeightLayer, UpdateSourceTrigger=PropertyChanged}"/>
+                                         Text="{Binding CeilingHeightLayer, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Block:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="2" Grid.Column="1"
+                                         Text="{Binding CeilingHeightBlockName, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Ceiling Height Tag:"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Grid.Row="3" Grid.Column="1"
+                                         Text="{Binding CeilingHeightBlockTag, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
-                            <TextBlock Text="Leave Ceiling Height Layer blank if heights are on the same layer as room names."
+                            <TextBlock Text="Ceiling heights from text layer OR block attributes. Leave Ceiling Height Layer blank to use blocks only, or leave Block fields blank to use text only."
                                        Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </StackPanel>
