@@ -33,5 +33,8 @@ Purge/
 # Design Guide (local-only working documents)
 Guide/
 
+# Installer build output
+Installer/publish/
+
 # Claude Code local settings
 .claude/settings.local.json
