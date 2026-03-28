@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates twelve commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboCuts, TurboSpike) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with thirteen `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates thirteen commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboCuts, TurboSpike, TurboPurge) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with fourteen `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\Sha
 ## Git Repository
 
 - **Remote:** GitHub (CDLTG/TurboSuite3D), default branch `main`, **public repo** (GPL v3)
-- **Ignored:** `Specs/` (local-only reference docs), `bin/`, `obj/`, `.vs/`, `.idea/`
+- **Ignored:** `Specs/`, `Spike/`, `Purge/` (local-only), `Installer/publish/` (build output), `bin/`, `obj/`, `.vs/`, `.idea/`
 - Do NOT commit files from `Specs/` — they are historical reference documents kept locally only.
 - Always commit and push `.gitignore` changes so they take effect on GitHub.
 
@@ -123,6 +123,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Cuts` | TurboCuts — spec sheet PDF download, stamping, and merging (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
 | `TurboSuite.Spike` | TurboSpike — diagnostic/debug command (swap Execute body per investigation) |
+| `TurboSuite.Purge` | TurboPurge — scorched-earth settings reset (deletes all DataStorage elements) |
 | `Guide/` | `Guide.md` — user-facing documentation |
 | `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
 | `Installer/` | TurboSuiteInstaller — standalone WPF installer for network share deployment |
