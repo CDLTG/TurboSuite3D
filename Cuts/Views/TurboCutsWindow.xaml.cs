@@ -16,7 +16,12 @@ public partial class TurboCutsWindow : Window
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) Close();
+        if (e.Key == Key.Escape)
+        {
+            if (DataContext is TurboCutsViewModel vm)
+                vm.SaveSettings();
+            Close();
+        }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

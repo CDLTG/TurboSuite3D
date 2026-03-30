@@ -17,6 +17,7 @@ public class TurboCutsViewModel : ViewModelBase
     private string _logoFilePath = string.Empty;
     private string _companyAddress = string.Empty;
     private string _companyPhone = string.Empty;
+    private string _companyEmail = string.Empty;
     private string _companyWebsite = string.Empty;
     private DateTime _headerDate = DateTime.Now;
     private double _progress;
@@ -42,6 +43,12 @@ public class TurboCutsViewModel : ViewModelBase
     {
         get => _companyPhone;
         set => SetProperty(ref _companyPhone, value);
+    }
+
+    public string CompanyEmail
+    {
+        get => _companyEmail;
+        set => SetProperty(ref _companyEmail, value);
     }
 
     public string CompanyWebsite
@@ -94,12 +101,16 @@ public class TurboCutsViewModel : ViewModelBase
         _logoFilePath = settings.LogoFilePath;
         _companyAddress = settings.CompanyAddress;
         _companyPhone = settings.CompanyPhone;
+        _companyEmail = settings.CompanyEmail;
         _companyWebsite = settings.CompanyWebsite;
 
         foreach (var fixture in Fixtures)
         {
             if (settings.LocalPdfPaths.TryGetValue(fixture.TypeMark, out var path) && File.Exists(path))
                 fixture.LocalPdfPath = path;
+
+            if (settings.SelectedTypeMarks.Count > 0)
+                fixture.IsSelected = settings.SelectedTypeMarks.Contains(fixture.TypeMark);
         }
 
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
@@ -116,13 +127,20 @@ public class TurboCutsViewModel : ViewModelBase
             .Where(f => f.HasLocalPdf)
             .ToDictionary(f => f.TypeMark, f => f.LocalPdfPath);
 
+        var selectedTypeMarks = Fixtures
+            .Where(f => f.IsSelected)
+            .Select(f => f.TypeMark)
+            .ToList();
+
         CutsSettingsService.Save(new CutsSettings
         {
             LogoFilePath = LogoFilePath,
             CompanyAddress = CompanyAddress,
             CompanyPhone = CompanyPhone,
+            CompanyEmail = CompanyEmail,
             CompanyWebsite = CompanyWebsite,
-            LocalPdfPaths = localPdfPaths
+            LocalPdfPaths = localPdfPaths,
+            SelectedTypeMarks = selectedTypeMarks
         });
     }
 
@@ -211,6 +229,7 @@ public class TurboCutsViewModel : ViewModelBase
                 LogoFilePath = LogoFilePath,
                 CompanyAddress = CompanyAddress,
                 CompanyPhone = CompanyPhone,
+                CompanyEmail = CompanyEmail,
                 CompanyWebsite = CompanyWebsite,
                 HeaderDate = HeaderDate.ToString("MMM dd, yyyy")
             };
