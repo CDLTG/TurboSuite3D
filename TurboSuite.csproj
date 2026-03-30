@@ -34,7 +34,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Resources\Icons\*.png" />
+    <Resource Include="Icons\*.png" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="Updater\TurboSuiteUpdater.csproj">
