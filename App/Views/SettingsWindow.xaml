@@ -9,16 +9,17 @@
     FontFamily="Segoe UI" FontSize="11">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
-        <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="ButtonBorderBrush" Color="#ACACAC"/>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
     </Window.Resources>
 
     <DockPanel>
         <!-- Header -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="16,10">
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
             <TextBlock Text="TurboSuite Settings" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
         </Border>
 
@@ -28,18 +29,15 @@
             <Grid>
                 <Button Content="Reset Defaults" HorizontalAlignment="Left"
                         Command="{Binding ResetDefaultsCommand}"
-                        Padding="12,5" MinWidth="100"
-                        Background="{StaticResource ButtonBgBrush}"
-                        BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                        Style="{StaticResource RevitButtonStyle}"
+                        Padding="12,5" MinWidth="100"/>
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <Button Content="Save" Command="{Binding SaveCommand}"
-                            Padding="12,5" MinWidth="75" Margin="0,0,8,0"
-                            Background="{StaticResource ButtonBgBrush}"
-                            BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                            Style="{StaticResource RevitButtonStyle}"
+                            Padding="12,5" MinWidth="75" Margin="0,0,8,0"/>
                     <Button Content="Cancel" IsCancel="True"
-                            Padding="12,5" MinWidth="75"
-                            Background="{StaticResource ButtonBgBrush}"
-                            BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                            Style="{StaticResource RevitButtonStyle}"
+                            Padding="12,5" MinWidth="75"/>
                 </StackPanel>
             </Grid>
         </Border>

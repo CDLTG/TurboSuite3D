@@ -11,24 +11,22 @@
     KeyDown="Window_KeyDown">
 
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <local:DimmingTypeToColorConverter x:Key="DimmingTypeToColor"/>
-        <local:EmptySlotsToVisibilityConverter x:Key="EmptySlotsToVisibility"/>
-        <local:IntToRangeConverter x:Key="IntToRange"/>
-        <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
-        <local:PercentToWidthConverter x:Key="PercentToWidth"/>
-        <local:BoolToRedForegroundConverter x:Key="BoolToRedForeground"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
-        <SolidColorBrush x:Key="ContentBgBrush" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="SeparatorBrush" Color="#CCCCCC"/>
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1A"/>
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#555555"/>
-        <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="ButtonBorderBrush" Color="#ACACAC"/>
-        <SolidColorBrush x:Key="EmptySlotBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="EmptySlotBorderBrush" Color="#BBBBBB"/>
+            <!-- Converters -->
+            <local:DimmingTypeToColorConverter x:Key="DimmingTypeToColor"/>
+            <local:EmptySlotsToVisibilityConverter x:Key="EmptySlotsToVisibility"/>
+            <local:IntToRangeConverter x:Key="IntToRange"/>
+            <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+            <local:PercentToWidthConverter x:Key="PercentToWidth"/>
+            <local:BoolToRedForegroundConverter x:Key="BoolToRedForeground"/>
+
+            <!-- Module-specific Brushes -->
+            <SolidColorBrush x:Key="EmptySlotBrush" Color="#F0F0F0"/>
+            <SolidColorBrush x:Key="EmptySlotBorderBrush" Color="#BBBBBB"/>
 
         <!-- Load Names tab: Source zone (read-only reference columns) -->
         <Style x:Key="SourceCellStyle" TargetType="DataGridCell">
@@ -77,44 +75,7 @@
             <Setter Property="Padding" Value="4,3"/>
         </Style>
 
-        <Style x:Key="RevitButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource ButtonBgBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource ButtonBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,4"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="2"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#E0E0E0"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#888888"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#D0D0D0"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#666666"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="border" Property="Background" Value="#F5F5F5"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#D9D9D9"/>
-                                <Setter Property="Foreground" Value="#AAAAAA"/>
-                                <Setter Property="Cursor" Value="Arrow"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Grid Background="{StaticResource ContentBgBrush}">
@@ -127,7 +88,7 @@
         <!-- Blue header bar -->
         <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
             <TextBlock Text="TurboZones - Zone &amp; Panel Manager"
-                       Foreground="White" FontSize="15" FontWeight="SemiBold"/>
+                       Foreground="White" FontSize="16" FontWeight="SemiBold"/>
         </Border>
 
         <!-- Tab content -->

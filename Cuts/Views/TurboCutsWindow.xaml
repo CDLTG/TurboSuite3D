@@ -10,32 +10,32 @@
     KeyDown="Window_KeyDown">
 
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
-        <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="ButtonBorderBrush" Color="#ACACAC"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <!-- Faint selection highlight and lighter grid lines -->
-        <Style TargetType="DataGridRow">
-            <Style.Resources>
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#D0D8E8"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#E0E4EC"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
-            </Style.Resources>
-        </Style>
+            <!-- Faint selection highlight and lighter grid lines -->
+            <Style TargetType="DataGridRow">
+                <Style.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#D0D8E8"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#E0E4EC"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
+                </Style.Resources>
+            </Style>
 
-        <!-- Single-click checkbox editing -->
-        <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
-            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
-        </Style>
+            <!-- Single-click checkbox editing -->
+            <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
+                <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <DockPanel>
         <!-- Header bar -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="16,10">
-            <TextBlock Text="TurboCuts — Cut Sheet Generator" Foreground="White" FontSize="15" FontWeight="SemiBold"/>
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
+            <TextBlock Text="TurboCuts — Cut Sheet Generator" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
         </Border>
 
         <!-- Footer buttons -->
@@ -44,10 +44,9 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="Generate" Command="{Binding GenerateCommand}" Width="90" Height="28" Margin="0,0,8,0"
-                            Background="{StaticResource HeaderBlueBrush}" Foreground="White" FontWeight="SemiBold"
-                            BorderThickness="0"/>
+                            Style="{StaticResource PrimaryButtonStyle}"/>
                     <Button Content="Close" Click="CloseButton_Click" Width="70" Height="28"
-                            Background="{StaticResource ButtonBgBrush}" BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                            Style="{StaticResource RevitButtonStyle}"/>
                 </StackPanel>
                 <!-- Status text -->
                 <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="4,0,12,0"
@@ -71,12 +70,14 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <TextBlock Text="Logo:" VerticalAlignment="Center" Grid.Row="0" Grid.Column="0"/>
                         <TextBox Text="{Binding LogoFilePath, UpdateSourceTrigger=PropertyChanged}"
                                  Grid.Row="0" Grid.Column="1" Margin="0,0,4,4" Height="24" VerticalContentAlignment="Center"/>
                         <Button Content="Browse..." Command="{Binding BrowseLogoCommand}"
+                                Style="{StaticResource RevitButtonStyle}" Padding="8,4"
                                 Grid.Row="0" Grid.Column="2" Width="70" Height="24" Margin="0,0,0,4"/>
 
                         <TextBlock Text="Address:" VerticalAlignment="Center" Grid.Row="1" Grid.Column="0"/>
@@ -89,15 +90,20 @@
                                  Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,4" Height="24"
                                  VerticalContentAlignment="Center"/>
 
-                        <TextBlock Text="Website:" VerticalAlignment="Center" Grid.Row="3" Grid.Column="0"/>
-                        <TextBox Text="{Binding CompanyWebsite, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBlock Text="Email:" VerticalAlignment="Center" Grid.Row="3" Grid.Column="0"/>
+                        <TextBox Text="{Binding CompanyEmail, UpdateSourceTrigger=PropertyChanged}"
                                  Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,4" Height="24"
                                  VerticalContentAlignment="Center"/>
 
-                        <TextBlock Text="Date:" VerticalAlignment="Center" Grid.Row="4" Grid.Column="0"/>
+                        <TextBlock Text="Website:" VerticalAlignment="Center" Grid.Row="4" Grid.Column="0"/>
+                        <TextBox Text="{Binding CompanyWebsite, UpdateSourceTrigger=PropertyChanged}"
+                                 Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,4" Height="24"
+                                 VerticalContentAlignment="Center"/>
+
+                        <TextBlock Text="Date:" VerticalAlignment="Center" Grid.Row="5" Grid.Column="0"/>
                         <DatePicker SelectedDate="{Binding HeaderDate, UpdateSourceTrigger=PropertyChanged}"
-                                    Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Height="24"
-                                    VerticalContentAlignment="Center"
+                                    Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Height="24"
+                                    VerticalContentAlignment="Center" Cursor="Hand"
                                     BorderBrush="#ABADB3" BorderThickness="1"/>
                     </Grid>
             </GroupBox>
@@ -111,10 +117,10 @@
                     <DockPanel Margin="8">
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                             <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
-                                    Background="{StaticResource ButtonBgBrush}" BorderBrush="{StaticResource ButtonBorderBrush}"
+                                    Style="{StaticResource RevitButtonStyle}" Padding="8,4"
                                     Margin="0,0,6,0"/>
                             <Button Content="Deselect All" Command="{Binding DeselectAllCommand}" Width="85" Height="24"
-                                    Background="{StaticResource ButtonBgBrush}" BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                                    Style="{StaticResource RevitButtonStyle}" Padding="8,4"/>
                         </StackPanel>
 
                         <DataGrid ItemsSource="{Binding Fixtures}"

@@ -8,10 +8,15 @@
     ShowInTaskbar="True"
     Topmost="False"
     WindowStartupLocation="Manual"
-    FontFamily="Segoe UI" FontSize="12">
+    FontFamily="Segoe UI" FontSize="11">
 
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Grid Margin="12">
@@ -70,10 +75,13 @@
                 </Style>
             </StackPanel.Style>
             <Button Content="Rectangle" Width="80" Margin="0,0,8,0"
+                    Style="{StaticResource RevitButtonStyle}"
                     Command="{Binding RectangleCommand}"/>
             <Button Content="Polygon" Width="80" Margin="0,0,8,0"
+                    Style="{StaticResource RevitButtonStyle}"
                     Command="{Binding PolygonCommand}"/>
             <Button Content="Finish" Width="75"
+                    Style="{StaticResource RevitButtonStyle}"
                     Command="{Binding FinishCommand}"/>
         </StackPanel>
     </Grid>

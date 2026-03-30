@@ -11,103 +11,66 @@
     KeyDown="Window_KeyDown">
 
     <Window.Resources>
-        <!-- Converters -->
-        <local:FeetInchesConverter x:Key="FeetInchesConverter"/>
-        <local:FlattenDevicesConverter x:Key="FlattenDevicesConverter"/>
-        <local:FamilyTypeDisplayConverter x:Key="FamilyTypeDisplayConverter"/>
-        <local:SubDriverHeaderConverter x:Key="SubDriverHeaderConverter"/>
-        <local:SegmentDisplayConverter x:Key="SegmentDisplayConverter"/>
-        <local:IsRecommendedTypeConverter x:Key="IsRecommendedTypeConverter"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <!-- Brushes -->
-        <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
-        <SolidColorBrush x:Key="ContentBgBrush" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SectionBgBrush" Color="#F5F5F5"/>
-        <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#D5D5D5"/>
-        <SolidColorBrush x:Key="TableHeaderBgBrush" Color="#E8E8E8"/>
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1A"/>
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#555555"/>
-        <SolidColorBrush x:Key="SeparatorBrush" Color="#CCCCCC"/>
-        <SolidColorBrush x:Key="AltRowBgBrush" Color="#F9F9F9"/>
-        <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
-        <SolidColorBrush x:Key="ButtonBorderBrush" Color="#ACACAC"/>
-        <SolidColorBrush x:Key="CircuitHeaderBgBrush" Color="#D0DBE9"/>
-        <SolidColorBrush x:Key="SelectionBgBrush" Color="#EDF2F9"/>
-        <SolidColorBrush x:Key="SelectionBorderBrush" Color="#4A78B0"/>
+            <!-- Converters -->
+            <local:FeetInchesConverter x:Key="FeetInchesConverter"/>
+            <local:FlattenDevicesConverter x:Key="FlattenDevicesConverter"/>
+            <local:FamilyTypeDisplayConverter x:Key="FamilyTypeDisplayConverter"/>
+            <local:SubDriverHeaderConverter x:Key="SubDriverHeaderConverter"/>
+            <local:SegmentDisplayConverter x:Key="SegmentDisplayConverter"/>
+            <local:IsRecommendedTypeConverter x:Key="IsRecommendedTypeConverter"/>
 
-        <!-- Label Style -->
-        <Style x:Key="LabelStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
+            <!-- Module-specific Brushes -->
+            <SolidColorBrush x:Key="SectionBgBrush" Color="#F5F5F5"/>
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#D5D5D5"/>
+            <SolidColorBrush x:Key="TableHeaderBgBrush" Color="#E8E8E8"/>
+            <SolidColorBrush x:Key="AltRowBgBrush" Color="#F9F9F9"/>
+            <SolidColorBrush x:Key="CircuitHeaderBgBrush" Color="#D0DBE9"/>
+            <SolidColorBrush x:Key="SelectionBgBrush" Color="#EDF2F9"/>
+            <SolidColorBrush x:Key="SelectionBorderBrush" Color="#4A78B0"/>
 
-        <!-- Value Style -->
-        <Style x:Key="ValueStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
+            <!-- Label Style -->
+            <Style x:Key="LabelStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
 
-        <!-- Section Header Style -->
-        <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="Margin" Value="0,8,0,4"/>
-        </Style>
+            <!-- Value Style -->
+            <Style x:Key="ValueStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
 
-        <!-- Table Header Style -->
-        <Style x:Key="TableHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="Padding" Value="8,3"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
+            <!-- Section Header Style -->
+            <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                <Setter Property="Margin" Value="0,8,0,4"/>
+            </Style>
 
-        <!-- Table Cell Style -->
-        <Style x:Key="TableCellStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="Padding" Value="8,3"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
+            <!-- Table Header Style -->
+            <Style x:Key="TableHeaderStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                <Setter Property="Padding" Value="8,3"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
 
-        <!-- Revit Button Style -->
-        <Style x:Key="RevitButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource ButtonBgBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource ButtonBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,4"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="2"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#E0E0E0"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#888888"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#D0D0D0"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#666666"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+            <!-- Table Cell Style -->
+            <Style x:Key="TableCellStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                <Setter Property="Padding" Value="8,3"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
 
         <!-- Circuit Expander Style -->
         <Style x:Key="CircuitExpanderStyle" TargetType="Expander">
@@ -245,6 +208,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Grid Background="{StaticResource ContentBgBrush}">
@@ -257,7 +221,7 @@
         <!-- Blue header bar -->
         <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
             <TextBlock Text="TurboRPS - Power Supply Selection Manager"
-                       Foreground="White" FontSize="15" FontWeight="SemiBold"
+                       Foreground="White" FontSize="16" FontWeight="SemiBold"
                        VerticalAlignment="Center"/>
         </Border>
 
