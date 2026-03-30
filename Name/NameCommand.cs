@@ -155,13 +155,6 @@ namespace TurboSuite.Name
                     $"Ambiguous (multiple names): {result.Ambiguous}\n" +
                     $"Unmatched (no CAD data): {result.Unmatched}";
 
-                if (result.AmbiguousDetails.Count > 0)
-                {
-                    summary += "\n\nAmbiguous regions — conflicting names found:";
-                    foreach (var ar in result.AmbiguousDetails)
-                        summary += $"\n  - {string.Join(" vs. ", ar.Names)}";
-                }
-
                 TaskDialog.Show("TurboName", summary);
 
                 return Result.Succeeded;

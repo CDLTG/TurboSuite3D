@@ -11,7 +11,6 @@
 
     <Window.Resources>
         <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
-        <SolidColorBrush x:Key="SeparatorBrush" Color="#CCCCCC"/>
         <SolidColorBrush x:Key="DisabledBgBrush" Color="#F0F0F0"/>
     </Window.Resources>
 
@@ -20,26 +19,12 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="12"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Assign Room Names section -->
-        <GroupBox Grid.Row="0" Header="Assign Room Names" Padding="12,8">
-            <StackPanel>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
-                           Text="Reads linked DWG files to extract room names and ceiling heights, assigns them to Room Region filled regions, and places TextNotes."/>
-                <Button Content="Run" Width="80" HorizontalAlignment="Right" Margin="0,8,0,0"
-                        Command="{Binding RunAssignCommand}" IsDefault="True"/>
-            </StackPanel>
-        </GroupBox>
-
-        <Separator Grid.Row="2" Background="{StaticResource SeparatorBrush}"/>
-
         <!-- Generate Regions section -->
-        <GroupBox Grid.Row="4" Header="Generate Regions" Padding="12,8">
+        <GroupBox Grid.Row="0" Header="Generate Regions" Padding="12,8">
             <StackPanel>
                 <TextBlock TextWrapping="Wrap"
                            Text="Draw Room Region filled regions interactively. Rectangle mode (two clicks) for simple rooms, Polygon mode (multi-click) for complex shapes."/>
@@ -48,8 +33,18 @@
             </StackPanel>
         </GroupBox>
 
+        <!-- Assign Room Names section -->
+        <GroupBox Grid.Row="2" Header="Assign Room Names" Padding="12,8">
+            <StackPanel>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
+                           Text="Reads linked DWG files to extract room names and ceiling heights, assigns them to Room Region filled regions, and places TextNotes."/>
+                <Button Content="Run" Width="80" HorizontalAlignment="Right" Margin="0,8,0,0"
+                        Command="{Binding RunAssignCommand}"/>
+            </StackPanel>
+        </GroupBox>
+
         <!-- Close button -->
-        <Button Grid.Row="6" Content="Close" Width="80" HorizontalAlignment="Right"
+        <Button Grid.Row="4" Content="Close" Width="80" HorizontalAlignment="Right" Margin="0,12,0,0"
                 Click="CloseButton_Click" IsCancel="True"/>
     </Grid>
 </Window>
