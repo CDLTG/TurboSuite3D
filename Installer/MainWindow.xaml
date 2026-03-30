@@ -12,11 +12,50 @@
         <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
         <SolidColorBrush x:Key="ButtonBgBrush" Color="#F0F0F0"/>
         <SolidColorBrush x:Key="ButtonBorderBrush" Color="#ACACAC"/>
+
+        <Style x:Key="RevitButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource ButtonBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ButtonBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="16,4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#DCECFC"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#7EB4EA"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#C4E0FC"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#569DE5"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Background" Value="#F5F5F5"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#D9D9D9"/>
+                                <Setter Property="Foreground" Value="#AAAAAA"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
         <!-- Header -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="16,10">
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
             <TextBlock Text="TurboSuite Installer" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
         </Border>
 
@@ -26,18 +65,15 @@
             <Grid>
                 <Button Content="Uninstall" HorizontalAlignment="Left"
                         Command="{Binding UninstallCommand}"
-                        Padding="12,5" MinWidth="75"
-                        Background="{StaticResource ButtonBgBrush}"
-                        BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                        Style="{StaticResource RevitButtonStyle}"
+                        Padding="12,5" MinWidth="75"/>
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <Button Content="Install" Command="{Binding InstallCommand}"
-                            Padding="12,5" MinWidth="75" Margin="0,0,8,0"
-                            Background="{StaticResource ButtonBgBrush}"
-                            BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                            Style="{StaticResource RevitButtonStyle}"
+                            Padding="12,5" MinWidth="75" Margin="0,0,8,0"/>
                     <Button Content="Close" Command="{Binding CloseCommand}"
-                            Padding="12,5" MinWidth="75"
-                            Background="{StaticResource ButtonBgBrush}"
-                            BorderBrush="{StaticResource ButtonBorderBrush}"/>
+                            Style="{StaticResource RevitButtonStyle}"
+                            Padding="12,5" MinWidth="75"/>
                 </StackPanel>
             </Grid>
         </Border>
