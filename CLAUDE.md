@@ -147,6 +147,7 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 - **Switch Systems** (`OST_SwitchSystem`) cannot be created or modified via the public API. Workaround: TurboDriver sets "Switch ID" parameter; users create switch systems manually.
 - **`PanelScheduleView.IsSlotGrouped`** is read-only — no `GroupCircuits`/`UngroupCircuits` API exists.
 - **Light Group** writes require a `Transaction` — calling outside one crashes Revit (hard crash, not exception). Groups are not elements and cannot be found via `FilteredElementCollector`.
+- **TextNote rotation**: `TextNote.Create` auto-orients text to be readable in the active view at orthogonal Project North angles (0°, ±90°, 180°). Manually rotating by `-ProjectPosition.Angle` at these angles doubles the rotation. Only apply rotation correction for non-orthogonal angles.
 
 ### WPF Patterns
 
