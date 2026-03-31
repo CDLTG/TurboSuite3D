@@ -226,7 +226,7 @@ public static class RegionNamingService
     private static readonly string[] PreservedCeilingWords =
     {
         "Vault", "Slope", "Barrel", "Tray", "Tin",
-        "Suspend", "Drop", "Cathedral", "Coffer", "Dome", "Groin"
+        "Suspend", "Drop", "Cathedral", "Coffer", "Dome", "Groin", "Varie"
     };
 
     /// <summary>
@@ -323,13 +323,20 @@ public static class RegionNamingService
 
     /// <summary>
     /// Returns the angle needed to rotate TextNotes so they align with model elements
-    /// in a Project North-oriented view. ProjectPosition.Angle is the angle from True North
-    /// to Project North, but elements in the view rotate by the negative of that angle.
+    /// in a Project North-oriented view. At orthogonal angles (0°, ±90°, 180°) Revit
+    /// auto-orients TextNotes correctly, so no rotation is needed. For non-orthogonal
+    /// angles the negated ProjectPosition.Angle is applied.
     /// </summary>
     private static double GetTextRotationAngle(Document doc)
     {
         ProjectPosition pp = doc.ActiveProjectLocation.GetProjectPosition(XYZ.Zero);
-        return -pp.Angle;
+        double angle = pp.Angle;
+
+        double mod = Math.Abs(angle % (Math.PI / 2));
+        if (mod < 1e-6 || Math.Abs(mod - Math.PI / 2) < 1e-6)
+            return 0;
+
+        return -angle;
     }
 
     /// <summary>
