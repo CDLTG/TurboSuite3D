@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.IO;
 using System.Linq;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
@@ -161,6 +162,11 @@ namespace TurboSuite.Name
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
             {
+                return Result.Cancelled;
+            }
+            catch (IOException ioEx)
+            {
+                TaskDialog.Show("TurboName", ioEx.Message);
                 return Result.Cancelled;
             }
             catch (Exception ex)

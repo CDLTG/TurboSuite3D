@@ -19,7 +19,8 @@ Windowed utility for assigning CAD room names and ceiling heights to filled regi
 - **Ceiling height cleaning**: Strips alphabetical characters, spaces, periods, and leading `+` from raw CAD values (e.g., `+10' - 0" CLG.` becomes `10'-0"`). Preserves ceiling description keywords (Vault, Slope, Barrel, Tray, Tin, Suspend, Drop, Cathedral, Coffer, Dome, Groin) as a separate smaller TextNote below.
 - **Project North rotation**: TextNotes are rotated to align with model elements when Rotate Project North has been applied (uses negated `ProjectPosition.Angle`).
 - **Text types**: Room name + height use `AL_Annotation_4.5"`, ceiling descriptions use `AL_Annotation_3"`.
-- **Re-run safe**: Skips regions that already have both Comments and a matching TextNote. Regions with Comments but no TextNote get TextNotes created using CAD ceiling height data (1:1 combined, 1:many separate) or centroid fallback.
+- **Re-run safe**: Skips regions that already have both Comments and a matching TextNote. Regions with Comments but no TextNote get TextNotes created using CAD ceiling height data (1:1 combined, 1:many separate) or centroid fallback. For regions without Comments (e.g., height-only), individual TextNote and description placements are skipped if a matching note already exists inside the region boundary.
+- **DWG file locking**: If a linked DWG file is open in AutoCAD, TurboName shows a warning dialog identifying the locked file instead of a generic error.
 - **Region flagging**: Ambiguous regions (multiple distinct room names) are changed to "Room Region (Flagged)". Unmatched regions (no CAD data) are changed to "Room Region (Empty)". Both are unflagged back to "Room Region" on subsequent successful runs.
 - **Deferred extraction**: Expensive operations (region collection, CAD extraction) are deferred behind button clicks to keep the initial dialog fast.
 - **Single transaction**: All changes roll back cleanly with Ctrl+Z.

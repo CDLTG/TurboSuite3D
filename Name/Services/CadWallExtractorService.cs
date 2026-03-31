@@ -52,9 +52,19 @@ public static class CadWallExtractorService
 
             Transform cadTransform = import.GetTransform();
             CadDocument cadDoc;
-            using (var reader = new DwgReader(dwgPath))
+            try
             {
-                cadDoc = reader.Read();
+                using (var reader = new DwgReader(dwgPath))
+                {
+                    cadDoc = reader.Read();
+                }
+            }
+            catch (IOException)
+            {
+                string fileName = Path.GetFileName(dwgPath);
+                throw new IOException(
+                    $"Cannot read \"{fileName}\" because it is open in another application.\n\n" +
+                    "Close the file in AutoCAD and try again.");
             }
 
             double unitToFeet = GetUnitToFeetFactor(cadDoc.Header.InsUnits);

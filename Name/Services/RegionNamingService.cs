@@ -171,21 +171,23 @@ public static class RegionNamingService
                 var nameEntry = nameEntries[0];
                 var (entryHeight, description) = CleanCeilingHeight(heightEntries[0].CeilingHeight);
                 string textContent = BuildTextContent(nameEntry.RoomName, entryHeight);
-                if (!string.IsNullOrEmpty(textContent))
+                if (!string.IsNullOrEmpty(textContent)
+                    && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, textContent))
                 {
                     var note = TextNote.Create(doc, view.Id, nameEntry.RevitPoint, textContent, textNoteTypeId);
                     note.HorizontalAlignment = HorizontalTextAlignment.Center;
                     note.VerticalAlignment = VerticalTextAlignment.Middle;
                     RotateToProjectNorth(doc, note, nameEntry.RevitPoint, northAngle);
+                }
 
-                    if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
-                    {
-                        var descPoint = GetDescriptionPoint(nameEntry.RevitPoint, northAngle);
-                        var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
-                        descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                        descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateToProjectNorth(doc, descNote, descPoint, northAngle);
-                    }
+                if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId
+                    && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, description))
+                {
+                    var descPoint = GetDescriptionPoint(nameEntries[0].RevitPoint, northAngle);
+                    var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
+                    descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
+                    descNote.VerticalAlignment = VerticalTextAlignment.Middle;
+                    RotateToProjectNorth(doc, descNote, descPoint, northAngle);
                 }
             }
             else
@@ -197,12 +199,16 @@ public static class RegionNamingService
                     string textContent = BuildTextContent(cadEntry.RoomName, entryHeight);
                     if (string.IsNullOrEmpty(textContent)) continue;
 
-                    var note = TextNote.Create(doc, view.Id, cadEntry.RevitPoint, textContent, textNoteTypeId);
-                    note.HorizontalAlignment = HorizontalTextAlignment.Center;
-                    note.VerticalAlignment = VerticalTextAlignment.Middle;
-                    RotateToProjectNorth(doc, note, cadEntry.RevitPoint, northAngle);
+                    if (!HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, textContent))
+                    {
+                        var note = TextNote.Create(doc, view.Id, cadEntry.RevitPoint, textContent, textNoteTypeId);
+                        note.HorizontalAlignment = HorizontalTextAlignment.Center;
+                        note.VerticalAlignment = VerticalTextAlignment.Middle;
+                        RotateToProjectNorth(doc, note, cadEntry.RevitPoint, northAngle);
+                    }
 
-                    if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
+                    if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId
+                        && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, description))
                     {
                         var descPoint = GetDescriptionPoint(cadEntry.RevitPoint, northAngle);
                         var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
@@ -269,6 +275,17 @@ public static class RegionNamingService
         if (!string.IsNullOrEmpty(ceilingHeight))
             return ceilingHeight;
         return "";
+    }
+
+    /// <summary>
+    /// Returns true if any TextNote in the view contains the given text
+    /// and is located inside the region boundary.
+    /// </summary>
+    private static bool HasMatchingTextNote(List<TextNote> viewTextNotes,
+        List<List<XYZ>> boundaryLoops, string text)
+    {
+        return viewTextNotes.Any(tn =>
+            tn.Text.Contains(text) && IsPointInZone(boundaryLoops, tn.Coord));
     }
 
     private static XYZ ComputeCentroid(List<XYZ> outerLoop)
