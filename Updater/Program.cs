@@ -7,6 +7,10 @@ using System.Threading;
 // TurboSuiteUpdater — waits for all Revit instances to exit, then copies staged files to the add-in folder.
 // Args: --source <staging path> --dest <addins path> --versionfile <local version.txt path>
 
+// Ensure only one updater instance runs at a time
+using var mutex = new Mutex(true, "TurboSuiteUpdater_SingleInstance", out var isNew);
+if (!isNew) return 0;
+
 var source = GetArg(args, "--source");
 var dest = GetArg(args, "--dest");
 var versionFile = GetArg(args, "--versionfile");

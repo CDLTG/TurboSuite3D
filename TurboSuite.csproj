@@ -56,13 +56,13 @@
     </ItemGroup>
     <Copy SourceFiles="@(OutputDlls)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
     <Copy SourceFiles="@(OutputPdbs)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
-    <!-- Copy updater exe to %LOCALAPPDATA%\TurboSuite\ -->
+    <!-- Copy updater files to %LOCALAPPDATA%\TurboSuite\ -->
     <MakeDir Directories="$(TurboSuiteLocalAppData)" />
-    <Copy SourceFiles="$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\win-x64\TurboSuiteUpdater.exe"
-          DestinationFolder="$(TurboSuiteLocalAppData)"
-          Condition="Exists('$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\win-x64\TurboSuiteUpdater.exe')" />
-    <Copy SourceFiles="$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.exe"
-          DestinationFolder="$(TurboSuiteLocalAppData)"
-          Condition="Exists('$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.exe')" />
+    <ItemGroup>
+      <UpdaterFiles Include="$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.exe;
+                             $(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.dll;
+                             $(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.runtimeconfig.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(UpdaterFiles)" DestinationFolder="$(TurboSuiteLocalAppData)" SkipUnchangedFiles="false" />
   </Target>
 </Project>

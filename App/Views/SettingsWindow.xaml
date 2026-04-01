@@ -20,7 +20,11 @@
     <DockPanel>
         <!-- Header -->
         <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
-            <TextBlock Text="TurboSuite Settings" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+            <DockPanel>
+                <TextBlock Text="TurboSuite Settings" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding VersionText}" Foreground="#B0D0FF" FontSize="11"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </DockPanel>
         </Border>
 
         <!-- Footer -->

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Input;
 using TurboSuite.Shared.Models;
+using TurboSuite.Shared.Services;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.App.ViewModels;
@@ -34,6 +35,8 @@ public class SettingsViewModel : ViewModelBase
     private string _doorLayerNamesText;
     private string _windowLayerNamesText;
     private string _regionTypeName;
+
+    public string VersionText { get; } = $"v{UpdateService.GetInstalledVersion().ToString(3)}";
 
     public string WallSconceFamiliesText
     {

@@ -135,8 +135,9 @@ public class TurboSuiteApplication : IExternalApplication
                 "Delete all TurboSuite settings",
                 "Scorched earth: deletes ALL DataStorage elements from the document. Restart Revit afterward and re-enter settings.");
 
-            // Auto-update check
+            // Auto-update check (two handlers: one checks/stages, one shows the dialog on next idle)
             application.Idling += OnIdlingCheckForUpdate;
+            application.Idling += OnIdlingShowUpdateNotification;
 
             return Result.Succeeded;
         }
@@ -178,6 +179,7 @@ public class TurboSuiteApplication : IExternalApplication
     #region Auto-Update
 
     private static string? _pendingUpdateVersion;
+    private static bool _showUpdateNotification;
 
     private static async void OnIdlingCheckForUpdate(object? sender, IdlingEventArgs e)
     {
@@ -191,22 +193,20 @@ public class TurboSuiteApplication : IExternalApplication
             if (UpdateService.HasStagedUpdate())
             {
                 _pendingUpdateVersion = UpdateService.GetStagedVersion();
-                if (_pendingUpdateVersion is not null)
-                {
-                    uiApp.Idling += OnIdlingShowUpdateNotification;
-                    return;
-                }
+            }
+            else
+            {
+                using var cts = new CancellationTokenSource(UpdateConstants.CheckTimeoutMs);
+                var newVersion = await UpdateService.CheckForUpdateAsync(cts.Token);
+
+                if (newVersion is null) return;
+
+                await Task.Run(() => UpdateService.StageUpdate());
+                _pendingUpdateVersion = newVersion;
             }
 
-            using var cts = new CancellationTokenSource(UpdateConstants.CheckTimeoutMs);
-            var newVersion = await UpdateService.CheckForUpdateAsync(cts.Token);
-
-            if (newVersion is null) return;
-
-            await Task.Run(() => UpdateService.StageUpdate());
-
-            _pendingUpdateVersion = newVersion;
-            uiApp.Idling += OnIdlingShowUpdateNotification;
+            if (_pendingUpdateVersion is not null)
+                _showUpdateNotification = true;
         }
         catch
         {
@@ -216,9 +216,10 @@ public class TurboSuiteApplication : IExternalApplication
 
     private static void OnIdlingShowUpdateNotification(object? sender, IdlingEventArgs e)
     {
+        if (!_showUpdateNotification) return;
         if (sender is not UIApplication uiApp) return;
 
-        // One-shot: unhook immediately
+        _showUpdateNotification = false;
         uiApp.Idling -= OnIdlingShowUpdateNotification;
 
         try
