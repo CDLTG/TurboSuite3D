@@ -59,7 +59,7 @@
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox ItemsSource="{Binding CircuitTab.Panels}"
                                       SelectedItem="{Binding CircuitTab.SelectedPanel}"
-                                      MinWidth="80" Height="24" Margin="0,0,8,0"/>
+                                      MinWidth="80" Height="24" VerticalContentAlignment="Center" Margin="0,0,8,0"/>
 
                             <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"
                                        Margin="4,2,12,2"/>
@@ -68,7 +68,7 @@
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox ItemsSource="{Binding CircuitTab.CircuitNamingOptions}"
                                       SelectedItem="{Binding CircuitTab.SelectedPanelSettings.CircuitNaming}"
-                                      MinWidth="90" Height="24" Margin="0,0,8,0"/>
+                                      MinWidth="90" Height="24" VerticalContentAlignment="Center" Margin="0,0,8,0"/>
 
                             <TextBlock Text="Prefix:" VerticalAlignment="Center" Margin="0,0,4,0"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>

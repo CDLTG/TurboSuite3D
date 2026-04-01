@@ -94,4 +94,12 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Hand cursor for interactive controls -->
+    <Style TargetType="ComboBox">
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style TargetType="TabItem">
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+
 </ResourceDictionary>
