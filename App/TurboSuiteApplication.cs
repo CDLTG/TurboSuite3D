@@ -107,11 +107,11 @@ public class TurboSuiteApplication : IExternalApplication
                 "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.");
 
             CreateButtonNoIcon(utilitiesPanel, assemblyPath,
-                "TurboCuts",
-                "    Turbo    \n    Cuts     ",
-                "TurboSuite.Cuts.CutsCommand",
-                "Generate merged cut sheet PDF",
-                "Collects spec sheet PDFs from lighting fixture types, stamps company header/footer, and merges into a single bookmarked PDF.");
+                "TurboDocs",
+                "    Turbo    \n    Docs     ",
+                "TurboSuite.Docs.DocsCommand",
+                "Generate fixture documentation PDFs",
+                "Opens a tabbed utility for generating cut sheet and fixture schedule PDFs from lighting fixture types in the active document.");
 
             CreateButtonNoIcon(commandsPanel, assemblyPath,
                 "TurboDriver",

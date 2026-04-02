@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates thirteen commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboCuts, TurboSpike, TurboPurge) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with fourteen `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates thirteen commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs, TurboSpike, TurboPurge) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with fourteen `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -120,7 +120,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Zones` | TurboZones — load names and panel breakdown (MVVM) |
 | `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless) |
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
-| `TurboSuite.Cuts` | TurboCuts — spec sheet PDF download, stamping, and merging (MVVM) |
+| `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF and cut sheet PDF merging (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
 | `TurboSuite.Spike` | TurboSpike — diagnostic/debug command (swap Execute body per investigation) |
 | `TurboSuite.Purge` | TurboPurge — scorched-earth settings reset (deletes all DataStorage elements) |
@@ -160,7 +160,7 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 
 - `RevitAPI.dll`, `RevitAPIUI.dll`, `Xceed.Wpf.AvalonDock.dll` (from Revit 2025 install)
 - `ACadSharp` (NuGet) — DWG/DXF reading for TurboName
-- `PdfSharpCore` (NuGet) — PDF operations for TurboCuts
+- `PdfSharpCore` (NuGet) — PDF operations for TurboDocs
 - .NET 8.0-windows / WPF
 
 ## Compact Instructions

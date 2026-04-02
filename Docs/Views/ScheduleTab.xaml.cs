@@ -3,44 +3,31 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using TurboSuite.Cuts.ViewModels;
 
-namespace TurboSuite.Cuts.Views;
+namespace TurboSuite.Docs.Views;
 
-public partial class TurboCutsWindow : Window
+public partial class ScheduleTab : UserControl
 {
-    public TurboCutsWindow()
+    public ScheduleTab()
     {
         InitializeComponent();
+        DataContextChanged += (_, _) => SyncRadioButtons();
     }
 
-    private void Window_KeyDown(object sender, KeyEventArgs e)
+    private void SyncRadioButtons()
     {
-        if (e.Key == Key.Escape)
-        {
-            if (DataContext is TurboCutsViewModel vm)
-                vm.SaveSettings();
-            Close();
-        }
-    }
-
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is TurboCutsViewModel vm)
-            vm.SaveSettings();
-        Close();
+        if (DataContext is TurboSuite.Docs.ViewModels.ScheduleViewModel vm && !vm.UseLargeFormat)
+            SmallFormatRadio.IsChecked = true;
     }
 
     private void DataGridCell_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not DataGridCell cell || cell.IsEditing || cell.IsReadOnly) return;
 
-        // Find the CheckBox inside the cell and toggle it directly
         var checkBox = FindVisualChild<CheckBox>(cell);
         if (checkBox != null)
         {
             checkBox.IsChecked = !checkBox.IsChecked;
-            // Push the binding update
             var binding = checkBox.GetBindingExpression(ToggleButton.IsCheckedProperty);
             binding?.UpdateSource();
             e.Handled = true;

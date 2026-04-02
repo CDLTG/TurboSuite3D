@@ -4,11 +4,11 @@ using System.IO;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
-using TurboSuite.Cuts.Models;
+using TurboSuite.Docs.Models;
 
-namespace TurboSuite.Cuts.Services;
+namespace TurboSuite.Docs.Services;
 
-public static class PdfService
+public static class CutSheetPdfService
 {
     private const double HeaderHeight = 79;
     private const double FooterHeight = 28;
@@ -17,7 +17,7 @@ public static class PdfService
 
     public static void MergeAndStamp(
         List<(string typeMark, byte[]? pdfData, string catalogNumber)> specSheets,
-        CutsSettings settings,
+        DocsSettings settings,
         string projectName,
         string outputPath)
     {
@@ -151,7 +151,7 @@ public static class PdfService
         gfx.DrawLine(pen, Margin, HeaderHeight - 2, pageWidth - Margin, HeaderHeight - 2);
     }
 
-    private static void DrawFooter(XGraphics gfx, PdfPage page, CutsSettings settings)
+    private static void DrawFooter(XGraphics gfx, PdfPage page, DocsSettings settings)
     {
         double w = page.Width.Point;
         double fTop = page.Height.Point - FooterHeight;

@@ -1,7 +1,7 @@
 using Autodesk.Revit.DB;
 using TurboSuite.Shared.ViewModels;
 
-namespace TurboSuite.Cuts.Models;
+namespace TurboSuite.Docs.Models;
 
 public class FixtureSpecModel : ViewModelBase
 {

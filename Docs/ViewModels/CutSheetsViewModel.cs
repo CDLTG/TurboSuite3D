@@ -6,13 +6,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32;
-using TurboSuite.Cuts.Models;
-using TurboSuite.Cuts.Services;
+using TurboSuite.Docs.Models;
+using TurboSuite.Docs.Services;
 using TurboSuite.Shared.ViewModels;
 
-namespace TurboSuite.Cuts.ViewModels;
+namespace TurboSuite.Docs.ViewModels;
 
-public class TurboCutsViewModel : ViewModelBase
+public class CutSheetsViewModel : ViewModelBase
 {
     private string _logoFilePath = string.Empty;
     private string _companyAddress = string.Empty;
@@ -92,12 +92,12 @@ public class TurboCutsViewModel : ViewModelBase
     public RelayCommand DeselectAllCommand { get; }
     public RelayCommand GenerateCommand { get; }
 
-    public TurboCutsViewModel(List<FixtureSpecModel> fixtures, string projectName)
+    public CutSheetsViewModel(List<FixtureSpecModel> fixtures, string projectName)
     {
         ProjectName = projectName;
         Fixtures = new ObservableCollection<FixtureSpecModel>(fixtures);
 
-        var settings = CutsSettingsService.Load();
+        var settings = DocsSettingsService.Load();
         _logoFilePath = settings.LogoFilePath;
         _companyAddress = settings.CompanyAddress;
         _companyPhone = settings.CompanyPhone;
@@ -132,7 +132,7 @@ public class TurboCutsViewModel : ViewModelBase
             .Select(f => f.TypeMark)
             .ToList();
 
-        CutsSettingsService.Save(new CutsSettings
+        DocsSettingsService.Save(new DocsSettings
         {
             LogoFilePath = LogoFilePath,
             CompanyAddress = CompanyAddress,
@@ -224,7 +224,7 @@ public class TurboCutsViewModel : ViewModelBase
             StatusText = "Merging PDFs...";
             Progress = 85;
 
-            var settings = new CutsSettings
+            var settings = new DocsSettings
             {
                 LogoFilePath = LogoFilePath,
                 CompanyAddress = CompanyAddress,
@@ -235,7 +235,7 @@ public class TurboCutsViewModel : ViewModelBase
             };
 
             string outputPath = saveDialog.FileName;
-            await Task.Run(() => PdfService.MergeAndStamp(results, settings, ProjectName, outputPath));
+            await Task.Run(() => CutSheetPdfService.MergeAndStamp(results, settings, ProjectName, outputPath));
 
             Progress = 100;
             StatusText = errors.Count > 0

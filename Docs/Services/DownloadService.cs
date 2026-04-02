@@ -4,7 +4,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace TurboSuite.Cuts.Services;
+namespace TurboSuite.Docs.Services;
 
 public static class DownloadService
 {

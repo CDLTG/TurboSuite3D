@@ -1,0 +1,83 @@
+<UserControl
+    x:Class="TurboSuite.Docs.Views.ScheduleTab"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    FontFamily="Segoe UI" FontSize="11">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style TargetType="DataGridRow">
+                <Style.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#D0D8E8"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#E0E4EC"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
+                </Style.Resources>
+            </Style>
+
+            <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
+                <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <DockPanel Margin="0,8">
+        <!-- Page size selector -->
+        <GroupBox DockPanel.Dock="Top" Header="Page Size" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" Margin="8">
+                <RadioButton x:Name="LargeFormatRadio" Content='11" x 29" (Construction)' GroupName="PageSize"
+                             IsChecked="{Binding UseLargeFormat}"
+                             Margin="0,0,20,0" VerticalContentAlignment="Center" Cursor="Hand"/>
+                <RadioButton x:Name="SmallFormatRadio" Content='8.5" x 11" (Letter)' GroupName="PageSize"
+                             VerticalContentAlignment="Center" Cursor="Hand"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Progress bar docked to bottom -->
+        <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
+                     Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
+
+        <!-- Fixture Types -->
+        <GroupBox Header="Fixture Types" Margin="0,0,0,0">
+            <DockPanel Margin="8">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
+                            Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                            Margin="0,0,6,0"/>
+                    <Button Content="Deselect All" Command="{Binding DeselectAllCommand}" Width="85" Height="24"
+                            Style="{StaticResource RevitButtonStyle}" Padding="8,4"/>
+                </StackPanel>
+
+                <DataGrid ItemsSource="{Binding Fixtures}"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False" CanUserDeleteRows="False"
+                          CanUserSortColumns="False"
+                          IsReadOnly="False"
+                          SelectionMode="Single"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="All"
+                          HorizontalGridLinesBrush="#E0E0E0"
+                          VerticalGridLinesBrush="#E0E0E0"
+                          BorderThickness="1" BorderBrush="#CCCCCC"
+                          MinHeight="150">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="&#x2713;" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="35"
+                                                CellStyle="{StaticResource SingleClickCheckBoxColumn}">
+                            <DataGridCheckBoxColumn.HeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                </Style>
+                            </DataGridCheckBoxColumn.HeaderStyle>
+                        </DataGridCheckBoxColumn>
+                        <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="60" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="*" IsReadOnly="True"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </GroupBox>
+    </DockPanel>
+</UserControl>
