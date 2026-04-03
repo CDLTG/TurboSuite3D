@@ -119,7 +119,8 @@ public class ScheduleViewModel : ViewModelBase
 
             string outputPath = saveDialog.FileName;
             bool largeFormat = UseLargeFormat;
-            await Task.Run(() => SchedulePdfService.Generate(selected, ProjectName, outputPath, largeFormat));
+            var settings = DocsSettingsService.Load();
+            await Task.Run(() => SchedulePdfService.Generate(selected, ProjectName, outputPath, largeFormat, settings.LogoFilePath));
 
             Progress = 100;
             StatusText = $"Done. Saved to {Path.GetFileName(outputPath)}";

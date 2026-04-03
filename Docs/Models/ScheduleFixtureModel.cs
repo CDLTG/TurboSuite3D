@@ -14,6 +14,7 @@ public class ScheduleFixtureModel : ViewModelBase
 
     public string TypeMark { get; set; } = string.Empty;
     public string FamilyName { get; set; } = string.Empty;
+    public string Classification { get; set; } = string.Empty;
 
     // Catalog Number1–6 joined with " | "
     public string CatalogNumber { get; set; } = string.Empty;

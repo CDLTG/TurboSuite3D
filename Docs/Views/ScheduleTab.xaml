@@ -29,7 +29,7 @@
         <!-- Page size selector -->
         <GroupBox DockPanel.Dock="Top" Header="Page Size" Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal" Margin="8">
-                <RadioButton x:Name="LargeFormatRadio" Content='11" x 29" (Construction)' GroupName="PageSize"
+                <RadioButton x:Name="LargeFormatRadio" Content='8.5" x 28.5" (Construction)' GroupName="PageSize"
                              IsChecked="{Binding UseLargeFormat}"
                              Margin="0,0,20,0" VerticalContentAlignment="Center" Cursor="Hand"/>
                 <RadioButton x:Name="SmallFormatRadio" Content='8.5" x 11" (Letter)' GroupName="PageSize"

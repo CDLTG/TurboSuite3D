@@ -43,13 +43,17 @@ public static class ScheduleCollectorService
                 if (!string.IsNullOrWhiteSpace(val)) notes.Add(val.Trim());
             }
 
-            string wattsVal = IsZeroDouble(symbol, "Power") ? "" : ReadParam(symbol, "Power").Replace(" VA", " W");
+            bool isLinear = !IsZeroDouble(fi, "Linear Power");
+            string wattsVal = IsZeroDouble(symbol, "Power") ? "" : ReadParam(symbol, "Power").Replace(" VA", isLinear ? " W/ft" : " W");
             string lumensVal = IsZeroDouble(symbol, "Lumens") ? "" : ReadParam(symbol, "Lumens");
+            if (lumensVal != "" && isLinear)
+                lumensVal = lumensVal.Contains(" lm") ? lumensVal.Replace(" lm", " lm/ft") : lumensVal + " lm/ft";
 
             fixtures.Add(new ScheduleFixtureModel
             {
                 TypeMark = typeMark,
                 FamilyName = symbol.FamilyName,
+                Classification = ReadStringParam(symbol, "Classification"),
                 CatalogNumber = string.Join(" | ", catParts),
                 Manufacturer = ReadBuiltIn(symbol, BuiltInParameter.ALL_MODEL_MANUFACTURER),
                 Description1 = ReadBuiltIn(symbol, BuiltInParameter.ALL_MODEL_DESCRIPTION),
@@ -71,9 +75,9 @@ public static class ScheduleCollectorService
         return fixtures;
     }
 
-    private static bool IsZeroDouble(FamilySymbol symbol, string name)
+    private static bool IsZeroDouble(Element element, string name)
     {
-        var param = symbol.LookupParameter(name);
+        var param = element.LookupParameter(name);
         if (param is not { HasValue: true }) return true;
         if (param.StorageType != StorageType.Double) return false;
         return System.Math.Abs(param.AsDouble()) < 1e-9;

@@ -14,23 +14,26 @@ Each fixture entry is a card-style block:
 - **Manufacturer**, **Description**, **Description2** on lines 2–4
 - Three spec sections to the right, each compacting independently (empty values shift remaining values up):
   - **Mechanical**: Finish, Listings, Mounting
-  - **Electrical**: Dimming, Watts, Volts
+  - **Electrical**: Dimming, Wattage, Voltage
   - **Photometric**: Lumens, CCT, CRI
-- **Schedule Notes** below (en-dash bulleted)
+- **Schedule Notes** below (en-dash bulleted, with word wrapping)
 
-Spec sections are dynamically positioned — column gaps adapt to the widest content across all entries while maintaining vertical alignment.
+Spec sections are dynamically positioned — column gaps adapt to the widest content across all entries while maintaining vertical alignment. Overflow handling: Type Mark and Catalog Numbers auto-shrink font size; Manufacturer and Descriptions shrink to stay within capped width so spec columns fit on the page.
+
+Entries are grouped by **Classification** (alphabetically, empty classification at bottom) with a header and rule line per group.
 
 ### Page Formats
 
-- **11" x 29"** — construction document strip (default)
+- **8.5" x 28.5"** — construction document strip (default)
 - **8.5" x 11"** — standard letter
 
-Page breaks never split a fixture entry. Headers repeat on new pages.
+Page breaks never split a fixture entry. Classification headers are kept with at least one entry. Headers (project name, subtitle, note, logo) repeat on every page. Page numbers appear on letter format only.
 
 ### Parameter Mapping
 
 | Schedule Field | Revit Parameter |
 |---------------|-----------------|
+| Classification | Classification (groups entries in PDF) |
 | Type Mark | ALL_MODEL_TYPE_MARK (built-in) |
 | Catalog #1–6 | Catalog Number1–6 |
 | Manufacturer | ALL_MODEL_MANUFACTURER (built-in) |
@@ -40,12 +43,13 @@ Page breaks never split a fixture entry. Headers repeat on new pages.
 | Listings | Listings and Ratings |
 | Mounting | Mounting |
 | Dimming | Dimming Protocol |
-| Watts | Power (displayed as W, hidden if 0) |
-| Volts | Voltage (hidden if both Watts and Lumens are 0) |
-| Lumens | Lumens (hidden if 0) |
+| Wattage | Power (displayed as W; W/ft if Linear Power > 0; hidden if 0) |
+| Voltage | Voltage (hidden if both Wattage and Lumens are 0) |
+| Lumens | Lumens (displayed as lm/ft if Linear Power > 0; hidden if 0) |
 | CCT | Correlated Color Temperature (CCT) |
 | CRI | Color Rendering Index (CRI) |
 | Notes 1–6 | Schedule Notes1–6 |
+| (linear detect) | Linear Power (instance param; > 0 triggers W/ft and lm/ft display) |
 
 Embedded line feeds (alt+0010) in parameter values are replaced with ", " for single-line display.
 

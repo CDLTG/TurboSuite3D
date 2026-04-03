@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
@@ -10,25 +12,30 @@ public static class SchedulePdfService
 {
     #region Layout Constants
 
-    // ── Page (Large = 11x29 construction strip, Small = 8.5x11 letter) ──
-    private const double LargePageWidth  = 11.0 * 72;   // 792 pt
-    private const double LargePageHeight = 29.0 * 72;   // 2088 pt
+    // ── Page (Large = 8.5x28.5 construction strip, Small = 8.5x11 letter) ──
+    private const double LargePageWidth  = 8.5  * 72;   // 612 pt
+    private const double LargePageHeight = 28.5 * 72;   // 2052 pt
     private const double SmallPageWidth  = 8.5  * 72;   // 612 pt
     private const double SmallPageHeight = 11.0 * 72;   // 792 pt
 
     // ── Margins ──
     private const double MarginLeft   = 36;
     private const double MarginRight  = 36;
-    private const double MarginTop    = 36;
-    private const double MarginBottom = 36;
+    private const double MarginTop    = 28;
+    private const double MarginBottom = 28;
 
-    // ── Title ──
-    private const double TitleFontSize = 14;
-    private const double TitleSpacing  = 20;
+    // ── Header ──
+    private const double HeaderProjectFontSize  = 18;
+    private const double HeaderSubtitleFontSize = 12;
+    private const double HeaderNoteFontSize     = 8;
+    private const double HeaderLogoHeight       = 76;
+    private const double HeaderLogoRightInset   = -18;   // positive = left of margin, negative = right of margin
+    private const double HeaderHeight           = 50;  // total height including rule
+    private const double HeaderSpacing          = 5;  // gap after header before content
 
     // ── Type Mark Box (height = 4 × LineHeight so box matches the 4 content lines) ──
     private const double TypeMarkBoxWidth  = 48;
-    private const double TypeMarkFontSize  = 17.5;
+    private const double TypeMarkFontSize  = 17;
     private const double TypeMarkBorderWidth = 1.2;
 
     // ── Content Area (right of Type Mark box) ──
@@ -50,14 +57,21 @@ public static class SchedulePdfService
     // ── Entry Spacing ──
     private const double EntrySpacing = 12;  // vertical gap between fixture entries
 
+    // ── Classification Header ──
+    private const double ClassHeaderFontSize = 10;
+    private const double ClassHeaderHeight   = 16;  // total height of the header row
+    private const double ClassHeaderSpacing  = 6;   // gap after header before first entry
+
     // ── Colors ──
-    private static readonly XColor DescriptionColor = XColor.FromArgb(180, 100, 45);   // warm brown/orange
-    private static readonly XColor NoteColor        = XColor.FromArgb(55, 86, 135);    // blue
-    private static readonly XColor SpecLabelColor   = XColor.FromGrayScale(0.40);
-    private static readonly XColor SpecValueColor   = XColor.FromArgb(0, 128, 128);    // teal
+    // Screening levels (0 = black, 1 = white)
+    // Level 0 (full):    Type Mark, Catalog Numbers, Manufacturer — XBrushes.Black
+    private static readonly XColor DescriptionColor = XColor.FromGrayScale(0.25);  // Level 1
+    private static readonly XColor SpecValueColor   = XColor.FromGrayScale(0.25);  // Level 1
+    private static readonly XColor NoteColor        = XColor.FromGrayScale(0.25);  // Level 1
+    private static readonly XColor SpecLabelColor   = XColor.FromGrayScale(0.25);  // Level 1
 
     // ── Spec Grid Layout ──
-    private const double SpecColumnGap = 8;   // gap between label and value
+    private const double SpecColumnGap = 4;   // gap between label and value
     private const double SpecSectionGap = 12; // gap between left-side text and spec col 1, and between spec col 1 values and spec col 2 labels
 
     #endregion
@@ -66,7 +80,8 @@ public static class SchedulePdfService
         List<ScheduleFixtureModel> fixtures,
         string projectName,
         string outputPath,
-        bool useLargeFormat)
+        bool useLargeFormat,
+        string logoPath)
     {
         double pageWidth  = useLargeFormat ? LargePageWidth  : SmallPageWidth;
         double pageHeight = useLargeFormat ? LargePageHeight : SmallPageHeight;
@@ -75,11 +90,15 @@ public static class SchedulePdfService
         double contentWidth = pageWidth - MarginRight - contentLeft;
 
         // Fonts
-        var fontTitle       = new XFont("Segoe UI", TitleFontSize, XFontStyle.Bold);
+        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
+        var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
+        var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
+
         var fontTypeMark    = new XFont("Segoe UI", TypeMarkFontSize, XFontStyle.Bold);
         var fontCatalog     = new XFont("Segoe UI", CatalogFontSize, XFontStyle.Bold);
         var fontManufacturer = new XFont("Segoe UI", ManufacturerFontSize);
-        var fontDesc        = new XFont("Segoe UI Light", DescriptionFontSize);
+        var fontDesc        = new XFont("Segoe UI", DescriptionFontSize);
         var fontSpecLabel   = new XFont("Segoe UI", SpecLabelFontSize);
         var fontSpecValue   = new XFont("Segoe UI", SpecValueFontSize);
         var fontNote        = new XFont("Segoe UI", NoteFontSize);
@@ -90,6 +109,8 @@ public static class SchedulePdfService
         var brushNote       = new XSolidBrush(NoteColor);
         var brushSpecLabel  = new XSolidBrush(SpecLabelColor);
         var brushSpecValue  = new XSolidBrush(SpecValueColor);
+        var fontClassHeader = new XFont("Segoe UI", ClassHeaderFontSize, XFontStyle.Regular);
+        var penClassRule    = new XPen(XColor.FromGrayScale(0.75), 0.25);
 
         // ── Measurement pass: dynamically position the 3 spec sections ──
         //    Layout: [descriptions] gap [mechanical] gap [electrical] gap [photometric]
@@ -97,6 +118,7 @@ public static class SchedulePdfService
         double maxLeftTextWidth = 0;       // widest manufacturer/description text
         double maxMechValueWidth = 0;      // widest mechanical value (Finish/Listings/Mounting)
         double maxElecValueWidth = 0;      // widest electrical value (Dimming/Watts/Volts)
+        double maxPhotoValueWidth = 0;     // widest photometric value (Lumens/CCT/CRI)
 
         using (var tempPdf = new PdfDocument())
         {
@@ -137,8 +159,25 @@ public static class SchedulePdfService
                         if (w > maxElecValueWidth) maxElecValueWidth = w;
                     }
                 }
+
+                // Measure photometric values (Lumens, CCT, CRI)
+                foreach (var val in new[] { f.Lumens, f.CCT, f.CRI })
+                {
+                    if (!string.IsNullOrWhiteSpace(val))
+                    {
+                        double w = tempGfx.MeasureString(val, fontSpecValue).Width;
+                        if (w > maxPhotoValueWidth) maxPhotoValueWidth = w;
+                    }
+                }
             }
         }
+
+        // Cap left-side text width so spec sections always fit on the page
+        double totalSpecWidth = 3 * (specLabelWidth + SpecColumnGap) + maxMechValueWidth + maxElecValueWidth + maxPhotoValueWidth + 2 * SpecSectionGap;
+        double maxLeftCap = contentWidth - totalSpecWidth - SpecSectionGap;
+        if (maxLeftCap < 0) maxLeftCap = 0;
+        if (maxLeftTextWidth > maxLeftCap)
+            maxLeftTextWidth = maxLeftCap;
 
         // Mechanical section starts after the widest left-side text + gap
         double mechColLeft = contentLeft + maxLeftTextWidth + SpecSectionGap;
@@ -146,6 +185,39 @@ public static class SchedulePdfService
         double elecColLeft = mechColLeft + specLabelWidth + SpecColumnGap + maxMechValueWidth + SpecSectionGap;
         // Photometric section starts after electrical label + gap + widest electrical value + gap
         double photoColLeft = elecColLeft + specLabelWidth + SpecColumnGap + maxElecValueWidth + SpecSectionGap;
+
+        // Note wrapping measurements
+        double noteX = contentLeft + NoteIndent;
+        double noteMaxWidth = pageWidth - MarginRight - noteX;
+        double dashWidth;
+        double noteTextMaxWidth;
+        using (var tempPdf2 = new PdfDocument())
+        {
+            var tp = tempPdf2.AddPage();
+            using var tg = XGraphics.FromPdfPage(tp);
+            dashWidth = tg.MeasureString("\u2013 ", fontNote).Width;
+            noteTextMaxWidth = noteMaxWidth - dashWidth;
+        }
+
+        // Load logo — stream must stay alive until after Save()
+        XImage? logo = null;
+        MemoryStream? logoStream = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(logoPath) && File.Exists(logoPath))
+            {
+                if (logoPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    logoStream = new MemoryStream(File.ReadAllBytes(logoPath));
+                    logo = XPdfForm.FromStream(logoStream);
+                }
+                else
+                {
+                    logo = XImage.FromFile(logoPath);
+                }
+            }
+        }
+        catch { /* logo remains null */ }
 
         using var pdf = new PdfDocument();
         pdf.Info.Title = $"{projectName} Fixture Schedule";
@@ -163,140 +235,273 @@ public static class SchedulePdfService
             gfx = XGraphics.FromPdfPage(page);
             y = MarginTop;
 
-            // Title on first page only
-            if (pdf.PageCount == 1)
+            // ── Header: project name + subtitle (left), logo (right) ──
+            gfx.DrawString(projectName, fontHeaderProject, XBrushes.Black,
+                new XPoint(MarginLeft, y + HeaderProjectFontSize));
+            gfx.DrawString("FIXTURE SCHEDULE", fontHeaderSubtitle, XBrushes.Black,
+                new XPoint(MarginLeft, y + HeaderProjectFontSize + HeaderSubtitleFontSize + 3));
+
+            // Logo — right-aligned, vertically centered in header area
+            if (logo != null)
             {
-                gfx.DrawString("Fixture Schedule", fontTitle, XBrushes.Black,
-                    new XPoint(MarginLeft, y + TitleFontSize));
-                y += TitleFontSize + TitleSpacing;
+                double logoW, logoH;
+                if (logo is XPdfForm pdfLogo)
+                {
+                    logoH = HeaderLogoHeight;
+                    logoW = pdfLogo.PointWidth * (logoH / pdfLogo.PointHeight);
+                }
+                else
+                {
+                    logoH = HeaderLogoHeight;
+                    logoW = (double)logo.PixelWidth * (logoH / logo.PixelHeight);
+                }
+                double logoX = pageWidth - MarginRight - logoW - HeaderLogoRightInset;
+                double logoY = y + (HeaderProjectFontSize + HeaderSubtitleFontSize - logoH) / 2 + 4;
+                if (logo is XPdfForm pdfForm)
+                    DrawScaledForm(gfx, pdfForm, logoX, logoY, logoW, logoH);
+                else
+                    gfx.DrawImage(logo, logoX, logoY, logoW, logoH);
             }
+
+            // Note line
+            double noteY = y + HeaderProjectFontSize + HeaderSubtitleFontSize + 16;
+            gfx.DrawString(
+                "Note: Verify all components and quantities. Refer to product specifications for complete fixture data.",
+                fontHeaderNote, brushHeaderNote, new XPoint(MarginLeft, noteY));
+
+            y += HeaderHeight + HeaderSpacing;
         }
 
         StartNewPage();
 
-        foreach (var fixture in fixtures)
+        // Group fixtures by classification, sorted by classification then TypeMark within
+        var grouped = fixtures
+            .GroupBy(f => f.Classification ?? "")
+            .OrderBy(g => string.IsNullOrWhiteSpace(g.Key) ? 1 : 0)
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+        var groups = new List<(string Classification, List<ScheduleFixtureModel> Items)>();
+        foreach (var g in grouped)
+            groups.Add((g.Key, g.OrderBy(f => f.TypeMark, StringComparer.OrdinalIgnoreCase).ToList()));
+
+        foreach (var (classification, items) in groups)
         {
-            double entryHeight = MeasureEntryHeight(fixture);
+            bool hasHeader = !string.IsNullOrWhiteSpace(classification);
 
-            // Page break — never split a fixture entry
-            if (y + entryHeight > pageHeight - MarginBottom)
+            if (hasHeader)
             {
-                StartNewPage();
+                double headerBlock = ClassHeaderHeight + ClassHeaderSpacing + MeasureEntryHeight(items[0], gfx!, fontNote, noteTextMaxWidth);
+
+                // Avoid classification header as last item on page —
+                // ensure header + at least one entry fits
+                if (y + headerBlock > pageHeight - MarginBottom)
+                    StartNewPage();
+
+                // Draw classification header
+                gfx!.DrawString(classification, fontClassHeader, XBrushes.Black,
+                    new XPoint(MarginLeft, y + ClassHeaderFontSize + 2));
+                gfx.DrawLine(penClassRule, MarginLeft, y + ClassHeaderHeight,
+                    pageWidth - MarginRight, y + ClassHeaderHeight);
+                y += ClassHeaderHeight + ClassHeaderSpacing;
             }
 
-            double entryTop = y;
-
-            // ── Type Mark Box ──
-            double boxY = entryTop;
-            gfx!.DrawRectangle(penTypeMarkBox,
-                MarginLeft, boxY, TypeMarkBoxWidth, typeMarkBoxHeight);
-
-            // Center Type Mark text in box — shrink font if text is too wide
-            double boxPadding = 6;
-            double maxTextWidth = TypeMarkBoxWidth - boxPadding * 2;
-            var tmFont = fontTypeMark;
-            double measuredWidth = gfx.MeasureString(fixture.TypeMark, tmFont).Width;
-            if (measuredWidth > maxTextWidth)
+            foreach (var fixture in items)
             {
-                double scale = maxTextWidth / measuredWidth;
-                tmFont = new XFont("Segoe UI", TypeMarkFontSize * scale, XFontStyle.Bold);
+                double entryHeight = MeasureEntryHeight(fixture, gfx!, fontNote, noteTextMaxWidth);
+
+                // Page break — never split a fixture entry
+                if (y + entryHeight > pageHeight - MarginBottom)
+                    StartNewPage();
+
+                DrawFixtureEntry(gfx!, fixture, y, typeMarkBoxHeight, contentLeft,
+                    mechColLeft, elecColLeft, photoColLeft, specLabelWidth,
+                    fontTypeMark, fontCatalog, fontManufacturer, fontDesc,
+                    fontSpecLabel, fontSpecValue, fontNote,
+                    penTypeMarkBox, brushDesc, brushNote, brushSpecLabel, brushSpecValue,
+                    pageWidth, dashWidth, noteTextMaxWidth, maxLeftTextWidth);
+
+                y += entryHeight + EntrySpacing;
             }
-
-            var typeMarkRect = new XRect(MarginLeft, boxY, TypeMarkBoxWidth, typeMarkBoxHeight);
-            var typeMarkFormat = new XStringFormat
-            {
-                Alignment = XStringAlignment.Center,
-                LineAlignment = XLineAlignment.Center
-            };
-            gfx.DrawString(fixture.TypeMark, tmFont, XBrushes.Black, typeMarkRect, typeMarkFormat);
-
-            // ── Content area (right of box) ──
-            double lineY = entryTop;
-
-            // Line 1: Catalog Numbers (bold)
-            if (!string.IsNullOrWhiteSpace(fixture.CatalogNumber))
-            {
-                gfx.DrawString(fixture.CatalogNumber, fontCatalog, XBrushes.Black,
-                    new XPoint(contentLeft, lineY + BaselineOffset));
-            }
-            lineY += LineHeight;
-
-            // Lines 2–4: Left-side text (fixed rows)
-            double line2Y = lineY;
-            if (!string.IsNullOrWhiteSpace(fixture.Manufacturer))
-                gfx.DrawString(fixture.Manufacturer, fontManufacturer, XBrushes.Black,
-                    new XPoint(contentLeft, line2Y + BaselineOffset));
-
-            double line3Y = lineY + LineHeight;
-            if (!string.IsNullOrWhiteSpace(fixture.Description1))
-                gfx.DrawString(fixture.Description1, fontDesc, brushDesc,
-                    new XPoint(contentLeft, line3Y + BaselineOffset));
-
-            double line4Y = lineY + 2 * LineHeight;
-            if (!string.IsNullOrWhiteSpace(fixture.Description2))
-                gfx.DrawString(fixture.Description2, fontDesc, brushDesc,
-                    new XPoint(contentLeft, line4Y + BaselineOffset));
-
-            // Spec sections: each draws its non-empty values top-down from line 2
-            var rightAlign = new XStringFormat
-            {
-                Alignment = XStringAlignment.Far,
-                LineAlignment = XLineAlignment.BaseLine
-            };
-
-            DrawSectionStack(gfx, lineY, mechColLeft, specLabelWidth,
-                [("Finish:", fixture.Finish), ("Listings:", fixture.Listings), ("Mounting:", fixture.Mounting)],
-                fontSpecLabel, fontSpecValue, brushSpecLabel, brushSpecValue, rightAlign);
-
-            DrawSectionStack(gfx, lineY, elecColLeft, specLabelWidth,
-                [("Dimming:", fixture.Dimming), ("Watts:", fixture.Watts), ("Volts:", fixture.Volts)],
-                fontSpecLabel, fontSpecValue, brushSpecLabel, brushSpecValue, rightAlign);
-
-            DrawSectionStack(gfx, lineY, photoColLeft, specLabelWidth,
-                [("Lumens:", fixture.Lumens), ("CCT:", fixture.CCT), ("CRI:", fixture.CRI)],
-                fontSpecLabel, fontSpecValue, brushSpecLabel, brushSpecValue, rightAlign);
-
-            lineY += 3 * LineHeight;
-
-            // ── Schedule Notes ──
-            for (int i = 0; i < fixture.ScheduleNotes.Length; i++)
-            {
-                string noteText = $"\u2013 {fixture.ScheduleNotes[i]}";
-                gfx.DrawString(noteText, fontNote, brushNote,
-                    new XPoint(contentLeft + NoteIndent, lineY + BaselineOffset));
-                lineY += NoteLineHeight;
-            }
-
-            y = entryTop + entryHeight + EntrySpacing;
         }
 
         // Dispose main graphics before page number pass
         gfx?.Dispose();
         gfx = null;
 
-        // Page numbers
-        for (int i = 0; i < pdf.PageCount; i++)
+        // Page numbers (letter format only)
+        if (!useLargeFormat)
         {
-            using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
-            g.DrawString($"Page {i + 1} of {pdf.PageCount}", fontPageNum, XBrushes.Gray,
-                new XPoint(pageWidth - MarginRight, pageHeight - MarginBottom + 12),
-                XStringFormats.TopRight);
+            for (int i = 0; i < pdf.PageCount; i++)
+            {
+                using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
+                g.DrawString($"Page {i + 1} of {pdf.PageCount}", fontPageNum, XBrushes.Gray,
+                    new XPoint(pageWidth - MarginRight, pageHeight - MarginBottom + 12),
+                    XStringFormats.TopRight);
+            }
         }
 
         pdf.Save(outputPath);
+        logoStream?.Dispose();
     }
 
-    private static double MeasureEntryHeight(ScheduleFixtureModel fixture)
+    private static void DrawScaledForm(XGraphics gfx, XPdfForm form, double x, double y, double width, double height)
+    {
+        if (form.PointWidth <= 0 || form.PointHeight <= 0) return;
+        var state = gfx.Save();
+        gfx.TranslateTransform(x, y);
+        gfx.ScaleTransform(width / form.PointWidth, height / form.PointHeight);
+        gfx.DrawImage(form, 0, 0, form.PointWidth, form.PointHeight);
+        gfx.Restore(state);
+    }
+
+    private static void DrawFixtureEntry(XGraphics gfx, ScheduleFixtureModel fixture,
+        double entryTop, double typeMarkBoxHeight, double contentLeft,
+        double mechColLeft, double elecColLeft, double photoColLeft, double specLabelWidth,
+        XFont fontTypeMark, XFont fontCatalog, XFont fontManufacturer, XFont fontDesc,
+        XFont fontSpecLabel, XFont fontSpecValue, XFont fontNote,
+        XPen penTypeMarkBox, XBrush brushDesc, XBrush brushNote,
+        XBrush brushSpecLabel, XBrush brushSpecValue,
+        double pageWidth, double dashWidth, double noteTextMaxWidth,
+        double maxLeftTextWidth)
+    {
+        // ── Type Mark Box ──
+        gfx.DrawRectangle(penTypeMarkBox,
+            MarginLeft, entryTop, TypeMarkBoxWidth, typeMarkBoxHeight);
+
+        // Center Type Mark text — shrink font if text is too wide
+        double boxPadding = 6;
+        double maxTextWidth = TypeMarkBoxWidth - boxPadding * 2;
+        var tmFont = fontTypeMark;
+        double measuredWidth = gfx.MeasureString(fixture.TypeMark, tmFont).Width;
+        if (measuredWidth > maxTextWidth)
+        {
+            double scale = maxTextWidth / measuredWidth;
+            tmFont = new XFont("Segoe UI", TypeMarkFontSize * scale, XFontStyle.Bold);
+        }
+
+        var typeMarkRect = new XRect(MarginLeft, entryTop, TypeMarkBoxWidth, typeMarkBoxHeight);
+        var typeMarkFormat = new XStringFormat
+        {
+            Alignment = XStringAlignment.Center,
+            LineAlignment = XLineAlignment.Center
+        };
+        gfx.DrawString(fixture.TypeMark, tmFont, XBrushes.Black, typeMarkRect, typeMarkFormat);
+
+        // ── Content area (right of box) ──
+        double lineY = entryTop;
+
+        // Line 1: Catalog Numbers (bold) — shrink font if too wide
+        if (!string.IsNullOrWhiteSpace(fixture.CatalogNumber))
+        {
+            double catalogMaxWidth = pageWidth - MarginRight - contentLeft;
+            var catFont = fontCatalog;
+            double catWidth = gfx.MeasureString(fixture.CatalogNumber, catFont).Width;
+            if (catWidth > catalogMaxWidth)
+            {
+                double scale = catalogMaxWidth / catWidth;
+                catFont = new XFont("Segoe UI", CatalogFontSize * scale, XFontStyle.Bold);
+            }
+            gfx.DrawString(fixture.CatalogNumber, catFont, XBrushes.Black,
+                new XPoint(contentLeft, lineY + BaselineOffset));
+        }
+        lineY += LineHeight;
+
+        // Lines 2–4: Left-side text (fixed rows) — shrink font if wider than capped width
+        if (!string.IsNullOrWhiteSpace(fixture.Manufacturer))
+        {
+            var mfgFont = fontManufacturer;
+            double mfgWidth = gfx.MeasureString(fixture.Manufacturer, mfgFont).Width;
+            if (mfgWidth > maxLeftTextWidth)
+                mfgFont = new XFont("Segoe UI", ManufacturerFontSize * (maxLeftTextWidth / mfgWidth));
+            gfx.DrawString(fixture.Manufacturer, mfgFont, XBrushes.Black,
+                new XPoint(contentLeft, lineY + BaselineOffset));
+        }
+
+        if (!string.IsNullOrWhiteSpace(fixture.Description1))
+        {
+            var d1Font = fontDesc;
+            double d1Width = gfx.MeasureString(fixture.Description1, d1Font).Width;
+            if (d1Width > maxLeftTextWidth)
+                d1Font = new XFont("Segoe UI", DescriptionFontSize * (maxLeftTextWidth / d1Width));
+            gfx.DrawString(fixture.Description1, d1Font, brushDesc,
+                new XPoint(contentLeft, lineY + LineHeight + BaselineOffset));
+        }
+
+        if (!string.IsNullOrWhiteSpace(fixture.Description2))
+        {
+            var d2Font = fontDesc;
+            double d2Width = gfx.MeasureString(fixture.Description2, d2Font).Width;
+            if (d2Width > maxLeftTextWidth)
+                d2Font = new XFont("Segoe UI", DescriptionFontSize * (maxLeftTextWidth / d2Width));
+            gfx.DrawString(fixture.Description2, d2Font, brushDesc,
+                new XPoint(contentLeft, lineY + 2 * LineHeight + BaselineOffset));
+        }
+
+        // Spec sections: each draws its non-empty values top-down from line 2
+        var rightAlign = new XStringFormat
+        {
+            Alignment = XStringAlignment.Far,
+            LineAlignment = XLineAlignment.BaseLine
+        };
+
+        DrawSectionStack(gfx, lineY, mechColLeft, specLabelWidth,
+            [("Finish:", fixture.Finish), ("Listings:", fixture.Listings), ("Mounting:", fixture.Mounting)],
+            fontSpecLabel, fontSpecValue, brushSpecLabel, brushSpecValue, rightAlign);
+
+        DrawSectionStack(gfx, lineY, elecColLeft, specLabelWidth,
+            [("Dimming:", fixture.Dimming), ("Wattage:", fixture.Watts), ("Voltage:", fixture.Volts)],
+            fontSpecLabel, fontSpecValue, brushSpecLabel, brushSpecValue, rightAlign);
+
+        DrawSectionStack(gfx, lineY, photoColLeft, specLabelWidth,
+            [("Lumens:", fixture.Lumens), ("CCT:", fixture.CCT), ("CRI:", fixture.CRI)],
+            fontSpecLabel, fontSpecValue, brushSpecLabel, brushSpecValue, rightAlign);
+
+        lineY += 3 * LineHeight;
+
+        // ── Schedule Notes (with wrapping) ──
+        double noteXPos = contentLeft + NoteIndent;
+
+        for (int i = 0; i < fixture.ScheduleNotes.Length; i++)
+        {
+            var wrappedLines = WrapText(gfx, fixture.ScheduleNotes[i], fontNote, noteTextMaxWidth);
+            // First line with en-dash prefix
+            gfx.DrawString($"\u2013 {wrappedLines[0]}", fontNote, brushNote,
+                new XPoint(noteXPos, lineY + BaselineOffset));
+            lineY += NoteLineHeight;
+            // Continuation lines indented to align with text after dash
+            for (int w = 1; w < wrappedLines.Count; w++)
+            {
+                gfx.DrawString(wrappedLines[w], fontNote, brushNote,
+                    new XPoint(noteXPos + dashWidth, lineY + BaselineOffset));
+                lineY += NoteLineHeight;
+            }
+        }
+    }
+
+    private static double MeasureEntryHeight(ScheduleFixtureModel fixture,
+        XGraphics gfx = null!, XFont fontNote = null!, double noteTextMaxWidth = 0)
     {
         // 4 content lines (catalog, manufacturer, desc1, desc2) + notes
         // Box height = 4 * LineHeight, so content lines always match the box;
         // notes extend below the box when present
-        return 4 * LineHeight + fixture.ScheduleNotes.Length * NoteLineHeight;
+        double noteHeight = 0;
+        if (gfx != null && fontNote != null)
+        {
+            foreach (var note in fixture.ScheduleNotes)
+            {
+                var wrappedLines = WrapText(gfx, note, fontNote, noteTextMaxWidth);
+                noteHeight += wrappedLines.Count * NoteLineHeight;
+            }
+        }
+        else
+        {
+            noteHeight = fixture.ScheduleNotes.Length * NoteLineHeight;
+        }
+        return 4 * LineHeight + noteHeight;
     }
 
     private static double MeasureMaxSpecLabelWidth(XGraphics gfx, XFont font)
     {
-        string[] labels = ["Finish:", "Listings:", "Mounting:", "Dimming:", "Watts:", "Volts:", "Lumens:", "CCT:", "CRI:"];
+        string[] labels = ["Finish:", "Listings:", "Mounting:", "Dimming:", "Wattage:", "Voltage:", "Lumens:", "CCT:", "CRI:"];
         double max = 0;
         foreach (var label in labels)
         {
@@ -304,6 +509,30 @@ public static class SchedulePdfService
             if (w > max) max = w;
         }
         return max;
+    }
+
+    private static List<string> WrapText(XGraphics gfx, string text, XFont font, double maxWidth)
+    {
+        var lines = new List<string>();
+        var words = text.Split(' ');
+        string currentLine = "";
+
+        foreach (var word in words)
+        {
+            string test = currentLine.Length == 0 ? word : currentLine + " " + word;
+            if (gfx.MeasureString(test, font).Width <= maxWidth)
+            {
+                currentLine = test;
+            }
+            else
+            {
+                if (currentLine.Length > 0) lines.Add(currentLine);
+                currentLine = word;
+            }
+        }
+        if (currentLine.Length > 0) lines.Add(currentLine);
+        if (lines.Count == 0) lines.Add("");
+        return lines;
     }
 
     private static void DrawSectionStack(XGraphics gfx, double startLineY,
