@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -10,15 +11,22 @@ using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Docs.ViewModels;
 
-public class ScheduleViewModel : ViewModelBase
+public class LoadsViewModel : ViewModelBase
 {
     private readonly DocsViewModel _parent;
+    private string _selectedSortColumn = "CircuitNumber";
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
 
     public string ProjectName { get; }
-    public ObservableCollection<ScheduleFixtureModel> Fixtures { get; }
+    public ObservableCollection<LoadsCircuitModel> Circuits { get; } = new();
+
+    public string SelectedSortColumn
+    {
+        get => _selectedSortColumn;
+        set => SetProperty(ref _selectedSortColumn, value);
+    }
 
     public double Progress
     {
@@ -42,60 +50,52 @@ public class ScheduleViewModel : ViewModelBase
         }
     }
 
-    public RelayCommand SelectAllCommand { get; }
-    public RelayCommand DeselectAllCommand { get; }
     public RelayCommand GenerateCommand { get; }
 
-    public ScheduleViewModel(string projectName, DocsViewModel parent)
+    public LoadsViewModel(string projectName, DocsViewModel parent)
     {
         _parent = parent;
         ProjectName = projectName;
-        Fixtures = new ObservableCollection<ScheduleFixtureModel>();
 
-        SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
-        DeselectAllCommand = new RelayCommand(() => SetAllSelected(false));
-        GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && Fixtures.Any(f => f.IsSelected));
+        GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && Circuits.Count > 0);
     }
 
-    public void LoadFixtures(System.Collections.Generic.List<ScheduleFixtureModel> fixtures)
+    public void LoadCircuits(List<LoadsCircuitModel> circuits)
     {
-        Fixtures.Clear();
-        foreach (var f in fixtures)
-            Fixtures.Add(f);
+        Circuits.Clear();
+        foreach (var c in circuits)
+            Circuits.Add(c);
 
         var settings = DocsSettingsService.Load();
-        if (settings.ScheduleSelectedTypeMarks.Count > 0)
-        {
-            foreach (var fixture in Fixtures)
-                fixture.IsSelected = settings.ScheduleSelectedTypeMarks.Contains(fixture.TypeMark);
-        }
+        if (!string.IsNullOrWhiteSpace(settings.LoadsSelectedSortColumn))
+            _selectedSortColumn = settings.LoadsSelectedSortColumn;
     }
 
     public void SaveSettings()
     {
         var settings = DocsSettingsService.Load();
-        settings.ScheduleSelectedTypeMarks = Fixtures
-            .Where(f => f.IsSelected)
-            .Select(f => f.TypeMark)
-            .ToList();
+        settings.LoadsSelectedSortColumn = SelectedSortColumn;
         DocsSettingsService.Save(settings);
     }
 
-    private void SetAllSelected(bool selected)
+    private List<LoadsCircuitModel> GetSortedCircuits()
     {
-        foreach (var fixture in Fixtures)
-            fixture.IsSelected = selected;
+        return SelectedSortColumn switch
+        {
+            "LoadName" => Circuits.OrderBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase).ToList(),
+            "TotalWatts" => Circuits.OrderBy(c => c.ApparentLoadVA).ToList(),
+            _ => Circuits.OrderBy(c => c.CircuitNumber, StringComparer.OrdinalIgnoreCase).ToList(),
+        };
     }
 
     private async void ExecuteGenerate()
     {
-        var selected = Fixtures.Where(f => f.IsSelected).ToList();
-        if (selected.Count == 0) return;
+        if (Circuits.Count == 0) return;
 
         var saveDialog = new SaveFileDialog
         {
             Filter = "PDF Files|*.pdf",
-            FileName = $"{ProjectName} Fixture Schedule.pdf"
+            FileName = $"{ProjectName} Load Schedule.pdf"
         };
         if (saveDialog.ShowDialog() != true) return;
 
@@ -105,11 +105,11 @@ public class ScheduleViewModel : ViewModelBase
 
         try
         {
-            StatusText = "Generating schedule...";
+            StatusText = "Generating load schedule...";
             Progress = 50;
 
+            var sorted = GetSortedCircuits();
             string outputPath = saveDialog.FileName;
-            bool largeFormat = _parent.UseLargeFormat;
             var settings = new DocsSettings
             {
                 LogoFilePath = _parent.LogoFilePath,
@@ -118,7 +118,7 @@ public class ScheduleViewModel : ViewModelBase
                 CompanyEmail = _parent.CompanyEmail,
                 CompanyWebsite = _parent.CompanyWebsite,
             };
-            await Task.Run(() => SchedulePdfService.Generate(selected, ProjectName, outputPath, largeFormat, settings));
+            await Task.Run(() => LoadsPdfService.Generate(sorted, ProjectName, outputPath, settings));
 
             Progress = 100;
             StatusText = $"Done. Saved to {Path.GetFileName(outputPath)}";

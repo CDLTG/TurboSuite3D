@@ -76,13 +76,17 @@ public static class SchedulePdfService
 
     #endregion
 
+    // ── Footer ──
+    private const double FooterHeight = 28;
+
     public static void Generate(
         List<ScheduleFixtureModel> fixtures,
         string projectName,
         string outputPath,
         bool useLargeFormat,
-        string logoPath)
+        DocsSettings settings)
     {
+        string logoPath = settings.LogoFilePath;
         double pageWidth  = useLargeFormat ? LargePageWidth  : SmallPageWidth;
         double pageHeight = useLargeFormat ? LargePageHeight : SmallPageHeight;
         double typeMarkBoxHeight = 4 * LineHeight;  // box matches the 4 content lines
@@ -293,7 +297,7 @@ public static class SchedulePdfService
 
                 // Avoid classification header as last item on page —
                 // ensure header + at least one entry fits
-                if (y + headerBlock > pageHeight - MarginBottom)
+                if (y + headerBlock > pageHeight - MarginBottom - FooterHeight)
                     StartNewPage();
 
                 // Draw classification header
@@ -309,7 +313,7 @@ public static class SchedulePdfService
                 double entryHeight = MeasureEntryHeight(fixture, gfx!, fontNote, noteTextMaxWidth);
 
                 // Page break — never split a fixture entry
-                if (y + entryHeight > pageHeight - MarginBottom)
+                if (y + entryHeight > pageHeight - MarginBottom - FooterHeight)
                     StartNewPage();
 
                 DrawFixtureEntry(gfx!, fixture, y, typeMarkBoxHeight, contentLeft,
@@ -323,20 +327,15 @@ public static class SchedulePdfService
             }
         }
 
-        // Dispose main graphics before page number pass
+        // Dispose main graphics before footer/page number pass
         gfx?.Dispose();
         gfx = null;
 
-        // Page numbers (letter format only)
-        if (!useLargeFormat)
+        // Footer + page numbers on every page
+        for (int i = 0; i < pdf.PageCount; i++)
         {
-            for (int i = 0; i < pdf.PageCount; i++)
-            {
-                using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
-                g.DrawString($"Page {i + 1} of {pdf.PageCount}", fontPageNum, XBrushes.Gray,
-                    new XPoint(pageWidth - MarginRight, pageHeight - MarginBottom + 12),
-                    XStringFormats.TopRight);
-            }
+            using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
+            DrawFooter(g, pageWidth, pageHeight, settings, fontPageNum, i + 1, pdf.PageCount);
         }
 
         pdf.Save(outputPath);
@@ -553,5 +552,34 @@ public static class SchedulePdfService
                 new XPoint(colLeft + labelWidth + SpecColumnGap, baseline));
             row++;
         }
+    }
+
+    private static void DrawFooter(XGraphics gfx, double pageWidth, double pageHeight,
+        DocsSettings settings, XFont fontPageNum, int pageNumber, int pageCount)
+    {
+        double fTop = pageHeight - FooterHeight;
+
+        gfx.DrawLine(new XPen(XColor.FromGrayScale(0.8), 0.25),
+            MarginLeft, fTop + 2, pageWidth - MarginLeft, fTop + 2);
+
+        // Company info centered
+        var font = new XFont("Segoe UI Light", 7.5);
+        var brush = new XSolidBrush(XColor.FromGrayScale(0.45));
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(settings.CompanyAddress)) parts.Add(settings.CompanyAddress);
+        if (!string.IsNullOrWhiteSpace(settings.CompanyPhone)) parts.Add(settings.CompanyPhone);
+        if (!string.IsNullOrWhiteSpace(settings.CompanyEmail)) parts.Add(settings.CompanyEmail);
+        if (!string.IsNullOrWhiteSpace(settings.CompanyWebsite)) parts.Add(settings.CompanyWebsite);
+
+        if (parts.Count > 0)
+        {
+            gfx.DrawString(string.Join("    |    ", parts), font, brush,
+                new XPoint(pageWidth / 2, fTop + 10), XStringFormats.TopCenter);
+        }
+
+        // Page number right-aligned
+        gfx.DrawString($"Page {pageNumber} of {pageCount}", fontPageNum, XBrushes.Gray,
+            new XPoint(pageWidth - MarginRight, fTop + 10), XStringFormats.TopRight);
     }
 }

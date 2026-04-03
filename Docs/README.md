@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility for lighting fixture types. Two tabs: **Schedule** (fixture schedule PDF) and **Cut Sheets** (spec sheet PDF download, stamping, and merging).
+Tabbed document generation utility. Three output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), and **Load Schedule** (electrical circuit load schedule PDF). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -52,6 +52,29 @@ Page breaks never split a fixture entry. Classification headers are kept with at
 | (linear detect) | Linear Power (instance param; > 0 triggers W/ft and lm/ft display) |
 
 Embedded line feeds (alt+0010) in parameter values are replaced with ", " for single-line display.
+
+## Load Schedule Tab
+
+Generates a load schedule PDF from electrical circuit parameters, listing each circuit with its connected lighting fixtures.
+
+### Layout
+
+Each circuit entry is a single row with fixture details below:
+- **Circuit Number**, **Load Name**, **Load Classification**, and **Total VA** on one line
+- Connected fixtures listed below with en-dash prefix, grouped by Type Mark
+- Point-based fixtures show quantity: `– A3 (x8)`
+- Line-based fixtures show total length: `– TL-32'-4"`
+
+### Parameter Mapping
+
+| Field | Source |
+|-------|--------|
+| Circuit Number | RBS_ELEC_CIRCUIT_NUMBER |
+| Load Name | RBS_ELEC_CIRCUIT_NAME |
+| Load Classification | Load Classification Abbreviation |
+| Total VA | RBS_ELEC_APPARENT_LOAD |
+| Fixture Type Mark | ALL_MODEL_TYPE_MARK |
+| Linear Length | Linear Length (instance, for line-based fixtures) |
 
 ## Cut Sheets Tab
 

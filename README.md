@@ -53,7 +53,7 @@ The "TurboSuite" ribbon tab has three panels:
 | [TurboZones](Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
 | [TurboRPS](Driver/README.md) | Review power supply assignments across all RPS circuits |
-| [TurboDocs](Docs/README.md) | Generate fixture schedule PDFs and download/merge cut sheet PDFs |
+| [TurboDocs](Docs/README.md) | Generate fixture schedule, load schedule, and cut sheet PDFs |
 
 ## Supported Workflows
 

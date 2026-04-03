@@ -1,5 +1,5 @@
 <UserControl
-    x:Class="TurboSuite.Docs.Views.ScheduleTab"
+    x:Class="TurboSuite.Docs.Views.LoadsTab"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     FontFamily="Segoe UI" FontSize="11">
@@ -18,10 +18,6 @@
                     <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
                 </Style.Resources>
             </Style>
-
-            <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
-                <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
-            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -30,40 +26,28 @@
         <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
-        <!-- Fixture Types -->
-        <GroupBox Header="Fixture Types" Margin="0,0,0,0">
+        <!-- Circuits -->
+        <GroupBox Header="Circuits" Margin="0,0,0,0">
             <DockPanel Margin="8">
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                    <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
-                            Style="{StaticResource RevitButtonStyle}" Padding="8,4"
-                            Margin="0,0,6,0"/>
-                    <Button Content="Deselect All" Command="{Binding DeselectAllCommand}" Width="85" Height="24"
-                            Style="{StaticResource RevitButtonStyle}" Padding="8,4"/>
-                </StackPanel>
-
-                <DataGrid ItemsSource="{Binding Fixtures}"
+                <DataGrid ItemsSource="{Binding Circuits}"
                           AutoGenerateColumns="False"
                           CanUserAddRows="False" CanUserDeleteRows="False"
-                          CanUserSortColumns="False"
-                          IsReadOnly="False"
+                          CanUserSortColumns="True"
+                          IsReadOnly="True"
                           SelectionMode="Single"
                           HeadersVisibility="Column"
                           GridLinesVisibility="All"
                           HorizontalGridLinesBrush="#E0E0E0"
                           VerticalGridLinesBrush="#E0E0E0"
                           BorderThickness="1" BorderBrush="#CCCCCC"
-                          MinHeight="150">
+                          MinHeight="150"
+                          Sorting="DataGrid_Sorting">
                     <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="&#x2713;" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="35"
-                                                CellStyle="{StaticResource SingleClickCheckBoxColumn}">
-                            <DataGridCheckBoxColumn.HeaderStyle>
-                                <Style TargetType="DataGridColumnHeader">
-                                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridCheckBoxColumn.HeaderStyle>
-                        </DataGridCheckBoxColumn>
-                        <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="60" IsReadOnly="True"/>
-                        <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="*" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Circuit Number" Binding="{Binding CircuitNumber}" Width="110"
+                                            SortDirection="Ascending"/>
+                        <DataGridTextColumn Header="Load Name" Binding="{Binding LoadName}" Width="*"/>
+                        <DataGridTextColumn Header="Total Watts" Binding="{Binding TotalWattsDisplay}" Width="100"
+                                            SortMemberPath="ApparentLoadVA"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>

@@ -14,54 +14,13 @@ namespace TurboSuite.Docs.ViewModels;
 
 public class CutSheetsViewModel : ViewModelBase
 {
-    private string _logoFilePath = string.Empty;
-    private string _companyAddress = string.Empty;
-    private string _companyPhone = string.Empty;
-    private string _companyEmail = string.Empty;
-    private string _companyWebsite = string.Empty;
-    private DateTime _headerDate = DateTime.Now;
+    private readonly DocsViewModel _parent;
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
 
     public string ProjectName { get; }
     public ObservableCollection<FixtureSpecModel> Fixtures { get; }
-
-    public string LogoFilePath
-    {
-        get => _logoFilePath;
-        set => SetProperty(ref _logoFilePath, value);
-    }
-
-    public string CompanyAddress
-    {
-        get => _companyAddress;
-        set => SetProperty(ref _companyAddress, value);
-    }
-
-    public string CompanyPhone
-    {
-        get => _companyPhone;
-        set => SetProperty(ref _companyPhone, value);
-    }
-
-    public string CompanyEmail
-    {
-        get => _companyEmail;
-        set => SetProperty(ref _companyEmail, value);
-    }
-
-    public string CompanyWebsite
-    {
-        get => _companyWebsite;
-        set => SetProperty(ref _companyWebsite, value);
-    }
-
-    public DateTime HeaderDate
-    {
-        get => _headerDate;
-        set => SetProperty(ref _headerDate, value);
-    }
 
     public double Progress
     {
@@ -85,24 +44,19 @@ public class CutSheetsViewModel : ViewModelBase
         }
     }
 
-    public RelayCommand BrowseLogoCommand { get; }
     public RelayCommand<FixtureSpecModel> BrowseLocalPdfCommand { get; }
     public RelayCommand<FixtureSpecModel> ClearLocalPdfCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand DeselectAllCommand { get; }
     public RelayCommand GenerateCommand { get; }
 
-    public CutSheetsViewModel(List<FixtureSpecModel> fixtures, string projectName)
+    public CutSheetsViewModel(List<FixtureSpecModel> fixtures, string projectName, DocsViewModel parent)
     {
+        _parent = parent;
         ProjectName = projectName;
         Fixtures = new ObservableCollection<FixtureSpecModel>(fixtures);
 
         var settings = DocsSettingsService.Load();
-        _logoFilePath = settings.LogoFilePath;
-        _companyAddress = settings.CompanyAddress;
-        _companyPhone = settings.CompanyPhone;
-        _companyEmail = settings.CompanyEmail;
-        _companyWebsite = settings.CompanyWebsite;
 
         foreach (var fixture in Fixtures)
         {
@@ -113,7 +67,6 @@ public class CutSheetsViewModel : ViewModelBase
                 fixture.IsSelected = settings.SelectedTypeMarks.Contains(fixture.TypeMark);
         }
 
-        BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
         BrowseLocalPdfCommand = new RelayCommand<FixtureSpecModel>(ExecuteBrowseLocalPdf);
         ClearLocalPdfCommand = new RelayCommand<FixtureSpecModel>(f => f.LocalPdfPath = string.Empty);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
@@ -123,36 +76,15 @@ public class CutSheetsViewModel : ViewModelBase
 
     public void SaveSettings()
     {
-        var localPdfPaths = Fixtures
+        var settings = DocsSettingsService.Load();
+        settings.LocalPdfPaths = Fixtures
             .Where(f => f.HasLocalPdf)
             .ToDictionary(f => f.TypeMark, f => f.LocalPdfPath);
-
-        var selectedTypeMarks = Fixtures
+        settings.SelectedTypeMarks = Fixtures
             .Where(f => f.IsSelected)
             .Select(f => f.TypeMark)
             .ToList();
-
-        DocsSettingsService.Save(new DocsSettings
-        {
-            LogoFilePath = LogoFilePath,
-            CompanyAddress = CompanyAddress,
-            CompanyPhone = CompanyPhone,
-            CompanyEmail = CompanyEmail,
-            CompanyWebsite = CompanyWebsite,
-            LocalPdfPaths = localPdfPaths,
-            SelectedTypeMarks = selectedTypeMarks
-        });
-    }
-
-    private void ExecuteBrowseLogo()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp;*.pdf",
-            Title = "Select Company Logo"
-        };
-        if (dialog.ShowDialog() == true)
-            LogoFilePath = dialog.FileName;
+        DocsSettingsService.Save(settings);
     }
 
     private void ExecuteBrowseLocalPdf(FixtureSpecModel fixture)
@@ -184,7 +116,7 @@ public class CutSheetsViewModel : ViewModelBase
         };
         if (saveDialog.ShowDialog() != true) return;
 
-        SaveSettings();
+        _parent.SaveSettings();
         IsGenerating = true;
         Progress = 0;
 
@@ -193,7 +125,7 @@ public class CutSheetsViewModel : ViewModelBase
 
         try
         {
-            // Load/download phase (0–80%)
+            // Load/download phase (0-80%)
             for (int i = 0; i < selected.Count; i++)
             {
                 var fixture = selected[i];
@@ -220,18 +152,18 @@ public class CutSheetsViewModel : ViewModelBase
                 results.Add((fixture.TypeMark, data, fixture.CatalogNumber));
             }
 
-            // Merge phase (80–100%)
+            // Merge phase (80-100%)
             StatusText = "Merging PDFs...";
             Progress = 85;
 
             var settings = new DocsSettings
             {
-                LogoFilePath = LogoFilePath,
-                CompanyAddress = CompanyAddress,
-                CompanyPhone = CompanyPhone,
-                CompanyEmail = CompanyEmail,
-                CompanyWebsite = CompanyWebsite,
-                HeaderDate = HeaderDate.ToString("MMM dd, yyyy")
+                LogoFilePath = _parent.LogoFilePath,
+                CompanyAddress = _parent.CompanyAddress,
+                CompanyPhone = _parent.CompanyPhone,
+                CompanyEmail = _parent.CompanyEmail,
+                CompanyWebsite = _parent.CompanyWebsite,
+                HeaderDate = _parent.HeaderDate.ToString("MMM dd, yyyy")
             };
 
             string outputPath = saveDialog.FileName;

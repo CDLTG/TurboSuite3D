@@ -11,13 +11,6 @@ public partial class ScheduleTab : UserControl
     public ScheduleTab()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) => SyncRadioButtons();
-    }
-
-    private void SyncRadioButtons()
-    {
-        if (DataContext is TurboSuite.Docs.ViewModels.ScheduleViewModel vm && !vm.UseLargeFormat)
-            SmallFormatRadio.IsChecked = true;
     }
 
     private void DataGridCell_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

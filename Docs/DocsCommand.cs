@@ -70,7 +70,10 @@ public class DocsCommand : IExternalCommand
         // Collect schedule fixture data
         var scheduleFixtures = ScheduleCollectorService.Collect(doc);
 
-        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0)
+        // Collect load schedule circuit data
+        var loadsCircuits = LoadsCollectorService.Collect(doc);
+
+        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0 && loadsCircuits.Count == 0)
         {
             TaskDialog.Show("TurboDocs", "No lighting fixture types found in the active document.");
             return Result.Cancelled;
@@ -80,6 +83,7 @@ public class DocsCommand : IExternalCommand
 
         var viewModel = new DocsViewModel(cutSheetFixtures, projectName);
         viewModel.ScheduleVM.LoadFixtures(scheduleFixtures);
+        viewModel.LoadsVM.LoadCircuits(loadsCircuits);
 
         var window = new TurboDocsWindow { DataContext = viewModel };
         var helper = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };

@@ -30,7 +30,15 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="Generate" Command="{Binding GenerateCommand}" Width="90" Height="28" Margin="0,0,8,0"
-                            Style="{StaticResource PrimaryButtonStyle}"/>
+                            Style="{StaticResource PrimaryButtonStyle}">
+                        <Button.Visibility>
+                            <Binding Path="SelectedTabIndex">
+                                <Binding.Converter>
+                                    <local:NonZeroToVisibilityConverter/>
+                                </Binding.Converter>
+                            </Binding>
+                        </Button.Visibility>
+                    </Button>
                     <Button Content="Close" Click="CloseButton_Click" Width="70" Height="28"
                             Style="{StaticResource RevitButtonStyle}"/>
                 </StackPanel>
@@ -42,11 +50,17 @@
 
         <!-- Tab content -->
         <TabControl SelectedIndex="{Binding SelectedTabIndex}" Margin="16,12,16,0" Cursor="Hand">
+            <TabItem Header="  Settings  ">
+                <local:SettingsTab/>
+            </TabItem>
             <TabItem Header="  Schedule  ">
                 <local:ScheduleTab DataContext="{Binding ScheduleVM}"/>
             </TabItem>
             <TabItem Header="  Cut Sheets  ">
                 <local:CutSheetsTab DataContext="{Binding CutSheetsVM}"/>
+            </TabItem>
+            <TabItem Header="  Load Schedule  ">
+                <local:LoadsTab DataContext="{Binding LoadsVM}"/>
             </TabItem>
         </TabControl>
     </DockPanel>
