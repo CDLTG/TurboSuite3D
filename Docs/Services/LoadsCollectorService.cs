@@ -25,8 +25,10 @@ public static class LoadsCollectorService
             {
                 string circuitNumber = ParameterHelper.GetCircuitNumber(circuit);
                 if (string.IsNullOrWhiteSpace(circuitNumber)) continue;
+                if (circuitNumber.Contains("Feed Through Lugs", StringComparison.OrdinalIgnoreCase)) continue;
 
                 var fixtureGroups = new List<LoadsFixtureGroup>();
+                var driverSwitchIds = new List<string>();
 
                 if (circuit.Elements != null)
                 {
@@ -35,13 +37,26 @@ public static class LoadsCollectorService
                     foreach (Element el in circuit.Elements)
                     {
                         if (el is not FamilyInstance fi) continue;
-                        if (fi.Category?.BuiltInCategory != BuiltInCategory.OST_LightingFixtures) continue;
 
-                        string typeMark = ParameterHelper.GetTypeMark(fi);
-                        if (string.IsNullOrWhiteSpace(typeMark)) continue;
+                        // Collect fixture TypeMark/LinearLength from Lighting Fixtures and Electrical Fixtures
+                        if (fi.Category?.BuiltInCategory is BuiltInCategory.OST_LightingFixtures
+                            or BuiltInCategory.OST_ElectricalFixtures)
+                        {
+                            string typeMark = ParameterHelper.GetTypeMark(fi);
+                            if (!string.IsNullOrWhiteSpace(typeMark))
+                            {
+                                double linearLength = ParameterHelper.GetLinearLength(fi);
+                                fixtureData.Add((typeMark, linearLength));
+                            }
+                        }
 
-                        double linearLength = ParameterHelper.GetLinearLength(fi);
-                        fixtureData.Add((typeMark, linearLength));
+                        // Collect Switch IDs from Lighting Devices (remote power supplies)
+                        if (fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingDevices)
+                        {
+                            string switchId = ParameterHelper.GetSwitchID(fi);
+                            if (!string.IsNullOrWhiteSpace(switchId))
+                                driverSwitchIds.Add(switchId);
+                        }
                     }
 
                     fixtureGroups = fixtureData
@@ -63,7 +78,8 @@ public static class LoadsCollectorService
                     LoadName = ParameterHelper.GetLoadName(circuit),
                     LoadClassification = ParameterHelper.GetLoadClassification(circuit),
                     ApparentLoadVA = ParameterHelper.GetApparentLoad(circuit),
-                    FixtureGroups = fixtureGroups
+                    FixtureGroups = fixtureGroups,
+                    DriverSwitchIDs = driverSwitchIds
                 });
             }
             catch

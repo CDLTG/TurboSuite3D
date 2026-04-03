@@ -11,6 +11,7 @@ public class DocsViewModel : ViewModelBase
 {
     private int _selectedTabIndex;
     private string _statusText = string.Empty;
+    private bool _isError;
     private string _logoFilePath = string.Empty;
     private string _companyAddress = string.Empty;
     private string _companyPhone = string.Empty;
@@ -33,7 +34,17 @@ public class DocsViewModel : ViewModelBase
     public string StatusText
     {
         get => _statusText;
-        set => SetProperty(ref _statusText, value);
+        set
+        {
+            if (SetProperty(ref _statusText, value))
+                IsError = value.StartsWith("Error:", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public bool IsError
+    {
+        get => _isError;
+        set => SetProperty(ref _isError, value);
     }
 
     public string LogoFilePath

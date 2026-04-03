@@ -15,6 +15,7 @@ public class LoadsViewModel : ViewModelBase
 {
     private readonly DocsViewModel _parent;
     private string _selectedSortColumn = "CircuitNumber";
+    private bool _sortDescending;
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
@@ -26,6 +27,12 @@ public class LoadsViewModel : ViewModelBase
     {
         get => _selectedSortColumn;
         set => SetProperty(ref _selectedSortColumn, value);
+    }
+
+    public bool SortDescending
+    {
+        get => _sortDescending;
+        set => SetProperty(ref _sortDescending, value);
     }
 
     public double Progress
@@ -80,12 +87,16 @@ public class LoadsViewModel : ViewModelBase
 
     private List<LoadsCircuitModel> GetSortedCircuits()
     {
-        return SelectedSortColumn switch
+        IEnumerable<LoadsCircuitModel> ordered = SelectedSortColumn switch
         {
-            "LoadName" => Circuits.OrderBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase).ToList(),
-            "TotalWatts" => Circuits.OrderBy(c => c.ApparentLoadVA).ToList(),
-            _ => Circuits.OrderBy(c => c.CircuitNumber, StringComparer.OrdinalIgnoreCase).ToList(),
+            "LoadName" when SortDescending => Circuits.OrderByDescending(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
+            "LoadName" => Circuits.OrderBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
+            "TotalWatts" when SortDescending => Circuits.OrderByDescending(c => c.ApparentLoadVA),
+            "TotalWatts" => Circuits.OrderBy(c => c.ApparentLoadVA),
+            _ when SortDescending => Circuits.OrderByDescending(c => c.CircuitNumber, StringComparer.OrdinalIgnoreCase),
+            _ => Circuits.OrderBy(c => c.CircuitNumber, StringComparer.OrdinalIgnoreCase),
         };
+        return ordered.ToList();
     }
 
     private async void ExecuteGenerate()

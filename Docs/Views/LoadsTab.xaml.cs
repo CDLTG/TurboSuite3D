@@ -16,10 +16,13 @@ public partial class LoadsTab : UserControl
 
         vm.SelectedSortColumn = e.Column.Header switch
         {
-            "Circuit Number" => "CircuitNumber",
-            "Load Name" => "LoadName",
-            "Total Watts" => "TotalWatts",
+            "Circuit" => "CircuitNumber",
+            "Load" => "LoadName",
+            "Wattage" => "TotalWatts",
             _ => "CircuitNumber"
         };
+
+        // Next direction: None→Asc, Asc→Desc, Desc→Asc
+        vm.SortDescending = e.Column.SortDirection == System.ComponentModel.ListSortDirection.Ascending;
     }
 }

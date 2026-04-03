@@ -31,18 +31,13 @@ public static class LoadsPdfService
     private const double HeaderHeight           = 50;
     private const double HeaderSpacing          = 5;
 
-    // ── Row ──
-    private const double RowFontSize    = 9;
-    private const double LineHeight     = 14;
-    private const double BaselineOffset = 10;
-
-    // ── Notes ──
-    private const double NoteFontSize   = 7.5;
-    private const double NoteLineHeight = 11;
-    private const double NoteIndent     = 12;
-
-    // ── Entry Spacing ──
-    private const double EntrySpacing = 10;
+    // ── Table ──
+    private const double RowFontSize       = 9;
+    private const double HeaderFontSize    = 8;
+    private const double LineHeight        = 16;
+    private const double ColumnHeaderHeight = 18;
+    private const double BaselineOffset    = 11;
+    private const double ColumnPadding     = 6;
 
     // ── Footer ──
     private const double FooterHeight = 28;
@@ -61,48 +56,71 @@ public static class LoadsPdfService
         var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
         var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
 
-        var fontRow     = new XFont("Segoe UI", RowFontSize);
-        var fontNote    = new XFont("Segoe UI", NoteFontSize);
-        var brushNote   = new XSolidBrush(XColor.FromGrayScale(0.25));
-        var fontPageNum = new XFont("Segoe UI Light", 7);
+        var fontRow       = new XFont("Segoe UI", RowFontSize);
+        var fontColHeader = new XFont("Segoe UI", HeaderFontSize, XFontStyle.Bold);
+        var fontPageNum   = new XFont("Segoe UI Light", 7);
+
+        var gridPen = new XPen(XColor.FromGrayScale(0.85), 0.5);
+
+        // Column headers
+        string[] headers = { "Ckt", "Load", "Dimming", "Fixtures", "Qty", "Driver", "Watts" };
 
         // ── Measurement pass: determine column widths ──
-        double circuitNumColWidth;
-        double classificationColWidth;
-        double wattsColWidth;
+        double colCircuit, colLoad, colDimming, colFixtures, colQuantity, colDriver, colWattage;
 
         using (var tempPdf = new PdfDocument())
         {
             var tempPage = tempPdf.AddPage();
             using var tempGfx = XGraphics.FromPdfPage(tempPage);
 
-            double maxCircuitNum = 0;
-            double maxClassification = 0;
-            double maxWatts = 0;
+            double maxCircuit = 0, maxDimming = 0, maxFixtures = 0;
+            double maxQuantity = 0, maxDriver = 0, maxWattage = 0;
 
             foreach (var c in circuits)
             {
                 double w = tempGfx.MeasureString(c.CircuitNumber, fontRow).Width;
-                if (w > maxCircuitNum) maxCircuitNum = w;
+                if (w > maxCircuit) maxCircuit = w;
 
                 w = tempGfx.MeasureString(c.LoadClassification, fontRow).Width;
-                if (w > maxClassification) maxClassification = w;
+                if (w > maxDimming) maxDimming = w;
+
+                w = tempGfx.MeasureString(c.FixturesDisplay, fontRow).Width;
+                if (w > maxFixtures) maxFixtures = w;
+
+                w = tempGfx.MeasureString(c.QuantityDisplay, fontRow).Width;
+                if (w > maxQuantity) maxQuantity = w;
+
+                w = tempGfx.MeasureString(c.DriverDisplay, fontRow).Width;
+                if (w > maxDriver) maxDriver = w;
 
                 w = tempGfx.MeasureString(c.TotalWattsDisplay, fontRow).Width;
-                if (w > maxWatts) maxWatts = w;
+                if (w > maxWattage) maxWattage = w;
             }
 
-            circuitNumColWidth = maxCircuitNum + 12;
-            classificationColWidth = maxClassification + 12;
-            wattsColWidth = maxWatts + 8;
+            // Measure header widths to enforce minimums
+            double[] headerWidths = new double[7];
+            for (int i = 0; i < 7; i++)
+                headerWidths[i] = tempGfx.MeasureString(headers[i], fontColHeader).Width;
+
+            double minPad = ColumnPadding * 4; // extra breathing room for non-Load columns
+            colCircuit  = Math.Max(maxCircuit, headerWidths[0]) + minPad;
+            colDimming  = Math.Max(maxDimming, headerWidths[2]) + minPad;
+            colFixtures = Math.Max(maxFixtures, headerWidths[3]) + minPad;
+            colQuantity = Math.Max(maxQuantity, headerWidths[4]) + minPad;
+            colDriver   = Math.Max(maxDriver, headerWidths[5]) + minPad;
+            colWattage  = Math.Max(maxWattage, headerWidths[6]) + minPad;
         }
 
-        // Column positions
-        double col1X = MarginLeft;                                          // Circuit Number
-        double col2X = col1X + circuitNumColWidth;                          // Load Name
-        double col4Right = PageWidth - MarginRight;                         // Watts right edge
-        double col3X = col4Right - wattsColWidth - classificationColWidth;  // Classification
-        double loadNameMaxWidth = col3X - col2X - 4;                        // Load Name available width
+        double contentWidth = PageWidth - MarginLeft - MarginRight;
+        double fixedColsWidth = colCircuit + colDimming + colFixtures + colQuantity + colDriver + colWattage;
+        colLoad = Math.Max(contentWidth - fixedColsWidth, 60);
+
+        // Column X positions (left edge of each column)
+        double[] colX = new double[7];
+        double[] colW = { colCircuit, colLoad, colDimming, colFixtures, colQuantity, colDriver, colWattage };
+        colX[0] = MarginLeft;
+        for (int i = 1; i < 7; i++)
+            colX[i] = colX[i - 1] + colW[i - 1];
 
         // Load logo
         XImage? logo = null;
@@ -173,63 +191,84 @@ public static class LoadsPdfService
                 fontHeaderNote, brushHeaderNote, new XPoint(MarginLeft, noteY));
 
             y += HeaderHeight + HeaderSpacing;
+
+            // ── Column headers ──
+            var headerBrush = new XSolidBrush(XColor.FromGrayScale(0.15));
+            // Ckt header centered
+            var centerAlign = new XStringFormat
+            {
+                Alignment = XStringAlignment.Center,
+                LineAlignment = XLineAlignment.BaseLine
+            };
+            gfx.DrawString(headers[0], fontColHeader, headerBrush,
+                new XPoint(colX[0] + colW[0] / 2, y + BaselineOffset - 2), centerAlign);
+            for (int i = 1; i < 7; i++)
+            {
+                gfx.DrawString(headers[i], fontColHeader, headerBrush,
+                    new XPoint(colX[i] + ColumnPadding, y + BaselineOffset - 2));
+            }
+            y += ColumnHeaderHeight;
+
+            // Line under column headers
+            gfx.DrawLine(new XPen(XColor.FromGrayScale(0.50), 0.75),
+                MarginLeft, y, PageWidth - MarginRight, y);
         }
 
         StartNewPage();
 
+        var centerAlignData = new XStringFormat
+        {
+            Alignment = XStringAlignment.Center,
+            LineAlignment = XLineAlignment.BaseLine
+        };
+
         foreach (var circuit in circuits)
         {
-            double entryHeight = MeasureEntryHeight(circuit);
-
-            if (y + entryHeight > PageHeight - MarginBottom - FooterHeight)
+            if (y + LineHeight > PageHeight - FooterHeight)
                 StartNewPage();
 
-            // ── Row: Circuit Number | Load Name | Classification | Watts ──
             double baseline = y + BaselineOffset;
 
+            // Circuit (centered)
             gfx!.DrawString(circuit.CircuitNumber, fontRow, XBrushes.Black,
-                new XPoint(col1X, baseline));
+                new XPoint(colX[0] + colW[0] / 2, baseline), centerAlignData);
 
-            // Truncate Load Name if too wide
+            // Load (truncate if too wide)
+            double loadMaxWidth = colW[1] - ColumnPadding * 2;
             string loadName = circuit.LoadName;
-            if (gfx.MeasureString(loadName, fontRow).Width > loadNameMaxWidth && loadName.Length > 0)
+            if (gfx.MeasureString(loadName, fontRow).Width > loadMaxWidth && loadName.Length > 0)
             {
-                while (loadName.Length > 1 && gfx.MeasureString(loadName + "\u2026", fontRow).Width > loadNameMaxWidth)
+                while (loadName.Length > 1 && gfx.MeasureString(loadName + "\u2026", fontRow).Width > loadMaxWidth)
                     loadName = loadName[..^1];
                 loadName += "\u2026";
             }
             gfx.DrawString(loadName, fontRow, XBrushes.Black,
-                new XPoint(col2X, baseline));
+                new XPoint(colX[1] + ColumnPadding, baseline));
 
+            // Dimming
             gfx.DrawString(circuit.LoadClassification, fontRow, XBrushes.Black,
-                new XPoint(col3X, baseline));
+                new XPoint(colX[2] + ColumnPadding, baseline));
 
-            var rightAlign = new XStringFormat
-            {
-                Alignment = XStringAlignment.Far,
-                LineAlignment = XLineAlignment.BaseLine
-            };
+            // Fixtures
+            gfx.DrawString(circuit.FixturesDisplay, fontRow, XBrushes.Black,
+                new XPoint(colX[3] + ColumnPadding, baseline));
+
+            // Quantity
+            gfx.DrawString(circuit.QuantityDisplay, fontRow, XBrushes.Black,
+                new XPoint(colX[4] + ColumnPadding, baseline));
+
+            // Driver
+            gfx.DrawString(circuit.DriverDisplay, fontRow, XBrushes.Black,
+                new XPoint(colX[5] + ColumnPadding, baseline));
+
+            // Wattage
             gfx.DrawString(circuit.TotalWattsDisplay, fontRow, XBrushes.Black,
-                new XPoint(col4Right, baseline), rightAlign);
+                new XPoint(colX[6] + ColumnPadding, baseline));
 
             y += LineHeight;
 
-            // ── Notes: fixture groups ──
-            double noteX = col1X + NoteIndent;
-            foreach (var group in circuit.FixtureGroups)
-            {
-                string noteText;
-                if (group.IsLinear)
-                    noteText = $"\u2013 {group.TypeMark}-{FormatFeetInches(group.TotalLinearLengthFeet)}";
-                else
-                    noteText = $"\u2013 {group.TypeMark} (x{group.Quantity})";
-
-                gfx.DrawString(noteText, fontNote, brushNote,
-                    new XPoint(noteX, y + BaselineOffset - 2));
-                y += NoteLineHeight;
-            }
-
-            y += EntrySpacing;
+            // Subtle gridline after each row
+            gfx.DrawLine(gridPen, MarginLeft, y, PageWidth - MarginRight, y);
         }
 
         // Dispose main graphics before footer pass
@@ -245,19 +284,6 @@ public static class LoadsPdfService
 
         pdf.Save(outputPath);
         logoStream?.Dispose();
-    }
-
-    private static double MeasureEntryHeight(LoadsCircuitModel circuit)
-    {
-        return LineHeight + circuit.FixtureGroups.Count * NoteLineHeight;
-    }
-
-    private static string FormatFeetInches(double feet)
-    {
-        int wholeFeet = (int)feet;
-        int remainingInches = (int)Math.Round((feet - wholeFeet) * 12.0);
-        if (remainingInches >= 12) { wholeFeet++; remainingInches = 0; }
-        return $"{wholeFeet}'-{remainingInches}\"";
     }
 
     private static void DrawScaledForm(XGraphics gfx, XPdfForm form, double x, double y, double width, double height)

@@ -55,15 +55,28 @@ Embedded line feeds (alt+0010) in parameter values are replaced with ", " for si
 
 ## Load Schedule Tab
 
-Generates a load schedule PDF from electrical circuit parameters, listing each circuit with its connected lighting fixtures.
+Generates a load schedule PDF from electrical circuit parameters in a flat table format.
 
 ### Layout
 
-Each circuit entry is a single row with fixture details below:
-- **Circuit Number**, **Load Name**, **Load Classification**, and **Total VA** on one line
-- Connected fixtures listed below with en-dash prefix, grouped by Type Mark
-- Point-based fixtures show quantity: `– A3 (x8)`
-- Line-based fixtures show total length: `– TL-32'-4"`
+Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**
+
+- Column headers repeat on each page with a rule line underneath
+- Subtle horizontal gridlines between rows
+- Circuit column is centered; all others left-aligned
+- Load column gets remaining page width after other columns are measured to fit content
+- Load names truncated with ellipsis if they exceed available width
+- Circuits named `<unnamed>` display as `<...>`
+- Circuits named `Feed Through Lugs` are excluded
+
+**Fixtures column** — smart Type Mark combining:
+- All same Type Mark → show as-is
+- Different Type Marks with shared alpha prefix → combine with `#` (e.g. `AS2, AS3` → `AS#`)
+- Mixed prefixes → show all alphabetically (e.g. `AR3, AS2, AS3` → `AR3,AS#`)
+
+**Qty column** — point-based fixtures sum to integer count; linear fixtures sum to total feet (e.g. `38.5'`)
+
+**Driver column** — Switch IDs from remote power supplies (`OST_LightingDevices`), with consecutive suffix combining (e.g. `X04a,X04b,X04c,X04d` → `X04a-d`)
 
 ### Parameter Mapping
 
@@ -71,10 +84,11 @@ Each circuit entry is a single row with fixture details below:
 |-------|--------|
 | Circuit Number | RBS_ELEC_CIRCUIT_NUMBER |
 | Load Name | RBS_ELEC_CIRCUIT_NAME |
-| Load Classification | Load Classification Abbreviation |
-| Total VA | RBS_ELEC_APPARENT_LOAD |
-| Fixture Type Mark | ALL_MODEL_TYPE_MARK |
-| Linear Length | Linear Length (instance, for line-based fixtures) |
+| Dimming | Load Classification Abbreviation |
+| Fixtures | ALL_MODEL_TYPE_MARK (from OST_LightingFixtures + OST_ElectricalFixtures) |
+| Qty | Element count or Linear Length sum |
+| Driver | Switch ID (from OST_LightingDevices on circuit) |
+| Watts | RBS_ELEC_APPARENT_LOAD |
 
 ## Cut Sheets Tab
 

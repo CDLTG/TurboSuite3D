@@ -44,12 +44,23 @@
                 </StackPanel>
                 <!-- Status text -->
                 <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="4,0,12,0"
-                           TextTrimming="CharacterEllipsis"/>
+                           TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsError}" Value="True">
+                                    <Setter Property="Foreground" Value="#B22222"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </DockPanel>
         </Border>
 
         <!-- Tab content -->
-        <TabControl SelectedIndex="{Binding SelectedTabIndex}" Margin="16,12,16,0" Cursor="Hand">
+        <TabControl SelectedIndex="{Binding SelectedTabIndex}" Margin="16,12,16,0">
             <TabItem Header="  Settings  ">
                 <local:SettingsTab/>
             </TabItem>

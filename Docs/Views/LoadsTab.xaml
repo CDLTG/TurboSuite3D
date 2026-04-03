@@ -43,10 +43,10 @@
                           MinHeight="150"
                           Sorting="DataGrid_Sorting">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Circuit Number" Binding="{Binding CircuitNumber}" Width="110"
+                        <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="110"
                                             SortDirection="Ascending"/>
-                        <DataGridTextColumn Header="Load Name" Binding="{Binding LoadName}" Width="*"/>
-                        <DataGridTextColumn Header="Total Watts" Binding="{Binding TotalWattsDisplay}" Width="100"
+                        <DataGridTextColumn Header="Load" Binding="{Binding LoadName}" Width="*"/>
+                        <DataGridTextColumn Header="Wattage" Binding="{Binding TotalWattsDisplay}" Width="100"
                                             SortMemberPath="ApparentLoadVA"/>
                     </DataGrid.Columns>
                 </DataGrid>
