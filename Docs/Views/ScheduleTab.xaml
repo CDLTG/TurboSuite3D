@@ -30,8 +30,18 @@
         <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
+        <!-- Page Size -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,0,0,8">
+            <TextBlock Text="Page Size:" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <RadioButton x:Name="SmallFormatRadio" Content='8.5" x 11" (Letter)' GroupName="PageSize"
+                         Margin="0,0,20,0" VerticalContentAlignment="Center" Cursor="Hand"/>
+            <RadioButton Content='8.5" x 28.5" (Construction)' GroupName="PageSize"
+                         IsChecked="{Binding DataContext.UseLargeFormat, RelativeSource={RelativeSource AncestorType=Window}}"
+                         VerticalContentAlignment="Center" Cursor="Hand"/>
+        </StackPanel>
+
         <!-- Fixture Types -->
-        <GroupBox Header="Fixture Types" Margin="0,0,0,0">
+        <GroupBox Header="Fixture Types" Margin="6,0,6,0">
             <DockPanel Margin="8">
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                     <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"

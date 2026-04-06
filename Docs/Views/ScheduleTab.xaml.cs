@@ -11,6 +11,13 @@ public partial class ScheduleTab : UserControl
     public ScheduleTab()
     {
         InitializeComponent();
+        Loaded += (_, _) => SyncPageSizeRadio();
+    }
+
+    private void SyncPageSizeRadio()
+    {
+        if (Window.GetWindow(this)?.DataContext is TurboSuite.Docs.ViewModels.DocsViewModel vm && !vm.UseLargeFormat)
+            SmallFormatRadio.IsChecked = true;
     }
 
     private void DataGridCell_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

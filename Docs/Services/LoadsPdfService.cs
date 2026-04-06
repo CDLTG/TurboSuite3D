@@ -35,7 +35,7 @@ public static class LoadsPdfService
     private const double RowFontSize       = 9;
     private const double HeaderFontSize    = 8;
     private const double LineHeight        = 16;
-    private const double ColumnHeaderHeight = 18;
+    private const double ColumnHeaderHeight = 13;
     private const double BaselineOffset    = 11;
     private const double ColumnPadding     = 6;
 
@@ -187,7 +187,7 @@ public static class LoadsPdfService
 
             double noteY = y + HeaderProjectFontSize + HeaderSubtitleFontSize + 16;
             gfx.DrawString(
-                "Note: Verify all circuits and loads. Refer to panel schedules for complete electrical data.",
+                "Note: Verify load schedule with official control system documentation.",
                 fontHeaderNote, brushHeaderNote, new XPoint(MarginLeft, noteY));
 
             y += HeaderHeight + HeaderSpacing;

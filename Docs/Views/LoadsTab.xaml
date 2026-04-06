@@ -27,7 +27,7 @@
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
         <!-- Circuits -->
-        <GroupBox Header="Circuits" Margin="0,0,0,0">
+        <GroupBox Header="Circuits" Margin="6,0,6,0">
             <DockPanel Margin="8">
                 <DataGrid ItemsSource="{Binding Circuits}"
                           AutoGenerateColumns="False"

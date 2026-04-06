@@ -33,7 +33,7 @@
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
         <!-- Fixture Types fills remaining space -->
-        <GroupBox Header="Fixture Types" Margin="0,0,0,0">
+        <GroupBox Header="Fixture Types" Margin="6,0,6,0">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"

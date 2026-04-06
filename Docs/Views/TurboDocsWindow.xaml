@@ -15,13 +15,14 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         </ResourceDictionary>
     </Window.Resources>
 
     <DockPanel>
         <!-- Header bar -->
         <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
-            <TextBlock Text="TurboDocs" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock Text="TurboDocs - Document Generator" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
         </Border>
 
         <!-- Footer buttons -->
@@ -29,21 +30,36 @@
                 BorderBrush="#CCCCCC" BorderThickness="0,1,0,0">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Generate" Command="{Binding GenerateCommand}" Width="90" Height="28" Margin="0,0,8,0"
-                            Style="{StaticResource PrimaryButtonStyle}">
-                        <Button.Visibility>
-                            <Binding Path="SelectedTabIndex">
-                                <Binding.Converter>
-                                    <local:NonZeroToVisibilityConverter/>
-                                </Binding.Converter>
-                            </Binding>
-                        </Button.Visibility>
+                    <Button Content="Generate" Command="{Binding GenerateCommand}" Width="90" Height="28" Margin="0,0,8,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSettingsVisible}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                     </Button>
                     <Button Content="Close" Click="CloseButton_Click" Width="70" Height="28"
                             Style="{StaticResource RevitButtonStyle}"/>
                 </StackPanel>
+                <Button DockPanel.Dock="Left" Command="{Binding ToggleSettingsCommand}"
+                        Content="Settings" Width="78" Height="28" Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource RevitButtonStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSettingsVisible}" Value="True">
+                                    <Setter Property="Background" Value="#DDEAF6"/>
+                                    <Setter Property="BorderBrush" Value="#9BBDDC"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
                 <!-- Status text -->
-                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="4,0,12,0"
+                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="12,0,12,0"
                            TextTrimming="CharacterEllipsis">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -59,20 +75,35 @@
             </DockPanel>
         </Border>
 
-        <!-- Tab content -->
-        <TabControl SelectedIndex="{Binding SelectedTabIndex}" Margin="16,12,16,0">
-            <TabItem Header="  Settings  ">
-                <local:SettingsTab/>
-            </TabItem>
-            <TabItem Header="  Schedule  ">
-                <local:ScheduleTab DataContext="{Binding ScheduleVM}"/>
-            </TabItem>
-            <TabItem Header="  Cut Sheets  ">
-                <local:CutSheetsTab DataContext="{Binding CutSheetsVM}"/>
-            </TabItem>
-            <TabItem Header="  Load Schedule  ">
-                <local:LoadsTab DataContext="{Binding LoadsVM}"/>
-            </TabItem>
-        </TabControl>
+        <!-- Content area -->
+        <Grid Margin="16,12,16,6">
+            <!-- Settings panel (shown when gear is toggled) -->
+            <local:SettingsTab Margin="0,0,0,0"
+                               Visibility="{Binding IsSettingsVisible, Converter={StaticResource BoolToVis}}"/>
+
+            <!-- Tab content (hidden when settings is visible) -->
+            <TabControl SelectedIndex="{Binding SelectedTabIndex}">
+                <TabControl.Style>
+                    <Style TargetType="TabControl">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSettingsVisible}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TabControl.Style>
+                <TabItem Header="  Fixture Schedule  ">
+                    <local:ScheduleTab DataContext="{Binding ScheduleVM}"/>
+                </TabItem>
+                <TabItem Header="  Cut Sheets  ">
+                    <local:CutSheetsTab DataContext="{Binding CutSheetsVM}"/>
+                </TabItem>
+                <TabItem Header="  Load Schedule  ">
+                    <local:LoadsTab DataContext="{Binding LoadsVM}"/>
+                </TabItem>
+            </TabControl>
+
+        </Grid>
     </DockPanel>
 </Window>

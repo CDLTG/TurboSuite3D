@@ -10,6 +10,7 @@ namespace TurboSuite.Docs.ViewModels;
 public class DocsViewModel : ViewModelBase
 {
     private int _selectedTabIndex;
+    private bool _isSettingsVisible;
     private string _statusText = string.Empty;
     private bool _isError;
     private string _logoFilePath = string.Empty;
@@ -18,7 +19,7 @@ public class DocsViewModel : ViewModelBase
     private string _companyEmail = string.Empty;
     private string _companyWebsite = string.Empty;
     private DateTime _headerDate = DateTime.Now;
-    private bool _useLargeFormat = true;
+    private bool _useLargeFormat;
 
     public string ProjectName { get; }
     public CutSheetsViewModel CutSheetsVM { get; }
@@ -29,6 +30,12 @@ public class DocsViewModel : ViewModelBase
     {
         get => _selectedTabIndex;
         set => SetProperty(ref _selectedTabIndex, value);
+    }
+
+    public bool IsSettingsVisible
+    {
+        get => _isSettingsVisible;
+        set => SetProperty(ref _isSettingsVisible, value);
     }
 
     public string StatusText
@@ -91,6 +98,7 @@ public class DocsViewModel : ViewModelBase
 
     public RelayCommand BrowseLogoCommand { get; }
     public RelayCommand GenerateCommand { get; }
+    public RelayCommand ToggleSettingsCommand { get; }
 
     public DocsViewModel(List<FixtureSpecModel> cutSheetFixtures, string projectName)
     {
@@ -110,6 +118,7 @@ public class DocsViewModel : ViewModelBase
         LoadsVM = new LoadsViewModel(projectName, this);
 
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
+        ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
 
         // Forward status text from active tab VM
         CutSheetsVM.PropertyChanged += (_, e) =>
@@ -166,12 +175,14 @@ public class DocsViewModel : ViewModelBase
 
     private bool CanGenerate()
     {
-        // Tab 0 = Settings, 1 = Schedule, 2 = Cut Sheets, 3 = Load Schedule
+        if (IsSettingsVisible) return false;
+
+        // Tab 0 = Schedule, 1 = Cut Sheets, 2 = Load Schedule
         return SelectedTabIndex switch
         {
-            1 => ScheduleVM.GenerateCommand.CanExecute(null),
-            2 => CutSheetsVM.GenerateCommand.CanExecute(null),
-            3 => LoadsVM.GenerateCommand.CanExecute(null),
+            0 => ScheduleVM.GenerateCommand.CanExecute(null),
+            1 => CutSheetsVM.GenerateCommand.CanExecute(null),
+            2 => LoadsVM.GenerateCommand.CanExecute(null),
             _ => false,
         };
     }
@@ -180,13 +191,13 @@ public class DocsViewModel : ViewModelBase
     {
         switch (SelectedTabIndex)
         {
-            case 1:
+            case 0:
                 ScheduleVM.GenerateCommand.Execute(null);
                 break;
-            case 2:
+            case 1:
                 CutSheetsVM.GenerateCommand.Execute(null);
                 break;
-            case 3:
+            case 2:
                 LoadsVM.GenerateCommand.Execute(null);
                 break;
         }
