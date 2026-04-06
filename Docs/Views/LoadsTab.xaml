@@ -41,6 +41,7 @@
                           VerticalGridLinesBrush="#E0E0E0"
                           BorderThickness="1" BorderBrush="#CCCCCC"
                           MinHeight="150"
+                          ColumnHeaderStyle="{StaticResource SortableColumnHeaderStyle}"
                           Sorting="DataGrid_Sorting">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="110"

@@ -46,7 +46,7 @@
                             Style="{StaticResource RevitButtonStyle}"/>
                 </StackPanel>
                 <Button DockPanel.Dock="Left" Command="{Binding ToggleSettingsCommand}"
-                        Content="Settings" Width="78" Height="28" Cursor="Hand">
+                        Content="Settings" Width="78" Height="28">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource RevitButtonStyle}">
                             <Style.Triggers>

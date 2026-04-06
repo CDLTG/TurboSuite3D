@@ -94,11 +94,37 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Hand cursor for interactive controls -->
+    <!-- Hand cursor for interactive controls (content areas inherit Arrow) -->
     <Style TargetType="ComboBox">
         <Setter Property="Cursor" Value="Hand"/>
     </Style>
+    <Style TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style TargetType="RadioButton">
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style TargetType="DatePicker">
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
     <Style TargetType="TabItem">
+        <Setter Property="Cursor" Value="Arrow"/>
+        <Setter Property="HeaderTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <ContentPresenter Content="{Binding}" Cursor="Hand"/>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="GroupBox">
+        <Setter Property="Cursor" Value="Arrow"/>
+    </Style>
+    <!-- Sortable DataGrid: apply to grids with column sorting enabled -->
+    <Style x:Key="SortableDataGridStyle" TargetType="DataGrid">
+        <Setter Property="Cursor" Value="Arrow"/>
+    </Style>
+    <Style x:Key="SortableColumnHeaderStyle" TargetType="DataGridColumnHeader">
         <Setter Property="Cursor" Value="Hand"/>
     </Style>
 

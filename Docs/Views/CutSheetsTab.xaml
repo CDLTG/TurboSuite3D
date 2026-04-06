@@ -22,6 +22,7 @@
 
             <!-- Single-click checkbox editing -->
             <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
+                <Setter Property="Cursor" Value="Hand"/>
                 <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
             </Style>
         </ResourceDictionary>

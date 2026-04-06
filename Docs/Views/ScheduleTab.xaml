@@ -20,6 +20,7 @@
             </Style>
 
             <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
+                <Setter Property="Cursor" Value="Hand"/>
                 <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
             </Style>
         </ResourceDictionary>
@@ -34,10 +35,10 @@
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,0,0,8">
             <TextBlock Text="Page Size:" VerticalAlignment="Center" Margin="0,0,12,0"/>
             <RadioButton x:Name="SmallFormatRadio" Content='8.5" x 11" (Letter)' GroupName="PageSize"
-                         Margin="0,0,20,0" VerticalContentAlignment="Center" Cursor="Hand"/>
+                         Margin="0,0,20,0" VerticalContentAlignment="Center"/>
             <RadioButton Content='8.5" x 28.5" (Construction)' GroupName="PageSize"
                          IsChecked="{Binding DataContext.UseLargeFormat, RelativeSource={RelativeSource AncestorType=Window}}"
-                         VerticalContentAlignment="Center" Cursor="Hand"/>
+                         VerticalContentAlignment="Center"/>
         </StackPanel>
 
         <!-- Fixture Types -->
