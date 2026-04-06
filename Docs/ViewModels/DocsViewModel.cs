@@ -25,6 +25,7 @@ public class DocsViewModel : ViewModelBase
     public CutSheetsViewModel CutSheetsVM { get; }
     public ScheduleViewModel ScheduleVM { get; }
     public LoadsViewModel LoadsVM { get; }
+    public PanelScheduleViewModel PanelScheduleVM { get; }
 
     public int SelectedTabIndex
     {
@@ -116,6 +117,7 @@ public class DocsViewModel : ViewModelBase
         CutSheetsVM = new CutSheetsViewModel(cutSheetFixtures, projectName, this);
         ScheduleVM = new ScheduleViewModel(projectName, this);
         LoadsVM = new LoadsViewModel(projectName, this);
+        PanelScheduleVM = new PanelScheduleViewModel(projectName, this);
 
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
         ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
@@ -136,6 +138,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName == nameof(LoadsViewModel.StatusText))
                 StatusText = LoadsVM.StatusText;
         };
+        PanelScheduleVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PanelScheduleViewModel.StatusText))
+                StatusText = PanelScheduleVM.StatusText;
+        };
 
         GenerateCommand = new RelayCommand(ExecuteGenerate, CanGenerate);
 
@@ -155,6 +162,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName is nameof(LoadsViewModel.IsGenerating))
                 System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         };
+        PanelScheduleVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(PanelScheduleViewModel.IsGenerating))
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        };
     }
 
     public void SaveSettings()
@@ -171,18 +183,20 @@ public class DocsViewModel : ViewModelBase
         CutSheetsVM.SaveSettings();
         ScheduleVM.SaveSettings();
         LoadsVM.SaveSettings();
+        PanelScheduleVM.SaveSettings();
     }
 
     private bool CanGenerate()
     {
         if (IsSettingsVisible) return false;
 
-        // Tab 0 = Schedule, 1 = Cut Sheets, 2 = Load Schedule
+        // Tab 0 = Schedule, 1 = Cut Sheets, 2 = Load Schedule, 3 = Panel Schedule
         return SelectedTabIndex switch
         {
             0 => ScheduleVM.GenerateCommand.CanExecute(null),
             1 => CutSheetsVM.GenerateCommand.CanExecute(null),
             2 => LoadsVM.GenerateCommand.CanExecute(null),
+            3 => PanelScheduleVM.GenerateCommand.CanExecute(null),
             _ => false,
         };
     }
@@ -199,6 +213,9 @@ public class DocsViewModel : ViewModelBase
                 break;
             case 2:
                 LoadsVM.GenerateCommand.Execute(null);
+                break;
+            case 3:
+                PanelScheduleVM.GenerateCommand.Execute(null);
                 break;
         }
     }

@@ -108,7 +108,8 @@ namespace TurboSuite.Zones.Services
                             LoadClassificationName = loadClassificationName ?? string.Empty,
                             UpdatedLoadName = updatedLoadName,
                             LabelSource = labelSource,
-                            IsWiredToSwitch = hasSwitchElement
+                            IsWiredToSwitch = hasSwitchElement,
+                            ApparentLoadVA = ParameterHelper.GetApparentLoad(circuit)
                         });
                     }
                     catch { continue; }

@@ -120,7 +120,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Zones` | TurboZones — load names and panel breakdown (MVVM) |
 | `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless) |
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
-| `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, and load schedule PDF (MVVM) |
+| `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, load schedule PDF, and panel schedule PDF (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
 | `TurboSuite.Spike` | TurboSpike — diagnostic/debug command (swap Execute body per investigation) |
 | `TurboSuite.Purge` | TurboPurge — scorched-earth settings reset (deletes all DataStorage elements) |

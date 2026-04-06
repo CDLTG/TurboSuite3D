@@ -102,6 +102,9 @@
                 <TabItem Header="  Load Schedule  ">
                     <local:LoadsTab DataContext="{Binding LoadsVM}"/>
                 </TabItem>
+                <TabItem Header="  Panel Schedule  ">
+                    <local:PanelScheduleTab DataContext="{Binding PanelScheduleVM}"/>
+                </TabItem>
             </TabControl>
 
         </Grid>

@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility. Three output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), and **Load Schedule** (electrical circuit load schedule PDF). A **Settings** tab configures shared company info and page options.
+Tabbed document generation utility. Four output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -89,6 +89,24 @@ Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**
 | Qty | Element count or Linear Length sum |
 | Driver | Switch ID (from OST_LightingDevices on circuit) |
 | Watts | RBS_ELEC_APPARENT_LOAD |
+
+## Panel Schedule Tab
+
+Generates a dimmer panel schedule PDF from TurboZones panel breakdown data. Each panel starts on its own page so pages can be separated and distributed.
+
+### Layout
+
+Hierarchical structure per panel:
+- **Panel header** (dark band) — panel name, part number in brackets, total panel wattage
+- **Module sections** (boxed) — module number, part number, total module wattage in header; per-slot load rows underneath with empty slots marked "— spare —"
+
+Five-column table per module: **# | Load | Ckt | Dimming | Watts**
+
+Modules never split across pages. When a panel's modules span multiple pages, the panel header repeats with "(continued)". Panel wattage is calculated from rounded module totals to avoid rounding discrepancies.
+
+### Data Source
+
+Re-derives the panel breakdown by reading saved TurboZones settings (brand, panel size overrides) from ExtensibleStorage and running `PanelAllocationService.BuildPanelBreakdown`. Circuit wattage is read from `RBS_ELEC_APPARENT_LOAD`.
 
 ## Cut Sheets Tab
 

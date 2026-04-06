@@ -8,6 +8,7 @@ using TurboSuite.Docs.Models;
 using TurboSuite.Docs.Services;
 using TurboSuite.Docs.ViewModels;
 using TurboSuite.Docs.Views;
+using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Docs;
 
@@ -73,7 +74,13 @@ public class DocsCommand : IExternalCommand
         // Collect load schedule circuit data
         var loadsCircuits = LoadsCollectorService.Collect(doc);
 
-        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0 && loadsCircuits.Count == 0)
+        // Collect panel schedule data
+        PanelScheduleData? panelData = null;
+        try { panelData = PanelScheduleCollectorService.Collect(doc); }
+        catch { /* Panel data unavailable — tab will show empty state */ }
+
+        bool hasPanelData = panelData?.Allocation?.AllPanels.Count > 0;
+        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0 && loadsCircuits.Count == 0 && !hasPanelData)
         {
             TaskDialog.Show("TurboDocs", "No lighting fixture types found in the active document.");
             return Result.Cancelled;
@@ -84,6 +91,8 @@ public class DocsCommand : IExternalCommand
         var viewModel = new DocsViewModel(cutSheetFixtures, projectName);
         viewModel.ScheduleVM.LoadFixtures(scheduleFixtures);
         viewModel.LoadsVM.LoadCircuits(loadsCircuits);
+        if (panelData != null)
+            viewModel.PanelScheduleVM.LoadData(panelData);
 
         var window = new TurboDocsWindow { DataContext = viewModel };
         var helper = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
