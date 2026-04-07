@@ -254,6 +254,7 @@ namespace TurboSuite.Zones.ViewModels
                 if (sender is PanelResult panel)
                 {
                     _panelSizeOverrides[panel.PanelName] = panel.SelectedPanelSize;
+                    SaveSettings();
                     Dispatcher.CurrentDispatcher.BeginInvoke(BuildPanelBreakdown, DispatcherPriority.Background);
                 }
             }

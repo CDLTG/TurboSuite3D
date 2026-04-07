@@ -71,12 +71,7 @@ namespace TurboSuite.Number.ViewModels
             _isUpdating = true;
             try
             {
-                changedRow.Value = FormatNumber(startValue);
-                for (int i = index + 1; i < sorted.Count; i++)
-                {
-                    startValue++;
-                    sorted[i].Value = FormatNumber(startValue);
-                }
+                CascadeFrom(sorted, index, startValue);
             }
             finally
             {
@@ -103,6 +98,16 @@ namespace TurboSuite.Number.ViewModels
             for (int i = 0; i < sorted.Count; i++)
             {
                 sorted[i].Value = FormatNumber(i + 1);
+            }
+        }
+
+        protected virtual void CascadeFrom(List<NumberableRowViewModel> sorted, int index, int startValue)
+        {
+            sorted[index].Value = FormatNumber(startValue);
+            for (int i = index + 1; i < sorted.Count; i++)
+            {
+                startValue++;
+                sorted[i].Value = FormatNumber(startValue);
             }
         }
 

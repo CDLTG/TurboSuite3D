@@ -17,7 +17,7 @@ namespace TurboSuite.Zones.Services
 
     public static class ZonesPanelSettingsStorageService
     {
-        private static readonly Guid SchemaGuid = new Guid("e6a0c4f3-9b5d-6ebf-d7f8-3c4a5b6e7f80");
+        private static readonly Guid SchemaGuid = new Guid("a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d");
         private const string SchemaName = "TurboZonesPanelSettings";
         private const string BrandField = "Brand";
         private const string SpecialKeysField = "SpecialDeviceKeys";
@@ -41,9 +41,6 @@ namespace TurboSuite.Zones.Services
             builder.AddArrayField(PanelSizeValuesField, typeof(string));
             return builder.Finish();
         }
-
-        private static bool HasField(Schema schema, string fieldName)
-            => schema.GetField(fieldName) != null;
 
         private static DataStorage FindDataStorage(Document doc, Schema schema)
             => DataStorageHelper.FindDataStorage(doc, schema);
@@ -77,23 +74,15 @@ namespace TurboSuite.Zones.Services
                     settings.SpecialDeviceSelections[keys[i]] = values[i];
             }
 
-            // Load panel size overrides (may not exist in older schemas)
-            try
+            var sizeKeys = entity.Get<IList<string>>(PanelSizeKeysField);
+            var sizeValues = entity.Get<IList<string>>(PanelSizeValuesField);
+            if (sizeKeys != null && sizeValues != null)
             {
-                var sizeKeys = entity.Get<IList<string>>(PanelSizeKeysField);
-                var sizeValues = entity.Get<IList<string>>(PanelSizeValuesField);
-                if (sizeKeys != null && sizeValues != null)
+                for (int i = 0; i < Math.Min(sizeKeys.Count, sizeValues.Count); i++)
                 {
-                    for (int i = 0; i < Math.Min(sizeKeys.Count, sizeValues.Count); i++)
-                    {
-                        if (int.TryParse(sizeValues[i], out int size))
-                            settings.PanelSizeOverrides[sizeKeys[i]] = size;
-                    }
+                    if (int.TryParse(sizeValues[i], out int size))
+                        settings.PanelSizeOverrides[sizeKeys[i]] = size;
                 }
-            }
-            catch
-            {
-                // Field doesn't exist in this schema version — ignore
             }
 
             return settings;
@@ -112,12 +101,8 @@ namespace TurboSuite.Zones.Services
                 entity.Set(BrandField, settings.Brand ?? "Lutron");
                 entity.Set(SpecialKeysField, (IList<string>)settings.SpecialDeviceSelections.Keys.ToList());
                 entity.Set(SpecialValuesField, (IList<string>)settings.SpecialDeviceSelections.Values.ToList());
-                // Panel size fields may not exist if old schema is cached from a prior Revit session
-                if (HasField(schema, PanelSizeKeysField))
-                {
-                    entity.Set(PanelSizeKeysField, (IList<string>)settings.PanelSizeOverrides.Keys.ToList());
-                    entity.Set(PanelSizeValuesField, (IList<string>)settings.PanelSizeOverrides.Values.Select(v => v.ToString()).ToList());
-                }
+                entity.Set(PanelSizeKeysField, (IList<string>)settings.PanelSizeOverrides.Keys.ToList());
+                entity.Set(PanelSizeValuesField, (IList<string>)settings.PanelSizeOverrides.Values.Select(v => v.ToString()).ToList());
                 storage.SetEntity(entity);
 
                 tx.Commit();

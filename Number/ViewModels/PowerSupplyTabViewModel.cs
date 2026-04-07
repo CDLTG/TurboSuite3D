@@ -106,6 +106,48 @@ namespace TurboSuite.Number.ViewModels
             }
         }
 
+        protected override void CascadeFrom(List<NumberableRowViewModel> sorted, int index, int startValue)
+        {
+            int baseNumber = startValue;
+            int i = index;
+
+            while (i < sorted.Count)
+            {
+                var circuitId = sorted[i].CircuitElementId;
+
+                // Gather consecutive rows on the same circuit
+                var group = new List<NumberableRowViewModel> { sorted[i] };
+                if (circuitId != ElementId.InvalidElementId)
+                {
+                    for (int j = i + 1; j < sorted.Count; j++)
+                    {
+                        if (sorted[j].CircuitElementId == circuitId)
+                            group.Add(sorted[j]);
+                        else
+                            break;
+                    }
+                }
+
+                string padded = PadNumber(baseNumber);
+
+                if (group.Count == 1)
+                {
+                    group[0].Value = $"{_prefix}{padded}{_suffix}";
+                }
+                else
+                {
+                    for (int g = 0; g < group.Count; g++)
+                    {
+                        char letter = (char)('a' + g);
+                        group[g].Value = $"{_prefix}{padded}{letter}{_suffix}";
+                    }
+                }
+
+                i += group.Count;
+                baseNumber++;
+            }
+        }
+
         protected override bool TryParseNumber(string input, out int value)
         {
             // Strip known prefix/suffix so "X40" parses as 40
