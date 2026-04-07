@@ -22,6 +22,8 @@ Spec sections are dynamically positioned — column gaps adapt to the widest con
 
 Entries are grouped by **Classification** (alphabetically, empty classification at bottom) with a header and rule line per group.
 
+A **Specification Notes** block is appended after all fixture entries — up to 6 numbered notes (e.g., contractor instructions, approval requirements). Notes are editable in the UI with sensible defaults and persist across sessions. Empty notes are omitted and the remaining notes renumber sequentially.
+
 ### Page Formats
 
 - **8.5" x 28.5"** — construction document strip (default)

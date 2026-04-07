@@ -74,6 +74,9 @@ public static class SchedulePdfService
     private const double SpecColumnGap = 4;   // gap between label and value
     private const double SpecSectionGap = 12; // gap between left-side text and spec col 1, and between spec col 1 values and spec col 2 labels
 
+    // ── Specification Notes Block (appended after all fixture entries) ──
+    private const double SpecNotesTopSpacing = 18;
+
     #endregion
 
     // ── Footer ──
@@ -327,6 +330,59 @@ public static class SchedulePdfService
             }
         }
 
+        // ── Specification Notes ──
+        var specNotes = settings.SpecificationNotes?
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToList();
+
+        if (specNotes != null && specNotes.Count > 0)
+        {
+            y += SpecNotesTopSpacing;
+
+            // Measure prefix width using widest number (e.g., "6) ")
+            double prefixWidth;
+            using (var tempPdf3 = new PdfDocument())
+            {
+                var tp = tempPdf3.AddPage();
+                using var tg = XGraphics.FromPdfPage(tp);
+                prefixWidth = tg.MeasureString($"{specNotes.Count}) ", fontNote).Width;
+            }
+            double specNoteTextMaxWidth = pageWidth - MarginRight - MarginLeft - NoteIndent - prefixWidth;
+
+            double blockHeight = MeasureSpecNotesBlockHeight(
+                gfx!, specNotes, fontNote, specNoteTextMaxWidth, prefixWidth);
+
+            if (y + blockHeight > pageHeight - MarginBottom - FooterHeight)
+                StartNewPage();
+
+            // Header (no rule line)
+            gfx!.DrawString("Specification Notes", fontClassHeader, XBrushes.Black,
+                new XPoint(MarginLeft, y + ClassHeaderFontSize + 2));
+            y += ClassHeaderHeight + ClassHeaderSpacing;
+
+            // Numbered notes (renumbered sequentially, skipping blanks), indented
+            double noteIndentX = MarginLeft + NoteIndent;
+            for (int i = 0; i < specNotes.Count; i++)
+            {
+                string prefix = $"{i + 1}) ";
+                double textX = noteIndentX + prefixWidth;
+                var wrapped = WrapText(gfx, specNotes[i], fontNote, specNoteTextMaxWidth);
+
+                // First line with number prefix
+                gfx.DrawString(prefix + wrapped[0], fontNote, brushNote,
+                    new XPoint(noteIndentX, y + BaselineOffset));
+                y += NoteLineHeight;
+
+                // Continuation lines indented past the number
+                for (int w = 1; w < wrapped.Count; w++)
+                {
+                    gfx.DrawString(wrapped[w], fontNote, brushNote,
+                        new XPoint(textX, y + BaselineOffset));
+                    y += NoteLineHeight;
+                }
+            }
+        }
+
         // Dispose main graphics before footer/page number pass
         gfx?.Dispose();
         gfx = null;
@@ -496,6 +552,18 @@ public static class SchedulePdfService
             noteHeight = fixture.ScheduleNotes.Length * NoteLineHeight;
         }
         return 4 * LineHeight + noteHeight;
+    }
+
+    private static double MeasureSpecNotesBlockHeight(
+        XGraphics gfx, List<string> notes, XFont font, double textMaxWidth, double prefixWidth)
+    {
+        double height = ClassHeaderHeight + ClassHeaderSpacing;
+        foreach (var note in notes)
+        {
+            var wrapped = WrapText(gfx, note, font, textMaxWidth);
+            height += wrapped.Count * NoteLineHeight;
+        }
+        return height;
     }
 
     private static double MeasureMaxSpecLabelWidth(XGraphics gfx, XFont font)

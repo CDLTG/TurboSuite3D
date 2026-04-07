@@ -12,10 +12,26 @@ namespace TurboSuite.Docs.ViewModels;
 
 public class ScheduleViewModel : ViewModelBase
 {
+    public static readonly string[] DefaultSpecificationNotes =
+    [
+        "Electrical Contractor to determine fixture housing rating (IC, Non-IC or Remodel) unless otherwise noted.",
+        "No substitutions permitted without prior approval from Creative Designs in Lighting.",
+        "All recessed trims and/or trim rings shall be painted to match color of ceiling.",
+        "Electrical Contractor to field measure all linear lighting prior to order.",
+        "All fixture finish colors to be verified with Architect / Interior Designer prior to order.",
+        "All Kelvin (color) temperatures to be verified with Architect / Interior Designer prior to order.",
+    ];
+
     private readonly DocsViewModel _parent;
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
+    private string _specNote1 = string.Empty;
+    private string _specNote2 = string.Empty;
+    private string _specNote3 = string.Empty;
+    private string _specNote4 = string.Empty;
+    private string _specNote5 = string.Empty;
+    private string _specNote6 = string.Empty;
 
     public string ProjectName { get; }
     public ObservableCollection<ScheduleFixtureModel> Fixtures { get; }
@@ -41,6 +57,13 @@ public class ScheduleViewModel : ViewModelBase
                 System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
     }
+
+    public string SpecNote1 { get => _specNote1; set => SetProperty(ref _specNote1, value); }
+    public string SpecNote2 { get => _specNote2; set => SetProperty(ref _specNote2, value); }
+    public string SpecNote3 { get => _specNote3; set => SetProperty(ref _specNote3, value); }
+    public string SpecNote4 { get => _specNote4; set => SetProperty(ref _specNote4, value); }
+    public string SpecNote5 { get => _specNote5; set => SetProperty(ref _specNote5, value); }
+    public string SpecNote6 { get => _specNote6; set => SetProperty(ref _specNote6, value); }
 
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand DeselectAllCommand { get; }
@@ -69,6 +92,15 @@ public class ScheduleViewModel : ViewModelBase
             foreach (var fixture in Fixtures)
                 fixture.IsSelected = settings.ScheduleSelectedTypeMarks.Contains(fixture.TypeMark);
         }
+
+        // Load specification notes (fall back to defaults if none saved)
+        var notes = settings.SpecificationNotes;
+        SpecNote1 = notes.Count > 0 ? notes[0] : DefaultSpecificationNotes[0];
+        SpecNote2 = notes.Count > 1 ? notes[1] : DefaultSpecificationNotes[1];
+        SpecNote3 = notes.Count > 2 ? notes[2] : DefaultSpecificationNotes[2];
+        SpecNote4 = notes.Count > 3 ? notes[3] : DefaultSpecificationNotes[3];
+        SpecNote5 = notes.Count > 4 ? notes[4] : DefaultSpecificationNotes[4];
+        SpecNote6 = notes.Count > 5 ? notes[5] : DefaultSpecificationNotes[5];
     }
 
     public void SaveSettings()
@@ -78,6 +110,7 @@ public class ScheduleViewModel : ViewModelBase
             .Where(f => f.IsSelected)
             .Select(f => f.TypeMark)
             .ToList();
+        settings.SpecificationNotes = [SpecNote1, SpecNote2, SpecNote3, SpecNote4, SpecNote5, SpecNote6];
         DocsSettingsService.Save(settings);
     }
 
@@ -117,6 +150,7 @@ public class ScheduleViewModel : ViewModelBase
                 CompanyPhone = _parent.CompanyPhone,
                 CompanyEmail = _parent.CompanyEmail,
                 CompanyWebsite = _parent.CompanyWebsite,
+                SpecificationNotes = [SpecNote1, SpecNote2, SpecNote3, SpecNote4, SpecNote5, SpecNote6],
             };
             await Task.Run(() => SchedulePdfService.Generate(selected, ProjectName, outputPath, largeFormat, settings));
 

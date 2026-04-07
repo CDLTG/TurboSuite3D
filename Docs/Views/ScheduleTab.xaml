@@ -41,43 +41,92 @@
                          VerticalContentAlignment="Center"/>
         </StackPanel>
 
-        <!-- Fixture Types -->
-        <GroupBox Header="Fixture Types" Margin="6,0,6,0">
-            <DockPanel Margin="8">
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                    <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
-                            Style="{StaticResource RevitButtonStyle}" Padding="8,4"
-                            Margin="0,0,6,0"/>
-                    <Button Content="Deselect All" Command="{Binding DeselectAllCommand}" Width="85" Height="24"
-                            Style="{StaticResource RevitButtonStyle}" Padding="8,4"/>
-                </StackPanel>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-                <DataGrid ItemsSource="{Binding Fixtures}"
-                          AutoGenerateColumns="False"
-                          CanUserAddRows="False" CanUserDeleteRows="False"
-                          CanUserSortColumns="False"
-                          IsReadOnly="False"
-                          SelectionMode="Single"
-                          HeadersVisibility="Column"
-                          GridLinesVisibility="All"
-                          HorizontalGridLinesBrush="#E0E0E0"
-                          VerticalGridLinesBrush="#E0E0E0"
-                          BorderThickness="1" BorderBrush="#CCCCCC"
-                          MinHeight="150">
-                    <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="&#x2713;" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="35"
-                                                CellStyle="{StaticResource SingleClickCheckBoxColumn}">
-                            <DataGridCheckBoxColumn.HeaderStyle>
-                                <Style TargetType="DataGridColumnHeader">
-                                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridCheckBoxColumn.HeaderStyle>
-                        </DataGridCheckBoxColumn>
-                        <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="60" IsReadOnly="True"/>
-                        <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="*" IsReadOnly="True"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </DockPanel>
-        </GroupBox>
+            <!-- Fixture Types -->
+            <GroupBox Header="Fixture Types" Grid.Row="0" Margin="6,0,6,0">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
+                                Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                                Margin="0,0,6,0"/>
+                        <Button Content="Deselect All" Command="{Binding DeselectAllCommand}" Width="85" Height="24"
+                                Style="{StaticResource RevitButtonStyle}" Padding="8,4"/>
+                    </StackPanel>
+
+                    <DataGrid ItemsSource="{Binding Fixtures}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False"
+                              CanUserSortColumns="False"
+                              IsReadOnly="False"
+                              SelectionMode="Single"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="All"
+                              HorizontalGridLinesBrush="#E0E0E0"
+                              VerticalGridLinesBrush="#E0E0E0"
+                              BorderThickness="1" BorderBrush="#CCCCCC"
+                              MinHeight="150">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="&#x2713;" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="35"
+                                                    CellStyle="{StaticResource SingleClickCheckBoxColumn}">
+                                <DataGridCheckBoxColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridCheckBoxColumn.HeaderStyle>
+                            </DataGridCheckBoxColumn>
+                            <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="60" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="*" IsReadOnly="True"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </GroupBox>
+
+            <!-- Specification Notes -->
+            <GroupBox Header="Specification Notes" Grid.Row="1" Margin="6,6,6,0">
+                <Grid Margin="8,6,8,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="1)" FontSize="11" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                    <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding SpecNote1, UpdateSourceTrigger=PropertyChanged}"
+                               TextWrapping="Wrap" FontSize="11" Margin="0,0,0,3" Padding="3,2"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="2)" FontSize="11" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                    <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding SpecNote2, UpdateSourceTrigger=PropertyChanged}"
+                               TextWrapping="Wrap" FontSize="11" Margin="0,0,0,3" Padding="3,2"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="3)" FontSize="11" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                    <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding SpecNote3, UpdateSourceTrigger=PropertyChanged}"
+                               TextWrapping="Wrap" FontSize="11" Margin="0,0,0,3" Padding="3,2"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="4)" FontSize="11" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                    <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding SpecNote4, UpdateSourceTrigger=PropertyChanged}"
+                               TextWrapping="Wrap" FontSize="11" Margin="0,0,0,3" Padding="3,2"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="5)" FontSize="11" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                    <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding SpecNote5, UpdateSourceTrigger=PropertyChanged}"
+                               TextWrapping="Wrap" FontSize="11" Margin="0,0,0,3" Padding="3,2"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="6)" FontSize="11" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                    <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding SpecNote6, UpdateSourceTrigger=PropertyChanged}"
+                               TextWrapping="Wrap" FontSize="11" Margin="0,0,0,3" Padding="3,2"/>
+                </Grid>
+            </GroupBox>
+        </Grid>
     </DockPanel>
 </UserControl>

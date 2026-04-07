@@ -18,6 +18,9 @@ public class DocsSettings
     public List<string> ScheduleSelectedTypeMarks { get; set; } = new();
     public bool ScheduleUseLargeFormat { get; set; }
 
+    // Schedule tab — Specification Notes
+    public List<string> SpecificationNotes { get; set; } = new();
+
     // Load Schedule tab settings
     public string LoadsSelectedSortColumn { get; set; } = "CircuitNumber";
 }
