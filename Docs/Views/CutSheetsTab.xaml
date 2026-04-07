@@ -23,7 +23,24 @@
             <!-- Single-click checkbox editing -->
             <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
                 <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridCell">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
                 <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
+            </Style>
+
+            <!-- Vertically center text in taller rows -->
+            <Style x:Key="CenteredTextElement" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="4,0,0,0"/>
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -65,8 +82,10 @@
                                     </Style>
                                 </DataGridCheckBoxColumn.HeaderStyle>
                             </DataGridCheckBoxColumn>
-                            <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="45" IsReadOnly="True"/>
-                            <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="200" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="45" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredTextElement}"/>
+                            <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="200" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredTextElement}"/>
                             <DataGridTemplateColumn Header="PDF Source" Width="*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -78,6 +97,7 @@
                                                     Visibility="{Binding HasLocalPdf, Converter={StaticResource BoolToVisibility}}"/>
                                             <Button DockPanel.Dock="Right" Content="..." Width="18" Height="18" Margin="2,0,0,0"
                                                     FontSize="9" Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                                    Cursor="Hand"
                                                     Command="{Binding DataContext.BrowseLocalPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                                     CommandParameter="{Binding}"/>
                                             <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0,0,0">
