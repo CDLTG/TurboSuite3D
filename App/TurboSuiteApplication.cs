@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Media.Imaging;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using TurboSuite.Shared.Services;
@@ -28,19 +29,21 @@ public class TurboSuiteApplication : IExternalApplication
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
             // ── Settings panel ──
-            CreateButtonNoIcon(settingsPanel, assemblyPath,
+            CreateButton(settingsPanel, assemblyPath,
                 "TurboSettings",
                 "  Settings   ",
                 "TurboSuite.App.SettingsCommand",
                 "Configure TurboSuite settings",
-                "Opens a dialog to configure which family names are treated as wall sconces, receptacles, and vertical electrical fixtures.");
+                "Opens a dialog to configure which family names are treated as wall sconces, receptacles, and vertical electrical fixtures.",
+                "TurboSettings");
 
-            CreateButtonNoIcon(settingsPanel, assemblyPath,
+            CreateButton(settingsPanel, assemblyPath,
                 "TurboTab",
                 "    Turbo    \n     Tab     ",
                 "TurboSuite.Tab.TabCommand",
                 "Toggle document tab coloring",
-                "Colors each open document tab with a distinct background color for easy visual identification. State persists across sessions.");
+                "Colors each open document tab with a distinct background color for easy visual identification. State persists across sessions.",
+                "TurboTab");
 
             // Auto-start tab coloring after Revit UI is fully loaded.
             if (TabSettingsService.LoadEnabled())
@@ -49,76 +52,86 @@ public class TurboSuiteApplication : IExternalApplication
             }
 
             // ── Commands panel ──
-            CreateButtonNoIcon(commandsPanel, assemblyPath,
+            CreateButton(commandsPanel, assemblyPath,
                 "TurboCompact",
                 "    Turbo    \n   Compact   ",
                 "TurboSuite.Compact.CompactCommand",
                 "Suggested shortcut: Ctrl+Shft+S\nClean and compact the active family",
-                "Removes unused materials from the active family document and saves with the compact option to reduce file size.");
+                "Removes unused materials from the active family document and saves with the compact option to reduce file size.",
+                "TurboCompact");
 
-            CreateButtonNoIcon(commandsPanel, assemblyPath,
+            CreateButton(commandsPanel, assemblyPath,
                 "TurboTag",
                 "    Turbo    \n     Tag     ",
                 "TurboSuite.Tag.TagCommand",
                 "Suggested shortcut: TT\nAuto-place lighting fixture type tags",
-                "Places type tags on selected lighting fixtures with configurable direction. Supports point-based, line-based, and face-based fixtures.");
+                "Places type tags on selected lighting fixtures with configurable direction. Supports point-based, line-based, and face-based fixtures.",
+                "TurboTag");
 
-            CreateButtonNoIcon(commandsPanel, assemblyPath,
+            CreateButton(commandsPanel, assemblyPath,
                 "TurboWire",
                 "    Turbo    \n    Wire     ",
                 "TurboSuite.Wire.WireCommand",
                 "Suggested shortcut: WW\nCreate wire connections between fixtures",
-                "Creates arc wires between lighting fixtures. Supports pre-selected circuits, multiple fixtures by proximity, and wall sconce spline routing.");
+                "Creates arc wires between lighting fixtures. Supports pre-selected circuits, multiple fixtures by proximity, and wall sconce spline routing.",
+                "TurboWire");
 
-            CreateButtonNoIcon(commandsPanel, assemblyPath,
+            CreateButton(commandsPanel, assemblyPath,
                 "TurboBubble",
                 "    Turbo    \n   Bubble    ",
                 "TurboSuite.Bubble.BubbleCommand",
                 "Suggested shortcut: TB\nCreate switchleg tag and wire for a lighting fixture",
-                "Creates a switchleg tag and wire connection for the selected lighting fixture tag. Works in floor plan and ceiling plan views.");
+                "Creates a switchleg tag and wire connection for the selected lighting fixture tag. Works in floor plan and ceiling plan views.",
+                "TurboBubble");
 
             // ── Utilities panel ──
-            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+            CreateButton(utilitiesPanel, assemblyPath,
                 "TurboName",
                 "    Turbo    \n    Name     ",
                 "TurboSuite.Name.NameCommand",
                 "Assign CAD room names to filled regions",
-                "Opens a window to assign room names from linked DWG files to Room Region filled regions and place TextNotes. Also provides region generation (under construction).");
+                "Opens a window to assign room names from linked DWG files to Room Region filled regions and place TextNotes. Also provides region generation (under construction).",
+                "TurboName");
 
-            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+            CreateButton(utilitiesPanel, assemblyPath,
                 "TurboZones",
                 "    Turbo    \n    Zones    ",
                 "TurboSuite.Zones.ZonesCommand",
                 "Update load names based on rooms and comments.",
-                "Updates the Load Name parameter for every Electrical Circuit using the room location of the first lighting fixture and the circuit Comments or Load Classification.");
+                "Updates the Load Name parameter for every Electrical Circuit using the room location of the first lighting fixture and the circuit Comments or Load Classification.",
+                "TurboZones");
 
-            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+            CreateButton(utilitiesPanel, assemblyPath,
                 "TurboNumber",
                 "    Turbo    \n   Number    ",
                 "TurboSuite.Number.NumberCommand",
                 "Update numbering for switchlegs, keypads, and power supplies.",
-                "Opens a window to view and renumber electrical circuit numbers, device marks, and switch IDs for Keypad and Power Supply lighting devices.");
+                "Opens a window to view and renumber electrical circuit numbers, device marks, and switch IDs for Keypad and Power Supply lighting devices.",
+                "TurboNumber");
 
-            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+            CreateButton(utilitiesPanel, assemblyPath,
                 "TurboRPS",
                 "    Turbo    \n     RPS     ",
                 "TurboSuite.Driver.RPSCommand",
                 "Review power supply assignments for RPS circuits",
-                "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.");
+                "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.",
+                "TurboRPS");
 
-            CreateButtonNoIcon(utilitiesPanel, assemblyPath,
+            CreateButton(utilitiesPanel, assemblyPath,
                 "TurboDocs",
                 "    Turbo    \n    Docs     ",
                 "TurboSuite.Docs.DocsCommand",
                 "Generate fixture documentation PDFs",
-                "Opens a tabbed utility for generating cut sheet and fixture schedule PDFs from lighting fixture types in the active document.");
+                "Opens a tabbed utility for generating cut sheet and fixture schedule PDFs from lighting fixture types in the active document.",
+                "TurboDocs");
 
-            CreateButtonNoIcon(commandsPanel, assemblyPath,
+            CreateButton(commandsPanel, assemblyPath,
                 "TurboDriver",
                 "    Turbo    \n   Driver    ",
                 "TurboSuite.Driver.DriverCommand",
                 "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
-                "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.");
+                "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.",
+                "TurboDriver");
 
             // ── Debug panel ──
             CreateButtonNoIcon(debugPanel, assemblyPath,
@@ -256,5 +269,25 @@ public class TurboSuiteApplication : IExternalApplication
         PushButton button = (PushButton)panel.AddItem(buttonData);
         button.ToolTip = tooltip;
         button.LongDescription = longDescription;
+    }
+
+    private static void CreateButton(RibbonPanel panel, string assemblyPath,
+        string name, string text, string className, string tooltip, string longDescription,
+        string iconBaseName)
+    {
+        PushButtonData buttonData = new PushButtonData(name, text, assemblyPath, className);
+        PushButton button = (PushButton)panel.AddItem(buttonData);
+        button.ToolTip = tooltip;
+        button.LongDescription = longDescription;
+
+        string assembly = Assembly.GetExecutingAssembly().GetName().Name!;
+        string largeUri = $"pack://application:,,,/{assembly};component/Icons/{iconBaseName}_32.png";
+        string smallUri = $"pack://application:,,,/{assembly};component/Icons/{iconBaseName}_16.png";
+
+        button.LargeImage = new BitmapImage(new Uri(largeUri));
+
+        var smallInfo = System.Windows.Application.GetResourceStream(new Uri(smallUri));
+        if (smallInfo != null)
+            button.Image = new BitmapImage(new Uri(smallUri));
     }
 }
