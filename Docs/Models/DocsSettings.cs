@@ -23,4 +23,5 @@ public class DocsSettings
 
     // Load Schedule tab settings
     public string LoadsSelectedSortColumn { get; set; } = "CircuitNumber";
+
 }

@@ -26,6 +26,7 @@ public class DocsViewModel : ViewModelBase
     public ScheduleViewModel ScheduleVM { get; }
     public LoadsViewModel LoadsVM { get; }
     public PanelScheduleViewModel PanelScheduleVM { get; }
+    public NotesViewModel NotesVM { get; }
 
     public int SelectedTabIndex
     {
@@ -118,6 +119,7 @@ public class DocsViewModel : ViewModelBase
         ScheduleVM = new ScheduleViewModel(projectName, this);
         LoadsVM = new LoadsViewModel(projectName, this);
         PanelScheduleVM = new PanelScheduleViewModel(projectName, this);
+        NotesVM = new NotesViewModel(projectName, this);
 
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
         ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
@@ -143,6 +145,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName == nameof(PanelScheduleViewModel.StatusText))
                 StatusText = PanelScheduleVM.StatusText;
         };
+        NotesVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(NotesViewModel.StatusText))
+                StatusText = NotesVM.StatusText;
+        };
 
         GenerateCommand = new RelayCommand(ExecuteGenerate, CanGenerate);
 
@@ -167,6 +174,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName is nameof(PanelScheduleViewModel.IsGenerating))
                 System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         };
+        NotesVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(NotesViewModel.IsGenerating))
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        };
     }
 
     public void SaveSettings()
@@ -184,19 +196,21 @@ public class DocsViewModel : ViewModelBase
         ScheduleVM.SaveSettings();
         LoadsVM.SaveSettings();
         PanelScheduleVM.SaveSettings();
+        NotesVM.SaveSettings();
     }
 
     private bool CanGenerate()
     {
         if (IsSettingsVisible) return false;
 
-        // Tab 0 = Schedule, 1 = Cut Sheets, 2 = Load Schedule, 3 = Panel Schedule
+        // Tab 0 = Schedule, 1 = Cut Sheets, 2 = Load Schedule, 3 = Panel Schedule, 4 = Package
         return SelectedTabIndex switch
         {
             0 => ScheduleVM.GenerateCommand.CanExecute(null),
             1 => CutSheetsVM.GenerateCommand.CanExecute(null),
             2 => LoadsVM.GenerateCommand.CanExecute(null),
             3 => PanelScheduleVM.GenerateCommand.CanExecute(null),
+            4 => NotesVM.GenerateCommand.CanExecute(null),
             _ => false,
         };
     }
@@ -216,6 +230,9 @@ public class DocsViewModel : ViewModelBase
                 break;
             case 3:
                 PanelScheduleVM.GenerateCommand.Execute(null);
+                break;
+            case 4:
+                NotesVM.GenerateCommand.Execute(null);
                 break;
         }
     }

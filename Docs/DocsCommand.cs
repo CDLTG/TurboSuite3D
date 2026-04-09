@@ -86,6 +86,10 @@ public class DocsCommand : IExternalCommand
             return Result.Cancelled;
         }
 
+        // Collect notes from key schedules
+        var generalNotes = NotesCollectorService.CollectGeneralNotes(doc);
+        var controlNotes = NotesCollectorService.CollectControlNotes(doc);
+
         string projectName = doc.ProjectInformation?.Name ?? "Untitled Project";
 
         var viewModel = new DocsViewModel(cutSheetFixtures, projectName);
@@ -93,6 +97,7 @@ public class DocsCommand : IExternalCommand
         viewModel.LoadsVM.LoadCircuits(loadsCircuits);
         if (panelData != null)
             viewModel.PanelScheduleVM.LoadData(panelData);
+        viewModel.NotesVM.LoadNotes(generalNotes, controlNotes);
 
         var window = new TurboDocsWindow { DataContext = viewModel };
         var helper = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };

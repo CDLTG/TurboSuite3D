@@ -105,6 +105,9 @@
                 <TabItem Header="  Panel Schedule  ">
                     <local:PanelScheduleTab DataContext="{Binding PanelScheduleVM}"/>
                 </TabItem>
+                <TabItem Header="  Package  ">
+                    <local:NotesTab DataContext="{Binding NotesVM}"/>
+                </TabItem>
             </TabControl>
 
         </Grid>

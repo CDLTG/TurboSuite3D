@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility. Four output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
+Tabbed document generation utility. Five output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Load Schedule** (electrical circuit load schedule PDF), **Panel Schedule** (dimmer panel breakdown PDF), and **Package** (general/control notes PDF). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -124,6 +124,18 @@ Downloads spec sheet PDFs from lighting fixture types, stamps a company header/f
 ### Company Settings
 
 Company info (logo, address, phone, website) is saved to `%APPDATA%\TurboSuite\TurboDocsSettings.json` and reused across all projects. Legacy `TurboCutsSettings.json` files are automatically migrated on first load.
+
+## Package Tab
+
+Generates General Notes and Control Notes PDFs for lighting fixture and control system specification packages. Toggle between **Fixture Package** (General Notes) and **Control Package** (Control Notes).
+
+### Data Source
+
+Notes are read from Revit key schedules: **Notes_General** and **Notes_Controls**. Each schedule has "Key Name" (note number) and "Comments" (note text) columns. If a schedule is not found, hardcoded defaults are used as a fallback. Notes are displayed read-only in TurboDocs — edits must be made in the Revit schedule.
+
+### Layout
+
+Single-page letter-size PDF. Numbered notes with word wrapping. Header matches Panel Schedule style (project name, subtitle, logo). Footer shows company info without page numbers.
 
 ## Dependencies
 
