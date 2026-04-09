@@ -102,6 +102,9 @@
                 <TabItem Header="  Cut Sheets  ">
                     <local:CutSheetsTab DataContext="{Binding CutSheetsVM}"/>
                 </TabItem>
+                <TabItem Header="  Control BOM  ">
+                    <local:BomTab DataContext="{Binding BomVM}"/>
+                </TabItem>
                 <TabItem Header="  Load Schedule  ">
                     <local:LoadsTab DataContext="{Binding LoadsVM}"/>
                 </TabItem>

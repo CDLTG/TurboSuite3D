@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility. Five output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Load Schedule** (electrical circuit load schedule PDF), **Panel Schedule** (dimmer panel breakdown PDF), and **Cover** (cover page and general/control notes PDF). A **Settings** tab configures shared company info and page options.
+Tabbed document generation utility. Six output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -124,6 +124,18 @@ Downloads spec sheet PDFs from lighting fixture types, stamps a company header/f
 ### Company Settings
 
 Company info (logo, address, phone, website) is saved to `%APPDATA%\TurboSuite\TurboDocsSettings.json` and reused across all projects. Legacy `TurboCutsSettings.json` files are automatically migrated on first load.
+
+## Control BOM Tab
+
+Generates a control system bill of materials PDF from TurboZones panel breakdown data.
+
+### Layout
+
+Three-column table: **Qty | Part Number | Description**, grouped by category with bold category headers and rule lines. Categories include Processors, Panels, Modules, Accessories, and Keypads. The page header includes the brand name (e.g. "LUTRON BILL OF MATERIALS").
+
+### Data Source
+
+Re-derives the panel breakdown using `PanelAllocationService.BuildPanelBreakdown` with saved TurboZones settings (brand, panel size overrides, special device selections) from ExtensibleStorage. Also collects keypad counts and hybrid repeater info from the Revit model. BOM line items are built using the same grouping logic as the TurboZones Panel Breakdown tab.
 
 ## Cover Tab
 

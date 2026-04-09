@@ -79,8 +79,14 @@ public class DocsCommand : IExternalCommand
         try { panelData = PanelScheduleCollectorService.Collect(doc); }
         catch { /* Panel data unavailable — tab will show empty state */ }
 
+        // Collect BOM data
+        BomData? bomData = null;
+        try { bomData = BomCollectorService.Collect(doc); }
+        catch { /* BOM data unavailable — tab will show empty state */ }
+
         bool hasPanelData = panelData?.Allocation?.AllPanels.Count > 0;
-        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0 && loadsCircuits.Count == 0 && !hasPanelData)
+        bool hasBomData = bomData?.Items.Count > 0;
+        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0 && loadsCircuits.Count == 0 && !hasPanelData && !hasBomData)
         {
             TaskDialog.Show("TurboDocs", "No lighting fixture types found in the active document.");
             return Result.Cancelled;
@@ -98,6 +104,8 @@ public class DocsCommand : IExternalCommand
         viewModel.LoadsVM.LoadCircuits(loadsCircuits);
         if (panelData != null)
             viewModel.PanelScheduleVM.LoadData(panelData);
+        if (bomData != null)
+            viewModel.BomVM.LoadData(bomData);
         viewModel.NotesVM.LoadNotes(generalNotes, controlNotes);
 
         var window = new TurboDocsWindow { DataContext = viewModel };
