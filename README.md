@@ -6,23 +6,26 @@ A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Ten
 
 ### First-Time Setup
 
-1. Copy `TurboSuite.addin` to `%APPDATA%\Autodesk\Revit\Addins\2025\`
-2. Copy `TurboSuite.dll` and all supporting DLLs to `%APPDATA%\Autodesk\Revit\Addins\2025\TurboSuite\`
-3. Revit discovers `.addin` files from that directory on startup.
+1. Navigate to the TurboSuite network share folder
+2. Run `TurboSuiteInstaller.exe`
+3. Click **Install** — the installer copies all required files to the correct locations and configures auto-update
+4. Launch Revit 2025 — the TurboSuite ribbon tab will appear automatically
+
+Revit must be closed during installation.
 
 ### Auto-Update
 
-TurboSuite checks for updates on each Revit launch by comparing version files against a shared server. If a newer version is found:
+TurboSuite checks for updates on each Revit launch by comparing version files against the network share. If a newer version is found:
 
-1. Update files are staged to `%LOCALAPPDATA%\TurboSuite\Staging\`
-2. A notification dialog lets you **accept** or **skip** the update
-3. If accepted, the update is applied automatically after you close Revit
+1. A notification dialog lets you **accept** or **skip** the update
+2. If accepted, the update is applied automatically after you close Revit
+3. Skipped updates will prompt again on next launch
 
-If the server is unreachable (offline, VPN disconnected), TurboSuite loads normally from local files. Skipped updates remain staged and you will be prompted again on next launch.
+If the network share is unreachable (offline, VPN disconnected), TurboSuite loads normally from local files.
 
-### Developer Build
+### Uninstall
 
-Build with `dotnet build TurboSuite.sln`. The post-build target copies output to the Revit add-ins folder and places `TurboSuiteUpdater.exe` in `%LOCALAPPDATA%\TurboSuite\`.
+Run `TurboSuiteInstaller.exe` again and click **Uninstall** to remove all TurboSuite files. Revit must be closed before uninstalling.
 
 ## Ribbon Tab
 
