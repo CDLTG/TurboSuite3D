@@ -91,8 +91,9 @@ public class DocsCommand : IExternalCommand
         var controlNotes = NotesCollectorService.CollectControlNotes(doc);
 
         string projectName = doc.ProjectInformation?.Name ?? "Untitled Project";
+        string projectNumber = doc.ProjectInformation?.Number ?? "";
 
-        var viewModel = new DocsViewModel(cutSheetFixtures, projectName);
+        var viewModel = new DocsViewModel(cutSheetFixtures, projectName, projectNumber);
         viewModel.ScheduleVM.LoadFixtures(scheduleFixtures);
         viewModel.LoadsVM.LoadCircuits(loadsCircuits);
         if (panelData != null)

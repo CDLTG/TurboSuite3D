@@ -35,6 +35,20 @@ public static class NotesPdfService
     private const double NoteLineHeight  = 12;
     private const double NoteSpacing     = 7;
     private const double NumberWidth     = 20;
+    private const double NoteInset       = 19;    // right-side indent to balance number column
+
+    // ── Cover Page ──
+    private const double CoverVerticalImageMaxWidth  = 100;
+    private const double CoverVerticalImageMaxHeight = 280;
+    private const double CoverVerticalImageMargin    = 36;
+    private const double CoverHorizontalImageHeight  = 80;
+    private const double CoverProjectNameFontSize    = 24;
+    private const double CoverLocationFontSize       = 14;
+    private const double CoverSubtitleFontSize       = 14;
+    private const double CoverDateFontSize           = 13;
+    private const double CoverProjectNumberFontSize  = 11.5;
+    private const double CoverTextLineSpacing        = 5;
+    private const double CoverBlockSpacing           = 15;
 
     // ── Footer ──
     private const double FooterHeight = 28;
@@ -42,7 +56,7 @@ public static class NotesPdfService
     #endregion
 
     private const double ContentWidth = PageWidth - MarginLeft - MarginRight;
-    private const double NoteTextWidth = ContentWidth - NumberWidth;
+    private const double NoteTextWidth = ContentWidth - NumberWidth - NoteInset;
     private const double UsableBottom = PageHeight - FooterHeight;
 
     public static void Generate(
@@ -50,7 +64,9 @@ public static class NotesPdfService
         string projectName,
         string subtitle,
         string outputPath,
-        DocsSettings settings)
+        DocsSettings settings,
+        string projectNumber = "",
+        bool isFixturePackage = true)
     {
         var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
         var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
@@ -124,6 +140,9 @@ public static class NotesPdfService
             y += HeaderHeight + HeaderSpacing;
         }
 
+        // Cover page as page 1
+        DrawCoverPage(pdf, projectName, settings, projectNumber, isFixturePackage);
+
         // Measure and render notes
         StartNewPage();
 
@@ -145,10 +164,11 @@ public static class NotesPdfService
                 if (y + noteHeight > UsableBottom)
                     StartNewPage();
 
-                // Draw note number
+                // Draw note number (right-aligned so ")" characters line up)
                 string number = $"{i + 1})";
                 gfx.DrawString(number, fontNoteNumber, XBrushes.Black,
-                    new XPoint(MarginLeft, y + NoteFontSize));
+                    new XRect(MarginLeft, y, NumberWidth - 4, NoteFontSize),
+                    new XStringFormat { Alignment = XStringAlignment.Far, LineAlignment = XLineAlignment.Near });
 
                 // Draw wrapped text lines
                 double textX = MarginLeft + NumberWidth;
@@ -167,8 +187,8 @@ public static class NotesPdfService
         gfx?.Dispose();
         gfx = null;
 
-        // Footer + page numbers on every page
-        for (int i = 0; i < pdf.PageCount; i++)
+        // Footer on notes pages only (skip cover page at index 0)
+        for (int i = 1; i < pdf.PageCount; i++)
         {
             using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
             DrawFooter(g, settings);
@@ -210,6 +230,176 @@ public static class NotesPdfService
         gfx.ScaleTransform(width / form.PointWidth, height / form.PointHeight);
         gfx.DrawImage(form, 0, 0, form.PointWidth, form.PointHeight);
         gfx.Restore(state);
+    }
+
+    private static void DrawCoverPage(PdfDocument pdf, string projectName, DocsSettings settings,
+        string projectNumber, bool isFixturePackage)
+    {
+        var page = pdf.AddPage();
+        page.Width  = XUnit.FromPoint(PageWidth);
+        page.Height = XUnit.FromPoint(PageHeight);
+        using var gfx = XGraphics.FromPdfPage(page);
+
+        // ── Load vertical branding image (top-left) ──
+        XImage vertImg = null;
+        MemoryStream vertStream = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(settings.CoverBrandingVerticalPath) &&
+                File.Exists(settings.CoverBrandingVerticalPath))
+            {
+                if (settings.CoverBrandingVerticalPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    vertStream = new MemoryStream(File.ReadAllBytes(settings.CoverBrandingVerticalPath));
+                    vertImg = XPdfForm.FromStream(vertStream);
+                }
+                else
+                {
+                    vertImg = XImage.FromFile(settings.CoverBrandingVerticalPath);
+                }
+            }
+        }
+        catch { /* image remains null */ }
+
+        // ── Load horizontal branding image (bottom) ──
+        XImage horizImg = null;
+        MemoryStream horizStream = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(settings.CoverBrandingHorizontalPath) &&
+                File.Exists(settings.CoverBrandingHorizontalPath))
+            {
+                if (settings.CoverBrandingHorizontalPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    horizStream = new MemoryStream(File.ReadAllBytes(settings.CoverBrandingHorizontalPath));
+                    horizImg = XPdfForm.FromStream(horizStream);
+                }
+                else
+                {
+                    horizImg = XImage.FromFile(settings.CoverBrandingHorizontalPath);
+                }
+            }
+        }
+        catch { /* image remains null */ }
+
+        // ── Draw vertical branding image ──
+        if (vertImg != null)
+        {
+            double imgW, imgH;
+            if (vertImg is XPdfForm pdfVert)
+            {
+                double scale = Math.Min(CoverVerticalImageMaxWidth / pdfVert.PointWidth,
+                                        CoverVerticalImageMaxHeight / pdfVert.PointHeight);
+                imgW = pdfVert.PointWidth * scale;
+                imgH = pdfVert.PointHeight * scale;
+            }
+            else
+            {
+                double scale = Math.Min(CoverVerticalImageMaxWidth / vertImg.PixelWidth,
+                                        CoverVerticalImageMaxHeight / vertImg.PixelHeight);
+                imgW = vertImg.PixelWidth * scale;
+                imgH = vertImg.PixelHeight * scale;
+            }
+            double vx = CoverVerticalImageMargin;
+            double vy = CoverVerticalImageMargin;
+            if (vertImg is XPdfForm pdfForm)
+                DrawScaledForm(gfx, pdfForm, vx, vy, imgW, imgH);
+            else
+                gfx.DrawImage(vertImg, vx, vy, imgW, imgH);
+        }
+
+        // ── Draw centered text block (slightly above vertical center) ──
+        var fontProjectName  = new XFont("Segoe UI", CoverProjectNameFontSize, XFontStyle.Bold);
+        var fontLocation     = new XFont("Segoe UI", CoverLocationFontSize);
+        var fontSubtitle     = new XFont("Segoe UI", CoverSubtitleFontSize, XFontStyle.Bold);
+        var fontDate         = new XFont("Segoe UI", CoverDateFontSize);
+        var fontProjectNum   = new XFont("Segoe UI", CoverProjectNumberFontSize);
+
+        string coverSubtitle = isFixturePackage
+            ? "Lighting Fixture Specification Manual"
+            : "Lighting Control System Specifications";
+
+        // Calculate total text block height for vertical centering
+        double totalTextHeight = CoverProjectNameFontSize;
+        bool hasLocation = !string.IsNullOrWhiteSpace(settings.ProjectLocation);
+        bool hasDate = !string.IsNullOrWhiteSpace(settings.HeaderDate);
+        bool hasNumber = !string.IsNullOrWhiteSpace(projectNumber);
+
+        if (hasLocation) totalTextHeight += CoverTextLineSpacing + CoverLocationFontSize;
+        totalTextHeight += CoverBlockSpacing + CoverSubtitleFontSize; // block gap before subtitle
+        if (hasDate) totalTextHeight += CoverTextLineSpacing + CoverDateFontSize;
+        if (hasNumber) totalTextHeight += CoverBlockSpacing + CoverProjectNumberFontSize; // block gap before project #
+
+        double textY = (PageHeight - totalTextHeight) / 2 - 20; // slightly above center
+        double centerX = PageWidth / 2;
+
+        gfx.DrawString(projectName, fontProjectName, XBrushes.Black,
+            new XPoint(centerX, textY), XStringFormats.TopCenter);
+        textY += CoverProjectNameFontSize + CoverTextLineSpacing;
+
+        if (hasLocation)
+        {
+            gfx.DrawString(settings.ProjectLocation, fontLocation, XBrushes.Black,
+                new XPoint(centerX, textY), XStringFormats.TopCenter);
+            textY += CoverLocationFontSize + CoverTextLineSpacing;
+        }
+
+        textY += CoverBlockSpacing; // block gap before subtitle
+        gfx.DrawString(coverSubtitle, fontSubtitle, XBrushes.Black,
+            new XPoint(centerX, textY), XStringFormats.TopCenter);
+        textY += CoverSubtitleFontSize + CoverTextLineSpacing;
+
+        if (hasDate)
+        {
+            gfx.DrawString(settings.HeaderDate, fontDate, XBrushes.Black,
+                new XPoint(centerX, textY), XStringFormats.TopCenter);
+            textY += CoverDateFontSize + CoverTextLineSpacing;
+        }
+
+        if (hasNumber)
+        {
+            textY += CoverBlockSpacing; // block gap before project number
+            gfx.DrawString($"Project #{projectNumber}", fontProjectNum, XBrushes.Black,
+                new XPoint(centerX, textY), XStringFormats.TopCenter);
+        }
+
+        // ── Draw horizontal branding image (bottom, full width) ──
+        if (horizImg != null)
+        {
+            double availW = PageWidth;
+            double imgW, imgH;
+            if (horizImg is XPdfForm pdfHoriz)
+            {
+                double scale = availW / pdfHoriz.PointWidth;
+                imgW = availW;
+                imgH = pdfHoriz.PointHeight * scale;
+                if (imgH > CoverHorizontalImageHeight)
+                {
+                    imgH = CoverHorizontalImageHeight;
+                    imgW = pdfHoriz.PointWidth * (imgH / pdfHoriz.PointHeight);
+                }
+            }
+            else
+            {
+                double scale = availW / horizImg.PixelWidth;
+                imgW = availW;
+                imgH = (double)horizImg.PixelHeight * scale;
+                if (imgH > CoverHorizontalImageHeight)
+                {
+                    imgH = CoverHorizontalImageHeight;
+                    imgW = (double)horizImg.PixelWidth * (imgH / horizImg.PixelHeight);
+                }
+            }
+            double hx = (PageWidth - imgW) / 2;
+            double hy = PageHeight - imgH;
+            if (horizImg is XPdfForm pdfForm)
+                DrawScaledForm(gfx, pdfForm, hx, hy, imgW, imgH);
+            else
+                gfx.DrawImage(horizImg, hx, hy, imgW, imgH);
+        }
+
+        vertStream?.Dispose();
+        horizStream?.Dispose();
     }
 
     private static void DrawFooter(XGraphics gfx, DocsSettings settings)

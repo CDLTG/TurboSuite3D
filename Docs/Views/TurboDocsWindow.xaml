@@ -93,6 +93,9 @@
                         </Style.Triggers>
                     </Style>
                 </TabControl.Style>
+                <TabItem Header="  Cover  ">
+                    <local:NotesTab DataContext="{Binding NotesVM}"/>
+                </TabItem>
                 <TabItem Header="  Fixture Schedule  ">
                     <local:ScheduleTab DataContext="{Binding ScheduleVM}"/>
                 </TabItem>
@@ -104,9 +107,6 @@
                 </TabItem>
                 <TabItem Header="  Panel Schedule  ">
                     <local:PanelScheduleTab DataContext="{Binding PanelScheduleVM}"/>
-                </TabItem>
-                <TabItem Header="  Package  ">
-                    <local:NotesTab DataContext="{Binding NotesVM}"/>
                 </TabItem>
             </TabControl>
 

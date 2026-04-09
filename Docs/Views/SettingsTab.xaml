@@ -58,6 +58,41 @@
             </Grid>
         </GroupBox>
 
+        <!-- Cover Page Settings -->
+        <GroupBox Header="Cover Page" Margin="0,0,0,12">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Vertical Banner:" VerticalAlignment="Center" Grid.Row="0" Grid.Column="0"/>
+                <TextBox Text="{Binding CoverBrandingVerticalPath, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="0" Grid.Column="1" Margin="0,0,4,4" Height="24" VerticalContentAlignment="Center"/>
+                <Button Content="Browse..." Command="{Binding BrowseCoverVerticalCommand}"
+                        Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                        Grid.Row="0" Grid.Column="2" Width="70" Height="24" Margin="0,0,0,4"/>
+
+                <TextBlock Text="Footer Banner:" VerticalAlignment="Center" Grid.Row="1" Grid.Column="0"/>
+                <TextBox Text="{Binding CoverBrandingHorizontalPath, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="1" Grid.Column="1" Margin="0,0,4,4" Height="24" VerticalContentAlignment="Center"/>
+                <Button Content="Browse..." Command="{Binding BrowseCoverHorizontalCommand}"
+                        Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                        Grid.Row="1" Grid.Column="2" Width="70" Height="24" Margin="0,0,0,4"/>
+
+                <TextBlock Text="Project Location:" VerticalAlignment="Center" Grid.Row="2" Grid.Column="0"/>
+                <TextBox Text="{Binding ProjectLocation, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Height="24"
+                         VerticalContentAlignment="Center"/>
+            </Grid>
+        </GroupBox>
+
         <!-- Document Settings -->
         <GroupBox Header="Document" Margin="0,0,0,12">
             <Grid Margin="8">

@@ -24,4 +24,12 @@ public class DocsSettings
     // Load Schedule tab settings
     public string LoadsSelectedSortColumn { get; set; } = "CircuitNumber";
 
+    // Window state
+    public int SelectedTabIndex { get; set; }
+
+    // Cover page settings
+    public string CoverBrandingVerticalPath { get; set; } = string.Empty;
+    public string CoverBrandingHorizontalPath { get; set; } = string.Empty;
+    public string ProjectLocation { get; set; } = string.Empty;
+
 }

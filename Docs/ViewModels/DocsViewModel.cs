@@ -20,8 +20,12 @@ public class DocsViewModel : ViewModelBase
     private string _companyWebsite = string.Empty;
     private DateTime _headerDate = DateTime.Now;
     private bool _useLargeFormat;
+    private string _coverBrandingVerticalPath = string.Empty;
+    private string _coverBrandingHorizontalPath = string.Empty;
+    private string _projectLocation = string.Empty;
 
     public string ProjectName { get; }
+    public string ProjectNumber { get; }
     public CutSheetsViewModel CutSheetsVM { get; }
     public ScheduleViewModel ScheduleVM { get; }
     public LoadsViewModel LoadsVM { get; }
@@ -98,13 +102,34 @@ public class DocsViewModel : ViewModelBase
         set => SetProperty(ref _useLargeFormat, value);
     }
 
+    public string CoverBrandingVerticalPath
+    {
+        get => _coverBrandingVerticalPath;
+        set => SetProperty(ref _coverBrandingVerticalPath, value);
+    }
+
+    public string CoverBrandingHorizontalPath
+    {
+        get => _coverBrandingHorizontalPath;
+        set => SetProperty(ref _coverBrandingHorizontalPath, value);
+    }
+
+    public string ProjectLocation
+    {
+        get => _projectLocation;
+        set => SetProperty(ref _projectLocation, value);
+    }
+
     public RelayCommand BrowseLogoCommand { get; }
+    public RelayCommand BrowseCoverVerticalCommand { get; }
+    public RelayCommand BrowseCoverHorizontalCommand { get; }
     public RelayCommand GenerateCommand { get; }
     public RelayCommand ToggleSettingsCommand { get; }
 
-    public DocsViewModel(List<FixtureSpecModel> cutSheetFixtures, string projectName)
+    public DocsViewModel(List<FixtureSpecModel> cutSheetFixtures, string projectName, string projectNumber = "")
     {
         ProjectName = projectName;
+        ProjectNumber = projectNumber;
 
         // Load shared settings
         var settings = DocsSettingsService.Load();
@@ -114,6 +139,10 @@ public class DocsViewModel : ViewModelBase
         _companyEmail = settings.CompanyEmail;
         _companyWebsite = settings.CompanyWebsite;
         _useLargeFormat = settings.ScheduleUseLargeFormat;
+        _coverBrandingVerticalPath = settings.CoverBrandingVerticalPath;
+        _coverBrandingHorizontalPath = settings.CoverBrandingHorizontalPath;
+        _projectLocation = settings.ProjectLocation;
+        _selectedTabIndex = settings.SelectedTabIndex;
 
         CutSheetsVM = new CutSheetsViewModel(cutSheetFixtures, projectName, this);
         ScheduleVM = new ScheduleViewModel(projectName, this);
@@ -122,6 +151,8 @@ public class DocsViewModel : ViewModelBase
         NotesVM = new NotesViewModel(projectName, this);
 
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
+        BrowseCoverVerticalCommand = new RelayCommand(ExecuteBrowseCoverVertical);
+        BrowseCoverHorizontalCommand = new RelayCommand(ExecuteBrowseCoverHorizontal);
         ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
 
         // Forward status text from active tab VM
@@ -190,6 +221,10 @@ public class DocsViewModel : ViewModelBase
         settings.CompanyEmail = CompanyEmail;
         settings.CompanyWebsite = CompanyWebsite;
         settings.ScheduleUseLargeFormat = UseLargeFormat;
+        settings.SelectedTabIndex = SelectedTabIndex;
+        settings.CoverBrandingVerticalPath = CoverBrandingVerticalPath;
+        settings.CoverBrandingHorizontalPath = CoverBrandingHorizontalPath;
+        settings.ProjectLocation = ProjectLocation;
         DocsSettingsService.Save(settings);
 
         CutSheetsVM.SaveSettings();
@@ -203,14 +238,14 @@ public class DocsViewModel : ViewModelBase
     {
         if (IsSettingsVisible) return false;
 
-        // Tab 0 = Schedule, 1 = Cut Sheets, 2 = Load Schedule, 3 = Panel Schedule, 4 = Package
+        // Tab 0 = Cover, 1 = Fixture Schedule, 2 = Cut Sheets, 3 = Load Schedule, 4 = Panel Schedule
         return SelectedTabIndex switch
         {
-            0 => ScheduleVM.GenerateCommand.CanExecute(null),
-            1 => CutSheetsVM.GenerateCommand.CanExecute(null),
-            2 => LoadsVM.GenerateCommand.CanExecute(null),
-            3 => PanelScheduleVM.GenerateCommand.CanExecute(null),
-            4 => NotesVM.GenerateCommand.CanExecute(null),
+            0 => NotesVM.GenerateCommand.CanExecute(null),
+            1 => ScheduleVM.GenerateCommand.CanExecute(null),
+            2 => CutSheetsVM.GenerateCommand.CanExecute(null),
+            3 => LoadsVM.GenerateCommand.CanExecute(null),
+            4 => PanelScheduleVM.GenerateCommand.CanExecute(null),
             _ => false,
         };
     }
@@ -220,19 +255,19 @@ public class DocsViewModel : ViewModelBase
         switch (SelectedTabIndex)
         {
             case 0:
-                ScheduleVM.GenerateCommand.Execute(null);
+                NotesVM.GenerateCommand.Execute(null);
                 break;
             case 1:
-                CutSheetsVM.GenerateCommand.Execute(null);
+                ScheduleVM.GenerateCommand.Execute(null);
                 break;
             case 2:
-                LoadsVM.GenerateCommand.Execute(null);
+                CutSheetsVM.GenerateCommand.Execute(null);
                 break;
             case 3:
-                PanelScheduleVM.GenerateCommand.Execute(null);
+                LoadsVM.GenerateCommand.Execute(null);
                 break;
             case 4:
-                NotesVM.GenerateCommand.Execute(null);
+                PanelScheduleVM.GenerateCommand.Execute(null);
                 break;
         }
     }
@@ -246,5 +281,27 @@ public class DocsViewModel : ViewModelBase
         };
         if (dialog.ShowDialog() == true)
             LogoFilePath = dialog.FileName;
+    }
+
+    private void ExecuteBrowseCoverVertical()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp;*.pdf",
+            Title = "Select Cover Page Vertical Branding Image"
+        };
+        if (dialog.ShowDialog() == true)
+            CoverBrandingVerticalPath = dialog.FileName;
+    }
+
+    private void ExecuteBrowseCoverHorizontal()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp;*.pdf",
+            Title = "Select Cover Page Horizontal Branding Image"
+        };
+        if (dialog.ShowDialog() == true)
+            CoverBrandingHorizontalPath = dialog.FileName;
     }
 }

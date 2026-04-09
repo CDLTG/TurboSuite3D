@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility. Five output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Load Schedule** (electrical circuit load schedule PDF), **Panel Schedule** (dimmer panel breakdown PDF), and **Package** (general/control notes PDF). A **Settings** tab configures shared company info and page options.
+Tabbed document generation utility. Five output tabs: **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Load Schedule** (electrical circuit load schedule PDF), **Panel Schedule** (dimmer panel breakdown PDF), and **Cover** (cover page and general/control notes PDF). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -125,9 +125,9 @@ Downloads spec sheet PDFs from lighting fixture types, stamps a company header/f
 
 Company info (logo, address, phone, website) is saved to `%APPDATA%\TurboSuite\TurboDocsSettings.json` and reused across all projects. Legacy `TurboCutsSettings.json` files are automatically migrated on first load.
 
-## Package Tab
+## Cover Tab
 
-Generates General Notes and Control Notes PDFs for lighting fixture and control system specification packages. Toggle between **Fixture Package** (General Notes) and **Control Package** (Control Notes).
+Generates cover page and notes PDFs for lighting fixture and control system specification packages. Toggle between **Fixture Package** (General Notes) and **Control Package** (Control Notes). A cover page with project name, location, subtitle, date, project number, and branding images is prepended before the notes.
 
 ### Data Source
 
@@ -135,7 +135,7 @@ Notes are read from Revit key schedules: **Notes_General** and **Notes_Controls*
 
 ### Layout
 
-Single-page letter-size PDF. Numbered notes with word wrapping. Header matches Panel Schedule style (project name, subtitle, logo). Footer shows company info without page numbers.
+Letter-size PDF. Page 1 is a cover page with project name, location, subtitle, date, project number, and optional branding images (vertical banner top-left, footer banner bottom). Subsequent pages contain numbered notes with word wrapping. Notes pages have a header (project name, subtitle, logo) and footer (company info). The cover page has no header or footer. Project Number is read from Revit's Project Information; Project Location and branding image paths are configured in TurboDocs Settings.
 
 ## Dependencies
 

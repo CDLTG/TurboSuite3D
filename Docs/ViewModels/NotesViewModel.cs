@@ -181,8 +181,13 @@ public class NotesViewModel : ViewModelBase
                 CompanyPhone = _parent.CompanyPhone,
                 CompanyEmail = _parent.CompanyEmail,
                 CompanyWebsite = _parent.CompanyWebsite,
+                CoverBrandingVerticalPath = _parent.CoverBrandingVerticalPath,
+                CoverBrandingHorizontalPath = _parent.CoverBrandingHorizontalPath,
+                ProjectLocation = _parent.ProjectLocation,
+                HeaderDate = _parent.HeaderDate.ToString("MMMM d, yyyy"),
             };
-            await Task.Run(() => NotesPdfService.Generate(notes, ProjectName, label, outputPath, settings));
+            string projectNumber = _parent.ProjectNumber;
+            await Task.Run(() => NotesPdfService.Generate(notes, ProjectName, label, outputPath, settings, projectNumber, isFixture));
 
             Progress = 100;
             StatusText = $"Done. Saved to {Path.GetFileName(outputPath)}";
