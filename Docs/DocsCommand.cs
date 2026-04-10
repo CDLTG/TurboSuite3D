@@ -71,6 +71,9 @@ public class DocsCommand : IExternalCommand
         // Collect schedule fixture data
         var scheduleFixtures = ScheduleCollectorService.Collect(doc);
 
+        // Collect RPS (remote power supply) data
+        var (rpsScheduleItems, rpsInstances, rpsCutSheetFixtures) = RPSCollectorService.Collect(doc);
+
         // Collect load schedule circuit data
         var loadsCircuits = LoadsCollectorService.Collect(doc);
 
@@ -86,7 +89,7 @@ public class DocsCommand : IExternalCommand
 
         bool hasPanelData = panelData?.Allocation?.AllPanels.Count > 0;
         bool hasBomData = bomData?.Items.Count > 0;
-        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0 && loadsCircuits.Count == 0 && !hasPanelData && !hasBomData)
+        if (cutSheetFixtures.Count == 0 && scheduleFixtures.Count == 0 && rpsScheduleItems.Count == 0 && loadsCircuits.Count == 0 && !hasPanelData && !hasBomData)
         {
             TaskDialog.Show("TurboDocs", "No lighting fixture types found in the active document.");
             return Result.Cancelled;
@@ -99,8 +102,9 @@ public class DocsCommand : IExternalCommand
         string projectName = doc.ProjectInformation?.Name ?? "Untitled Project";
         string projectNumber = doc.ProjectInformation?.Number ?? "";
 
-        var viewModel = new DocsViewModel(cutSheetFixtures, projectName, projectNumber);
+        var viewModel = new DocsViewModel(cutSheetFixtures, rpsCutSheetFixtures, projectName, projectNumber);
         viewModel.ScheduleVM.LoadFixtures(scheduleFixtures);
+        viewModel.PowerSuppliesVM.LoadData(rpsScheduleItems, rpsInstances);
         viewModel.LoadsVM.LoadCircuits(loadsCircuits);
         if (panelData != null)
             viewModel.PanelScheduleVM.LoadData(panelData);

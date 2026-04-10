@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility. Six output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
+Tabbed document generation utility. Seven output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Power Supplies** (RPS schedule and switch ID lookup table PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -110,16 +110,32 @@ Modules never split across pages. When a panel's modules span multiple pages, th
 
 Re-derives the panel breakdown by reading saved TurboZones settings (brand, panel size overrides) from ExtensibleStorage and running `PanelAllocationService.BuildPanelBreakdown`. Circuit wattage is read from `RBS_ELEC_APPARENT_LOAD`.
 
+## Power Supplies Tab
+
+Generates documentation for remote power supplies (`OST_LightingDevices`) with three selectable output modes: **RPS Schedule** (type-level specification schedule), **Lookup Table** (switch ID to circuit mapping), or **RPS Schedule + Lookup Table** (combined PDF).
+
+### RPS Schedule
+
+Same visual format as the fixture schedule but with two spec sections: **Capacity** (Power, Sub-Driver, Max Fixtures) and **Electrical** (Dimming, Voltage). Supports classification grouping, specification notes, and small/large page format.
+
+### Lookup Table
+
+Compact table with columns **Switch ID | Type Mark | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware). Letter size only. Dark header row with alternating row shading.
+
+### Data Source
+
+Collects from `OST_LightingDevices` family instances with valid driver parameters (`Power > 0`, `Sub-Driver Power > 0`, power evenly divisible by sub-driver). Circuit info is read from the electrical system connected to each instance. RPS cut sheets are appended after fixture cut sheets in the Cut Sheets tab.
+
 ## Cut Sheets Tab
 
-Downloads spec sheet PDFs from lighting fixture types, stamps a company header/footer on every page, and merges them into a single bookmarked PDF.
+Downloads spec sheet PDFs from lighting fixture and power supply types, stamps a company header/footer on every page, and merges them into a single bookmarked PDF. Password-protected PDFs that cannot be embedded render a placeholder page with the source URL.
 
 ### What It Does
 
-1. **Collects fixture types** — Scans all placed `OST_LightingFixtures` for unique `FamilySymbol` types that have a "Data Sheet URL" type parameter.
-2. **Downloads spec sheets** — Fetches each PDF from the URL via HTTP.
-3. **Stamps header/footer** — Adds a company header (logo, project name, date, fixture Type Mark) and footer (address, phone, website) to every page.
-4. **Merges into one PDF** — Combines all spec sheets into a single output file with PDF bookmarks at each fixture type's first page.
+1. **Collects fixture and RPS types** — Scans placed `OST_LightingFixtures` and valid `OST_LightingDevices` for unique types with a "Data Sheet URL" parameter.
+2. **Downloads or loads spec sheets** — Fetches each PDF from the URL via HTTP, or uses a local PDF file if one has been browsed to. Users can set a **default local PDF** per catalog number (gold star) that persists across projects.
+3. **Stamps header/footer** — Adds a company header (logo, project name, date, Type Mark) and footer (address, phone, website) to every page.
+4. **Merges into one PDF** — Combines all spec sheets into a single output file with PDF bookmarks at each type's first page. Password-protected PDFs render a placeholder page with the source URL.
 
 ### Company Settings
 
@@ -153,7 +169,8 @@ Letter-size PDF. Page 1 is a cover page with project name, location, subtitle, d
 
 ### Revit Project
 - Lighting fixture families with schedule parameters populated (see parameter mapping above)
-- For Cut Sheets: a **"Data Sheet URL"** shared type parameter containing a direct URL to a PDF spec sheet
+- Lighting device (RPS) families with Power, Sub-Driver Power, and schedule parameters for the Power Supplies tab
+- A **"Data Sheet URL"** shared type parameter on fixture/device types for Cut Sheets (direct URL to a PDF spec sheet)
 
 ### Software
 - **PdfSharpCore** (NuGet, MIT license) — PDF generation, reading, page stamping, merging, and bookmarks

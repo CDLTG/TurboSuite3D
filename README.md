@@ -56,7 +56,7 @@ The "TurboSuite" ribbon tab has three panels:
 | [TurboZones](Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
 | [TurboRPS](Driver/README.md) | Review power supply assignments across all RPS circuits |
-| [TurboDocs](Docs/README.md) | Generate fixture schedule, load schedule, panel schedule, and cut sheet PDFs |
+| [TurboDocs](Docs/README.md) | Generate fixture/RPS schedules, load/panel schedules, cut sheets, and cover/notes PDFs |
 
 ## Supported Workflows
 
@@ -73,8 +73,8 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 | Category | Used By |
 |----------|---------|
 | Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs |
+| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs |
 | Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones |
-| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones |
 | Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones |
 
 ### Common Custom Parameters
@@ -87,7 +87,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 | `Sub-Driver Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS, TurboTag, TurboNumber |
 | `Scale Factor` | Fixture instances | Double | TurboBubble, TurboWire |
 | `Load Classification Abbreviation` | Electrical Circuits | Text | TurboZones, TurboDriver |
-| `Data Sheet URL` | Lighting Fixture types | Text (URL) | TurboDocs |
+| `Data Sheet URL` | Lighting Fixture/Device types | Text (URL) | TurboDocs |
 
 ### Tag Families
 

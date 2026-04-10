@@ -14,6 +14,9 @@ public class DocsSettings
     public Dictionary<string, string> LocalPdfPaths { get; set; } = new();
     public List<string> SelectedTypeMarks { get; set; } = new();
 
+    // Default local PDF paths — keyed by catalog number, persists across projects
+    public Dictionary<string, string> DefaultLocalPdfPaths { get; set; } = new();
+
     // Schedule tab settings
     public List<string> ScheduleSelectedTypeMarks { get; set; } = new();
     public bool ScheduleUseLargeFormat { get; set; }
@@ -23,6 +26,12 @@ public class DocsSettings
 
     // Load Schedule tab settings
     public string LoadsSelectedSortColumn { get; set; } = "CircuitNumber";
+
+    // Power Supplies tab settings
+    public List<string> RPSSelectedTypeMarks { get; set; } = new();
+    public int RPSOutputMode { get; set; }              // 0=Schedule, 1=Lookup, 2=Both
+    public List<string> RPSSpecificationNotes { get; set; } = new();
+    public bool RPSUseLargeFormat { get; set; }
 
     // Window state
     public int SelectedTabIndex { get; set; }

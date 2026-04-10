@@ -99,6 +99,9 @@
                 <TabItem Header="  Fixture Schedule  ">
                     <local:ScheduleTab DataContext="{Binding ScheduleVM}"/>
                 </TabItem>
+                <TabItem Header="  Power Supplies  ">
+                    <local:PowerSuppliesTab DataContext="{Binding PowerSuppliesVM}"/>
+                </TabItem>
                 <TabItem Header="  Cut Sheets  ">
                     <local:CutSheetsTab DataContext="{Binding CutSheetsVM}"/>
                 </TabItem>

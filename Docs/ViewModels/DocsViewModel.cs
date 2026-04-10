@@ -28,6 +28,7 @@ public class DocsViewModel : ViewModelBase
     public string ProjectNumber { get; }
     public CutSheetsViewModel CutSheetsVM { get; }
     public ScheduleViewModel ScheduleVM { get; }
+    public PowerSuppliesViewModel PowerSuppliesVM { get; }
     public LoadsViewModel LoadsVM { get; }
     public PanelScheduleViewModel PanelScheduleVM { get; }
     public NotesViewModel NotesVM { get; }
@@ -127,7 +128,7 @@ public class DocsViewModel : ViewModelBase
     public RelayCommand GenerateCommand { get; }
     public RelayCommand ToggleSettingsCommand { get; }
 
-    public DocsViewModel(List<FixtureSpecModel> cutSheetFixtures, string projectName, string projectNumber = "")
+    public DocsViewModel(List<FixtureSpecModel> cutSheetFixtures, List<FixtureSpecModel> rpsCutSheetFixtures, string projectName, string projectNumber = "")
     {
         ProjectName = projectName;
         ProjectNumber = projectNumber;
@@ -145,8 +146,13 @@ public class DocsViewModel : ViewModelBase
         _projectLocation = settings.ProjectLocation;
         _selectedTabIndex = settings.SelectedTabIndex;
 
-        CutSheetsVM = new CutSheetsViewModel(cutSheetFixtures, projectName, this);
+        // Combine fixture + RPS cut sheets (fixtures first, then RPS)
+        var allCutSheets = new List<FixtureSpecModel>(cutSheetFixtures);
+        allCutSheets.AddRange(rpsCutSheetFixtures);
+
+        CutSheetsVM = new CutSheetsViewModel(allCutSheets, projectName, this);
         ScheduleVM = new ScheduleViewModel(projectName, this);
+        PowerSuppliesVM = new PowerSuppliesViewModel(projectName, this);
         LoadsVM = new LoadsViewModel(projectName, this);
         PanelScheduleVM = new PanelScheduleViewModel(projectName, this);
         NotesVM = new NotesViewModel(projectName, this);
@@ -188,6 +194,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName == nameof(BomViewModel.StatusText))
                 StatusText = BomVM.StatusText;
         };
+        PowerSuppliesVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PowerSuppliesViewModel.StatusText))
+                StatusText = PowerSuppliesVM.StatusText;
+        };
 
         GenerateCommand = new RelayCommand(ExecuteGenerate, CanGenerate);
 
@@ -222,6 +233,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName is nameof(BomViewModel.IsGenerating))
                 System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         };
+        PowerSuppliesVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(PowerSuppliesViewModel.IsGenerating))
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        };
     }
 
     public void SaveSettings()
@@ -241,6 +257,7 @@ public class DocsViewModel : ViewModelBase
 
         CutSheetsVM.SaveSettings();
         ScheduleVM.SaveSettings();
+        PowerSuppliesVM.SaveSettings();
         LoadsVM.SaveSettings();
         PanelScheduleVM.SaveSettings();
         NotesVM.SaveSettings();
@@ -251,15 +268,16 @@ public class DocsViewModel : ViewModelBase
     {
         if (IsSettingsVisible) return false;
 
-        // Tab 0 = Cover, 1 = Fixture Schedule, 2 = Cut Sheets, 3 = Control BOM, 4 = Load Schedule, 5 = Panel Schedule
+        // Tab 0 = Cover, 1 = Fixture Schedule, 2 = Power Supplies, 3 = Cut Sheets, 4 = Control BOM, 5 = Load Schedule, 6 = Panel Schedule
         return SelectedTabIndex switch
         {
             0 => NotesVM.GenerateCommand.CanExecute(null),
             1 => ScheduleVM.GenerateCommand.CanExecute(null),
-            2 => CutSheetsVM.GenerateCommand.CanExecute(null),
-            3 => BomVM.GenerateCommand.CanExecute(null),
-            4 => LoadsVM.GenerateCommand.CanExecute(null),
-            5 => PanelScheduleVM.GenerateCommand.CanExecute(null),
+            2 => PowerSuppliesVM.GenerateCommand.CanExecute(null),
+            3 => CutSheetsVM.GenerateCommand.CanExecute(null),
+            4 => BomVM.GenerateCommand.CanExecute(null),
+            5 => LoadsVM.GenerateCommand.CanExecute(null),
+            6 => PanelScheduleVM.GenerateCommand.CanExecute(null),
             _ => false,
         };
     }
@@ -275,15 +293,18 @@ public class DocsViewModel : ViewModelBase
                 ScheduleVM.GenerateCommand.Execute(null);
                 break;
             case 2:
-                CutSheetsVM.GenerateCommand.Execute(null);
+                PowerSuppliesVM.GenerateCommand.Execute(null);
                 break;
             case 3:
-                BomVM.GenerateCommand.Execute(null);
+                CutSheetsVM.GenerateCommand.Execute(null);
                 break;
             case 4:
-                LoadsVM.GenerateCommand.Execute(null);
+                BomVM.GenerateCommand.Execute(null);
                 break;
             case 5:
+                LoadsVM.GenerateCommand.Execute(null);
+                break;
+            case 6:
                 PanelScheduleVM.GenerateCommand.Execute(null);
                 break;
         }

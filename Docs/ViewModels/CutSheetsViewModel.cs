@@ -46,6 +46,8 @@ public class CutSheetsViewModel : ViewModelBase
 
     public RelayCommand<FixtureSpecModel> BrowseLocalPdfCommand { get; }
     public RelayCommand<FixtureSpecModel> ClearLocalPdfCommand { get; }
+    public RelayCommand<FixtureSpecModel> SetDefaultPdfCommand { get; }
+    public RelayCommand<FixtureSpecModel> ClearDefaultPdfCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand DeselectAllCommand { get; }
     public RelayCommand GenerateCommand { get; }
@@ -60,15 +62,34 @@ public class CutSheetsViewModel : ViewModelBase
 
         foreach (var fixture in Fixtures)
         {
+            // Priority: per-project local path > global default by catalog number
             if (settings.LocalPdfPaths.TryGetValue(fixture.TypeMark, out var path) && File.Exists(path))
+            {
                 fixture.LocalPdfPath = path;
+            }
+            else if (!string.IsNullOrWhiteSpace(fixture.CatalogNumber)
+                     && settings.DefaultLocalPdfPaths.TryGetValue(fixture.CatalogNumber, out var defaultPath)
+                     && File.Exists(defaultPath))
+            {
+                fixture.LocalPdfPath = defaultPath;
+            }
+
+            // Check if the loaded path matches a global default — show gold star
+            if (fixture.HasLocalPdf && !string.IsNullOrWhiteSpace(fixture.CatalogNumber)
+                && settings.DefaultLocalPdfPaths.TryGetValue(fixture.CatalogNumber, out var defPath)
+                && fixture.LocalPdfPath == defPath)
+            {
+                fixture.IsDefaultPdf = true;
+            }
 
             if (settings.SelectedTypeMarks.Count > 0)
                 fixture.IsSelected = settings.SelectedTypeMarks.Contains(fixture.TypeMark);
         }
 
         BrowseLocalPdfCommand = new RelayCommand<FixtureSpecModel>(ExecuteBrowseLocalPdf);
-        ClearLocalPdfCommand = new RelayCommand<FixtureSpecModel>(f => f.LocalPdfPath = string.Empty);
+        ClearLocalPdfCommand = new RelayCommand<FixtureSpecModel>(f => { f.LocalPdfPath = string.Empty; f.IsDefaultPdf = false; });
+        SetDefaultPdfCommand = new RelayCommand<FixtureSpecModel>(ExecuteSetDefaultPdf);
+        ClearDefaultPdfCommand = new RelayCommand<FixtureSpecModel>(ExecuteClearDefaultPdf);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
         DeselectAllCommand = new RelayCommand(() => SetAllSelected(false));
         GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && Fixtures.Any(f => f.IsSelected));
@@ -95,7 +116,28 @@ public class CutSheetsViewModel : ViewModelBase
             Title = $"Select Local PDF for {fixture.TypeMark}"
         };
         if (dialog.ShowDialog() == true)
+        {
             fixture.LocalPdfPath = dialog.FileName;
+            fixture.IsDefaultPdf = false;
+        }
+    }
+
+    private void ExecuteSetDefaultPdf(FixtureSpecModel fixture)
+    {
+        if (!fixture.HasLocalPdf || string.IsNullOrWhiteSpace(fixture.CatalogNumber)) return;
+        var settings = DocsSettingsService.Load();
+        settings.DefaultLocalPdfPaths[fixture.CatalogNumber] = fixture.LocalPdfPath;
+        DocsSettingsService.Save(settings);
+        fixture.IsDefaultPdf = true;
+    }
+
+    private void ExecuteClearDefaultPdf(FixtureSpecModel fixture)
+    {
+        if (string.IsNullOrWhiteSpace(fixture.CatalogNumber)) return;
+        var settings = DocsSettingsService.Load();
+        settings.DefaultLocalPdfPaths.Remove(fixture.CatalogNumber);
+        DocsSettingsService.Save(settings);
+        fixture.IsDefaultPdf = false;
     }
 
     private void SetAllSelected(bool selected)
@@ -120,7 +162,7 @@ public class CutSheetsViewModel : ViewModelBase
         IsGenerating = true;
         Progress = 0;
 
-        var results = new List<(string typeMark, byte[]? pdfData, string catalogNumber)>();
+        var results = new List<(string typeMark, byte[]? pdfData, string catalogNumber, string dataSheetUrl)>();
         var errors = new List<string>();
 
         try
@@ -149,7 +191,7 @@ public class CutSheetsViewModel : ViewModelBase
                     data = null;
                 }
 
-                results.Add((fixture.TypeMark, data, fixture.CatalogNumber));
+                results.Add((fixture.TypeMark, data, fixture.CatalogNumber, fixture.DataSheetUrl));
             }
 
             // Merge phase (80-100%)

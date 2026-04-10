@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
-using PdfSharpCore.Pdf.IO;
+
 using TurboSuite.Docs.Models;
 
 namespace TurboSuite.Docs.Services;
@@ -16,7 +16,7 @@ public static class CutSheetPdfService
     private const double ContentScale = 0.88;
 
     public static void MergeAndStamp(
-        List<(string typeMark, byte[]? pdfData, string catalogNumber)> specSheets,
+        List<(string typeMark, byte[]? pdfData, string catalogNumber, string dataSheetUrl)> specSheets,
         DocsSettings settings,
         string projectName,
         string outputPath)
@@ -30,37 +30,47 @@ public static class CutSheetPdfService
             ? settings.HeaderDate
             : DateTime.Now.ToString("MMM dd, yyyy");
 
-        foreach (var (typeMark, pdfData, catalogNumber) in specSheets)
+        foreach (var (typeMark, pdfData, catalogNumber, dataSheetUrl) in specSheets)
         {
             int bookmarkPageIndex = output.PageCount;
 
             if (pdfData != null)
             {
-                using var formStream = new MemoryStream(pdfData);
-                var form = XPdfForm.FromStream(formStream);
-
-                using var countStream = new MemoryStream(pdfData);
-                using var source = PdfReader.Open(countStream, PdfDocumentOpenMode.Import);
-                int pageCount = source.PageCount;
-
-                for (int i = 0; i < pageCount; i++)
+                try
                 {
-                    form.PageIndex = i;
+                    using var formStream = new MemoryStream(pdfData);
+                    var form = XPdfForm.FromStream(formStream);
+                    int pageCount = form.PageCount;
+
+                    for (int i = 0; i < pageCount; i++)
+                    {
+                        form.PageIndex = i;
+                        var page = output.AddPage();
+                        page.Width = XUnit.FromPoint(form.PointWidth);
+                        page.Height = XUnit.FromPoint(form.PointHeight);
+
+                        using var gfx = XGraphics.FromPdfPage(page);
+                        double pageWidth = page.Width.Point;
+                        double pageHeight = page.Height.Point;
+
+                        double drawWidth = form.PointWidth * ContentScale;
+                        double drawHeight = form.PointHeight * ContentScale;
+                        double drawX = (pageWidth - drawWidth) / 2;
+                        double drawY = HeaderHeight + (pageHeight - HeaderHeight - FooterHeight - drawHeight) / 2;
+
+                        DrawScaledForm(gfx, form, drawX, drawY, drawWidth, drawHeight);
+                        DrawHeader(gfx, page, logo, projectName, typeMark, dateText, catalogNumber);
+                        DrawFooter(gfx, page, settings);
+                    }
+                }
+                catch (PdfSharpCore.Pdf.IO.PdfReaderException)
+                {
+                    // Owner-password-protected PDF — render placeholder page
                     var page = output.AddPage();
-                    page.Width = source.Pages[i].Width;
-                    page.Height = source.Pages[i].Height;
-
                     using var gfx = XGraphics.FromPdfPage(page);
-                    double pageWidth = page.Width.Point;
-                    double pageHeight = page.Height.Point;
-
-                    double drawWidth = form.PointWidth * ContentScale;
-                    double drawHeight = form.PointHeight * ContentScale;
-                    double drawX = (pageWidth - drawWidth) / 2;
-                    double drawY = HeaderHeight + (pageHeight - HeaderHeight - FooterHeight - drawHeight) / 2;
-
-                    DrawScaledForm(gfx, form, drawX, drawY, drawWidth, drawHeight);
+                    gfx.DrawRectangle(XBrushes.White, 0, 0, page.Width.Point, page.Height.Point);
                     DrawHeader(gfx, page, logo, projectName, typeMark, dateText, catalogNumber);
+                    DrawPasswordNotice(gfx, page, dataSheetUrl);
                     DrawFooter(gfx, page, settings);
                 }
             }
@@ -175,6 +185,29 @@ public static class CutSheetPdfService
         {
             gfx.DrawString(string.Join("    |    ", parts), font, brush,
                 new XPoint(w / 2, fTop + 10), XStringFormats.TopCenter);
+        }
+    }
+
+    private static void DrawPasswordNotice(XGraphics gfx, PdfPage page, string dataSheetUrl)
+    {
+        double w = page.Width.Point;
+        double h = page.Height.Point;
+        double centerY = HeaderHeight + (h - HeaderHeight - FooterHeight) / 2;
+
+        var font = new XFont("Segoe UI", 11);
+        var brush = new XSolidBrush(XColor.FromGrayScale(0.45));
+
+        gfx.DrawString("This cut sheet PDF is password-protected and cannot be embedded.",
+            font, brush, new XPoint(w / 2, centerY - 10), XStringFormats.TopCenter);
+        gfx.DrawString("Print this page separately from the manufacturer's website.",
+            font, brush, new XPoint(w / 2, centerY + 10), XStringFormats.TopCenter);
+
+        if (!string.IsNullOrWhiteSpace(dataSheetUrl))
+        {
+            var urlFont = new XFont("Segoe UI", 9);
+            var urlBrush = new XSolidBrush(XColor.FromArgb(0x33, 0x66, 0xCC));
+            gfx.DrawString(dataSheetUrl, urlFont, urlBrush,
+                new XPoint(w / 2, centerY + 32), XStringFormats.TopCenter);
         }
     }
 

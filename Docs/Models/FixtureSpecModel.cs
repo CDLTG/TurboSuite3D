@@ -7,6 +7,7 @@ public class FixtureSpecModel : ViewModelBase
 {
     private bool _isSelected = true;
     private string _localPdfPath = string.Empty;
+    private bool _isDefaultPdf;
 
     public bool IsSelected
     {
@@ -25,6 +26,15 @@ public class FixtureSpecModel : ViewModelBase
     }
 
     public bool HasLocalPdf => !string.IsNullOrEmpty(LocalPdfPath);
+
+    /// <summary>
+    /// True when LocalPdfPath was loaded from the global default (keyed by CatalogNumber).
+    /// </summary>
+    public bool IsDefaultPdf
+    {
+        get => _isDefaultPdf;
+        set => SetProperty(ref _isDefaultPdf, value);
+    }
 
     public string TypeMark { get; set; } = string.Empty;
     public string FamilyName { get; set; } = string.Empty;

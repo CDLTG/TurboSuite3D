@@ -90,11 +90,34 @@
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <DockPanel>
+                                            <!-- Clear local PDF -->
                                             <Button DockPanel.Dock="Right" Content="&#x2715;" Width="18" Height="18" Margin="2,0,0,0"
                                                     FontSize="9" Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
                                                     Command="{Binding DataContext.ClearLocalPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                                     CommandParameter="{Binding}"
                                                     Visibility="{Binding HasLocalPdf, Converter={StaticResource BoolToVisibility}}"/>
+                                            <!-- Set/clear as default (pin icon) -->
+                                            <Button DockPanel.Dock="Right" Width="18" Height="18" Margin="2,0,0,0"
+                                                    FontSize="9" Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                                    ToolTip="Set as default PDF for this catalog number (persists across projects)"
+                                                    Visibility="{Binding HasLocalPdf, Converter={StaticResource BoolToVisibility}}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Content" Value="&#x2606;"/>
+                                                        <Setter Property="Command" Value="{Binding DataContext.SetDefaultPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                                        <Setter Property="CommandParameter" Value="{Binding}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsDefaultPdf}" Value="True">
+                                                                <Setter Property="Content" Value="&#x2605;"/>
+                                                                <Setter Property="Foreground" Value="#D4A017"/>
+                                                                <Setter Property="Command" Value="{Binding DataContext.ClearDefaultPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                                                <Setter Property="ToolTip" Value="Remove as default PDF"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            <!-- Browse for local PDF -->
                                             <Button DockPanel.Dock="Right" Content="..." Width="18" Height="18" Margin="2,0,0,0"
                                                     FontSize="9" Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
                                                     Cursor="Hand"

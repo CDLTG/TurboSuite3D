@@ -1,9 +1,11 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="clr-namespace:TurboSuite.Shared.Converters">
 
     <!-- Converters -->
     <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    <converters:IntEqualConverter x:Key="IntEqualConverter"/>
 
     <!-- Core Brushes -->
     <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
