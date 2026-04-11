@@ -114,6 +114,9 @@
                 <TabItem Header="  Panel Schedule  ">
                     <local:PanelScheduleTab DataContext="{Binding PanelScheduleVM}"/>
                 </TabItem>
+                <TabItem Header="  Counts  ">
+                    <local:CountsTab DataContext="{Binding CountsVM}"/>
+                </TabItem>
             </TabControl>
 
         </Grid>

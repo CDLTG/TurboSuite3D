@@ -1,0 +1,1052 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using ClosedXML.Excel;
+using TurboSuite.Docs.Models;
+
+namespace TurboSuite.Docs.Services;
+
+public static class CountsWorkbookService
+{
+    #region Constants
+
+    private const string DefaultPricingPath = @"C:\Path\To\PricingWorkbook.xlsx";
+
+    // Worksheet column indices (1-based)
+    private const int WsColType = 1;        // A
+    private const int WsColMfr = 2;         // B
+    private const int WsColCatalog = 3;     // C
+    private const int WsColQty = 4;         // D
+    private const int WsColPrevQty = 5;     // E
+    private const int WsColDelta = 6;       // F
+    private const int WsColCalc = 7;        // G
+    private const int WsColPhase = 8;       // H
+    private const int WsColDesc = 9;        // I
+    private const int WsColUnitCost = 10;   // J
+    private const int WsColMarkup = 11;     // K
+    private const int WsColTariff = 12;     // L
+    private const int WsColAdder = 13;      // M
+
+    // Counts sheet column indices (1-based)
+    private const int CsColType = 1;        // A
+    private const int CsColMfr = 2;         // B
+    private const int CsColCat1 = 3;        // C
+    private const int CsColCat2 = 4;        // D
+    private const int CsColCat3 = 5;        // E
+    private const int CsColCat4 = 6;        // F
+    private const int CsColCat5 = 7;        // G
+    private const int CsColCat6 = 8;        // H
+    private const int CsColCount = 9;       // I
+    private const int CsColLinear = 10;     // J
+    private const int CsColReel = 11;       // K
+    private const int CsColChannel = 12;    // L
+
+    // Highlight colors
+    private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
+    private static readonly XLColor RedFill = XLColor.FromHtml("#FFC7CE");
+    private static readonly XLColor YellowFill = XLColor.FromHtml("#FFEB9C");
+
+    #endregion
+
+    /// <summary>
+    /// Creates a new Counts workbook with all five sheets.
+    /// </summary>
+    public static void GenerateNew(
+        List<CountsFixtureModel> fixtures,
+        string projectName,
+        string outputPath)
+    {
+        using var wb = new XLWorkbook();
+
+        string dateString = DateTime.Now.ToString("yyyy.MM.dd");
+        string countsSheetName = $"Counts {dateString}";
+
+        // Read pricing workbook (silently skip if unavailable)
+        var pricing = ReadPricingWorkbook(DefaultPricingPath);
+
+        // 1. Cover
+        BuildCoverSheet(wb, projectName);
+
+        // 2. Worksheet
+        BuildWorksheetSheet(wb, fixtures, countsSheetName, pricing, null);
+
+        // 3. Quote
+        BuildQuoteSheet(wb);
+
+        // 4. Changes
+        BuildChangesSheet(wb);
+
+        // 5. Counts (dated)
+        BuildCountsSheet(wb, fixtures, countsSheetName);
+
+        wb.SaveAs(outputPath);
+    }
+
+    /// <summary>
+    /// Opens an existing workbook and updates it with fresh Revit data.
+    /// </summary>
+    public static void GenerateUpdate(
+        List<CountsFixtureModel> fixtures,
+        string existingPath)
+    {
+        using var wb = new XLWorkbook(existingPath);
+
+        string dateString = DateTime.Now.ToString("yyyy.MM.dd");
+        string countsSheetName = ResolveCountsSheetName(wb, dateString);
+
+        // Find previous Counts sheet for change detection
+        var prevCountsSheet = FindLatestCountsSheet(wb);
+        var prevData = prevCountsSheet != null ? ReadCountsSheetData(prevCountsSheet) : null;
+
+        // Read pricing workbook path from Cover sheet config
+        string pricingPath = ReadPricingPathFromCover(wb);
+        var pricing = ReadPricingWorkbook(pricingPath);
+
+        // Read existing Worksheet rows
+        var existingRows = ReadExistingWorksheetRows(wb);
+
+        // Build new Counts sheet
+        BuildCountsSheet(wb, fixtures, countsSheetName);
+
+        // Update Worksheet
+        UpdateWorksheetSheet(wb, fixtures, countsSheetName, pricing, existingRows, prevData);
+
+        // Rebuild Quote sheet
+        if (wb.Worksheets.TryGetWorksheet("Quote", out var oldQuote))
+            wb.Worksheets.Delete("Quote");
+        BuildQuoteSheet(wb);
+
+        // Append changes
+        if (prevData != null)
+            AppendChanges(wb, fixtures, prevData);
+
+        wb.Save();
+    }
+
+    #region Cover Sheet
+
+    private static void BuildCoverSheet(IXLWorkbook wb, string projectName)
+    {
+        var ws = wb.Worksheets.Add("Cover");
+
+        // Branding area (rows 1-4 left blank for user images)
+        ws.Cell("A6").Value = "Project Name:";
+        ws.Cell("B6").Value = projectName;
+        ws.Cell("B6").Style.Font.Bold = true;
+        ws.Cell("B6").Style.Font.FontSize = 14;
+
+        ws.Cell("A7").Value = "Project Location:";
+        // B7 blank
+
+        ws.Cell("A9").Value = "Lighting Fixture Quotation";
+        ws.Cell("A9").Style.Font.Bold = true;
+        ws.Cell("A9").Style.Font.FontSize = 16;
+
+        ws.Cell("A11").Value = "Release Date:";
+        ws.Cell("A12").Value = "Project Number:";
+        ws.Cell("A13").Value = "For:";
+        ws.Cell("A14").Value = "Prepared by:";
+        ws.Cell("A15").Value = "Email:";
+        ws.Cell("A16").Value = "Phone:";
+
+        // Style labels
+        for (int r = 6; r <= 16; r++)
+        {
+            if (r == 8 || r == 10) continue; // skip blank rows
+            ws.Cell(r, 1).Style.Font.Bold = true;
+        }
+
+        // Configuration section (outside print area — row 20+)
+        ws.Cell("A20").Value = "Pricing Workbook Path";
+        ws.Cell("A20").Style.Font.Bold = true;
+        ws.Cell("A20").Style.Font.FontColor = XLColor.Gray;
+        ws.Cell("B20").Value = DefaultPricingPath;
+        ws.Cell("B20").Style.Font.FontColor = XLColor.Gray;
+
+        // Named range for pricing path
+        wb.DefinedNames.Add("PricingWorkbookPath", ws.Range("B20:B20"));
+
+        ws.Cell("A21").Value = "Notify Email";
+        ws.Cell("A21").Style.Font.Bold = true;
+        ws.Cell("A21").Style.Font.FontColor = XLColor.Gray;
+        ws.Cell("B21").Style.Font.FontColor = XLColor.Gray;
+        // B21 left blank — user enters recipient email address
+
+        // Column widths
+        ws.Column(1).Width = 22;
+        ws.Column(2).Width = 50;
+
+        // Print area excludes config section
+        ws.PageSetup.PrintAreas.Add("A1:B17");
+    }
+
+    #endregion
+
+    #region Counts Sheet
+
+    private static void BuildCountsSheet(IXLWorkbook wb, List<CountsFixtureModel> fixtures, string sheetName)
+    {
+        var ws = wb.Worksheets.Add(sheetName);
+
+        // Headers
+        ws.Cell(1, CsColType).Value = "Type";
+        ws.Cell(1, CsColMfr).Value = "Mfr";
+        ws.Cell(1, CsColCat1).Value = "Cat 1";
+        ws.Cell(1, CsColCat2).Value = "Cat 2";
+        ws.Cell(1, CsColCat3).Value = "Cat 3";
+        ws.Cell(1, CsColCat4).Value = "Cat 4";
+        ws.Cell(1, CsColCat5).Value = "Cat 5";
+        ws.Cell(1, CsColCat6).Value = "Cat 6";
+        ws.Cell(1, CsColCount).Value = "Count";
+        ws.Cell(1, CsColLinear).Value = "Linear Length";
+        ws.Cell(1, CsColReel).Value = "Reel Length";
+        ws.Cell(1, CsColChannel).Value = "Channel Length";
+
+        // Style headers
+        var headerRange = ws.Range(1, 1, 1, CsColChannel);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+        headerRange.Style.Font.FontColor = XLColor.White;
+
+        // Data rows
+        int row = 2;
+        foreach (var f in fixtures)
+        {
+            ws.Cell(row, CsColType).Value = f.TypeMark;
+            ws.Cell(row, CsColMfr).Value = f.Manufacturer;
+            for (int c = 0; c < 6; c++)
+                ws.Cell(row, CsColCat1 + c).Value = f.CatalogNumbers[c] ?? "";
+            ws.Cell(row, CsColCount).Value = f.Count;
+            ws.Cell(row, CsColLinear).Value = Math.Round(f.LinearLength, 2);
+            ws.Cell(row, CsColReel).Value = Math.Round(f.ReelLength, 2);
+            ws.Cell(row, CsColChannel).Value = Math.Round(f.ChannelLength, 2);
+            row++;
+        }
+
+        // Auto-fit columns
+        ws.Columns().AdjustToContents();
+    }
+
+    #endregion
+
+    #region Worksheet Sheet
+
+    private static void BuildWorksheetSheet(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> fixtures,
+        string countsSheetName,
+        Dictionary<string, PricingEntry>? pricing,
+        Dictionary<(string Type, string Catalog), WorksheetRowData>? existingRows)
+    {
+        var ws = wb.Worksheets.Add("Worksheet");
+
+        // Headers
+        ws.Cell(1, WsColType).Value = "Type";
+        ws.Cell(1, WsColMfr).Value = "Mfr";
+        ws.Cell(1, WsColCatalog).Value = "Catalog Number";
+        ws.Cell(1, WsColQty).Value = "Qty";
+        ws.Cell(1, WsColPrevQty).Value = "Prev Qty";
+        ws.Cell(1, WsColDelta).Value = "Δ";
+        ws.Cell(1, WsColCalc).Value = "Calc";
+        ws.Cell(1, WsColPhase).Value = "Phase";
+        ws.Cell(1, WsColDesc).Value = "Description";
+        ws.Cell(1, WsColUnitCost).Value = "Unit Cost";
+        ws.Cell(1, WsColMarkup).Value = "Markup %";
+        ws.Cell(1, WsColTariff).Value = "Tariff %";
+        ws.Cell(1, WsColAdder).Value = "Adder";
+
+        // Style headers
+        var headerRange = ws.Range(1, 1, 1, WsColAdder);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+        headerRange.Style.Font.FontColor = XLColor.White;
+
+        string csRef = $"'{countsSheetName}'";
+
+        // Track first occurrence of each catalog number for shared pricing
+        var catalogFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        int row = 2;
+        foreach (var f in fixtures)
+        {
+            for (int c = 0; c < 6; c++)
+            {
+                string catNum = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(catNum)) continue;
+
+                // Type, Mfr, Catalog Number
+                ws.Cell(row, WsColType).Value = f.TypeMark;
+                ws.Cell(row, WsColMfr).Value = f.Manufacturer;
+                ws.Cell(row, WsColCatalog).Value = catNum;
+
+                // Qty formula
+                string qtyFormula = BuildQtyFormula(row, csRef);
+                ws.Cell(row, WsColQty).FormulaA1 = qtyFormula;
+
+                // Prev Qty — blank on first export
+                // Delta formula
+                ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
+
+                // Calc dropdown
+                ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
+
+                // Description + Unit Cost (pricing lookup or shared reference)
+                if (catalogFirstRow.TryGetValue(catNum, out int firstRow))
+                {
+                    // Subsequent occurrence — reference first
+                    ws.Cell(row, WsColDesc).FormulaA1 = $"I{firstRow}";
+                    ws.Cell(row, WsColUnitCost).FormulaA1 = $"J{firstRow}";
+                    ws.Cell(row, WsColMarkup).FormulaA1 = $"K{firstRow}";
+                    ws.Cell(row, WsColTariff).FormulaA1 = $"L{firstRow}";
+                    ws.Cell(row, WsColAdder).FormulaA1 = $"M{firstRow}";
+                }
+                else
+                {
+                    catalogFirstRow[catNum] = row;
+                    if (pricing != null && pricing.TryGetValue(catNum, out var pe))
+                    {
+                        ws.Cell(row, WsColDesc).Value = pe.Description;
+                        ws.Cell(row, WsColUnitCost).Value = pe.Cost;
+                    }
+                }
+
+                row++;
+            }
+        }
+
+        // Column widths
+        ws.Column(WsColType).AdjustToContents();
+        ws.Column(WsColMfr).AdjustToContents();
+        ws.Column(WsColCatalog).AdjustToContents();
+        ws.Column(WsColQty).Width = 8;
+        ws.Column(WsColPrevQty).Width = 10;
+        ws.Column(WsColDelta).Width = 6;
+        ws.Column(WsColCalc).Width = 10;
+        ws.Column(WsColPhase).Width = 10;
+        ws.Column(WsColDesc).AdjustToContents();
+        ws.Column(WsColUnitCost).Width = 12;
+        ws.Column(WsColMarkup).Width = 10;
+        ws.Column(WsColTariff).Width = 10;
+        ws.Column(WsColAdder).Width = 10;
+
+        // Format currency columns
+        ws.Column(WsColUnitCost).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(WsColMarkup).Style.NumberFormat.Format = "0%";
+        ws.Column(WsColTariff).Style.NumberFormat.Format = "0%";
+        ws.Column(WsColAdder).Style.NumberFormat.Format = "$#,##0.00";
+
+        // Sheet protection — lock TurboSuite columns (A-F), unlock user columns (G-M)
+        for (int r = 2; r < row; r++)
+        {
+            for (int col = WsColCalc; col <= WsColAdder; col++)
+                ws.Cell(r, col).Style.Protection.SetLocked(false);
+        }
+        ws.Protect();
+    }
+
+    private static string BuildQtyFormula(int row, string csRef)
+    {
+        // VLOOKUP indices: Col 9=Count, Col 10=LinearLength, Col 11=ReelLength, Col 12=ChannelLength
+        return $"IF(G{row}=\"Reel\"," +
+               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,11,FALSE),1),1)," +
+               $"IF(G{row}=\"Channel\"," +
+               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,12,FALSE),1),1)," +
+               $"IF(G{row}=\"End Cap\"," +
+               $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)," +
+               $"IF(G{row}=\"Clip\"," +
+               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/1.75,1)," +
+               $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)))))";
+    }
+
+    #endregion
+
+    #region Quote Sheet
+
+    private static void BuildQuoteSheet(IXLWorkbook wb)
+    {
+        var ws = wb.Worksheets.Add("Quote");
+
+        if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
+            return;
+
+        // Header area — merge across all columns and center
+        ws.Range("A1:I1").Merge();
+        ws.Cell("A1").FormulaA1 = "Cover!B6";
+        ws.Cell("A1").Style.Font.Bold = true;
+        ws.Cell("A1").Style.Font.FontSize = 16;
+        ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Range("A2:I2").Merge();
+        ws.Cell("A2").FormulaA1 = "\"PRODUCT PRICING \"&Cover!B11";
+        ws.Cell("A2").Style.Font.Bold = true;
+        ws.Cell("A2").Style.Font.FontSize = 12;
+        ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Range("A3:I3").Merge();
+        ws.Cell("A3").Value = "ANY SUBSTITUTIONS MUST BE APPROVED BY CDLTG";
+        ws.Cell("A3").Style.Font.FontColor = XLColor.Red;
+        ws.Cell("A3").Style.Font.Bold = true;
+        ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Range("A4:I4").Merge();
+        ws.Cell("A4").Value = "ALL PRICING BELOW IS VALID FOR 5 BUSINESS DAYS";
+        ws.Cell("A4").Style.Font.FontColor = XLColor.Red;
+        ws.Cell("A4").Style.Font.Bold = true;
+        ws.Cell("A4").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        // Column headers at row 6
+        int headerRow = 6;
+        ws.Cell(headerRow, 1).Value = "Type";
+        ws.Cell(headerRow, 2).Value = "Mfr";
+        ws.Cell(headerRow, 3).Value = "Catalog Number";
+        ws.Cell(headerRow, 4).Value = "Description";
+        ws.Cell(headerRow, 5).Value = "Qty";
+        ws.Cell(headerRow, 6).Value = "Δ";
+        ws.Cell(headerRow, 7).Value = "Phase";
+        ws.Cell(headerRow, 8).Value = "Sell Ea.";
+        ws.Cell(headerRow, 9).Value = "Sell Ext.";
+
+        var qHeaderRange = ws.Range(headerRow, 1, headerRow, 9);
+        qHeaderRange.Style.Font.Bold = true;
+        qHeaderRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+        qHeaderRange.Style.Font.FontColor = XLColor.White;
+
+        // Find data range in Worksheet
+        int lastWsRow = wsSheet.LastRowUsed()?.RowNumber() ?? 1;
+        if (lastWsRow <= 1) return; // no data
+
+        int qRow = headerRow + 1;
+        string? prevQuoteType = null;
+        for (int wsRow = 2; wsRow <= lastWsRow; wsRow++)
+        {
+            string wsType = wsSheet.Cell(wsRow, WsColType).GetString();
+
+            // Blank separator row between Type Mark groups
+            if (prevQuoteType != null && !string.Equals(prevQuoteType, wsType, StringComparison.OrdinalIgnoreCase))
+                qRow++;
+            prevQuoteType = wsType;
+
+            ws.Cell(qRow, 1).FormulaA1 = $"Worksheet!A{wsRow}";   // Type
+            ws.Cell(qRow, 2).FormulaA1 = $"Worksheet!B{wsRow}";   // Mfr
+            ws.Cell(qRow, 3).FormulaA1 = $"Worksheet!C{wsRow}";   // Catalog Number
+            ws.Cell(qRow, 4).FormulaA1 = $"Worksheet!I{wsRow}";   // Description
+            ws.Cell(qRow, 5).FormulaA1 = $"Worksheet!D{wsRow}";   // Qty
+            ws.Cell(qRow, 6).FormulaA1 = $"Worksheet!F{wsRow}";   // Delta
+            ws.Cell(qRow, 7).FormulaA1 = $"Worksheet!H{wsRow}";   // Rough-In (hidden)
+            ws.Cell(qRow, 8).FormulaA1 = $"IFERROR((Worksheet!J{wsRow}*(1+Worksheet!K{wsRow})*(1+Worksheet!L{wsRow}))+Worksheet!M{wsRow},0)"; // Sell Ea.
+            ws.Cell(qRow, 9).FormulaA1 = $"H{qRow}*E{qRow}";     // Sell Ext. (local refs within Quote)
+
+            // Wait — Sell Ext should be Sell Ea * Qty. Col H = Sell Ea, Col E = Qty in Quote
+            // Actually that's wrong — H{qRow} is Sell Ea., E{qRow} is Qty. That's correct.
+            // But the formula above references H (Sell Ea.) and E (Qty). Let me verify:
+            // Quote Col 8 = Sell Ea., Quote Col 5 = Qty → Sell Ext = Col8 * Col5
+            // In A1 notation: H{qRow} * E{qRow} — correct.
+
+            qRow++;
+        }
+
+        int dataStart = headerRow + 1;
+        int dataEnd = qRow - 1;
+
+        // Subtotals
+        if (dataEnd >= dataStart)
+        {
+            int subtotalRow = dataEnd + 2;
+
+            // Subtotal — sum of visible Sell Ext. rows
+            ws.Cell(subtotalRow, 8).Value = "Subtotal:";
+            ws.Cell(subtotalRow, 8).Style.Font.Bold = true;
+            ws.Cell(subtotalRow, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            ws.Cell(subtotalRow, 9).FormulaA1 = $"SUBTOTAL(109,I{dataStart}:I{dataEnd})";
+
+            // Freight — user-entered value
+            ws.Cell(subtotalRow + 1, 8).Value = "Freight:";
+            ws.Cell(subtotalRow + 1, 8).Style.Font.Bold = true;
+            ws.Cell(subtotalRow + 1, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            // Leave I cell blank for user to enter freight cost
+
+            // Grand Total = Subtotal + Freight
+            ws.Cell(subtotalRow + 2, 8).Value = "Grand Total:";
+            ws.Cell(subtotalRow + 2, 8).Style.Font.Bold = true;
+            ws.Cell(subtotalRow + 2, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            ws.Cell(subtotalRow + 2, 9).FormulaA1 = $"I{subtotalRow}+I{subtotalRow + 1}";
+
+            // Format totals cells
+            for (int sr = subtotalRow; sr <= subtotalRow + 2; sr++)
+            {
+                ws.Cell(sr, 9).Style.Font.Bold = true;
+                ws.Cell(sr, 9).Style.NumberFormat.Format = "$#,##0.00";
+            }
+        }
+
+        // Hide Phase column (used for filtering only)
+        ws.Column(7).Hide();
+
+        // Format currency columns
+        ws.Column(8).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(9).Style.NumberFormat.Format = "$#,##0.00";
+
+        // Column widths
+        ws.Column(1).AdjustToContents();
+        ws.Column(2).AdjustToContents();
+        ws.Column(3).AdjustToContents();
+        ws.Column(4).AdjustToContents();
+        ws.Column(5).Width = 8;
+        ws.Column(6).Width = 6;
+        ws.Column(7).Width = 10;
+        ws.Column(8).Width = 12;
+        ws.Column(9).Width = 14;
+
+        // Auto-filter on header row
+        if (dataEnd >= dataStart)
+            ws.Range(headerRow, 1, dataEnd, 9).SetAutoFilter();
+
+        // Print setup
+        ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
+        ws.PageSetup.FitToPages(1, 0); // fit width, unlimited height
+        ws.PageSetup.SetRowsToRepeatAtTop(1, headerRow); // repeat header rows
+    }
+
+    #endregion
+
+    #region Changes Sheet
+
+    private static void BuildChangesSheet(IXLWorkbook wb)
+    {
+        var ws = wb.Worksheets.Add("Changes");
+
+        ws.Cell(1, 1).Value = "Date";
+        ws.Cell(1, 2).Value = "Type";
+        ws.Cell(1, 3).Value = "Change";
+        ws.Cell(1, 4).Value = "Old Value";
+        ws.Cell(1, 5).Value = "New Value";
+
+        var headerRange = ws.Range(1, 1, 1, 5);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+        headerRange.Style.Font.FontColor = XLColor.White;
+
+        ws.Column(1).Width = 14;
+        ws.Column(2).Width = 12;
+        ws.Column(3).Width = 18;
+        ws.Column(4).Width = 30;
+        ws.Column(5).Width = 30;
+    }
+
+    #endregion
+
+    #region Update Logic
+
+    private static void UpdateWorksheetSheet(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> fixtures,
+        string countsSheetName,
+        Dictionary<string, PricingEntry>? pricing,
+        List<WorksheetRowData> existingRows,
+        Dictionary<string, CountsFixtureModel>? prevData)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var ws))
+        {
+            // No existing Worksheet — build fresh
+            BuildWorksheetSheet(wb, fixtures, countsSheetName, pricing, null);
+            return;
+        }
+
+        string csRef = $"'{countsSheetName}'";
+
+        // Build lookup of existing rows by (Type, Catalog)
+        var existingByKey = new Dictionary<(string, string), WorksheetRowData>();
+        foreach (var er in existingRows)
+        {
+            var key = (er.Type.ToUpperInvariant(), er.Catalog.ToUpperInvariant());
+            existingByKey.TryAdd(key, er);
+        }
+
+        // Build set of new (Type, Catalog) pairs
+        var newTypeMarks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var newKeys = new HashSet<(string, string)>();
+        var newRowEntries = new List<(string Type, string Mfr, string Catalog, int CatPosition)>();
+        foreach (var f in fixtures)
+        {
+            newTypeMarks.Add(f.TypeMark);
+            for (int c = 0; c < 6; c++)
+            {
+                string catNum = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(catNum)) continue;
+                var key = (f.TypeMark.ToUpperInvariant(), catNum.ToUpperInvariant());
+                newKeys.Add(key);
+                newRowEntries.Add((f.TypeMark, f.Manufacturer, catNum, c));
+            }
+        }
+
+        // Determine which existing types existed before (from prev data)
+        var prevTypeMarks = prevData?.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                            ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Unprotect before editing
+        ws.Unprotect();
+
+        // Clear all existing styling (highlights from prior update)
+        int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+        if (lastRow > 1)
+        {
+            var dataRange = ws.Range(2, 1, lastRow, WsColAdder);
+            dataRange.Style.Fill.BackgroundColor = XLColor.NoColor;
+            dataRange.Style.Font.Strikethrough = false;
+        }
+
+        // Step 1: Delete rows that were already marked as removed (red strikethrough)
+        // We detect these by checking if the row's (Type, Catalog) is not in new data
+        // AND was already not in prev data (meaning it was marked red last time)
+        // For simplicity on first implementation: just delete rows not in new data
+        // that have strikethrough font
+        for (int r = lastRow; r >= 2; r--)
+        {
+            string rowType = ws.Cell(r, WsColType).GetString();
+            string rowCat = ws.Cell(r, WsColCatalog).GetString();
+            var key = (rowType.ToUpperInvariant(), rowCat.ToUpperInvariant());
+
+            if (!newKeys.Contains(key) && ws.Cell(r, WsColType).Style.Font.Strikethrough)
+            {
+                ws.Row(r).Delete();
+            }
+        }
+
+        // Re-read existing rows after deletions
+        existingRows = ReadExistingWorksheetRows(wb);
+        existingByKey.Clear();
+        foreach (var er in existingRows)
+        {
+            var key = (er.Type.ToUpperInvariant(), er.Catalog.ToUpperInvariant());
+            existingByKey.TryAdd(key, er);
+        }
+
+        // Step 2: Clear existing data rows and rebuild
+        lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+        if (lastRow > 1)
+        {
+            for (int r = lastRow; r >= 2; r--)
+                ws.Row(r).Delete();
+        }
+
+        // Step 3: Write all rows sorted by Type Mark then catalog position
+        newRowEntries.Sort((a, b) =>
+        {
+            int cmp = string.Compare(a.Type, b.Type, StringComparison.OrdinalIgnoreCase);
+            return cmp != 0 ? cmp : a.CatPosition.CompareTo(b.CatPosition);
+        });
+
+        // Also include removed rows (in existing but not in new)
+        var removedEntries = new List<(string Type, string Mfr, string Catalog)>();
+        foreach (var er in existingRows)
+        {
+            var key = (er.Type.ToUpperInvariant(), er.Catalog.ToUpperInvariant());
+            if (!newKeys.Contains(key))
+                removedEntries.Add((er.Type, er.Mfr, er.Catalog));
+        }
+
+        var catalogFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int row = 2;
+
+        // Write new/matched rows
+        foreach (var (type, mfr, catalog, _) in newRowEntries)
+        {
+            var key = (type.ToUpperInvariant(), catalog.ToUpperInvariant());
+            var existing = existingByKey.GetValueOrDefault(key);
+            bool isNewType = !prevTypeMarks.Contains(type);
+            bool isNewRow = existing == null;
+
+            ws.Cell(row, WsColType).Value = type;
+            ws.Cell(row, WsColMfr).Value = mfr;
+            ws.Cell(row, WsColCatalog).Value = catalog;
+            ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
+            ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
+            ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
+
+            // Prev Qty from previous Counts sheet
+            if (prevData != null && prevData.TryGetValue(type, out var prevFixture))
+                ws.Cell(row, WsColPrevQty).Value = prevFixture.Count;
+
+            if (existing != null)
+            {
+                // Preserve user columns
+                ws.Cell(row, WsColCalc).Value = existing.Calc;
+                ws.Cell(row, WsColPhase).Value = existing.Phase;
+
+                // Shared pricing logic
+                WritePricingCells(ws, row, catalog, catalogFirstRow, pricing,
+                    existing.Description, existing.UnitCost, existing.Markup, existing.Tariff, existing.Adder,
+                    existing.DescIsFormula, existing.CostIsFormula, existing.MarkupIsFormula, existing.TariffIsFormula, existing.AdderIsFormula,
+                    isNewCatalog: false);
+
+                // Highlight changes
+                if (existing.Mfr != mfr)
+                    ws.Cell(row, WsColMfr).Style.Fill.BackgroundColor = YellowFill;
+            }
+            else
+            {
+                // New row
+                WritePricingCells(ws, row, catalog, catalogFirstRow, pricing,
+                    null, null, null, null, null, false, false, false, false, false, isNewCatalog: true);
+
+                // Highlight: green if entire type is new, yellow if just a new catalog on existing type
+                var fillColor = isNewType ? GreenFill : YellowFill;
+                for (int col = 1; col <= WsColAdder; col++)
+                    ws.Cell(row, col).Style.Fill.BackgroundColor = fillColor;
+            }
+
+            row++;
+        }
+
+        // Write removed rows with red strikethrough
+        foreach (var (type, mfr, catalog) in removedEntries)
+        {
+            var key = (type.ToUpperInvariant(), catalog.ToUpperInvariant());
+            var existing = existingByKey.GetValueOrDefault(key);
+
+            ws.Cell(row, WsColType).Value = type;
+            ws.Cell(row, WsColMfr).Value = mfr;
+            ws.Cell(row, WsColCatalog).Value = catalog;
+
+            if (existing != null)
+            {
+                ws.Cell(row, WsColCalc).Value = existing.Calc;
+                ws.Cell(row, WsColPhase).Value = existing.Phase;
+                ws.Cell(row, WsColDesc).Value = existing.Description ?? "";
+                ws.Cell(row, WsColUnitCost).Value = existing.UnitCost ?? "";
+                ws.Cell(row, WsColMarkup).Value = existing.Markup ?? "";
+                ws.Cell(row, WsColTariff).Value = existing.Tariff ?? "";
+                ws.Cell(row, WsColAdder).Value = existing.Adder ?? "";
+            }
+
+            // Red fill + strikethrough
+            for (int col = 1; col <= WsColAdder; col++)
+            {
+                ws.Cell(row, col).Style.Fill.BackgroundColor = RedFill;
+                ws.Cell(row, col).Style.Font.Strikethrough = true;
+            }
+
+            row++;
+        }
+
+        // Re-apply protection
+        for (int r = 2; r < row; r++)
+        {
+            for (int col = WsColCalc; col <= WsColAdder; col++)
+                ws.Cell(r, col).Style.Protection.SetLocked(false);
+        }
+        ws.Protect();
+    }
+
+    private static void WritePricingCells(
+        IXLWorksheet ws, int row, string catalog,
+        Dictionary<string, int> catalogFirstRow,
+        Dictionary<string, PricingEntry>? pricing,
+        object? existingDesc, object? existingCost, object? existingMarkup, object? existingTariff, object? existingAdder,
+        bool descIsFormula, bool costIsFormula, bool markupIsFormula, bool tariffIsFormula, bool adderIsFormula,
+        bool isNewCatalog)
+    {
+        if (catalogFirstRow.TryGetValue(catalog, out int firstRow))
+        {
+            // Subsequent occurrence — write formula references unless user overwrote with literal
+            if (isNewCatalog || descIsFormula)
+                ws.Cell(row, WsColDesc).FormulaA1 = $"I{firstRow}";
+            else if (existingDesc != null)
+                ws.Cell(row, WsColDesc).Value = existingDesc.ToString() ?? "";
+
+            if (isNewCatalog || costIsFormula)
+                ws.Cell(row, WsColUnitCost).FormulaA1 = $"J{firstRow}";
+            else if (existingCost != null)
+                ws.Cell(row, WsColUnitCost).Value = existingCost.ToString() ?? "";
+
+            if (isNewCatalog || markupIsFormula)
+                ws.Cell(row, WsColMarkup).FormulaA1 = $"K{firstRow}";
+            else if (existingMarkup != null)
+                ws.Cell(row, WsColMarkup).Value = existingMarkup.ToString() ?? "";
+
+            if (isNewCatalog || tariffIsFormula)
+                ws.Cell(row, WsColTariff).FormulaA1 = $"L{firstRow}";
+            else if (existingTariff != null)
+                ws.Cell(row, WsColTariff).Value = existingTariff.ToString() ?? "";
+
+            if (isNewCatalog || adderIsFormula)
+                ws.Cell(row, WsColAdder).FormulaA1 = $"M{firstRow}";
+            else if (existingAdder != null)
+                ws.Cell(row, WsColAdder).Value = existingAdder.ToString() ?? "";
+        }
+        else
+        {
+            catalogFirstRow[catalog] = row;
+            if (!isNewCatalog && existingDesc != null)
+            {
+                // Preserve existing values
+                ws.Cell(row, WsColDesc).Value = existingDesc.ToString() ?? "";
+                if (existingCost != null) ws.Cell(row, WsColUnitCost).Value = existingCost.ToString() ?? "";
+                if (existingMarkup != null) ws.Cell(row, WsColMarkup).Value = existingMarkup.ToString() ?? "";
+                if (existingTariff != null) ws.Cell(row, WsColTariff).Value = existingTariff.ToString() ?? "";
+                if (existingAdder != null) ws.Cell(row, WsColAdder).Value = existingAdder.ToString() ?? "";
+            }
+            else if (pricing != null && pricing.TryGetValue(catalog, out var pe))
+            {
+                ws.Cell(row, WsColDesc).Value = pe.Description;
+                ws.Cell(row, WsColUnitCost).Value = pe.Cost;
+            }
+        }
+    }
+
+    private static void AppendChanges(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> fixtures,
+        Dictionary<string, CountsFixtureModel> prevData)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Changes", out var ws))
+            return;
+
+        string dateStr = DateTime.Now.ToString("yyyy.MM.dd");
+        int row = (ws.LastRowUsed()?.RowNumber() ?? 1) + 1;
+
+        var newByType = fixtures.ToDictionary(f => f.TypeMark, StringComparer.OrdinalIgnoreCase);
+
+        // Added types
+        foreach (var f in fixtures)
+        {
+            if (!prevData.ContainsKey(f.TypeMark))
+            {
+                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Added", "", "");
+            }
+        }
+
+        // Removed types
+        foreach (var kvp in prevData)
+        {
+            if (!newByType.ContainsKey(kvp.Key))
+            {
+                WriteChangeRow(ws, ref row, dateStr, kvp.Key, "Removed", "", "");
+            }
+        }
+
+        // Changed values
+        foreach (var f in fixtures)
+        {
+            if (!prevData.TryGetValue(f.TypeMark, out var prev)) continue;
+
+            if (f.Count != prev.Count)
+                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Qty", prev.Count.ToString(), f.Count.ToString());
+
+            if (f.Manufacturer != prev.Manufacturer)
+                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Mfr", prev.Manufacturer, f.Manufacturer);
+
+            if (Math.Abs(f.LinearLength - prev.LinearLength) > 0.01)
+                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Linear Length",
+                    prev.LinearLength.ToString("F2"), f.LinearLength.ToString("F2"));
+
+            for (int c = 0; c < 6; c++)
+            {
+                string oldCat = prev.CatalogNumbers[c] ?? "";
+                string newCat = f.CatalogNumbers[c] ?? "";
+                if (oldCat != newCat)
+                    WriteChangeRow(ws, ref row, dateStr, f.TypeMark, $"Catalog Number {c + 1}", oldCat, newCat);
+            }
+        }
+    }
+
+    private static void WriteChangeRow(IXLWorksheet ws, ref int row, string date, string type, string change, string oldVal, string newVal)
+    {
+        ws.Cell(row, 1).Value = date;
+        ws.Cell(row, 2).Value = type;
+        ws.Cell(row, 3).Value = change;
+        ws.Cell(row, 4).Value = oldVal;
+        ws.Cell(row, 5).Value = newVal;
+        row++;
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static string ResolveCountsSheetName(IXLWorkbook wb, string dateString)
+    {
+        string baseName = $"Counts {dateString}";
+        if (!wb.Worksheets.TryGetWorksheet(baseName, out _))
+            return baseName;
+
+        for (int i = 2; i < 100; i++)
+        {
+            string name = $"{baseName} ({i})";
+            if (!wb.Worksheets.TryGetWorksheet(name, out _))
+                return name;
+        }
+        return $"{baseName} ({Guid.NewGuid().ToString()[..4]})";
+    }
+
+    private static IXLWorksheet? FindLatestCountsSheet(IXLWorkbook wb)
+    {
+        return wb.Worksheets
+            .Where(ws => ws.Name.StartsWith("Counts ", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(ws => ws.Name)
+            .FirstOrDefault();
+    }
+
+    private static Dictionary<string, CountsFixtureModel> ReadCountsSheetData(IXLWorksheet ws)
+    {
+        var result = new Dictionary<string, CountsFixtureModel>(StringComparer.OrdinalIgnoreCase);
+        int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+
+        for (int r = 2; r <= lastRow; r++)
+        {
+            string typeMark = ws.Cell(r, CsColType).GetString();
+            if (string.IsNullOrWhiteSpace(typeMark)) continue;
+
+            var model = new CountsFixtureModel
+            {
+                TypeMark = typeMark,
+                Manufacturer = ws.Cell(r, CsColMfr).GetString(),
+                CatalogNumbers = new string[6],
+                Count = (int)ws.Cell(r, CsColCount).GetDouble(),
+                LinearLength = ws.Cell(r, CsColLinear).GetDouble(),
+                ReelLength = ws.Cell(r, CsColReel).GetDouble(),
+                ChannelLength = ws.Cell(r, CsColChannel).GetDouble(),
+            };
+
+            for (int c = 0; c < 6; c++)
+                model.CatalogNumbers[c] = ws.Cell(r, CsColCat1 + c).GetString();
+
+            result[typeMark] = model;
+        }
+
+        return result;
+    }
+
+    private static string ReadPricingPathFromCover(IXLWorkbook wb)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Cover", out var ws))
+            return DefaultPricingPath;
+
+        return ws.Cell("B20").GetString();
+    }
+
+    /// <summary>
+    /// Reads the notify email address from the Cover sheet config area of a saved workbook.
+    /// </summary>
+    public static string ReadNotifyEmailFromCover(string workbookPath)
+    {
+        try
+        {
+            using var wb = new XLWorkbook(workbookPath);
+            if (!wb.Worksheets.TryGetWorksheet("Cover", out var ws))
+                return string.Empty;
+            return ws.Cell("B21").GetString();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static List<WorksheetRowData> ReadExistingWorksheetRows(IXLWorkbook wb)
+    {
+        var result = new List<WorksheetRowData>();
+        if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var ws))
+            return result;
+
+        int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+        for (int r = 2; r <= lastRow; r++)
+        {
+            var cell = ws.Cell(r, WsColType);
+            string type = cell.GetString();
+            if (string.IsNullOrWhiteSpace(type)) continue;
+
+            result.Add(new WorksheetRowData
+            {
+                Row = r,
+                Type = type,
+                Mfr = ws.Cell(r, WsColMfr).GetString(),
+                Catalog = ws.Cell(r, WsColCatalog).GetString(),
+                Calc = ws.Cell(r, WsColCalc).GetString(),
+                Phase = ws.Cell(r, WsColPhase).GetString(),
+                Description = ws.Cell(r, WsColDesc).HasFormula ? null : ws.Cell(r, WsColDesc).GetString(),
+                UnitCost = ws.Cell(r, WsColUnitCost).HasFormula ? null : ws.Cell(r, WsColUnitCost).GetString(),
+                Markup = ws.Cell(r, WsColMarkup).HasFormula ? null : ws.Cell(r, WsColMarkup).GetString(),
+                Tariff = ws.Cell(r, WsColTariff).HasFormula ? null : ws.Cell(r, WsColTariff).GetString(),
+                Adder = ws.Cell(r, WsColAdder).HasFormula ? null : ws.Cell(r, WsColAdder).GetString(),
+                DescIsFormula = ws.Cell(r, WsColDesc).HasFormula,
+                CostIsFormula = ws.Cell(r, WsColUnitCost).HasFormula,
+                MarkupIsFormula = ws.Cell(r, WsColMarkup).HasFormula,
+                TariffIsFormula = ws.Cell(r, WsColTariff).HasFormula,
+                AdderIsFormula = ws.Cell(r, WsColAdder).HasFormula,
+                IsStrikethrough = ws.Cell(r, WsColType).Style.Font.Strikethrough,
+            });
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, PricingEntry>? ReadPricingWorkbook(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return null;
+
+        try
+        {
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheets.TryGetWorksheet("Pricing", out var pricingSheet)
+                ? pricingSheet
+                : wb.Worksheets.First();
+
+            var result = new Dictionary<string, PricingEntry>(StringComparer.OrdinalIgnoreCase);
+            int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+
+            for (int r = 2; r <= lastRow; r++)
+            {
+                string catalogNumber = ws.Cell(r, 1).GetString();
+                if (string.IsNullOrWhiteSpace(catalogNumber)) continue;
+
+                result.TryAdd(catalogNumber, new PricingEntry
+                {
+                    Description = ws.Cell(r, 2).GetString(),
+                    Cost = (decimal)ws.Cell(r, 3).GetDouble(),
+                });
+            }
+
+            return result;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    #endregion
+
+    #region Internal Types
+
+    private class PricingEntry
+    {
+        public string Description { get; init; } = string.Empty;
+        public decimal Cost { get; init; }
+    }
+
+    internal class WorksheetRowData
+    {
+        public int Row { get; init; }
+        public string Type { get; init; } = string.Empty;
+        public string Mfr { get; init; } = string.Empty;
+        public string Catalog { get; init; } = string.Empty;
+        public string Calc { get; init; } = string.Empty;
+        public string Phase { get; init; } = string.Empty;
+        public string? Description { get; init; }
+        public string? UnitCost { get; init; }
+        public string? Markup { get; init; }
+        public string? Tariff { get; init; }
+        public string? Adder { get; init; }
+        public bool DescIsFormula { get; init; }
+        public bool CostIsFormula { get; init; }
+        public bool MarkupIsFormula { get; init; }
+        public bool TariffIsFormula { get; init; }
+        public bool AdderIsFormula { get; init; }
+        public bool IsStrikethrough { get; init; }
+    }
+
+    #endregion
+}
