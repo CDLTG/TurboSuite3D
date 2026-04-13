@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Xml.Linq;
 using ClosedXML.Excel;
 using TurboSuite.Docs.Models;
 
@@ -74,13 +76,21 @@ public static class CountsWorkbookService
         // 3. Quote
         BuildQuoteSheet(wb);
 
-        // 4. Changes
+        // 4–6. Phase sheets
+        for (int p = 1; p <= 3; p++)
+            BuildPhaseQuoteSheet(wb, p);
+
+        // 7. Changes
         BuildChangesSheet(wb);
 
-        // 5. Counts (dated)
+        // 8. Counts (dated)
         BuildCountsSheet(wb, fixtures, countsSheetName);
 
         wb.SaveAs(outputPath);
+
+        // Patch dynamic array metadata for Phase sheets (ClosedXML doesn't write XLDAPR)
+        var phaseNames = Enumerable.Range(1, 3).Select(p => $"Phase {p}").ToList();
+        PatchDynamicArrayMetadata(outputPath, phaseNames);
     }
 
     /// <summary>
@@ -112,16 +122,27 @@ public static class CountsWorkbookService
         // Update Worksheet
         UpdateWorksheetSheet(wb, fixtures, countsSheetName, pricing, existingRows, prevData);
 
-        // Rebuild Quote sheet
+        // Rebuild Quote and Phase sheets
         if (wb.Worksheets.TryGetWorksheet("Quote", out var oldQuote))
             wb.Worksheets.Delete("Quote");
         BuildQuoteSheet(wb);
+
+        for (int p = 1; p <= 3; p++)
+        {
+            if (wb.Worksheets.TryGetWorksheet($"Phase {p}", out _))
+                wb.Worksheets.Delete($"Phase {p}");
+            BuildPhaseQuoteSheet(wb, p);
+        }
 
         // Append changes
         if (prevData != null)
             AppendChanges(wb, fixtures, prevData);
 
         wb.Save();
+
+        // Patch dynamic array metadata for Phase sheets (ClosedXML doesn't write XLDAPR)
+        var phaseNames = Enumerable.Range(1, 3).Select(p => $"Phase {p}").ToList();
+        PatchDynamicArrayMetadata(existingPath, phaseNames);
     }
 
     #region Cover Sheet
@@ -371,25 +392,25 @@ public static class CountsWorkbookService
             return;
 
         // Header area — merge across all columns and center
-        ws.Range("A1:I1").Merge();
+        ws.Range("A1:H1").Merge();
         ws.Cell("A1").FormulaA1 = "Cover!B6";
         ws.Cell("A1").Style.Font.Bold = true;
         ws.Cell("A1").Style.Font.FontSize = 16;
         ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-        ws.Range("A2:I2").Merge();
+        ws.Range("A2:H2").Merge();
         ws.Cell("A2").FormulaA1 = "\"PRODUCT PRICING \"&Cover!B11";
         ws.Cell("A2").Style.Font.Bold = true;
         ws.Cell("A2").Style.Font.FontSize = 12;
         ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-        ws.Range("A3:I3").Merge();
+        ws.Range("A3:H3").Merge();
         ws.Cell("A3").Value = "ANY SUBSTITUTIONS MUST BE APPROVED BY CDLTG";
         ws.Cell("A3").Style.Font.FontColor = XLColor.Red;
         ws.Cell("A3").Style.Font.Bold = true;
         ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-        ws.Range("A4:I4").Merge();
+        ws.Range("A4:H4").Merge();
         ws.Cell("A4").Value = "ALL PRICING BELOW IS VALID FOR 5 BUSINESS DAYS";
         ws.Cell("A4").Style.Font.FontColor = XLColor.Red;
         ws.Cell("A4").Style.Font.Bold = true;
@@ -403,11 +424,10 @@ public static class CountsWorkbookService
         ws.Cell(headerRow, 4).Value = "Description";
         ws.Cell(headerRow, 5).Value = "Qty";
         ws.Cell(headerRow, 6).Value = "Δ";
-        ws.Cell(headerRow, 7).Value = "Phase";
-        ws.Cell(headerRow, 8).Value = "Sell Ea.";
-        ws.Cell(headerRow, 9).Value = "Sell Ext.";
+        ws.Cell(headerRow, 7).Value = "Sell Ea.";
+        ws.Cell(headerRow, 8).Value = "Sell Ext.";
 
-        var qHeaderRange = ws.Range(headerRow, 1, headerRow, 9);
+        var qHeaderRange = ws.Range(headerRow, 1, headerRow, 8);
         qHeaderRange.Style.Font.Bold = true;
         qHeaderRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
         qHeaderRange.Style.Font.FontColor = XLColor.White;
@@ -430,18 +450,11 @@ public static class CountsWorkbookService
             ws.Cell(qRow, 1).FormulaA1 = $"Worksheet!A{wsRow}";   // Type
             ws.Cell(qRow, 2).FormulaA1 = $"Worksheet!B{wsRow}";   // Mfr
             ws.Cell(qRow, 3).FormulaA1 = $"Worksheet!C{wsRow}";   // Catalog Number
-            ws.Cell(qRow, 4).FormulaA1 = $"Worksheet!I{wsRow}";   // Description
+            ws.Cell(qRow, 4).FormulaA1 = $"IF(Worksheet!I{wsRow}=0,\"\",Worksheet!I{wsRow})";   // Description
             ws.Cell(qRow, 5).FormulaA1 = $"Worksheet!D{wsRow}";   // Qty
             ws.Cell(qRow, 6).FormulaA1 = $"Worksheet!F{wsRow}";   // Delta
-            ws.Cell(qRow, 7).FormulaA1 = $"Worksheet!H{wsRow}";   // Rough-In (hidden)
-            ws.Cell(qRow, 8).FormulaA1 = $"IFERROR((Worksheet!J{wsRow}*(1+Worksheet!K{wsRow})*(1+Worksheet!L{wsRow}))+Worksheet!M{wsRow},0)"; // Sell Ea.
-            ws.Cell(qRow, 9).FormulaA1 = $"H{qRow}*E{qRow}";     // Sell Ext. (local refs within Quote)
-
-            // Wait — Sell Ext should be Sell Ea * Qty. Col H = Sell Ea, Col E = Qty in Quote
-            // Actually that's wrong — H{qRow} is Sell Ea., E{qRow} is Qty. That's correct.
-            // But the formula above references H (Sell Ea.) and E (Qty). Let me verify:
-            // Quote Col 8 = Sell Ea., Quote Col 5 = Qty → Sell Ext = Col8 * Col5
-            // In A1 notation: H{qRow} * E{qRow} — correct.
+            ws.Cell(qRow, 7).FormulaA1 = $"IFERROR((Worksheet!J{wsRow}*(1+Worksheet!K{wsRow})*(1+Worksheet!L{wsRow}))+Worksheet!M{wsRow},0)"; // Sell Ea.
+            ws.Cell(qRow, 8).FormulaA1 = $"G{qRow}*E{qRow}";     // Sell Ext. = Sell Ea. * Qty
 
             qRow++;
         }
@@ -455,37 +468,34 @@ public static class CountsWorkbookService
             int subtotalRow = dataEnd + 2;
 
             // Subtotal — sum of visible Sell Ext. rows
-            ws.Cell(subtotalRow, 8).Value = "Subtotal:";
-            ws.Cell(subtotalRow, 8).Style.Font.Bold = true;
-            ws.Cell(subtotalRow, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-            ws.Cell(subtotalRow, 9).FormulaA1 = $"SUBTOTAL(109,I{dataStart}:I{dataEnd})";
+            ws.Cell(subtotalRow, 7).Value = "Subtotal:";
+            ws.Cell(subtotalRow, 7).Style.Font.Bold = true;
+            ws.Cell(subtotalRow, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            ws.Cell(subtotalRow, 8).FormulaA1 = $"SUBTOTAL(109,H{dataStart}:H{dataEnd})";
 
             // Freight — user-entered value
-            ws.Cell(subtotalRow + 1, 8).Value = "Freight:";
-            ws.Cell(subtotalRow + 1, 8).Style.Font.Bold = true;
-            ws.Cell(subtotalRow + 1, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-            // Leave I cell blank for user to enter freight cost
+            ws.Cell(subtotalRow + 1, 7).Value = "Freight:";
+            ws.Cell(subtotalRow + 1, 7).Style.Font.Bold = true;
+            ws.Cell(subtotalRow + 1, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            // Leave H cell blank for user to enter freight cost
 
             // Grand Total = Subtotal + Freight
-            ws.Cell(subtotalRow + 2, 8).Value = "Grand Total:";
-            ws.Cell(subtotalRow + 2, 8).Style.Font.Bold = true;
-            ws.Cell(subtotalRow + 2, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-            ws.Cell(subtotalRow + 2, 9).FormulaA1 = $"I{subtotalRow}+I{subtotalRow + 1}";
+            ws.Cell(subtotalRow + 2, 7).Value = "Grand Total:";
+            ws.Cell(subtotalRow + 2, 7).Style.Font.Bold = true;
+            ws.Cell(subtotalRow + 2, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            ws.Cell(subtotalRow + 2, 8).FormulaA1 = $"H{subtotalRow}+H{subtotalRow + 1}";
 
             // Format totals cells
             for (int sr = subtotalRow; sr <= subtotalRow + 2; sr++)
             {
-                ws.Cell(sr, 9).Style.Font.Bold = true;
-                ws.Cell(sr, 9).Style.NumberFormat.Format = "$#,##0.00";
+                ws.Cell(sr, 8).Style.Font.Bold = true;
+                ws.Cell(sr, 8).Style.NumberFormat.Format = "$#,##0.00";
             }
         }
 
-        // Hide Phase column (used for filtering only)
-        ws.Column(7).Hide();
-
         // Format currency columns
+        ws.Column(7).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(8).Style.NumberFormat.Format = "$#,##0.00";
-        ws.Column(9).Style.NumberFormat.Format = "$#,##0.00";
 
         // Column widths
         ws.Column(1).AdjustToContents();
@@ -494,18 +504,130 @@ public static class CountsWorkbookService
         ws.Column(4).AdjustToContents();
         ws.Column(5).Width = 8;
         ws.Column(6).Width = 6;
-        ws.Column(7).Width = 10;
-        ws.Column(8).Width = 12;
-        ws.Column(9).Width = 14;
+        ws.Column(7).Width = 12;
+        ws.Column(8).Width = 14;
 
         // Auto-filter on header row
         if (dataEnd >= dataStart)
-            ws.Range(headerRow, 1, dataEnd, 9).SetAutoFilter();
+            ws.Range(headerRow, 1, dataEnd, 8).SetAutoFilter();
 
         // Print setup
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
         ws.PageSetup.FitToPages(1, 0); // fit width, unlimited height
         ws.PageSetup.SetRowsToRepeatAtTop(1, headerRow); // repeat header rows
+    }
+
+    private static void BuildPhaseQuoteSheet(IXLWorkbook wb, int phase)
+    {
+        string sheetName = $"Phase {phase}";
+        var ws = wb.Worksheets.Add(sheetName);
+
+        if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
+            return;
+
+        // Header area — 7 columns (no Δ or Phase)
+        ws.Range("A1:G1").Merge();
+        ws.Cell("A1").FormulaA1 = "Cover!B6";
+        ws.Cell("A1").Style.Font.Bold = true;
+        ws.Cell("A1").Style.Font.FontSize = 16;
+        ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Range("A2:G2").Merge();
+        ws.Cell("A2").FormulaA1 = $"\"PHASE {phase} PRODUCT PRICING \"&Cover!B11";
+        ws.Cell("A2").Style.Font.Bold = true;
+        ws.Cell("A2").Style.Font.FontSize = 12;
+        ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Range("A3:G3").Merge();
+        ws.Cell("A3").Value = "ANY SUBSTITUTIONS MUST BE APPROVED BY CDLTG";
+        ws.Cell("A3").Style.Font.FontColor = XLColor.Red;
+        ws.Cell("A3").Style.Font.Bold = true;
+        ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Range("A4:G4").Merge();
+        ws.Cell("A4").Value = "ALL PRICING BELOW IS VALID FOR 5 BUSINESS DAYS";
+        ws.Cell("A4").Style.Font.FontColor = XLColor.Red;
+        ws.Cell("A4").Style.Font.Bold = true;
+        ws.Cell("A4").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        // Column headers at row 6
+        int headerRow = 6;
+        ws.Cell(headerRow, 1).Value = "Type";
+        ws.Cell(headerRow, 2).Value = "Mfr";
+        ws.Cell(headerRow, 3).Value = "Catalog Number";
+        ws.Cell(headerRow, 4).Value = "Description";
+        ws.Cell(headerRow, 5).Value = "Qty";
+        ws.Cell(headerRow, 6).Value = "Sell Ea.";
+        ws.Cell(headerRow, 7).Value = "Sell Ext.";
+
+        var qHeaderRange = ws.Range(headerRow, 1, headerRow, 7);
+        qHeaderRange.Style.Font.Bold = true;
+        qHeaderRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
+        qHeaderRange.Style.Font.FontColor = XLColor.White;
+
+        int lastWsRow = wsSheet.LastRowUsed()?.RowNumber() ?? 1;
+        if (lastWsRow <= 1) return;
+
+        // Worksheet range helpers
+        string ws_(string col) => $"Worksheet!${col}$2:${col}${lastWsRow}";
+        string cond = $"{ws_("H")}={phase}";
+
+        // Sell Ea. computation from Worksheet pricing columns
+        string sellEa = $"IFERROR(({ws_("J")}*(1+{ws_("K")})*(1+{ws_("L")}))+{ws_("M")},0)";
+
+        // Sell Ext. = Sell Ea. * Qty
+        string sellExt = $"({sellEa})*{ws_("D")}";
+
+        // Subtotal via SUMPRODUCT (always computable, even when FILTER is empty)
+        string subtotal = $"SUMPRODUCT(({cond})*{sellEa}*{ws_("D")})";
+
+        // Data row — single cell per column, each spills downward via dynamic array
+        int dataRow = headerRow + 1;
+
+        // A: Type
+        ws.Cell(dataRow, 1).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({ws_("A")},{cond}),\"\")";
+
+        // B: Mfr
+        ws.Cell(dataRow, 2).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({ws_("B")},{cond}),\"\")";
+
+        // C: Catalog Number
+        ws.Cell(dataRow, 3).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({ws_("C")},{cond}),\"\")";
+
+        // D: Description (blank out 0 values, matching Quote behavior)
+        ws.Cell(dataRow, 4).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER(IF({ws_("I")}=0,\"\",{ws_("I")}),{cond}),\"\")";
+
+        // E: Qty + footer labels via VSTACK
+        ws.Cell(dataRow, 5).FormulaA1 =
+            $"IFERROR(_xlfn.VSTACK(_xlfn._xlws.FILTER({ws_("D")},{cond})"
+            + $",\"\",\"Subtotal:\",\"Freight:\",\"Grand Total:\")"
+            + $",_xlfn.VSTACK(\"Subtotal:\",\"Freight:\",\"Grand Total:\"))";
+
+        // F: Sell Ea.
+        ws.Cell(dataRow, 6).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({sellEa},{cond}),\"\")";
+
+        // G: Sell Ext. + footer values via VSTACK
+        ws.Cell(dataRow, 7).FormulaA1 =
+            $"IFERROR(_xlfn.VSTACK(_xlfn._xlws.FILTER({sellExt},{cond})"
+            + $",\"\",{subtotal},0,{subtotal}+0)"
+            + $",_xlfn.VSTACK({subtotal},0,{subtotal}+0))";
+
+        // Format currency columns
+        ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(7).Style.NumberFormat.Format = "$#,##0.00";
+
+        // Column widths — pull auto-sized widths from Worksheet (FILTER formulas can't auto-size)
+        ws.Column(1).Width = wsSheet.Column(WsColType).Width;
+        ws.Column(2).Width = wsSheet.Column(WsColMfr).Width;
+        ws.Column(3).Width = wsSheet.Column(WsColCatalog).Width;
+        ws.Column(4).Width = wsSheet.Column(WsColDesc).Width;
+        ws.Column(5).Width = 8;
+        ws.Column(6).Width = 12;
+        ws.Column(7).Width = 14;
+
+        // Print setup
+        ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
+        ws.PageSetup.FitToPages(1, 0);
+        ws.PageSetup.SetRowsToRepeatAtTop(1, headerRow);
     }
 
     #endregion
@@ -1046,6 +1168,185 @@ public static class CountsWorkbookService
         public bool TariffIsFormula { get; init; }
         public bool AdderIsFormula { get; init; }
         public bool IsStrikethrough { get; init; }
+    }
+
+    #endregion
+
+    #region Dynamic Array Post-Processing
+
+    /// <summary>
+    /// Patches the saved .xlsx to enable dynamic array spilling for Phase sheet formulas.
+    /// ClosedXML doesn't write the XLDAPR cell metadata that Excel requires, so formulas
+    /// containing FILTER/VSTACK get the implicit intersection operator (@) added on open.
+    /// This method injects xl/metadata.xml with the dynamic array property definition and
+    /// adds cm="1" to the formula cells in each Phase sheet.
+    /// </summary>
+    private static void PatchDynamicArrayMetadata(string filePath, List<string> phaseSheetNames)
+    {
+        XNamespace sml = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        XNamespace ct = "http://schemas.openxmlformats.org/package/2006/content-types";
+        XNamespace rel = "http://schemas.openxmlformats.org/package/2006/relationships";
+        XNamespace orel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        XNamespace xda = "http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray";
+
+        using var archive = ZipFile.Open(filePath, ZipArchiveMode.Update);
+
+        // 1. Add xl/metadata.xml if missing
+        if (archive.GetEntry("xl/metadata.xml") == null)
+        {
+            var metadataXml = new XDocument(
+                new XDeclaration("1.0", "UTF-8", "yes"),
+                new XElement(sml + "metadata",
+                    new XAttribute(XNamespace.Xmlns + "xda", xda),
+                    new XElement(sml + "metadataTypes",
+                        new XAttribute("count", "1"),
+                        new XElement(sml + "metadataType",
+                            new XAttribute("name", "XLDAPR"),
+                            new XAttribute("minSupportedVersion", "120000"),
+                            new XAttribute("copy", "1"),
+                            new XAttribute("pasteAll", "1"),
+                            new XAttribute("pasteValues", "1"),
+                            new XAttribute("merge", "1"),
+                            new XAttribute("splitFirst", "1"),
+                            new XAttribute("rowColShift", "1"),
+                            new XAttribute("clearFormats", "1"),
+                            new XAttribute("clearComments", "1"),
+                            new XAttribute("assign", "1"),
+                            new XAttribute("coerce", "1"),
+                            new XAttribute("cellMeta", "1"))),
+                    new XElement(sml + "futureMetadata",
+                        new XAttribute("name", "XLDAPR"),
+                        new XAttribute("count", "1"),
+                        new XElement(sml + "bk",
+                            new XElement(sml + "extLst",
+                                new XElement(sml + "ext",
+                                    new XAttribute("uri", "{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"),
+                                    new XElement(xda + "dynamicArrayProperties",
+                                        new XAttribute("fDynamic", "1"),
+                                        new XAttribute("fCollapsed", "0")))))),
+                    new XElement(sml + "cellMetadata",
+                        new XAttribute("count", "1"),
+                        new XElement(sml + "bk",
+                            new XElement(sml + "rc",
+                                new XAttribute("t", "1"),
+                                new XAttribute("v", "0"))))));
+
+            var entry = archive.CreateEntry("xl/metadata.xml");
+            using var stream = entry.Open();
+            metadataXml.Save(stream);
+        }
+
+        // 2. Register metadata.xml in [Content_Types].xml
+        var contentTypesEntry = archive.GetEntry("[Content_Types].xml")!;
+        XDocument contentTypes;
+        using (var stream = contentTypesEntry.Open())
+            contentTypes = XDocument.Load(stream);
+
+        bool hasMetadataOverride = contentTypes.Root!.Elements(ct + "Override")
+            .Any(e => e.Attribute("PartName")?.Value == "/xl/metadata.xml");
+        if (!hasMetadataOverride)
+        {
+            contentTypes.Root.Add(new XElement(ct + "Override",
+                new XAttribute("PartName", "/xl/metadata.xml"),
+                new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml")));
+
+            contentTypesEntry.Delete();
+            var newEntry = archive.CreateEntry("[Content_Types].xml");
+            using var stream = newEntry.Open();
+            contentTypes.Save(stream);
+        }
+
+        // 3. Add relationship in xl/_rels/workbook.xml.rels
+        var wbRelsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels")!;
+        XDocument wbRels;
+        using (var stream = wbRelsEntry.Open())
+            wbRels = XDocument.Load(stream);
+
+        const string metadataRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata";
+        bool hasMetadataRel = wbRels.Root!.Elements(rel + "Relationship")
+            .Any(e => e.Attribute("Type")?.Value == metadataRelType);
+        if (!hasMetadataRel)
+        {
+            // Find highest existing rId number
+            int maxId = wbRels.Root.Elements(rel + "Relationship")
+                .Select(e => e.Attribute("Id")?.Value ?? "")
+                .Where(id => id.StartsWith("rId"))
+                .Select(id => int.TryParse(id[3..], out int n) ? n : 0)
+                .DefaultIfEmpty(0).Max();
+
+            wbRels.Root.Add(new XElement(rel + "Relationship",
+                new XAttribute("Id", $"rId{maxId + 1}"),
+                new XAttribute("Type", metadataRelType),
+                new XAttribute("Target", "metadata.xml")));
+
+            wbRelsEntry.Delete();
+            var newEntry = archive.CreateEntry("xl/_rels/workbook.xml.rels");
+            using var stream = newEntry.Open();
+            wbRels.Save(stream);
+        }
+
+        // 4. Find phase sheet files and add cm="1" to formula cells
+        var wbEntry = archive.GetEntry("xl/workbook.xml")!;
+        XDocument workbook;
+        using (var stream = wbEntry.Open())
+            workbook = XDocument.Load(stream);
+
+        // Map sheet names to rIds
+        var sheetRIds = new Dictionary<string, string>();
+        foreach (var sheet in workbook.Root!.Descendants(sml + "sheet"))
+        {
+            string name = sheet.Attribute("name")?.Value ?? "";
+            string rId = sheet.Attribute(orel + "id")?.Value ?? "";
+            if (phaseSheetNames.Contains(name))
+                sheetRIds[name] = rId;
+        }
+
+        // Map rIds to file targets
+        foreach (var sheetName in phaseSheetNames)
+        {
+            if (!sheetRIds.TryGetValue(sheetName, out string? rId)) continue;
+
+            string? target = wbRels.Root.Elements(rel + "Relationship")
+                .FirstOrDefault(e => e.Attribute("Id")?.Value == rId)
+                ?.Attribute("Target")?.Value;
+            if (target == null) continue;
+
+            // Target may be absolute ("/xl/worksheets/...") or relative ("worksheets/...")
+            string entryPath = target.StartsWith("/") ? target[1..] : $"xl/{target}";
+            var sheetEntry = archive.GetEntry(entryPath);
+            if (sheetEntry == null) continue;
+
+            XDocument sheetDoc;
+            using (var stream = sheetEntry.Open())
+                sheetDoc = XDocument.Load(stream);
+
+            // Mark every formula cell as a dynamic array formula
+            foreach (var cell in sheetDoc.Descendants(sml + "c"))
+            {
+                var f = cell.Element(sml + "f");
+                if (f == null) continue;
+
+                // cm="1" on the cell references the XLDAPR cellMetadata entry
+                if (cell.Attribute("cm") == null)
+                    cell.SetAttributeValue("cm", "1");
+
+                // Array formula attributes on the <f> element
+                string cellRef = cell.Attribute("r")?.Value ?? "";
+                if (f.Attribute("t") == null)
+                    f.SetAttributeValue("t", "array");
+                if (f.Attribute("ref") == null)
+                    f.SetAttributeValue("ref", cellRef);
+                if (f.Attribute("aca") == null)
+                    f.SetAttributeValue("aca", "1");
+                if (f.Attribute("ca") == null)
+                    f.SetAttributeValue("ca", "1");
+            }
+
+            sheetEntry.Delete();
+            var newSheetEntry = archive.CreateEntry(entryPath);
+            using var stream2 = newSheetEntry.Open();
+            sheetDoc.Save(stream2);
+        }
     }
 
     #endregion
