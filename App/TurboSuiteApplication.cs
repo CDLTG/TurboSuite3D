@@ -243,7 +243,8 @@ public class TurboSuiteApplication : IExternalApplication
             {
                 MainInstruction = "A new version of TurboSuite is available.",
                 MainContent = $"Current version: {currentVersion}\nNew version: {_pendingUpdateVersion}\n\n" +
-                              "The update will be applied when you close Revit.",
+                              "The update will be applied when you close Revit.\n" +
+                              "Please wait a few seconds before reopening Revit to allow the update to complete.",
                 CommonButtons = TaskDialogCommonButtons.None
             };
 

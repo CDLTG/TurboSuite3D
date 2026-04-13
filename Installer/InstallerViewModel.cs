@@ -147,11 +147,14 @@ public class InstallerViewModel : INotifyPropertyChanged
             StatusText = $"Copied {copyCount} files...";
             ProgressValue = 60;
 
-            // Step 5: Copy updater
+            // Step 5: Copy updater and its runtime files
             StatusText = "Copying updater...";
-            await CopyFileAsync(
-                Path.Combine(_sourceDir, "TurboSuiteUpdater.exe"),
-                Path.Combine(localAppDataFolder, "TurboSuiteUpdater.exe"));
+            foreach (var updaterFile in new[] { "TurboSuiteUpdater.exe", "TurboSuiteUpdater.dll", "TurboSuiteUpdater.runtimeconfig.json" })
+            {
+                var updaterSource = Path.Combine(_sourceDir, updaterFile);
+                if (File.Exists(updaterSource))
+                    await CopyFileAsync(updaterSource, Path.Combine(localAppDataFolder, updaterFile));
+            }
 
             ProgressValue = 70;
 

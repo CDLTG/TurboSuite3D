@@ -86,17 +86,21 @@ Get-ChildItem -Path $mainBinDir -Filter "*.pdb" | ForEach-Object {
 Copy-Item $addinFile -Destination $ServerPath -Force
 Write-Host "  Copied TurboSuite.addin"
 
-# Copy updater (try RID-specific path first, then plain)
-$updaterExe = Join-Path $updaterBinDir "win-x64\TurboSuiteUpdater.exe"
-if (-not (Test-Path $updaterExe)) {
-    $updaterExe = Join-Path $updaterBinDir "TurboSuiteUpdater.exe"
+# Copy updater and its runtime files (try RID-specific path first, then plain)
+$updaterDir = Join-Path $updaterBinDir "win-x64"
+if (-not (Test-Path (Join-Path $updaterDir "TurboSuiteUpdater.exe"))) {
+    $updaterDir = $updaterBinDir
 }
-if (Test-Path $updaterExe) {
-    Copy-Item $updaterExe -Destination $ServerPath -Force
-    Write-Host "  Copied TurboSuiteUpdater.exe"
-} else {
-    Write-Error "TurboSuiteUpdater.exe not found."
-    exit 1
+$updaterFiles = @("TurboSuiteUpdater.exe", "TurboSuiteUpdater.dll", "TurboSuiteUpdater.runtimeconfig.json")
+foreach ($updaterFile in $updaterFiles) {
+    $updaterPath = Join-Path $updaterDir $updaterFile
+    if (Test-Path $updaterPath) {
+        Copy-Item $updaterPath -Destination $ServerPath -Force
+        Write-Host "  Copied $updaterFile"
+    } else {
+        Write-Error "$updaterFile not found at: $updaterPath"
+        exit 1
+    }
 }
 
 # Copy installer files

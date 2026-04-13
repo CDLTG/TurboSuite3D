@@ -14,10 +14,11 @@ if (!isNew) return 0;
 var source = GetArg(args, "--source");
 var dest = GetArg(args, "--dest");
 var versionFile = GetArg(args, "--versionfile");
+var pidArg = GetArg(args, "--pid");
 
 if (source is null || dest is null || versionFile is null)
 {
-    Console.Error.WriteLine("Usage: TurboSuiteUpdater --source <path> --dest <path> --versionfile <path>");
+    Console.Error.WriteLine("Usage: TurboSuiteUpdater --source <path> --dest <path> --versionfile <path> [--pid <revit-pid>]");
     return 1;
 }
 
@@ -27,24 +28,40 @@ if (!Directory.Exists(source))
     return 1;
 }
 
-// Wait for ALL Revit processes to exit (handles multiple instances)
+// Wait for the specific Revit process that launched us, or fall back to waiting for all Revit processes
 var timeout = TimeSpan.FromSeconds(120);
 var sw = Stopwatch.StartNew();
 
-while (sw.Elapsed < timeout)
+if (pidArg is not null && int.TryParse(pidArg, out var pid))
 {
-    var revitProcesses = Process.GetProcessesByName("Revit");
-    if (revitProcesses.Length == 0) break;
-
-    foreach (var p in revitProcesses) p.Dispose();
-    Thread.Sleep(1000);
+    try
+    {
+        var revit = Process.GetProcessById(pid);
+        revit.WaitForExit((int)timeout.TotalMilliseconds);
+        revit.Dispose();
+    }
+    catch (ArgumentException)
+    {
+        // Process already exited
+    }
 }
-
-// If Revit is still running after timeout, abort — don't risk copying over locked files
-if (Process.GetProcessesByName("Revit").Length > 0)
+else
 {
-    Console.Error.WriteLine("Timeout waiting for Revit to exit. Update aborted.");
-    return 1;
+    // Legacy fallback: wait for all Revit processes
+    while (sw.Elapsed < timeout)
+    {
+        var revitProcesses = Process.GetProcessesByName("Revit");
+        if (revitProcesses.Length == 0) break;
+
+        foreach (var p in revitProcesses) p.Dispose();
+        Thread.Sleep(1000);
+    }
+
+    if (Process.GetProcessesByName("Revit").Length > 0)
+    {
+        Console.Error.WriteLine("Timeout waiting for Revit to exit. Update aborted.");
+        return 1;
+    }
 }
 
 try
@@ -52,25 +69,48 @@ try
     if (!Directory.Exists(dest))
         Directory.CreateDirectory(dest);
 
-    // Copy all files except the .complete marker
+    // Files that belong in LocalAppData, not the addins folder
+    var localAppDataFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "TurboSuiteUpdater.exe", "TurboSuiteUpdater.dll", "TurboSuiteUpdater.runtimeconfig.json",
+        "version.txt"
+    };
+    var skipFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".complete" };
+
+    var versionDir = Path.GetDirectoryName(versionFile);
+    if (versionDir is not null && !Directory.Exists(versionDir))
+        Directory.CreateDirectory(versionDir);
+
     foreach (var sourceFile in Directory.GetFiles(source))
     {
         var fileName = Path.GetFileName(sourceFile);
-        if (fileName == ".complete") continue;
+        if (skipFiles.Contains(fileName)) continue;
 
-        var destFile = Path.Combine(dest, fileName);
-        File.Copy(sourceFile, destFile, overwrite: true);
+        // Skip installer files — they don't belong in the addins folder
+        if (fileName.StartsWith("TurboSuiteInstaller", StringComparison.OrdinalIgnoreCase)) continue;
+
+        if (localAppDataFiles.Contains(fileName))
+        {
+            // Update files in LocalAppData (updater self-update + version.txt)
+            var localDest = Path.Combine(versionDir!, fileName);
+            try { File.Copy(sourceFile, localDest, overwrite: true); }
+            catch { /* Updater exe/dll may be locked by this process — updated next time */ }
+        }
+        else
+        {
+            // Copy add-in files (DLLs, PDBs, .addin) to the Revit addins folder
+            var destFile = Path.Combine(dest, fileName);
+            File.Copy(sourceFile, destFile, overwrite: true);
+        }
     }
 
-    // Update the local version file from the staged version.txt
-    var stagedVersion = Path.Combine(source, "version.txt");
-    if (File.Exists(stagedVersion))
+    // Also copy .addin manifest to the parent directory (Revit discovers it there)
+    var stagedAddin = Path.Combine(source, "TurboSuite.addin");
+    if (File.Exists(stagedAddin))
     {
-        var versionDir = Path.GetDirectoryName(versionFile);
-        if (versionDir is not null && !Directory.Exists(versionDir))
-            Directory.CreateDirectory(versionDir);
-
-        File.Copy(stagedVersion, versionFile, overwrite: true);
+        var addinsParent = Path.GetDirectoryName(dest);
+        if (addinsParent is not null)
+            File.Copy(stagedAddin, Path.Combine(addinsParent, "TurboSuite.addin"), overwrite: true);
     }
 
     // Clean up staging folder
