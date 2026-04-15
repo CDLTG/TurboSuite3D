@@ -22,13 +22,13 @@ public static class CountsWorkbookService
     private const int WsColQty = 4;         // D
     private const int WsColPrevQty = 5;     // E
     private const int WsColDelta = 6;       // F
-    private const int WsColCalc = 7;        // G
-    private const int WsColPhase = 8;       // H
-    private const int WsColDesc = 9;        // I
-    private const int WsColUnitCost = 10;   // J
-    private const int WsColMarkup = 11;     // K
-    private const int WsColTariff = 12;     // L
-    private const int WsColAdder = 13;      // M
+    private const int WsColDesc = 7;        // G
+    private const int WsColCalc = 8;        // H
+    private const int WsColUnitCost = 9;    // I
+    private const int WsColMarkup = 10;     // J
+    private const int WsColTariff = 11;     // K
+    private const int WsColAdder = 12;      // L
+    private const int WsColPhase = 13;      // M
 
     // Counts sheet column indices (1-based)
     private const int CsColType = 1;        // A
@@ -137,6 +137,9 @@ public static class CountsWorkbookService
         // Append changes
         if (prevData != null)
             AppendChanges(wb, fixtures, prevData);
+
+        // Restore canonical sheet order (Quote/Phase were deleted and re-added at the end)
+        ReorderSheets(wb);
 
         wb.Save();
 
@@ -288,6 +291,18 @@ public static class CountsWorkbookService
         // Track first occurrence of each catalog number for shared pricing
         var catalogFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+        // Pre-pass: count how many times each catalog appears — needed to decide whether to mark canonical
+        var catalogCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var f in fixtures)
+        {
+            for (int c = 0; c < 6; c++)
+            {
+                string cn = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(cn)) continue;
+                catalogCounts[cn] = catalogCounts.GetValueOrDefault(cn) + 1;
+            }
+        }
+
         int row = 2;
         foreach (var f in fixtures)
         {
@@ -315,12 +330,17 @@ public static class CountsWorkbookService
                 // Description + Unit Cost (pricing lookup or shared reference)
                 if (catalogFirstRow.TryGetValue(catNum, out int firstRow))
                 {
-                    // Subsequent occurrence — reference first
-                    ws.Cell(row, WsColDesc).FormulaA1 = $"I{firstRow}";
-                    ws.Cell(row, WsColUnitCost).FormulaA1 = $"J{firstRow}";
-                    ws.Cell(row, WsColMarkup).FormulaA1 = $"K{firstRow}";
-                    ws.Cell(row, WsColTariff).FormulaA1 = $"L{firstRow}";
-                    ws.Cell(row, WsColAdder).FormulaA1 = $"M{firstRow}";
+                    // Subsequent occurrence — reference first, styled as auto-filled
+                    ws.Cell(row, WsColDesc).FormulaA1 = $"G{firstRow}";
+                    ws.Cell(row, WsColUnitCost).FormulaA1 = $"I{firstRow}";
+                    ws.Cell(row, WsColMarkup).FormulaA1 = $"J{firstRow}";
+                    ws.Cell(row, WsColTariff).FormulaA1 = $"K{firstRow}";
+                    ws.Cell(row, WsColAdder).FormulaA1 = $"L{firstRow}";
+                    StyleAutoFilledCell(ws.Cell(row, WsColDesc));
+                    StyleAutoFilledCell(ws.Cell(row, WsColUnitCost));
+                    StyleAutoFilledCell(ws.Cell(row, WsColMarkup));
+                    StyleAutoFilledCell(ws.Cell(row, WsColTariff));
+                    StyleAutoFilledCell(ws.Cell(row, WsColAdder));
                 }
                 else
                 {
@@ -330,6 +350,10 @@ public static class CountsWorkbookService
                         ws.Cell(row, WsColDesc).Value = pe.Description;
                         ws.Cell(row, WsColUnitCost).Value = pe.Cost;
                     }
+
+                    // Mark canonical only when the catalog has siblings (otherwise every row would be bolded)
+                    if (catalogCounts.GetValueOrDefault(catNum) > 1)
+                        MarkCanonicalRow(ws, row, catNum);
                 }
 
                 row++;
@@ -343,13 +367,13 @@ public static class CountsWorkbookService
         ws.Column(WsColQty).Width = 8;
         ws.Column(WsColPrevQty).Width = 10;
         ws.Column(WsColDelta).Width = 6;
+        ws.Column(WsColDesc).Width = 25;
         ws.Column(WsColCalc).Width = 10;
-        ws.Column(WsColPhase).Width = 10;
-        ws.Column(WsColDesc).AdjustToContents();
         ws.Column(WsColUnitCost).Width = 12;
         ws.Column(WsColMarkup).Width = 10;
         ws.Column(WsColTariff).Width = 10;
         ws.Column(WsColAdder).Width = 10;
+        ws.Column(WsColPhase).Width = 10;
 
         // Format currency columns
         ws.Column(WsColUnitCost).Style.NumberFormat.Format = "$#,##0.00";
@@ -357,25 +381,52 @@ public static class CountsWorkbookService
         ws.Column(WsColTariff).Style.NumberFormat.Format = "0%";
         ws.Column(WsColAdder).Style.NumberFormat.Format = "$#,##0.00";
 
+        // Delta: show +/- prefix, hide zero
+        ws.Column(WsColDelta).Style.NumberFormat.Format = "+0;-0;;@";
+
+        // Visual separator between TurboSuite (locked) and pricing (editable) columns
+        ws.Column(WsColDelta).Style.Border.RightBorder = XLBorderStyleValues.Thick;
+
+        // Hide gridlines so only the explicit type-group dividers read as separators
+        ws.ShowGridLines = false;
+
+        // Light gray divider at the last row of each Type group
+        ApplyTypeGroupDividers(ws, 2, row - 1);
+
         // Sheet protection — lock TurboSuite columns (A-F), unlock user columns (G-M)
         for (int r = 2; r < row; r++)
         {
-            for (int col = WsColCalc; col <= WsColAdder; col++)
+            for (int col = WsColDesc; col <= WsColPhase; col++)
                 ws.Cell(r, col).Style.Protection.SetLocked(false);
         }
-        ws.Protect();
+        ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
+    }
+
+    private static void ApplyTypeGroupDividers(IXLWorksheet ws, int firstRow, int lastRow)
+    {
+        for (int r = firstRow; r < lastRow; r++)
+        {
+            string thisType = ws.Cell(r, WsColType).GetString();
+            string nextType = ws.Cell(r + 1, WsColType).GetString();
+            if (string.Equals(thisType, nextType, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var rng = ws.Range(r, 1, r, WsColPhase);
+            rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+            rng.Style.Border.BottomBorderColor = XLColor.LightGray;
+        }
     }
 
     private static string BuildQtyFormula(int row, string csRef)
     {
         // VLOOKUP indices: Col 9=Count, Col 10=LinearLength, Col 11=ReelLength, Col 12=ChannelLength
-        return $"IF(G{row}=\"Reel\"," +
+        return $"IF(H{row}=\"Reel\"," +
                $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,11,FALSE),1),1)," +
-               $"IF(G{row}=\"Channel\"," +
+               $"IF(H{row}=\"Channel\"," +
                $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,12,FALSE),1),1)," +
-               $"IF(G{row}=\"End Cap\"," +
+               $"IF(H{row}=\"End Cap\"," +
                $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)," +
-               $"IF(G{row}=\"Clip\"," +
+               $"IF(H{row}=\"Clip\"," +
                $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/1.75,1)," +
                $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)))))";
     }
@@ -440,6 +491,10 @@ public static class CountsWorkbookService
         string? prevQuoteType = null;
         for (int wsRow = 2; wsRow <= lastWsRow; wsRow++)
         {
+            // Skip rows marked as removed (red strikethrough in Worksheet)
+            if (wsSheet.Cell(wsRow, WsColType).Style.Font.Strikethrough)
+                continue;
+
             string wsType = wsSheet.Cell(wsRow, WsColType).GetString();
 
             // Blank separator row between Type Mark groups
@@ -450,10 +505,10 @@ public static class CountsWorkbookService
             ws.Cell(qRow, 1).FormulaA1 = $"Worksheet!A{wsRow}";   // Type
             ws.Cell(qRow, 2).FormulaA1 = $"Worksheet!B{wsRow}";   // Mfr
             ws.Cell(qRow, 3).FormulaA1 = $"Worksheet!C{wsRow}";   // Catalog Number
-            ws.Cell(qRow, 4).FormulaA1 = $"IF(Worksheet!I{wsRow}=0,\"\",Worksheet!I{wsRow})";   // Description
+            ws.Cell(qRow, 4).FormulaA1 = $"IF(Worksheet!G{wsRow}=0,\"\",Worksheet!G{wsRow})";   // Description
             ws.Cell(qRow, 5).FormulaA1 = $"Worksheet!D{wsRow}";   // Qty
             ws.Cell(qRow, 6).FormulaA1 = $"Worksheet!F{wsRow}";   // Delta
-            ws.Cell(qRow, 7).FormulaA1 = $"IFERROR((Worksheet!J{wsRow}*(1+Worksheet!K{wsRow})*(1+Worksheet!L{wsRow}))+Worksheet!M{wsRow},0)"; // Sell Ea.
+            ws.Cell(qRow, 7).FormulaA1 = $"IFERROR((Worksheet!I{wsRow}*(1+Worksheet!J{wsRow})*(1+Worksheet!K{wsRow}))+Worksheet!L{wsRow},0)"; // Sell Ea.
             ws.Cell(qRow, 8).FormulaA1 = $"G{qRow}*E{qRow}";     // Sell Ext. = Sell Ea. * Qty
 
             qRow++;
@@ -497,11 +552,14 @@ public static class CountsWorkbookService
         ws.Column(7).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(8).Style.NumberFormat.Format = "$#,##0.00";
 
-        // Column widths
-        ws.Column(1).AdjustToContents();
-        ws.Column(2).AdjustToContents();
-        ws.Column(3).AdjustToContents();
-        ws.Column(4).AdjustToContents();
+        // Delta: show +/- prefix, hide zero
+        ws.Column(6).Style.NumberFormat.Format = "+0;-0;;@";
+
+        // Column widths — pull from Worksheet (Quote cells are formulas, can't auto-size)
+        ws.Column(1).Width = wsSheet.Column(WsColType).Width;
+        ws.Column(2).Width = wsSheet.Column(WsColMfr).Width;
+        ws.Column(3).Width = wsSheet.Column(WsColCatalog).Width;
+        ws.Column(4).Width = wsSheet.Column(WsColDesc).Width;
         ws.Column(5).Width = 8;
         ws.Column(6).Width = 6;
         ws.Column(7).Width = 12;
@@ -570,10 +628,10 @@ public static class CountsWorkbookService
 
         // Worksheet range helpers
         string ws_(string col) => $"Worksheet!${col}$2:${col}${lastWsRow}";
-        string cond = $"{ws_("H")}={phase}";
+        string cond = $"{ws_("M")}={phase}";
 
         // Sell Ea. computation from Worksheet pricing columns
-        string sellEa = $"IFERROR(({ws_("J")}*(1+{ws_("K")})*(1+{ws_("L")}))+{ws_("M")},0)";
+        string sellEa = $"IFERROR(({ws_("I")}*(1+{ws_("J")})*(1+{ws_("K")}))+{ws_("L")},0)";
 
         // Sell Ext. = Sell Ea. * Qty
         string sellExt = $"({sellEa})*{ws_("D")}";
@@ -581,35 +639,59 @@ public static class CountsWorkbookService
         // Subtotal via SUMPRODUCT (always computable, even when FILTER is empty)
         string subtotal = $"SUMPRODUCT(({cond})*{sellEa}*{ws_("D")})";
 
+        // Inlined LAMBDA (immediately invoked) that emits a blank row at each type-group
+        // boundary, producing type-grouped output for Phase sheets. Inline rather than
+        // behind a defined name — defined-name LAMBDA calls from spill cells trip Excel's
+        // load-time parser.
+        //
+        // Approach: build a "gap marker" column where each row holds "" if it starts a
+        // new type group (else NA()), HSTACK with the values column, then TOCOL with
+        // ignore-errors flattens row-major, dropping NA() and keeping "" as gap rows.
+        // Avoids REDUCE's growing accumulator which produced spurious mid-group gaps.
+        //
+        // Stored form: _xlfn. for 365 functions, _xlpm. for LAMBDA/LET parameter refs.
+        string typesArg = $"_xlfn._xlws.FILTER({ws_("A")},{cond})";
+        string Gap(string valsExpr)
+        {
+            string valsArg = $"_xlfn._xlws.FILTER({valsExpr},{cond})";
+            return "_xlfn.LAMBDA(_xlpm.types,_xlpm.vals,"
+                 +   "IF(ROWS(_xlpm.vals)<=1,_xlpm.vals,"
+                 +     "_xlfn.LET("
+                 +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
+                 +       "_xlpm.gapCol,IF(_xlpm.types<>_xlpm.prev,\"\",_xlfn.NA()),"
+                 +       "_xlfn.TOCOL(_xlfn.HSTACK(_xlpm.gapCol,_xlpm.vals),2)"
+                 +     ")"
+                 +   ")"
+                 + $")({typesArg},{valsArg})";
+        }
+
         // Data row — single cell per column, each spills downward via dynamic array
         int dataRow = headerRow + 1;
 
         // A: Type
-        ws.Cell(dataRow, 1).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({ws_("A")},{cond}),\"\")";
+        ws.Cell(dataRow, 1).FormulaA1 = $"IFERROR({Gap(ws_("A"))},\"\")";
 
         // B: Mfr
-        ws.Cell(dataRow, 2).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({ws_("B")},{cond}),\"\")";
+        ws.Cell(dataRow, 2).FormulaA1 = $"IFERROR({Gap(ws_("B"))},\"\")";
 
         // C: Catalog Number
-        ws.Cell(dataRow, 3).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({ws_("C")},{cond}),\"\")";
+        ws.Cell(dataRow, 3).FormulaA1 = $"IFERROR({Gap(ws_("C"))},\"\")";
 
         // D: Description (blank out 0 values, matching Quote behavior)
-        ws.Cell(dataRow, 4).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER(IF({ws_("I")}=0,\"\",{ws_("I")}),{cond}),\"\")";
+        ws.Cell(dataRow, 4).FormulaA1 = $"IFERROR({Gap($"IF({ws_("G")}=0,\"\",{ws_("G")})")},\"\")";
 
-        // E: Qty + footer labels via VSTACK
+        // E: Qty + footer labels via VSTACK (IFERROR wraps only Gap so footer always anchors at bottom)
         ws.Cell(dataRow, 5).FormulaA1 =
-            $"IFERROR(_xlfn.VSTACK(_xlfn._xlws.FILTER({ws_("D")},{cond})"
-            + $",\"\",\"Subtotal:\",\"Freight:\",\"Grand Total:\")"
-            + $",_xlfn.VSTACK(\"Subtotal:\",\"Freight:\",\"Grand Total:\"))";
+            $"_xlfn.VSTACK(IFERROR({Gap(ws_("D"))},\"\")"
+            + $",\"\",\"Subtotal:\",\"Freight:\",\"Grand Total:\")";
 
         // F: Sell Ea.
-        ws.Cell(dataRow, 6).FormulaA1 = $"IFERROR(_xlfn._xlws.FILTER({sellEa},{cond}),\"\")";
+        ws.Cell(dataRow, 6).FormulaA1 = $"IFERROR({Gap(sellEa)},\"\")";
 
-        // G: Sell Ext. + footer values via VSTACK
+        // G: Sell Ext. + footer values via VSTACK (IFERROR wraps only Gap)
         ws.Cell(dataRow, 7).FormulaA1 =
-            $"IFERROR(_xlfn.VSTACK(_xlfn._xlws.FILTER({sellExt},{cond})"
-            + $",\"\",{subtotal},0,{subtotal}+0)"
-            + $",_xlfn.VSTACK({subtotal},0,{subtotal}+0))";
+            $"_xlfn.VSTACK(IFERROR({Gap(sellExt)},\"\")"
+            + $",\"\",{subtotal},0,{subtotal}+0)";
 
         // Format currency columns
         ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
@@ -768,7 +850,35 @@ public static class CountsWorkbookService
                 removedEntries.Add((er.Type, er.Mfr, er.Catalog));
         }
 
-        var catalogFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Count how many rows each catalog appears on — only mark canonical when siblings exist
+        var catalogCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in newRowEntries)
+            catalogCounts[entry.Catalog] = catalogCounts.GetValueOrDefault(entry.Catalog) + 1;
+
+        // Pre-pass: determine canonical sheet row for each catalog (source of truth for
+        // formula-chained duplicates). Prefer the first row in sort order whose existing
+        // Unit Cost is a literal number. Unit Cost is the most reliable signal that a row
+        // has real pricing data — Description is often empty or inconsistent.
+        var canonicalSheetRowByCatalog = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < newRowEntries.Count; i++)
+        {
+            int sheetRow = 2 + i;
+            var (type, _, catalog, _) = newRowEntries[i];
+            var key = (type.ToUpperInvariant(), catalog.ToUpperInvariant());
+            var existing = existingByKey.GetValueOrDefault(key);
+            bool hasLiteralCost = existing != null && existing.UnitCost.HasValue && !existing.CostIsFormula;
+            if (hasLiteralCost && !canonicalSheetRowByCatalog.ContainsKey(catalog))
+                canonicalSheetRowByCatalog[catalog] = sheetRow;
+        }
+        // Fallback: for catalogs with no literal-cost row, use first occurrence
+        for (int i = 0; i < newRowEntries.Count; i++)
+        {
+            int sheetRow = 2 + i;
+            var (_, _, catalog, _) = newRowEntries[i];
+            if (!canonicalSheetRowByCatalog.ContainsKey(catalog))
+                canonicalSheetRowByCatalog[catalog] = sheetRow;
+        }
+
         int row = 2;
 
         // Write new/matched rows
@@ -778,6 +888,7 @@ public static class CountsWorkbookService
             var existing = existingByKey.GetValueOrDefault(key);
             bool isNewType = !prevTypeMarks.Contains(type);
             bool isNewRow = existing == null;
+            int canonicalRow = canonicalSheetRowByCatalog[catalog];
 
             ws.Cell(row, WsColType).Value = type;
             ws.Cell(row, WsColMfr).Value = mfr;
@@ -786,37 +897,46 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
             ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
 
-            // Prev Qty from previous Counts sheet
-            if (prevData != null && prevData.TryGetValue(type, out var prevFixture))
+            // Prev Qty — use previous Worksheet's computed Qty (reflects Calc adjustments)
+            // Fall back to raw fixture Count if no existing row (new type on this pass)
+            if (existing?.PrevQty.HasValue == true)
+                ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
+            else if (prevData != null && prevData.TryGetValue(type, out var prevFixture))
                 ws.Cell(row, WsColPrevQty).Value = prevFixture.Count;
 
             if (existing != null)
             {
                 // Preserve user columns
                 ws.Cell(row, WsColCalc).Value = existing.Calc;
-                ws.Cell(row, WsColPhase).Value = existing.Phase;
+                if (existing.Phase.HasValue)
+                    ws.Cell(row, WsColPhase).Value = existing.Phase.Value;
 
                 // Shared pricing logic
-                WritePricingCells(ws, row, catalog, catalogFirstRow, pricing,
+                WritePricingCells(ws, row, canonicalRow, catalog, pricing,
                     existing.Description, existing.UnitCost, existing.Markup, existing.Tariff, existing.Adder,
                     existing.DescIsFormula, existing.CostIsFormula, existing.MarkupIsFormula, existing.TariffIsFormula, existing.AdderIsFormula,
-                    isNewCatalog: false);
-
-                // Highlight changes
-                if (existing.Mfr != mfr)
-                    ws.Cell(row, WsColMfr).Style.Fill.BackgroundColor = YellowFill;
+                    isNewRow: false);
             }
             else
             {
-                // New row
-                WritePricingCells(ws, row, catalog, catalogFirstRow, pricing,
-                    null, null, null, null, null, false, false, false, false, false, isNewCatalog: true);
+                // New row — no existing data
+                WritePricingCells(ws, row, canonicalRow, catalog, pricing,
+                    null, null, null, null, null, false, false, false, false, false, isNewRow: true);
 
-                // Highlight: green if entire type is new, yellow if just a new catalog on existing type
+                // For brand-new types, Prev Qty = 0 so delta shows +qty (green-highlight semantic)
+                if (isNewType)
+                    ws.Cell(row, WsColPrevQty).Value = 0;
+
+                // Highlight Revit-side cells only: green if entire type is new, yellow if just a new catalog.
+                // Fill stops at Delta so pricing team's editable columns are not visually disrupted.
                 var fillColor = isNewType ? GreenFill : YellowFill;
-                for (int col = 1; col <= WsColAdder; col++)
+                for (int col = 1; col <= WsColDelta; col++)
                     ws.Cell(row, col).Style.Fill.BackgroundColor = fillColor;
             }
+
+            // Mark canonical only when the catalog has siblings on this sheet
+            if (row == canonicalRow && catalogCounts.GetValueOrDefault(catalog) > 1)
+                MarkCanonicalRow(ws, row, catalog);
 
             row++;
         }
@@ -834,12 +954,12 @@ public static class CountsWorkbookService
             if (existing != null)
             {
                 ws.Cell(row, WsColCalc).Value = existing.Calc;
-                ws.Cell(row, WsColPhase).Value = existing.Phase;
+                // Phase intentionally left blank — removed rows must not appear in Phase sheet FILTER results
                 ws.Cell(row, WsColDesc).Value = existing.Description ?? "";
-                ws.Cell(row, WsColUnitCost).Value = existing.UnitCost ?? "";
-                ws.Cell(row, WsColMarkup).Value = existing.Markup ?? "";
-                ws.Cell(row, WsColTariff).Value = existing.Tariff ?? "";
-                ws.Cell(row, WsColAdder).Value = existing.Adder ?? "";
+                if (existing.UnitCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existing.UnitCost.Value;
+                if (existing.Markup.HasValue) ws.Cell(row, WsColMarkup).Value = existing.Markup.Value;
+                if (existing.Tariff.HasValue) ws.Cell(row, WsColTariff).Value = existing.Tariff.Value;
+                if (existing.Adder.HasValue) ws.Cell(row, WsColAdder).Value = existing.Adder.Value;
             }
 
             // Red fill + strikethrough
@@ -852,68 +972,142 @@ public static class CountsWorkbookService
             row++;
         }
 
+        // Visual separator between TurboSuite (locked) and pricing (editable) columns
+        ws.Column(WsColDelta).Style.Border.RightBorder = XLBorderStyleValues.Thick;
+
+        // Hide gridlines so only the explicit type-group dividers read as separators
+        ws.ShowGridLines = false;
+
+        // Light gray divider at the last row of each Type group
+        ApplyTypeGroupDividers(ws, 2, row - 1);
+
         // Re-apply protection
         for (int r = 2; r < row; r++)
         {
-            for (int col = WsColCalc; col <= WsColAdder; col++)
+            for (int col = WsColDesc; col <= WsColPhase; col++)
                 ws.Cell(r, col).Style.Protection.SetLocked(false);
         }
-        ws.Protect();
+        ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
+    }
+
+    private static readonly XLColor AutoFilledFontColor = XLColor.FromHtml("#808080");
+
+    private static void MarkCanonicalRow(IXLWorksheet ws, int row, string catalog)
+    {
+        ws.Cell(row, WsColCatalog).GetComment().AddText(
+            $"Source row for catalog {catalog}. Edit here; other rows with this catalog auto-fill from this one.");
+
+        ws.Cell(row, WsColDesc).Style.Font.Bold = true;
+        ws.Cell(row, WsColUnitCost).Style.Font.Bold = true;
+        ws.Cell(row, WsColMarkup).Style.Font.Bold = true;
+        ws.Cell(row, WsColTariff).Style.Font.Bold = true;
+        ws.Cell(row, WsColAdder).Style.Font.Bold = true;
+    }
+
+    private static void StyleAutoFilledCell(IXLCell cell)
+    {
+        cell.Style.Font.Italic = true;
+        cell.Style.Font.FontColor = AutoFilledFontColor;
     }
 
     private static void WritePricingCells(
-        IXLWorksheet ws, int row, string catalog,
-        Dictionary<string, int> catalogFirstRow,
+        IXLWorksheet ws, int row, int canonicalRow, string catalog,
         Dictionary<string, PricingEntry>? pricing,
-        object? existingDesc, object? existingCost, object? existingMarkup, object? existingTariff, object? existingAdder,
+        string? existingDesc, double? existingCost, double? existingMarkup, double? existingTariff, double? existingAdder,
         bool descIsFormula, bool costIsFormula, bool markupIsFormula, bool tariffIsFormula, bool adderIsFormula,
-        bool isNewCatalog)
+        bool isNewRow)
     {
-        if (catalogFirstRow.TryGetValue(catalog, out int firstRow))
+        bool isCanonical = row == canonicalRow;
+
+        if (isCanonical)
         {
-            // Subsequent occurrence — write formula references unless user overwrote with literal
-            if (isNewCatalog || descIsFormula)
-                ws.Cell(row, WsColDesc).FormulaA1 = $"I{firstRow}";
-            else if (existingDesc != null)
-                ws.Cell(row, WsColDesc).Value = existingDesc.ToString() ?? "";
-
-            if (isNewCatalog || costIsFormula)
-                ws.Cell(row, WsColUnitCost).FormulaA1 = $"J{firstRow}";
-            else if (existingCost != null)
-                ws.Cell(row, WsColUnitCost).Value = existingCost.ToString() ?? "";
-
-            if (isNewCatalog || markupIsFormula)
-                ws.Cell(row, WsColMarkup).FormulaA1 = $"K{firstRow}";
-            else if (existingMarkup != null)
-                ws.Cell(row, WsColMarkup).Value = existingMarkup.ToString() ?? "";
-
-            if (isNewCatalog || tariffIsFormula)
-                ws.Cell(row, WsColTariff).FormulaA1 = $"L{firstRow}";
-            else if (existingTariff != null)
-                ws.Cell(row, WsColTariff).Value = existingTariff.ToString() ?? "";
-
-            if (isNewCatalog || adderIsFormula)
-                ws.Cell(row, WsColAdder).FormulaA1 = $"M{firstRow}";
-            else if (existingAdder != null)
-                ws.Cell(row, WsColAdder).Value = existingAdder.ToString() ?? "";
-        }
-        else
-        {
-            catalogFirstRow[catalog] = row;
-            if (!isNewCatalog && existingDesc != null)
+            // Canonical row: write literal values — existing first, then pricing lookup, then blank.
+            if (!isNewRow)
             {
-                // Preserve existing values
-                ws.Cell(row, WsColDesc).Value = existingDesc.ToString() ?? "";
-                if (existingCost != null) ws.Cell(row, WsColUnitCost).Value = existingCost.ToString() ?? "";
-                if (existingMarkup != null) ws.Cell(row, WsColMarkup).Value = existingMarkup.ToString() ?? "";
-                if (existingTariff != null) ws.Cell(row, WsColTariff).Value = existingTariff.ToString() ?? "";
-                if (existingAdder != null) ws.Cell(row, WsColAdder).Value = existingAdder.ToString() ?? "";
+                if (existingDesc != null) ws.Cell(row, WsColDesc).Value = existingDesc;
+                if (existingCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
+                if (existingMarkup.HasValue) ws.Cell(row, WsColMarkup).Value = existingMarkup.Value;
+                if (existingTariff.HasValue) ws.Cell(row, WsColTariff).Value = existingTariff.Value;
+                if (existingAdder.HasValue) ws.Cell(row, WsColAdder).Value = existingAdder.Value;
             }
             else if (pricing != null && pricing.TryGetValue(catalog, out var pe))
             {
                 ws.Cell(row, WsColDesc).Value = pe.Description;
                 ws.Cell(row, WsColUnitCost).Value = pe.Cost;
             }
+            return;
+        }
+
+        // Non-canonical row: per field, preserve user-entered literals; otherwise formula-ref canonical.
+        if (!isNewRow && !descIsFormula && existingDesc != null)
+        {
+            ws.Cell(row, WsColDesc).Value = existingDesc;
+        }
+        else
+        {
+            ws.Cell(row, WsColDesc).FormulaA1 = $"G{canonicalRow}";
+            StyleAutoFilledCell(ws.Cell(row, WsColDesc));
+        }
+
+        if (!isNewRow && !costIsFormula && existingCost.HasValue)
+        {
+            ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
+        }
+        else
+        {
+            ws.Cell(row, WsColUnitCost).FormulaA1 = $"I{canonicalRow}";
+            StyleAutoFilledCell(ws.Cell(row, WsColUnitCost));
+        }
+
+        if (!isNewRow && !markupIsFormula && existingMarkup.HasValue)
+        {
+            ws.Cell(row, WsColMarkup).Value = existingMarkup.Value;
+        }
+        else
+        {
+            ws.Cell(row, WsColMarkup).FormulaA1 = $"J{canonicalRow}";
+            StyleAutoFilledCell(ws.Cell(row, WsColMarkup));
+        }
+
+        if (!isNewRow && !tariffIsFormula && existingTariff.HasValue)
+        {
+            ws.Cell(row, WsColTariff).Value = existingTariff.Value;
+        }
+        else
+        {
+            ws.Cell(row, WsColTariff).FormulaA1 = $"K{canonicalRow}";
+            StyleAutoFilledCell(ws.Cell(row, WsColTariff));
+        }
+
+        if (!isNewRow && !adderIsFormula && existingAdder.HasValue)
+        {
+            ws.Cell(row, WsColAdder).Value = existingAdder.Value;
+        }
+        else
+        {
+            ws.Cell(row, WsColAdder).FormulaA1 = $"L{canonicalRow}";
+            StyleAutoFilledCell(ws.Cell(row, WsColAdder));
+        }
+    }
+
+    private static double? ReadNumericCell(IXLCell cell)
+    {
+        if (cell.HasFormula) return null;
+        if (cell.IsEmpty()) return null;
+        return cell.TryGetValue<double>(out double v) ? v : null;
+    }
+
+    private static double? ReadCachedDouble(IXLCell cell)
+    {
+        if (cell.IsEmpty()) return null;
+        try
+        {
+            var v = cell.CachedValue;
+            return v.IsNumber ? v.GetNumber() : (double?)null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -986,6 +1180,30 @@ public static class CountsWorkbookService
     #endregion
 
     #region Helpers
+
+    private static void ReorderSheets(IXLWorkbook wb)
+    {
+        // Canonical order: Cover, Worksheet, Quote, Phase 1, Phase 2, Phase 3, Changes, Counts (by date ascending)
+        var ordered = new List<string>();
+        foreach (var name in new[] { "Cover", "Worksheet", "Quote", "Phase 1", "Phase 2", "Phase 3", "Changes" })
+        {
+            if (wb.Worksheets.TryGetWorksheet(name, out _))
+                ordered.Add(name);
+        }
+
+        var countsSheets = wb.Worksheets
+            .Where(s => s.Name.StartsWith("Counts ", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(s => s.Name);
+        ordered.AddRange(countsSheets);
+
+        int pos = 1;
+        foreach (var name in ordered)
+        {
+            if (wb.Worksheets.TryGetWorksheet(name, out var ws))
+                ws.Position = pos++;
+        }
+    }
 
     private static string ResolveCountsSheetName(IXLWorkbook wb, string dateString)
     {
@@ -1086,12 +1304,13 @@ public static class CountsWorkbookService
                 Mfr = ws.Cell(r, WsColMfr).GetString(),
                 Catalog = ws.Cell(r, WsColCatalog).GetString(),
                 Calc = ws.Cell(r, WsColCalc).GetString(),
-                Phase = ws.Cell(r, WsColPhase).GetString(),
+                PrevQty = ReadCachedDouble(ws.Cell(r, WsColQty)),
+                Phase = ReadNumericCell(ws.Cell(r, WsColPhase)),
                 Description = ws.Cell(r, WsColDesc).HasFormula ? null : ws.Cell(r, WsColDesc).GetString(),
-                UnitCost = ws.Cell(r, WsColUnitCost).HasFormula ? null : ws.Cell(r, WsColUnitCost).GetString(),
-                Markup = ws.Cell(r, WsColMarkup).HasFormula ? null : ws.Cell(r, WsColMarkup).GetString(),
-                Tariff = ws.Cell(r, WsColTariff).HasFormula ? null : ws.Cell(r, WsColTariff).GetString(),
-                Adder = ws.Cell(r, WsColAdder).HasFormula ? null : ws.Cell(r, WsColAdder).GetString(),
+                UnitCost = ReadNumericCell(ws.Cell(r, WsColUnitCost)),
+                Markup = ReadNumericCell(ws.Cell(r, WsColMarkup)),
+                Tariff = ReadNumericCell(ws.Cell(r, WsColTariff)),
+                Adder = ReadNumericCell(ws.Cell(r, WsColAdder)),
                 DescIsFormula = ws.Cell(r, WsColDesc).HasFormula,
                 CostIsFormula = ws.Cell(r, WsColUnitCost).HasFormula,
                 MarkupIsFormula = ws.Cell(r, WsColMarkup).HasFormula,
@@ -1156,12 +1375,13 @@ public static class CountsWorkbookService
         public string Mfr { get; init; } = string.Empty;
         public string Catalog { get; init; } = string.Empty;
         public string Calc { get; init; } = string.Empty;
-        public string Phase { get; init; } = string.Empty;
+        public double? PrevQty { get; init; }
+        public double? Phase { get; init; }
         public string? Description { get; init; }
-        public string? UnitCost { get; init; }
-        public string? Markup { get; init; }
-        public string? Tariff { get; init; }
-        public string? Adder { get; init; }
+        public double? UnitCost { get; init; }
+        public double? Markup { get; init; }
+        public double? Tariff { get; init; }
+        public double? Adder { get; init; }
         public bool DescIsFormula { get; init; }
         public bool CostIsFormula { get; init; }
         public bool MarkupIsFormula { get; init; }
