@@ -31,6 +31,23 @@
                 <TextBlock Text="Export fixture quantities and catalog numbers to an Excel workbook for quotation."
                            FontSize="11" TextAlignment="Center" Foreground="#888888" Margin="0,0,0,16"/>
 
+                <!-- Rep Directory Path -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+                    <TextBlock Text="Rep Directory:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" Width="90" TextAlignment="Right"/>
+                    <TextBox Text="{Binding RepDirectoryPath, UpdateSourceTrigger=PropertyChanged}"
+                             Width="360" VerticalContentAlignment="Center" Padding="4,2"/>
+                    <Button Content="Browse…" Command="{Binding BrowseRepDirectoryCommand}"
+                            Margin="6,0,0,0" Padding="10,2"/>
+                </StackPanel>
+
+                <!-- Notify Email -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
+                    <TextBlock Text="Notify Email:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" Width="90" TextAlignment="Right"/>
+                    <TextBox Text="{Binding NotifyEmail, UpdateSourceTrigger=PropertyChanged}"
+                             Width="360" VerticalContentAlignment="Center" Padding="4,2"
+                             ToolTip="Optional. When set, Generate/Update opens a pre-filled email draft to this address."/>
+                </StackPanel>
+
                 <!-- Export mode -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,4">
                     <RadioButton x:Name="NewExportRadio" Content="New Export" IsChecked="True"

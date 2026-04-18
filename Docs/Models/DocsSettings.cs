@@ -41,4 +41,9 @@ public class DocsSettings
     public string CoverBrandingHorizontalPath { get; set; } = string.Empty;
     public string ProjectLocation { get; set; } = string.Empty;
 
+    // Counts tab — Rep Directory external workbook (drives Rep Lists sheet generation)
+    public string RepDirectoryPath { get; set; } = string.Empty;
+
+    // Counts tab — optional email address; Generate/Update opens a pre-filled mailto draft to this address
+    public string CountsNotifyEmail { get; set; } = string.Empty;
 }

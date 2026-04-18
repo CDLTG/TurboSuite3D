@@ -13,8 +13,6 @@ public static class CountsWorkbookService
 {
     #region Constants
 
-    private const string DefaultPricingPath = @"C:\Path\To\PricingWorkbook.xlsx";
-
     // Worksheet column indices (1-based)
     private const int WsColType = 1;        // A
     private const int WsColMfr = 2;         // B
@@ -65,38 +63,32 @@ public static class CountsWorkbookService
     #endregion
 
     /// <summary>
-    /// Creates a new Counts workbook with all five sheets.
+    /// Creates a new Counts workbook. Rep directory path comes from TurboDocs user settings
+    /// (CountsViewModel passes it); seeds Dashboard!B4 and is used to build the Rep Lists sheet.
+    /// Descriptions and pricing are no longer auto-filled — pricing team enters them manually.
     /// </summary>
     public static void GenerateNew(
         List<CountsFixtureModel> fixtures,
         string projectName,
-        string outputPath)
+        string projectLocation,
+        string outputPath,
+        string repDirectoryPath)
     {
         using var wb = new XLWorkbook();
 
         string dateString = DateTime.Now.ToString("yyyy.MM.dd");
         string countsSheetName = $"Counts {dateString}";
 
-        // Read pricing workbook (silently skip if unavailable)
-        var pricing = ReadPricingWorkbook(DefaultPricingPath);
+        var repDirectory = ReadRepDirectory(repDirectoryPath);
 
-        // 1. Cover
-        BuildCoverSheet(wb, projectName);
-
-        // 2. Worksheet
-        BuildWorksheetSheet(wb, fixtures, countsSheetName, pricing, null);
-
-        // 3. Quote
+        BuildCoverSheet(wb, projectName, projectLocation);
+        BuildDashboardSheet(wb, projectName, repDirectoryPath);
+        BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
+        BuildRepListsSheet(wb, fixtures, repDirectory);
         BuildQuoteSheet(wb);
-
-        // 4–6. Phase sheets
         for (int p = 1; p <= 3; p++)
             BuildPhaseQuoteSheet(wb, p);
-
-        // 7. Changes
         BuildChangesSheet(wb);
-
-        // 8. Counts (dated)
         BuildCountsSheet(wb, fixtures, countsSheetName);
 
         wb.SaveAs(outputPath);
@@ -117,7 +109,8 @@ public static class CountsWorkbookService
     /// </summary>
     public static void GenerateUpdate(
         List<CountsFixtureModel> fixtures,
-        string existingPath)
+        string existingPath,
+        string repDirectoryPath)
     {
         using var wb = new XLWorkbook(existingPath);
 
@@ -128,9 +121,14 @@ public static class CountsWorkbookService
         var prevCountsSheet = FindLatestCountsSheet(wb);
         var prevData = prevCountsSheet != null ? ReadCountsSheetData(prevCountsSheet) : null;
 
-        // Read pricing workbook path from Cover sheet config
-        string pricingPath = ReadPricingPathFromCover(wb);
-        var pricing = ReadPricingWorkbook(pricingPath);
+        // Migrate legacy workbooks (no Dashboard) and seed/keep Rep Directory path.
+        EnsureDashboardSheet(wb, repDirectoryPath);
+
+        // Dashboard!B4 is authoritative; fall back to settings only when empty.
+        string effectiveRepPath = ReadRepDirectoryPathFromDashboard(wb);
+        if (string.IsNullOrWhiteSpace(effectiveRepPath))
+            effectiveRepPath = repDirectoryPath;
+        var repDirectory = ReadRepDirectory(effectiveRepPath);
 
         // Read existing Worksheet rows
         var existingRows = ReadExistingWorksheetRows(wb);
@@ -139,7 +137,10 @@ public static class CountsWorkbookService
         BuildCountsSheet(wb, fixtures, countsSheetName);
 
         // Update Worksheet
-        UpdateWorksheetSheet(wb, fixtures, countsSheetName, pricing, existingRows, prevData);
+        UpdateWorksheetSheet(wb, fixtures, countsSheetName, existingRows, prevData);
+
+        // Rebuild Rep Lists (deleted + recreated; pure derived output)
+        BuildRepListsSheet(wb, fixtures, repDirectory);
 
         // Append changes
         if (prevData != null)
@@ -160,7 +161,7 @@ public static class CountsWorkbookService
 
     #region Cover Sheet
 
-    private static void BuildCoverSheet(IXLWorkbook wb, string projectName)
+    private static void BuildCoverSheet(IXLWorkbook wb, string projectName, string projectLocation)
     {
         var ws = wb.Worksheets.Add("Cover");
 
@@ -171,7 +172,7 @@ public static class CountsWorkbookService
         ws.Cell("B6").Style.Font.FontSize = 14;
 
         ws.Cell("A7").Value = "Project Location:";
-        // B7 blank
+        ws.Cell("B7").Value = projectLocation ?? string.Empty;
 
         ws.Cell("A9").Value = "Lighting Fixture Quotation";
         ws.Cell("A9").Style.Font.Bold = true;
@@ -191,28 +192,652 @@ public static class CountsWorkbookService
             ws.Cell(r, 1).Style.Font.Bold = true;
         }
 
-        // Configuration section (outside print area — row 20+)
-        ws.Cell("A20").Value = "Pricing Workbook Path";
-        ws.Cell("A20").Style.Font.Bold = true;
-        ws.Cell("A20").Style.Font.FontColor = XLColor.Gray;
-        ws.Cell("B20").Value = DefaultPricingPath;
-        ws.Cell("B20").Style.Font.FontColor = XLColor.Gray;
-
-        // Named range for pricing path
-        wb.DefinedNames.Add("PricingWorkbookPath", ws.Range("B20:B20"));
-
-        ws.Cell("A21").Value = "Notify Email";
-        ws.Cell("A21").Style.Font.Bold = true;
-        ws.Cell("A21").Style.Font.FontColor = XLColor.Gray;
-        ws.Cell("B21").Style.Font.FontColor = XLColor.Gray;
-        // B21 left blank — user enters recipient email address
-
         // Column widths
         ws.Column(1).Width = 22;
         ws.Column(2).Width = 50;
 
-        // Print area excludes config section
+        // Print area
         ws.PageSetup.PrintAreas.Add("A1:B17");
+    }
+
+    #endregion
+
+    #region Dashboard Sheet
+
+    // Dashboard cell anchors (consumed by helper pipeline via named ranges)
+    private const string DashRepDirCell = "B4";
+    private const string DashLutronCell = "B8";
+    private const string DashFreightCell = "B9";
+    private const string DashBidDateCell = "B12";
+    private const string DashReleaseDateCell = "B13";
+    private const string DashNotesFirstRow = "36";
+    private const string DashNotesLastRow = "50";
+
+    private static readonly XLColor HeaderBlue = XLColor.FromHtml("#4472C4");
+
+    /// <summary>
+    /// Creates the Dashboard sheet holding all workbook configuration, quote adjustments,
+    /// bid lock state, internal notes, and the quote-footer notes library. All named ranges
+    /// used by the helper pipeline and external readers are defined here.
+    /// </summary>
+    private static void BuildDashboardSheet(IXLWorkbook wb, string projectName, string repDirectoryPath)
+    {
+        var ws = wb.Worksheets.Add("Dashboard");
+        ws.Position = 2; // after Cover
+
+        // Title bar (rows 1-2)
+        ws.Range("A1:D2").Merge();
+        ws.Cell("A1").Value = $"COUNTS DASHBOARD — {projectName}";
+        StyleSectionBar(ws.Range("A1:D2"), fontSize: 14);
+
+        // --- CONFIGURATION ---
+        WriteSectionBar(ws, 3, "CONFIGURATION");
+        ws.Cell("A4").Value = "Rep Directory Path";
+        ws.Range("B4:D4").Merge();
+        ws.Cell("B4").Value = repDirectoryPath ?? string.Empty;
+
+        // --- QUOTE ADJUSTMENTS ---
+        WriteSectionBar(ws, 7, "QUOTE ADJUSTMENTS");
+        ws.Cell("A8").Value = "Lutron Lighting Control";
+        ws.Cell("B8").Value = 0.0;
+        ws.Cell("B8").Style.NumberFormat.Format = "$#,##0.00";
+
+        ws.Cell("A9").Value = "Estimated Freight";
+        ws.Cell("B9").Value = 0.0;
+        ws.Cell("B9").Style.NumberFormat.Format = "$#,##0.00";
+
+        // --- BID LOCK ---
+        WriteSectionBar(ws, 11, "BID LOCK");
+        ws.Cell("A12").Value = "Bid Quote Date";
+        ws.Cell("B12").Style.NumberFormat.Format = "yyyy-mm-dd";
+
+        ws.Cell("A13").Value = "Release Lock";
+        ws.Cell("B13").Style.NumberFormat.Format = "yyyy-mm-dd";
+
+        ws.Cell("A14").Value = "Bid Status";
+        ws.Cell("B14").FormulaA1 =
+            "IF(B12=\"\",\"Unlocked\",IF(B13=B12,\"Pending release\",\"LOCKED \"&TEXT(B12,\"yyyy-mm-dd\")))";
+        ws.Cell("B14").Style.Font.Italic = true;
+
+        // --- INTERNAL NOTES ---
+        WriteSectionBar(ws, 16, "INTERNAL NOTES");
+        ws.Cell("A17").Value = "Date";
+        ws.Cell("B17").Value = "Author";
+        ws.Cell("C17").Value = "Status";
+        ws.Cell("D17").Value = "Notes";
+        var notesHdr = ws.Range("A17:D17");
+        notesHdr.Style.Font.Bold = true;
+        notesHdr.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+
+        // --- QUOTE FOOTER NOTES ---
+        WriteSectionBar(ws, 34, "QUOTE FOOTER NOTES");
+        ws.Cell("A35").Value = "#";
+        ws.Cell("B35").Value = "BOLD";
+        ws.Cell("C35").Value = "Notes";
+        var fnHdr = ws.Range("A35:C35");
+        fnHdr.Style.Font.Bold = true;
+        fnHdr.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+
+        for (int i = 0; i < 15; i++)
+        {
+            int r = 36 + i;
+            ws.Cell(r, 1).Value = i + 1;
+            ws.Cell(r, 2).Value = false; // boolean literal — pass 3 upgrades to native checkbox
+            ws.Cell(r, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        }
+
+        // Column widths
+        ws.Column(1).Width = 26;
+        ws.Column(2).Width = 18;
+        ws.Column(3).Width = 42;
+        ws.Column(4).Width = 40;
+
+        // Named ranges
+        wb.DefinedNames.Add("RepDirectoryPath", ws.Range("B4:B4"));
+        wb.DefinedNames.Add("LutronSubtotal", ws.Range("B8:B8"));
+        wb.DefinedNames.Add("Freight", ws.Range("B9:B9"));
+        wb.DefinedNames.Add("BidDate", ws.Range("B12:B12"));
+        wb.DefinedNames.Add("ReleaseDate", ws.Range("B13:B13"));
+        wb.DefinedNames.Add("QuoteNotes", ws.Range($"C{DashNotesFirstRow}:C{DashNotesLastRow}"));
+        wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
+
+        // Protection: unlock editable cells, lock the rest
+        foreach (string addr in new[] { "B4", "B8", "B9", "B12", "B13" })
+            ws.Cell(addr).Style.Protection.SetLocked(false);
+        ws.Range("A18:D32").Style.Protection.SetLocked(false);
+        ws.Range($"B{DashNotesFirstRow}:C{DashNotesLastRow}").Style.Protection.SetLocked(false);
+        ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
+
+        ws.ShowGridLines = false;
+    }
+
+    private static void EnsureDashboardSheet(IXLWorkbook wb, string repDirectoryPath)
+    {
+        if (wb.Worksheets.TryGetWorksheet("Dashboard", out _))
+            return;
+
+        IXLWorksheet? cover = null;
+        if (wb.Worksheets.TryGetWorksheet("Cover", out var c))
+        {
+            cover = c;
+            cover.Cell("A20").Clear();
+            cover.Cell("B20").Clear();
+            cover.Cell("A21").Clear();
+            cover.Cell("B21").Clear();
+            var old = wb.DefinedNames.FirstOrDefault(n =>
+                string.Equals(n.Name, "PricingWorkbookPath", StringComparison.OrdinalIgnoreCase));
+            old?.Delete();
+        }
+
+        string projectName = cover?.Cell("B6").GetString() ?? string.Empty;
+        BuildDashboardSheet(wb, projectName, repDirectoryPath);
+    }
+
+    private static void WriteSectionBar(IXLWorksheet ws, int row, string text)
+    {
+        var rng = ws.Range(row, 1, row, 4);
+        rng.Merge();
+        rng.FirstCell().Value = text;
+        StyleSectionBar(rng, fontSize: 11);
+    }
+
+    private static void StyleSectionBar(IXLRange rng, double fontSize)
+    {
+        rng.Style.Fill.BackgroundColor = HeaderBlue;
+        rng.Style.Font.FontColor = XLColor.White;
+        rng.Style.Font.Bold = true;
+        rng.Style.Font.FontSize = fontSize;
+        rng.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+        rng.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+    }
+
+    #endregion
+
+    #region Rep Directory + Rep Lists
+
+    internal class RepEntry
+    {
+        public string Rep { get; init; } = string.Empty;
+        public string QuoteContact { get; init; } = string.Empty;
+        public string OrderContact { get; init; } = string.Empty;
+        public XLColor? HeaderFill { get; init; }
+    }
+
+    /// <summary>
+    /// Reads the external Rep Directory workbook and returns a case-insensitive
+    /// Mfr→RepEntry map. Rep/Quote/Order values are each merged blocks in the source
+    /// (cols A/H/I); every Mfr row in column B inherits its block's rep metadata.
+    /// Silently returns an empty dictionary on any failure.
+    /// </summary>
+    private static Dictionary<string, RepEntry> ReadRepDirectory(string? path)
+    {
+        var empty = new Dictionary<string, RepEntry>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return empty;
+
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var wb = new XLWorkbook(fs);
+            var ws = wb.Worksheets.First();
+            int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+
+            // Pre-index merged ranges by column for O(log n) containment lookup
+            var mergedByCol = new Dictionary<int, List<IXLRange>>();
+            foreach (var mr in ws.MergedRanges)
+            {
+                int c = mr.FirstColumn().ColumnNumber();
+                if (!mergedByCol.TryGetValue(c, out var list))
+                    mergedByCol[c] = list = new List<IXLRange>();
+                list.Add(mr);
+            }
+
+            static string ExtractText(IXLCell cell)
+            {
+                // Handles plain text, HYPERLINK() formulas (2nd arg is display text),
+                // cached formula results, and cells whose only content is an attached hyperlink.
+                try
+                {
+                    string formatted = cell.GetFormattedString();
+                    if (!string.IsNullOrWhiteSpace(formatted) && !formatted.StartsWith("="))
+                        return formatted;
+                }
+                catch { }
+                try
+                {
+                    var v = cell.CachedValue;
+                    string s = v.ToString() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                }
+                catch { }
+                if (cell.HasFormula)
+                {
+                    string f = cell.FormulaA1 ?? string.Empty;
+                    // Pull display text out of =HYPERLINK("url","text")
+                    int comma = f.IndexOf(',');
+                    if (f.StartsWith("HYPERLINK(", StringComparison.OrdinalIgnoreCase) && comma > 0)
+                    {
+                        string tail = f.Substring(comma + 1).TrimEnd(')').Trim().Trim('"');
+                        if (!string.IsNullOrWhiteSpace(tail)) return tail;
+                    }
+                }
+                if (cell.HasHyperlink)
+                {
+                    string tip = cell.GetHyperlink().Tooltip ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(tip)) return tip;
+                }
+                return cell.GetString();
+            }
+
+            string ResolveBlockValue(int col, int row)
+            {
+                string direct = ExtractText(ws.Cell(row, col));
+                if (!string.IsNullOrWhiteSpace(direct)) return direct;
+                if (mergedByCol.TryGetValue(col, out var list))
+                {
+                    foreach (var mr in list)
+                    {
+                        if (row >= mr.FirstRow().RowNumber() && row <= mr.LastRow().RowNumber())
+                            return ExtractText(mr.FirstCell());
+                    }
+                }
+                return string.Empty;
+            }
+
+            static XLColor? SampleFill(IXLCell cell)
+            {
+                try
+                {
+                    var fill = cell.Style.Fill;
+                    if (fill.PatternType == XLFillPatternValues.None) return null;
+                    var bg = fill.BackgroundColor;
+                    var sd = bg.Color; // System.Drawing.Color
+                    if (sd.A == 0) return null;
+                    if (sd.R == 255 && sd.G == 255 && sd.B == 255) return null;
+                    return bg;
+                }
+                catch { return null; }
+            }
+
+            XLColor? ResolveBlockFill(int col, int row)
+            {
+                var direct = SampleFill(ws.Cell(row, col));
+                if (direct != null) return direct;
+                if (mergedByCol.TryGetValue(col, out var list))
+                {
+                    foreach (var mr in list)
+                    {
+                        if (row >= mr.FirstRow().RowNumber() && row <= mr.LastRow().RowNumber())
+                        {
+                            var anchor = SampleFill(mr.FirstCell());
+                            if (anchor != null) return anchor;
+                        }
+                    }
+                }
+                return null;
+            }
+
+            var result = new Dictionary<string, RepEntry>(StringComparer.OrdinalIgnoreCase);
+            for (int r = 2; r <= lastRow; r++)
+            {
+                string mfr = ExtractText(ws.Cell(r, 2)).Trim();
+                if (string.IsNullOrWhiteSpace(mfr)) continue;
+
+                var entry = new RepEntry
+                {
+                    Rep = ResolveBlockValue(1, r),
+                    QuoteContact = ResolveBlockValue(8, r),
+                    OrderContact = ResolveBlockValue(9, r),
+                    HeaderFill = ResolveBlockFill(1, r),
+                };
+
+                // Expand aliases ("Element/Tech", "Foo A.K.A. Bar") and index each under its normalized key.
+                foreach (string alias in ExpandMfrAliases(mfr))
+                {
+                    string key = NormalizeMfr(alias);
+                    if (string.IsNullOrWhiteSpace(key)) continue;
+                    result.TryAdd(key, entry);
+                }
+            }
+            return result;
+        }
+        catch
+        {
+            return empty;
+        }
+    }
+
+    private static string[] SplitLines(string s) =>
+        string.IsNullOrEmpty(s)
+            ? Array.Empty<string>()
+            : s.Replace("\r\n", "\n").Replace('\r', '\n')
+               .Split('\n', StringSplitOptions.None)
+               .Select(p => p.Trim())
+               .Where(p => p.Length > 0)
+               .ToArray();
+
+    private static string JoinLines(string s, string sep) => string.Join(sep, SplitLines(s));
+
+    private static readonly string[] MfrSuffixNoise =
+    {
+        "lighting", "lights", "light", "ltg",
+        "inc", "llc", "corp", "corporation", "co", "company",
+        "industries", "ltd", "group", "usa",
+    };
+
+    private static readonly string[] MfrAliasDelimiters =
+    {
+        " a.k.a. ", " aka ", "/",
+    };
+
+    /// <summary>
+    /// Splits a directory Mfr cell into its alternate names. "Element/Tech" → ["Element","Tech"].
+    /// "Environmental Lights A.K.A. Lumen Spec" → ["Environmental Lights","Lumen Spec"]. Always
+    /// yields at least the original trimmed string.
+    /// </summary>
+    private static IEnumerable<string> ExpandMfrAliases(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) yield break;
+        var pieces = new List<string> { raw };
+        foreach (string delim in MfrAliasDelimiters)
+        {
+            var next = new List<string>();
+            foreach (string p in pieces)
+                next.AddRange(p.Split(new[] { delim }, StringSplitOptions.RemoveEmptyEntries));
+            pieces = next;
+        }
+        foreach (string p in pieces)
+        {
+            string t = p.Trim();
+            if (!string.IsNullOrWhiteSpace(t)) yield return t;
+        }
+    }
+
+    /// <summary>
+    /// Normalizes a Mfr name for equality matching: lowercases, strips punctuation, collapses
+    /// whitespace, and removes trailing generic-suffix tokens (Lighting, Inc, LLC, etc.) so that
+    /// "Pure Edge Lighting" and "Pure Edge" collapse to the same key.
+    /// </summary>
+    private static string NormalizeMfr(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+        var sb = new System.Text.StringBuilder(raw.Length);
+        foreach (char ch in raw)
+        {
+            if (char.IsLetterOrDigit(ch)) sb.Append(char.ToLowerInvariant(ch));
+            else if (char.IsWhiteSpace(ch) || ch == '-' || ch == '.' || ch == ',' || ch == '&' || ch == '\'')
+                sb.Append(' ');
+            // other punctuation dropped
+        }
+
+        var tokens = sb.ToString()
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+
+        // Strip trailing generic-suffix tokens, but never down to zero tokens.
+        while (tokens.Count > 1 && MfrSuffixNoise.Contains(tokens[^1]))
+            tokens.RemoveAt(tokens.Count - 1);
+
+        return string.Join(" ", tokens);
+    }
+
+    /// <summary>
+    /// Builds the Rep Lists sheet between Worksheet and Quote. One block per matched rep,
+    /// an Unmatched block at the end for mfrs not in the directory. Rebuilt fresh each
+    /// time (delete + add) since it has no user-editable state.
+    /// </summary>
+    private static void BuildRepListsSheet(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> fixtures,
+        Dictionary<string, RepEntry> directory)
+    {
+        // Delete if exists (GenerateUpdate path)
+        if (wb.Worksheets.TryGetWorksheet("Rep Lists", out var existing))
+            existing.Delete();
+
+        var ws = wb.Worksheets.Add("Rep Lists");
+        // Position between Worksheet and Quote
+        if (wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
+            ws.Position = wsSheet.Position + 1;
+
+        // Read project info from Cover sheet so each block carries the job identifiers
+        // (pricing team copies a whole block into an email — name/location need to travel with it).
+        string projectName = string.Empty;
+        string projectLocation = string.Empty;
+        if (wb.Worksheets.TryGetWorksheet("Cover", out var coverWs))
+        {
+            projectName = coverWs.Cell("B6").GetString().Trim();
+            projectLocation = coverWs.Cell("B7").GetString().Trim();
+        }
+
+        // Flatten fixtures to (Type, Mfr, Catalog, Qty) rows
+        var rows = new List<(string Type, string Mfr, string Catalog, int Qty)>();
+        foreach (var f in fixtures)
+        {
+            for (int c = 0; c < 6; c++)
+            {
+                string cat = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(cat)) continue;
+                rows.Add((f.TypeMark, f.Manufacturer, cat, f.Count));
+            }
+        }
+
+        // Group by rep (matched) vs unmatched
+        var matched = new Dictionary<string, (RepEntry Entry, List<(string Type, string Mfr, string Catalog, int Qty)> Items)>(
+            StringComparer.OrdinalIgnoreCase);
+        var unmatched = new List<(string Type, string Mfr, string Catalog, int Qty)>();
+
+        foreach (var row in rows)
+        {
+            string key = NormalizeMfr(row.Mfr);
+            if (!string.IsNullOrWhiteSpace(key) &&
+                directory.TryGetValue(key, out var entry) &&
+                !string.IsNullOrWhiteSpace(entry.Rep))
+            {
+                if (!matched.TryGetValue(entry.Rep, out var bucket))
+                    matched[entry.Rep] = bucket = (entry, new List<(string, string, string, int)>());
+                bucket.Items.Add(row);
+            }
+            else
+            {
+                unmatched.Add(row);
+            }
+        }
+
+        // Track max data-cell length per column (1–4), widest rep-bar line, and widest contact lines per half.
+        var colMax = new[] { "Type".Length, "Mfr".Length, "Catalog Number".Length, "Qty".Length };
+        int repBarMax = 0;
+        int quoteMax = 0;
+        int orderMax = 0;
+
+        int curRow = 1;
+        foreach (var repName in matched.Keys.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+        {
+            var (entry, items) = matched[repName];
+            curRow = WriteRepBlock(ws, curRow, entry.Rep, entry.QuoteContact, entry.OrderContact,
+                projectName, projectLocation, items,
+                entry.HeaderFill ?? HeaderBlue,
+                colMax, ref repBarMax, ref quoteMax, ref orderMax);
+            curRow++; // spacer
+            ws.PageSetup.AddHorizontalPageBreak(curRow);
+        }
+
+        if (unmatched.Count > 0 || matched.Count == 0)
+        {
+            curRow = WriteRepBlock(ws, curRow, "UNMATCHED MANUFACTURERS", string.Empty, string.Empty,
+                projectName, projectLocation, unmatched,
+                XLColor.FromHtml("#F1A983"), colMax, ref repBarMax, ref quoteMax, ref orderMax);
+        }
+
+        // Column widths: max content length + padding, with sensible minimums.
+        double[] widths =
+        {
+            Math.Max(8,  colMax[0] + 2),
+            Math.Max(14, colMax[1] + 2),
+            Math.Max(18, colMax[2] + 2),
+            Math.Max(6,  colMax[3] + 2),
+        };
+        // A:B merged holds quote-contact lines → ensure widths[0]+widths[1] fits the widest quote line.
+        double leftHalf = widths[0] + widths[1];
+        if (quoteMax + 2 > leftHalf) widths[1] += (quoteMax + 2 - leftHalf);
+        // C:D merged holds order-contact lines → ensure widths[2]+widths[3] fits the widest order line.
+        double rightHalf = widths[2] + widths[3];
+        if (orderMax + 2 > rightHalf) widths[3] += (orderMax + 2 - rightHalf);
+        // Rep bar spans A:D → ensure full row can display the flattened rep name.
+        double total = widths.Sum();
+        if (repBarMax + 2 > total) widths[2] += (repBarMax + 2 - total);
+
+        for (int i = 0; i < 4; i++) ws.Column(i + 1).Width = widths[i];
+
+        // Left-align Qty so it stays visually adjacent to Catalog when the column is wide.
+        ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+
+        ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
+        ws.PageSetup.FitToPages(1, 0);
+        ws.ShowGridLines = false;
+    }
+
+    // Project name/location rows are rendered taller than default, with vertical alignment
+    // pushing the text away from the adjacent sections — the empty portion of the cell
+    // supplies the visual buffer without needing separate spacer rows.
+    private const double RepBlockProjectRowHeight = 22.0;
+
+    private static int WriteRepBlock(
+        IXLWorksheet ws, int startRow,
+        string repName, string quoteContact, string orderContact,
+        string projectName, string projectLocation,
+        List<(string Type, string Mfr, string Catalog, int Qty)> items,
+        XLColor headerColor,
+        int[] colMax, ref int repBarMax, ref int quoteMax, ref int orderMax)
+    {
+        int row = startRow;
+
+        // Rep name bar — flatten any newlines in the directory cell to " / " for the single-line header.
+        string repTitle = JoinLines(repName, " / ");
+        var hdr = ws.Range(row, 1, row, 4);
+        hdr.Merge();
+        hdr.FirstCell().Value = repTitle;
+        hdr.Style.Fill.BackgroundColor = headerColor;
+        // Pick black or white text based on fill luminance (YIQ).
+        var sd = headerColor.Color;
+        double luminance = 0.299 * sd.R + 0.587 * sd.G + 0.114 * sd.B;
+        hdr.Style.Font.FontColor = luminance > 160 ? XLColor.Black : XLColor.White;
+        hdr.Style.Font.Bold = true;
+        hdr.Style.Font.FontSize = 12;
+        if (repTitle.Length > repBarMax) repBarMax = repTitle.Length;
+        row++;
+
+        // Contact section — side-by-side line-by-line. Left half (A:B) = quote lines; right half (C:D) = order lines.
+        var quoteLines = SplitLines(quoteContact);
+        var orderLines = SplitLines(orderContact);
+        int contactRowCount = Math.Max(quoteLines.Length, orderLines.Length);
+        // Prepend a "label" row when either side has content.
+        if (contactRowCount > 0)
+        {
+            ws.Range(row, 1, row, 2).Merge().FirstCell().Value = "Quote Contact";
+            ws.Range(row, 3, row, 4).Merge().FirstCell().Value = "Order Contact";
+            var labelRow = ws.Range(row, 1, row, 4);
+            labelRow.Style.Font.Bold = true;
+            labelRow.Style.Font.FontColor = XLColor.DimGray;
+            labelRow.Style.Border.BottomBorder = XLBorderStyleValues.Hair;
+            if ("Quote Contact".Length > quoteMax) quoteMax = "Quote Contact".Length;
+            if ("Order Contact".Length > orderMax) orderMax = "Order Contact".Length;
+            row++;
+
+            var emailColor = XLColor.FromHtml("#9A9A9A"); // light gray, paired with italic
+            for (int i = 0; i < contactRowCount; i++)
+            {
+                string q = i < quoteLines.Length ? quoteLines[i] : string.Empty;
+                string o = i < orderLines.Length ? orderLines[i] : string.Empty;
+                var lq = ws.Range(row, 1, row, 2).Merge();
+                var lo = ws.Range(row, 3, row, 4).Merge();
+                lq.FirstCell().Value = q;
+                lo.FirstCell().Value = o;
+                if (q.Contains('@'))
+                {
+                    lq.Style.Font.FontColor = emailColor;
+                    lq.Style.Font.Italic = true;
+                }
+                else
+                {
+                    lq.Style.Font.FontColor = XLColor.DimGray;
+                }
+                if (o.Contains('@'))
+                {
+                    lo.Style.Font.FontColor = emailColor;
+                    lo.Style.Font.Italic = true;
+                }
+                else
+                {
+                    lo.Style.Font.FontColor = XLColor.DimGray;
+                }
+                if (q.Length > quoteMax) quoteMax = q.Length;
+                if (o.Length > orderMax) orderMax = o.Length;
+                row++;
+            }
+        }
+
+        // Project identifiers — each block carries its own name+location so a pricing-team
+        // paste of the whole block into an email always includes the job reference.
+        // Rows are rendered tall with vertical alignment pushing text outward, so the
+        // empty cell padding supplies the top/bottom buffer around this section.
+        bool hasProjectName = !string.IsNullOrWhiteSpace(projectName);
+        bool hasProjectLocation = !string.IsNullOrWhiteSpace(projectLocation);
+        bool hasBoth = hasProjectName && hasProjectLocation;
+
+        if (hasProjectName)
+        {
+            var pn = ws.Range(row, 1, row, 4).Merge();
+            pn.FirstCell().Value = projectName;
+            pn.Style.Font.Bold = true;
+            pn.Style.Alignment.Vertical = hasBoth
+                ? XLAlignmentVerticalValues.Bottom   // push away from contacts above
+                : XLAlignmentVerticalValues.Center;  // only row → center for symmetric buffer
+            ws.Row(row).Height = RepBlockProjectRowHeight;
+            if (projectName.Length > colMax[2]) colMax[2] = projectName.Length;
+            row++;
+        }
+        if (hasProjectLocation)
+        {
+            var pl = ws.Range(row, 1, row, 4).Merge();
+            pl.FirstCell().Value = projectLocation;
+            pl.Style.Font.Bold = true;
+            pl.Style.Alignment.Vertical = hasBoth
+                ? XLAlignmentVerticalValues.Top      // push away from column headers below
+                : XLAlignmentVerticalValues.Center;
+            ws.Row(row).Height = RepBlockProjectRowHeight;
+            if (projectLocation.Length > colMax[2]) colMax[2] = projectLocation.Length;
+            row++;
+        }
+
+        // Column headers
+        ws.Cell(row, 1).Value = "Type";
+        ws.Cell(row, 2).Value = "Mfr";
+        ws.Cell(row, 3).Value = "Catalog Number";
+        ws.Cell(row, 4).Value = "Qty";
+        var colHdr = ws.Range(row, 1, row, 4);
+        colHdr.Style.Font.Bold = true;
+        colHdr.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        row++;
+
+        // Data rows
+        foreach (var item in items)
+        {
+            ws.Cell(row, 1).Value = item.Type;
+            ws.Cell(row, 2).Value = item.Mfr;
+            ws.Cell(row, 3).Value = item.Catalog;
+            ws.Cell(row, 4).Value = item.Qty;
+
+            if (item.Type.Length    > colMax[0]) colMax[0] = item.Type.Length;
+            if (item.Mfr.Length     > colMax[1]) colMax[1] = item.Mfr.Length;
+            if (item.Catalog.Length > colMax[2]) colMax[2] = item.Catalog.Length;
+            int qtyLen = item.Qty.ToString().Length;
+            if (qtyLen              > colMax[3]) colMax[3] = qtyLen;
+
+            row++;
+        }
+
+        return row;
     }
 
     #endregion
@@ -270,7 +895,6 @@ public static class CountsWorkbookService
         IXLWorkbook wb,
         List<CountsFixtureModel> fixtures,
         string countsSheetName,
-        Dictionary<string, PricingEntry>? pricing,
         Dictionary<(string Type, string Catalog), WorksheetRowData>? existingRows)
     {
         var ws = wb.Worksheets.Add("Worksheet");
@@ -356,11 +980,7 @@ public static class CountsWorkbookService
                 else
                 {
                     catalogFirstRow[catNum] = row;
-                    if (pricing != null && pricing.TryGetValue(catNum, out var pe))
-                    {
-                        ws.Cell(row, WsColDesc).Value = pe.Description;
-                        ws.Cell(row, WsColUnitCost).Value = pe.Cost;
-                    }
+                    // Description + Unit Cost start blank — pricing team enters manually.
 
                     // Mark canonical only when the catalog has siblings (otherwise every row would be bolded)
                     if (catalogCounts.GetValueOrDefault(catNum) > 1)
@@ -540,9 +1160,14 @@ public static class CountsWorkbookService
             $"SUMPRODUCT(({predicate})*{sellEa}*{Col("D")})"
             + $"+SUMPRODUCT(({predicate})*{tariffBasePerRow}*{typeKPerRow})";
 
+        // Quote footer notes — appended to the Type column under the Grand Total line.
+        // FILTER drops empty rows so users can fill fewer than 15 notes without blank spill.
+        string notesSpill = "_xlfn._xlws.FILTER(QuoteNotes,QuoteNotes<>\"\",\"\")";
+
         int i = 0;
-        // Type — blank tariff row
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(Col("A"), "\"\"")},\"\")";
+        // Type — blank tariff row, plus notes appended at the bottom (after Grand Total row footprint)
+        ws.Cell($"{cols[i++]}2").FormulaA1 =
+            $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"")},\"\"),\"\",\"\",\"\",\"\",\"\",{notesSpill})";
         // Mfr — blank tariff row
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(Col("B"), "\"\"")},\"\")";
         // Catalog~Desc — "Tariff" label on tariff row
@@ -552,12 +1177,12 @@ public static class CountsWorkbookService
         // Delta (Quote only) — blank tariff row
         if (includeDelta)
             ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(Col("F"), "\"\"")},\"\")";
-        // Sell Ea. + footer labels
+        // Sell Ea. + footer labels (Subtotal / Lutron / Freight / Grand Total)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellEa, "\"\"")},\"\"),\"\",\"Subtotal:\",\"Freight:\",\"Grand Total:\")";
+            $"_xlfn.VSTACK(IFERROR({Gap(sellEa, "\"\"")},\"\"),\"\",\"Subtotal:\",\"Lutron Control:\",\"Freight:\",\"Grand Total:\")";
         // Sell Ext. + footer values (tariff row carries per-type tariff amount)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),\"\",{subtotal},0,{subtotal}+0)";
+            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),\"\",{subtotal},LutronSubtotal,Freight,{subtotal}+LutronSubtotal+Freight)";
     }
 
     #endregion
@@ -728,14 +1353,13 @@ public static class CountsWorkbookService
         IXLWorkbook wb,
         List<CountsFixtureModel> fixtures,
         string countsSheetName,
-        Dictionary<string, PricingEntry>? pricing,
         List<WorksheetRowData> existingRows,
         Dictionary<string, CountsFixtureModel>? prevData)
     {
         if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var ws))
         {
             // No existing Worksheet — build fresh
-            BuildWorksheetSheet(wb, fixtures, countsSheetName, pricing, null);
+            BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
             return;
         }
 
@@ -785,8 +1409,10 @@ public static class CountsWorkbookService
         // Step 1: Delete rows that were already marked as removed (red strikethrough)
         // We detect these by checking if the row's (Type, Catalog) is not in new data
         // AND was already not in prev data (meaning it was marked red last time)
-        // For simplicity on first implementation: just delete rows not in new data
-        // that have strikethrough font
+        // NOTE: row 2 must never be deleted — the helper pipeline spill anchors live there
+        // (AA2, AB2, …) and the print sheets reference them via ANCHORARRAY. Deleting row 2
+        // causes ClosedXML to shift those cross-sheet references (AD2# → AD1#). Clear in
+        // place instead.
         for (int r = lastRow; r >= 2; r--)
         {
             string rowType = ws.Cell(r, WsColType).GetString();
@@ -795,7 +1421,10 @@ public static class CountsWorkbookService
 
             if (!newKeys.Contains(key) && ws.Cell(r, WsColType).Style.Font.Strikethrough)
             {
-                ws.Row(r).Delete();
+                if (r == 2)
+                    ws.Row(r).Clear(XLClearOptions.Contents | XLClearOptions.NormalFormats);
+                else
+                    ws.Row(r).Delete();
             }
         }
 
@@ -808,12 +1437,19 @@ public static class CountsWorkbookService
             existingByKey.TryAdd(key, er);
         }
 
-        // Step 2: Clear existing data rows and rebuild
+        // Step 2: Clear existing data rows and rebuild.
+        // Row 2 is cleared in place (see note in step 1); rows 3+ are safe to delete.
         lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
-        if (lastRow > 1)
+        if (lastRow >= 3)
         {
-            for (int r = lastRow; r >= 2; r--)
+            for (int r = lastRow; r >= 3; r--)
                 ws.Row(r).Delete();
+        }
+        if (lastRow >= 2)
+        {
+            // Clear contents + formats on the visible columns A..helper-last. The helper-pipeline
+            // cells at row 2 will be overwritten by WriteHelperPipeline at the end of this method.
+            ws.Range(2, 1, 2, WsColHelperLast).Clear(XLClearOptions.Contents | XLClearOptions.NormalFormats);
         }
 
         // Step 3: Write all rows sorted by Type Mark then catalog position
@@ -904,7 +1540,7 @@ public static class CountsWorkbookService
                     ws.Cell(row, WsColPhase).Value = existing.Phase.Value;
 
                 // Catalog-canonical fields
-                WritePricingCells(ws, row, canonicalRow, catalog, pricing,
+                WritePricingCells(ws, row, canonicalRow,
                     existing.Description, existing.Calc, existing.UnitCost, existing.Markup, existing.Adder,
                     existing.DescIsFormula, existing.CalcIsFormula, existing.CostIsFormula,
                     isNewRow: false);
@@ -915,7 +1551,7 @@ public static class CountsWorkbookService
             else
             {
                 // New row — no existing data
-                WritePricingCells(ws, row, canonicalRow, catalog, pricing,
+                WritePricingCells(ws, row, canonicalRow,
                     null, null, null, null, null, false, false, false, isNewRow: true);
 
                 WriteTariffCell(ws, row, typeCanonical, null, isNewRow: true);
@@ -1058,8 +1694,7 @@ public static class CountsWorkbookService
     }
 
     private static void WritePricingCells(
-        IXLWorksheet ws, int row, int canonicalRow, string catalog,
-        Dictionary<string, PricingEntry>? pricing,
+        IXLWorksheet ws, int row, int canonicalRow,
         string? existingDesc, string? existingCalc, double? existingCost, double? existingMarkup, double? existingAdder,
         bool descIsFormula, bool calcIsFormula, bool costIsFormula,
         bool isNewRow)
@@ -1077,17 +1712,13 @@ public static class CountsWorkbookService
 
         if (isCanonical)
         {
-            // Canonical row: Desc / Calc / Unit Cost get literal values.
+            // Canonical row: Desc / Calc / Unit Cost get literal values — preserved across updates.
+            // New rows start blank; pricing team enters manually.
             if (!isNewRow)
             {
                 if (existingDesc != null) ws.Cell(row, WsColDesc).Value = existingDesc;
                 if (!string.IsNullOrEmpty(existingCalc)) ws.Cell(row, WsColCalc).Value = existingCalc;
                 if (existingCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
-            }
-            else if (pricing != null && pricing.TryGetValue(catalog, out var pe))
-            {
-                ws.Cell(row, WsColDesc).Value = pe.Description;
-                ws.Cell(row, WsColUnitCost).Value = pe.Cost;
             }
             return;
         }
@@ -1284,30 +1915,11 @@ public static class CountsWorkbookService
         return result;
     }
 
-    private static string ReadPricingPathFromCover(IXLWorkbook wb)
+    private static string ReadRepDirectoryPathFromDashboard(IXLWorkbook wb)
     {
-        if (!wb.Worksheets.TryGetWorksheet("Cover", out var ws))
-            return DefaultPricingPath;
-
-        return ws.Cell("B20").GetString();
-    }
-
-    /// <summary>
-    /// Reads the notify email address from the Cover sheet config area of a saved workbook.
-    /// </summary>
-    public static string ReadNotifyEmailFromCover(string workbookPath)
-    {
-        try
-        {
-            using var wb = new XLWorkbook(workbookPath);
-            if (!wb.Worksheets.TryGetWorksheet("Cover", out var ws))
-                return string.Empty;
-            return ws.Cell("B21").GetString();
-        }
-        catch
-        {
+        if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var ws))
             return string.Empty;
-        }
+        return ws.Cell("B4").GetString();
     }
 
     private static List<WorksheetRowData> ReadExistingWorksheetRows(IXLWorkbook wb)
@@ -1347,50 +1959,9 @@ public static class CountsWorkbookService
         return result;
     }
 
-    private static Dictionary<string, PricingEntry>? ReadPricingWorkbook(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            return null;
-
-        try
-        {
-            using var wb = new XLWorkbook(path);
-            var ws = wb.Worksheets.TryGetWorksheet("Pricing", out var pricingSheet)
-                ? pricingSheet
-                : wb.Worksheets.First();
-
-            var result = new Dictionary<string, PricingEntry>(StringComparer.OrdinalIgnoreCase);
-            int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
-
-            for (int r = 2; r <= lastRow; r++)
-            {
-                string catalogNumber = ws.Cell(r, 1).GetString();
-                if (string.IsNullOrWhiteSpace(catalogNumber)) continue;
-
-                result.TryAdd(catalogNumber, new PricingEntry
-                {
-                    Description = ws.Cell(r, 2).GetString(),
-                    Cost = (decimal)ws.Cell(r, 3).GetDouble(),
-                });
-            }
-
-            return result;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     #endregion
 
     #region Internal Types
-
-    private class PricingEntry
-    {
-        public string Description { get; init; } = string.Empty;
-        public decimal Cost { get; init; }
-    }
 
     internal class WorksheetRowData
     {

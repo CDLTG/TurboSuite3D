@@ -18,6 +18,8 @@ public class CountsViewModel : ViewModelBase
     private string _statusText = string.Empty;
     private bool _isGenerating;
     private bool _isUpdateMode;
+    private string _repDirectoryPath = string.Empty;
+    private string _notifyEmail = string.Empty;
 
     public string ProjectName { get; }
 
@@ -61,12 +63,29 @@ public class CountsViewModel : ViewModelBase
     }
 
     public RelayCommand GenerateCommand { get; }
+    public RelayCommand BrowseRepDirectoryCommand { get; }
+
+    public string RepDirectoryPath
+    {
+        get => _repDirectoryPath;
+        set => SetProperty(ref _repDirectoryPath, value);
+    }
+
+    public string NotifyEmail
+    {
+        get => _notifyEmail;
+        set => SetProperty(ref _notifyEmail, value);
+    }
 
     public CountsViewModel(string projectName, DocsViewModel parent)
     {
         _parent = parent;
         ProjectName = projectName;
+        var settings = DocsSettingsService.Load();
+        _repDirectoryPath = settings.RepDirectoryPath;
+        _notifyEmail = settings.CountsNotifyEmail;
         GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && _fixtures.Count > 0);
+        BrowseRepDirectoryCommand = new RelayCommand(ExecuteBrowseRepDirectory);
     }
 
     public void LoadData(List<CountsFixtureModel> fixtures)
@@ -78,7 +97,23 @@ public class CountsViewModel : ViewModelBase
 
     public void SaveSettings()
     {
-        // No tab-specific settings to persist yet
+        var settings = DocsSettingsService.Load();
+        settings.RepDirectoryPath = _repDirectoryPath;
+        settings.CountsNotifyEmail = _notifyEmail;
+        DocsSettingsService.Save(settings);
+    }
+
+    private void ExecuteBrowseRepDirectory()
+    {
+        var dlg = new OpenFileDialog
+        {
+            Filter = "Excel Files|*.xlsx;*.xlsm",
+            Title = "Select Rep Directory Workbook"
+        };
+        if (!string.IsNullOrWhiteSpace(RepDirectoryPath) && File.Exists(RepDirectoryPath))
+            dlg.InitialDirectory = Path.GetDirectoryName(RepDirectoryPath);
+        if (dlg.ShowDialog() == true)
+            RepDirectoryPath = dlg.FileName;
     }
 
     private async void ExecuteGenerate()
@@ -117,6 +152,8 @@ public class CountsViewModel : ViewModelBase
             bool updateMode = IsUpdateMode;
             var fixtures = _fixtures;
             string projName = ProjectName;
+            string projLocation = _parent.ProjectLocation;
+            string repDirPath = _repDirectoryPath;
 
             StatusText = updateMode ? "Updating workbook..." : "Generating workbook...";
             Progress = 30;
@@ -124,16 +161,16 @@ public class CountsViewModel : ViewModelBase
             await Task.Run(() =>
             {
                 if (updateMode)
-                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath);
+                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath);
                 else
-                    CountsWorkbookService.GenerateNew(fixtures, projName, outputPath);
+                    CountsWorkbookService.GenerateNew(fixtures, projName, projLocation, outputPath, repDirPath);
             });
 
             Progress = 100;
             StatusText = $"Done. Saved to {Path.GetFileName(outputPath)}";
 
-            // Open pre-filled email notification if a notify email is configured
-            string notifyEmail = CountsWorkbookService.ReadNotifyEmailFromCover(outputPath);
+            // Open pre-filled email notification if a notify email is configured (Revit-side setting)
+            string notifyEmail = _notifyEmail;
             if (!string.IsNullOrWhiteSpace(notifyEmail))
             {
                 string subject = Uri.EscapeDataString($"Counts Updated - {projName}");
