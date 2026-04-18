@@ -110,10 +110,12 @@ public static class UpdateService
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 @"Autodesk\Revit\Addins\2025\TurboSuite");
 
+            var revitPid = Process.GetCurrentProcess().Id;
+
             var startInfo = new ProcessStartInfo
             {
                 FileName = UpdaterExePath,
-                Arguments = $"--source \"{StagingFolder}\" --dest \"{revitAddinsFolder}\" --versionfile \"{VersionFilePath}\"",
+                Arguments = $"--source \"{StagingFolder}\" --dest \"{revitAddinsFolder}\" --versionfile \"{VersionFilePath}\" --pid {revitPid}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden

@@ -33,6 +33,7 @@ public class DocsViewModel : ViewModelBase
     public PanelScheduleViewModel PanelScheduleVM { get; }
     public NotesViewModel NotesVM { get; }
     public BomViewModel BomVM { get; }
+    public CountsViewModel CountsVM { get; }
 
     public int SelectedTabIndex
     {
@@ -157,6 +158,7 @@ public class DocsViewModel : ViewModelBase
         PanelScheduleVM = new PanelScheduleViewModel(projectName, this);
         NotesVM = new NotesViewModel(projectName, this);
         BomVM = new BomViewModel(projectName, this);
+        CountsVM = new CountsViewModel(projectName, this);
 
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
         BrowseCoverVerticalCommand = new RelayCommand(ExecuteBrowseCoverVertical);
@@ -199,6 +201,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName == nameof(PowerSuppliesViewModel.StatusText))
                 StatusText = PowerSuppliesVM.StatusText;
         };
+        CountsVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CountsViewModel.StatusText))
+                StatusText = CountsVM.StatusText;
+        };
 
         GenerateCommand = new RelayCommand(ExecuteGenerate, CanGenerate);
 
@@ -238,6 +245,11 @@ public class DocsViewModel : ViewModelBase
             if (e.PropertyName is nameof(PowerSuppliesViewModel.IsGenerating))
                 System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         };
+        CountsVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(CountsViewModel.IsGenerating))
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        };
     }
 
     public void SaveSettings()
@@ -262,13 +274,14 @@ public class DocsViewModel : ViewModelBase
         PanelScheduleVM.SaveSettings();
         NotesVM.SaveSettings();
         BomVM.SaveSettings();
+        CountsVM.SaveSettings();
     }
 
     private bool CanGenerate()
     {
         if (IsSettingsVisible) return false;
 
-        // Tab 0 = Cover, 1 = Fixture Schedule, 2 = Power Supplies, 3 = Cut Sheets, 4 = Control BOM, 5 = Load Schedule, 6 = Panel Schedule
+        // Tab 0 = Cover, 1 = Fixture Schedule, 2 = Power Supplies, 3 = Cut Sheets, 4 = Control BOM, 5 = Load Schedule, 6 = Panel Schedule, 7 = Counts
         return SelectedTabIndex switch
         {
             0 => NotesVM.GenerateCommand.CanExecute(null),
@@ -278,6 +291,7 @@ public class DocsViewModel : ViewModelBase
             4 => BomVM.GenerateCommand.CanExecute(null),
             5 => LoadsVM.GenerateCommand.CanExecute(null),
             6 => PanelScheduleVM.GenerateCommand.CanExecute(null),
+            7 => CountsVM.GenerateCommand.CanExecute(null),
             _ => false,
         };
     }
@@ -306,6 +320,9 @@ public class DocsViewModel : ViewModelBase
                 break;
             case 6:
                 PanelScheduleVM.GenerateCommand.Execute(null);
+                break;
+            case 7:
+                CountsVM.GenerateCommand.Execute(null);
                 break;
         }
     }
