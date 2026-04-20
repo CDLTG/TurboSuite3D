@@ -238,12 +238,12 @@ public static class CountsWorkbookService
 
         // --- QUOTE ADJUSTMENTS ---
         WriteSectionBar(ws, 7, "QUOTE ADJUSTMENTS");
+        // Left blank by default — the Quote/Phase sheets omit the Lutron row when B8 is empty,
+        // and blank cells coerce to 0 inside the Grand Total arithmetic.
         ws.Cell("A8").Value = "Lutron Lighting Control";
-        ws.Cell("B8").Value = 0.0;
         ws.Cell("B8").Style.NumberFormat.Format = "$#,##0.00";
 
         ws.Cell("A9").Value = "Estimated Freight";
-        ws.Cell("B9").Value = 0.0;
         ws.Cell("B9").Style.NumberFormat.Format = "$#,##0.00";
 
         // --- BID LOCK ---
@@ -524,15 +524,61 @@ public static class CountsWorkbookService
         "industries", "ltd", "group", "usa",
     };
 
+    // Display-trim noise set (case-insensitive). Decoupled from MfrSuffixNoise so display
+    // tweaks don't perturb Rep Lists matching. Intentionally omits "lights" (kept for matching).
+    private static readonly HashSet<string> MfrDisplayNoise =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "lighting", "light", "ltg",
+            "inc", "llc", "corp", "corporation", "co", "company",
+            "industries", "ltd", "group", "usa",
+        };
+
+    /// <summary>
+    /// Space-saving display trim for the Worksheet Mfr column. Strips trailing legal
+    /// suffixes (Inc, LLC, Corp, Co, Company, Ltd, Industries, Group, USA) and lighting
+    /// tokens (Lighting, Lights, Light, Ltg), then drops a trailing "and"/"&" left dangling
+    /// by the strip (e.g. "AV Poles and Lighting" → "AV Poles"). Stops at the first
+    /// non-noise token, never reduces below one remaining word, and preserves original
+    /// casing. Unlike NormalizeMfr this is cosmetic — not used for matching.
+    /// </summary>
+    private static string TrimMfrForDisplay(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return raw ?? string.Empty;
+
+        var tokens = raw.Trim()
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+
+        static string StripPunct(string t) => t.Trim(',', '.', ';', ':');
+
+        bool strippedAny = false;
+        while (tokens.Count > 1 && MfrDisplayNoise.Contains(StripPunct(tokens[^1])))
+        {
+            tokens.RemoveAt(tokens.Count - 1);
+            strippedAny = true;
+        }
+        if (strippedAny && tokens.Count > 1)
+        {
+            string last = StripPunct(tokens[^1]);
+            if (last.Equals("and", StringComparison.OrdinalIgnoreCase) || last == "&")
+                tokens.RemoveAt(tokens.Count - 1);
+        }
+        if (tokens.Count > 0)
+            tokens[^1] = tokens[^1].TrimEnd(',', ';');
+
+        return string.Join(" ", tokens);
+    }
+
     private static readonly string[] MfrAliasDelimiters =
     {
-        " a.k.a. ", " aka ", "/",
+        " a.k.a. ", " aka ", "/", "\r\n", "\n",
     };
 
     /// <summary>
     /// Splits a directory Mfr cell into its alternate names. "Element/Tech" → ["Element","Tech"].
-    /// "Environmental Lights A.K.A. Lumen Spec" → ["Environmental Lights","Lumen Spec"]. Always
-    /// yields at least the original trimmed string.
+    /// Newline-separated entries (a directory cell holding multiple mfrs on separate lines) and
+    /// "Foo A.K.A. Bar" aliases are also split. Always yields at least the original trimmed string.
     /// </summary>
     private static IEnumerable<string> ExpandMfrAliases(string raw)
     {
@@ -904,7 +950,7 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColMfr).Value = "Mfr";
         ws.Cell(1, WsColCatalog).Value = "Catalog Number";
         ws.Cell(1, WsColQty).Value = "Qty";
-        ws.Cell(1, WsColPrevQty).Value = "Prev Qty";
+        ws.Cell(1, WsColPrevQty).Value = "Prev";
         ws.Cell(1, WsColDelta).Value = "Δ";
         ws.Cell(1, WsColCalc).Value = "Calc";
         ws.Cell(1, WsColPhase).Value = "Phase";
@@ -950,7 +996,7 @@ public static class CountsWorkbookService
 
                 // Type, Mfr, Catalog Number
                 ws.Cell(row, WsColType).Value = f.TypeMark;
-                ws.Cell(row, WsColMfr).Value = f.Manufacturer;
+                ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(f.Manufacturer);
                 ws.Cell(row, WsColCatalog).Value = catNum;
 
                 // Qty formula
@@ -1121,8 +1167,10 @@ public static class CountsWorkbookService
         string sellExt = $"({sellEa})*{Col("D")}";
         // Tariff base = Sell Ext. (includes Adder). Prior version omitted L, underpricing tariffs.
         string tariffBasePerRow = sellExt;
+        // Exclude "dependent" placeholder — it's a visual cue on Worksheet for drag-fill links,
+        // not a real description. Treated as blank here so it doesn't leak into print sheets.
         string catalogCombined =
-            $"{Col("C")}&IF(({Col("G")}<>0)*({Col("G")}<>\"\"),\" ~ \"&{Col("G")},\"\")";
+            $"{Col("C")}&IF(({Col("G")}<>0)*({Col("G")}<>\"\")*({Col("G")}<>\"dependent\"),\" ~ \"&{Col("G")},\"\")";
 
         // Gap LAMBDA: emits gap rows at type-group boundaries and a "Tariff" row at each
         // group's end (when tariff% != 0). Inline LAMBDA — defined-name LAMBDAs called from
@@ -1177,12 +1225,22 @@ public static class CountsWorkbookService
         // Delta (Quote only) — blank tariff row
         if (includeDelta)
             ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(Col("F"), "\"\"")},\"\")";
-        // Sell Ea. + footer labels (Subtotal / Lutron / Freight / Grand Total)
+        // Sell Ea. + footer labels (Subtotal / [Lutron?] / Freight / Grand Total).
+        // Lutron row is omitted when Dashboard!LutronSubtotal is blank.
+        string labelFooter =
+            "IF(LutronSubtotal=\"\","
+            + "_xlfn.VSTACK(\"\",\"Subtotal:\",\"Freight:\",\"Grand Total:\"),"
+            + "_xlfn.VSTACK(\"\",\"Subtotal:\",\"Lutron Control:\",\"Freight:\",\"Grand Total:\"))";
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellEa, "\"\"")},\"\"),\"\",\"Subtotal:\",\"Lutron Control:\",\"Freight:\",\"Grand Total:\")";
-        // Sell Ext. + footer values (tariff row carries per-type tariff amount)
+            $"_xlfn.VSTACK(IFERROR({Gap(sellEa, "\"\"")},\"\"),{labelFooter})";
+        // Sell Ext. + footer values (tariff row carries per-type tariff amount).
+        // Grand Total uses N(LutronSubtotal) so a blank cell contributes zero.
+        string valueFooter =
+            "IF(LutronSubtotal=\"\","
+            + $"_xlfn.VSTACK(\"\",{subtotal},Freight,{subtotal}+Freight),"
+            + $"_xlfn.VSTACK(\"\",{subtotal},LutronSubtotal,Freight,{subtotal}+LutronSubtotal+Freight))";
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),\"\",{subtotal},LutronSubtotal,Freight,{subtotal}+LutronSubtotal+Freight)";
+            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),{valueFooter})";
     }
 
     #endregion
@@ -1208,14 +1266,20 @@ public static class CountsWorkbookService
         WritePrintSheetHeaders(ws, headerRow, headers);
 
         // Spill row — one ANCHORARRAY per column pointing at Worksheet!AAn..AGn.
+        // Mfr column (index 1) is wrapped in UPPER for all-caps display, with a
+        // hardcoded substitution: "Environmental Lights" → "LUMEN SPEC".
         int spillRow = headerRow + 1;
         for (int i = 0; i < QuoteHelperCols.Length; i++)
-            ws.Cell(spillRow, i + 1).FormulaA1 = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteHelperCols[i]}2)";
+        {
+            string anchor = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteHelperCols[i]}2)";
+            ws.Cell(spillRow, i + 1).FormulaA1 = i == 1 ? BuildMfrDisplayFormula(anchor) : anchor;
+        }
 
         // Currency + delta formats
         ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(7).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
+        ws.Column(2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         // Column widths — pull from Worksheet (ANCHORARRAY cells can't auto-size).
         ws.Column(1).Width = wsSheet.Column(WsColType).Width;
@@ -1259,11 +1323,15 @@ public static class CountsWorkbookService
 
         int spillRow = headerRow + 1;
         for (int i = 0; i < cols.Length; i++)
-            ws.Cell(spillRow, i + 1).FormulaA1 = $"_xlfn.ANCHORARRAY(Worksheet!{cols[i]}2)";
+        {
+            string anchor = $"_xlfn.ANCHORARRAY(Worksheet!{cols[i]}2)";
+            ws.Cell(spillRow, i + 1).FormulaA1 = i == 1 ? BuildMfrDisplayFormula(anchor) : anchor;
+        }
 
         // Currency formats
         ws.Column(5).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         // Column widths
         ws.Column(1).Width = wsSheet.Column(WsColType).Width;
@@ -1277,6 +1345,18 @@ public static class CountsWorkbookService
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
         ws.PageSetup.FitToPages(1, 0);
         ws.PageSetup.SetRowsToRepeatAtTop(1, headerRow);
+    }
+
+    /// <summary>
+    /// Builds the Mfr-column spill formula for Quote/Phase print sheets. Uppercases every
+    /// value, then applies hardcoded display substitutions (e.g. Environmental Lights →
+    /// LUMEN SPEC). IF returns an array when its arguments are arrays, so the spill is
+    /// preserved. Comparison is case-insensitive because UPPER is applied first.
+    /// </summary>
+    private static string BuildMfrDisplayFormula(string anchor)
+    {
+        string upper = $"UPPER({anchor})";
+        return $"IF({upper}=\"ENVIRONMENTAL LIGHTS\",\"LUMEN SPEC\",{upper})";
     }
 
     /// <summary>Writes the 4-row merged title block shared by Quote and Phase sheets.</summary>
@@ -1597,7 +1677,7 @@ public static class CountsWorkbookService
             var existing = existingByKey.GetValueOrDefault(key);
 
             ws.Cell(row, WsColType).Value = type;
-            ws.Cell(row, WsColMfr).Value = mfr;
+            ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(mfr);
             ws.Cell(row, WsColCatalog).Value = catalog;
 
             if (existing != null)
