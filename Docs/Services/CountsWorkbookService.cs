@@ -142,6 +142,11 @@ public static class CountsWorkbookService
         // Rebuild Rep Lists (deleted + recreated; pure derived output)
         BuildRepListsSheet(wb, fixtures, repDirectory);
 
+        // Rebuild Quote and Phase sheets. They are pure ANCHORARRAY consumers
+        // of Worksheet helper columns with no user-editable state. Copy+overwrite
+        // workflows can duplicate spill formulas across re-saves, so rebuild fresh.
+        RebuildQuoteAndPhaseSheets(wb);
+
         // Append changes
         if (prevData != null)
             AppendChanges(wb, fixtures, prevData);
@@ -866,13 +871,15 @@ public static class CountsWorkbookService
         colHdr.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
         row++;
 
-        // Data rows
+        // Data rows — Qty pulls live from Worksheet col D (Calc-adjusted) keyed by (Type, Catalog)
+        // so pricing-team Calc changes propagate here without re-running Counts.
         foreach (var item in items)
         {
             ws.Cell(row, 1).Value = item.Type;
             ws.Cell(row, 2).Value = item.Mfr;
             ws.Cell(row, 3).Value = item.Catalog;
-            ws.Cell(row, 4).Value = item.Qty;
+            ws.Cell(row, 4).FormulaA1 =
+                $"SUMIFS(Worksheet!D:D,Worksheet!A:A,A{row},Worksheet!C:C,C{row})";
 
             if (item.Type.Length    > colMax[0]) colMax[0] = item.Type.Length;
             if (item.Mfr.Length     > colMax[1]) colMax[1] = item.Mfr.Length;
@@ -1034,10 +1041,14 @@ public static class CountsWorkbookService
                 }
 
                 // Tariff % (K) is per-Type canonical: only the first row of each Type holds a
-                // literal; subsequent rows are blank and locked. Helper pipeline resolves the
-                // Type's tariff % via XLOOKUP against the full K column (first match = canonical).
+                // literal; subsequent rows mirror it via a gray-italic formula (WriteTariffCell)
+                // so users see the tariff on every row while the canonical cell remains the
+                // only editable one. Helper pipeline resolves the Type's tariff % via XLOOKUP
+                // against the full K column (first match = canonical).
                 if (!typeFirstRow.ContainsKey(f.TypeMark))
                     typeFirstRow[f.TypeMark] = row;
+                else
+                    WriteTariffCell(ws, row, typeFirstRow[f.TypeMark], existingTariff: null, isNewRow: true);
 
                 // Active flag: initial export has no removed rows — always 1.
                 ws.Cell(row, WsColActive).Value = 1;
@@ -1052,9 +1063,7 @@ public static class CountsWorkbookService
         ws.Column(WsColType).AdjustToContents();
         ws.Column(WsColMfr).AdjustToContents();
         ws.Column(WsColCatalog).AdjustToContents();
-        ws.Column(WsColQty).Width = 8;
-        ws.Column(WsColPrevQty).Width = 10;
-        ws.Column(WsColDelta).Width = 6;
+        ApplyQtyColumnFormatting(ws);
         ws.Column(WsColDesc).Width = 25;
         ws.Column(WsColCalc).Width = 10;
         ws.Column(WsColUnitCost).Width = 12;
@@ -1063,14 +1072,7 @@ public static class CountsWorkbookService
         ws.Column(WsColAdder).Width = 10;
         ws.Column(WsColPhase).Width = 10;
 
-        // Format currency columns
-        ws.Column(WsColUnitCost).Style.NumberFormat.Format = "$#,##0.00";
-        ws.Column(WsColMarkup).Style.NumberFormat.Format = "0%";
-        ws.Column(WsColTariff).Style.NumberFormat.Format = "0%";
-        ws.Column(WsColAdder).Style.NumberFormat.Format = "$#,##0.00";
-
-        // Delta: show +/- prefix, hide zero
-        ws.Column(WsColDelta).Style.NumberFormat.Format = "+0;-0;;@";
+        ApplyPricingColumnFormats(ws);
 
         // Visual separator between TurboSuite (locked) and pricing (editable) columns
         ws.Column(WsColDelta).Style.Border.RightBorder = XLBorderStyleValues.Thick;
@@ -1101,6 +1103,30 @@ public static class CountsWorkbookService
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
     }
 
+    // Currency/percent number formats for the pricing columns. Applied from both build and
+    // update paths because update clears row 2's cell-level formats — falling back to column
+    // style isn't reliable once cells have been written with numeric values.
+    private static void ApplyPricingColumnFormats(IXLWorksheet ws)
+    {
+        ws.Column(WsColUnitCost).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(WsColMarkup).Style.NumberFormat.Format = "0%";
+        ws.Column(WsColTariff).Style.NumberFormat.Format = "0%";
+        ws.Column(WsColAdder).Style.NumberFormat.Format = "$#,##0.00";
+    }
+
+    // Width/alignment/number-format for Qty, Prev, Δ. Applied from both build and update
+    // paths — update clears row formats, so per-cell alignment wouldn't survive a round-trip.
+    private static void ApplyQtyColumnFormatting(IXLWorksheet ws)
+    {
+        ws.Column(WsColQty).Width = 6;
+        ws.Column(WsColPrevQty).Width = 6;
+        ws.Column(WsColDelta).Width = 6;
+        ws.Column(WsColQty).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColPrevQty).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColDelta).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColDelta).Style.NumberFormat.Format = "+0;-0;;@";
+    }
+
     private static void ApplyTypeGroupDividers(IXLWorksheet ws, int firstRow, int lastRow)
     {
         for (int r = firstRow; r < lastRow; r++)
@@ -1114,6 +1140,21 @@ public static class CountsWorkbookService
             rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
             rng.Style.Border.BottomBorderColor = XLColor.LightGray;
         }
+    }
+
+    // C# mirror of BuildQtyFormula for recomputing Qty when the Excel-side cached value
+    // isn't available (used by the PrevQty fallback path on 3rd+ update passes).
+    private static double ComputeQtyForCalc(string? calc, CountsFixtureModel f)
+    {
+        double linearPadded = Math.Ceiling(f.LinearLength * 1.05);
+        return calc switch
+        {
+            "Reel"    => f.ReelLength > 0    ? Math.Ceiling(linearPadded / Math.Ceiling(f.ReelLength)) : f.Count,
+            "Channel" => f.ChannelLength > 0 ? Math.Ceiling(linearPadded / Math.Ceiling(f.ChannelLength)) : f.Count,
+            "Clip"    => Math.Ceiling(linearPadded / 1.75),
+            "End Cap" => f.Count,
+            _         => f.Count,
+        };
     }
 
     private static string BuildQtyFormula(int row, string csRef)
@@ -1253,6 +1294,38 @@ public static class CountsWorkbookService
     /// tariff rows, subtotal/freight/grand-total footer) lives on Worksheet — this sheet is
     /// print formatting only.
     /// </summary>
+    private static void RebuildQuoteAndPhaseSheets(IXLWorkbook wb)
+    {
+        var names = new[] { "Quote", "Phase 1", "Phase 2", "Phase 3" };
+        var positions = new Dictionary<string, int>();
+        foreach (var name in names)
+        {
+            if (wb.Worksheets.TryGetWorksheet(name, out var existing))
+            {
+                positions[name] = existing.Position;
+                existing.Delete();
+            }
+        }
+        BuildQuoteSheet(wb);
+        for (int p = 1; p <= 3; p++)
+            BuildPhaseQuoteSheet(wb, p);
+        // Restore positions. Insert each sheet at the anchor (smallest saved
+        // position) in reverse name order — each insertion pushes previously
+        // placed sheets one slot right, yielding Quote|Phase 1|Phase 2|Phase 3.
+        if (positions.Count > 0)
+        {
+            int anchor = positions.Values.Min();
+            foreach (var name in names.Reverse())
+            {
+                if (positions.ContainsKey(name)
+                    && wb.Worksheets.TryGetWorksheet(name, out var ws))
+                {
+                    ws.Position = anchor;
+                }
+            }
+        }
+    }
+
     private static void BuildQuoteSheet(IXLWorkbook wb)
     {
         var ws = wb.Worksheets.Add("Quote");
@@ -1586,6 +1659,28 @@ public static class CountsWorkbookService
             typeCanonicalSheetRow.TryAdd(type, sheetRow);
         }
 
+        // Catalog → canonical Calc literal from the prior pass. Used to recompute PrevQty
+        // when the Qty formula's cached value wasn't preserved (ClosedXML doesn't emit caches
+        // on fresh FormulaA1 writes, so a user who never opens the file in Excel between
+        // passes loses the cache on pass 3+).
+        var prevCalcByCatalog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var er in existingRows)
+        {
+            if (!er.CalcIsFormula && !string.IsNullOrWhiteSpace(er.Calc))
+                prevCalcByCatalog.TryAdd(er.Catalog, er.Calc);
+        }
+
+        // Type → Tariff literal from the prior pass. Tariff lives only on each Type's
+        // canonical row; if sort order elects a different catalog as canonical this pass,
+        // the new-canonical row's existingByKey lookup returns null and the tariff drops.
+        // Index by Type so it survives any re-canonicalization within the Type.
+        var prevTariffByType = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var er in existingRows)
+        {
+            if (er.Tariff.HasValue && !prevTariffByType.ContainsKey(er.Type))
+                prevTariffByType[er.Type] = er.Tariff.Value;
+        }
+
         int row = 2;
 
         // Write new/matched rows
@@ -1598,18 +1693,25 @@ public static class CountsWorkbookService
             int canonicalRow = canonicalSheetRowByCatalog[catalog];
 
             ws.Cell(row, WsColType).Value = type;
-            ws.Cell(row, WsColMfr).Value = mfr;
+            ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(mfr);
             ws.Cell(row, WsColCatalog).Value = catalog;
             ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
             ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
             ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
 
-            // Prev Qty — use previous Worksheet's computed Qty (reflects Calc adjustments)
-            // Fall back to raw fixture Count if no existing row (new type on this pass)
+            // Prev Qty — prefer the previous Worksheet's cached Qty (reflects Calc adjustments),
+            // else recompute from the preserved canonical Calc + prev fixture lengths (cache may
+            // be missing on 3rd+ passes — ClosedXML doesn't emit caches for rewritten formulas),
+            // else fall back to raw Count for types that weren't present before.
             if (existing?.PrevQty.HasValue == true)
+            {
                 ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
+            }
             else if (prevData != null && prevData.TryGetValue(type, out var prevFixture))
-                ws.Cell(row, WsColPrevQty).Value = prevFixture.Count;
+            {
+                prevCalcByCatalog.TryGetValue(catalog, out string? prevCalc);
+                ws.Cell(row, WsColPrevQty).Value = ComputeQtyForCalc(prevCalc, prevFixture);
+            }
 
             int typeCanonical = typeCanonicalSheetRow[type];
 
@@ -1626,7 +1728,11 @@ public static class CountsWorkbookService
                     isNewRow: false);
 
                 // Type-canonical field (Tariff): preserve existing literal on canonical row.
-                WriteTariffCell(ws, row, typeCanonical, existing.Tariff, isNewRow: false);
+                // If this row's key had no tariff (e.g., a different catalog was canonical last
+                // pass), fall back to the Type-indexed snapshot so the tariff survives re-canonicalization.
+                double? tariffForRow = existing.Tariff
+                    ?? (prevTariffByType.TryGetValue(type, out double t) ? t : (double?)null);
+                WriteTariffCell(ws, row, typeCanonical, tariffForRow, isNewRow: false);
             }
             else
             {
@@ -1634,7 +1740,13 @@ public static class CountsWorkbookService
                 WritePricingCells(ws, row, canonicalRow,
                     null, null, null, null, null, false, false, false, isNewRow: true);
 
-                WriteTariffCell(ws, row, typeCanonical, null, isNewRow: true);
+                // If this brand-new catalog happens to land on the Type-canonical slot and the
+                // Type itself existed before, carry the prior tariff forward. For truly new
+                // types (isNewType), no prior tariff exists — stays blank.
+                if (!isNewType && prevTariffByType.TryGetValue(type, out double prevT))
+                    WriteTariffCell(ws, row, typeCanonical, prevT, isNewRow: false);
+                else
+                    WriteTariffCell(ws, row, typeCanonical, null, isNewRow: true);
 
                 if (isNewType)
                 {
@@ -1711,6 +1823,9 @@ public static class CountsWorkbookService
 
         // Hide gridlines so only the explicit type-group dividers read as separators
         ws.ShowGridLines = false;
+
+        ApplyQtyColumnFormatting(ws);
+        ApplyPricingColumnFormats(ws);
 
         // Light gray divider at the last row of each Type group
         ApplyTypeGroupDividers(ws, 2, lastDataRow);
@@ -1839,16 +1954,37 @@ public static class CountsWorkbookService
 
     /// <summary>
     /// Writes the Tariff cell. Tariff is a per-Type value — only the first row of each Type
-    /// holds a literal; non-canonical rows stay blank (and locked via the protection pass).
-    /// Helper pipeline resolves per-row tariff % via XLOOKUP into the full K column.
+    /// holds a literal; non-canonical rows mirror the canonical value via a gray-italic
+    /// formula so users see the tariff on every row but can only edit the canonical cell.
+    /// Formula returns "" (not 0) when canonical is blank so locked rows stay visually quiet
+    /// until a tariff is entered. Helper pipeline still resolves per-row tariff % via XLOOKUP
+    /// into the full K column (it reads cached values, so the mirror formula is purely cosmetic).
     /// </summary>
     private static void WriteTariffCell(
         IXLWorksheet ws, int row, int typeCanonicalRow,
         double? existingTariff, bool isNewRow)
     {
-        if (row != typeCanonicalRow) return;
-        if (!isNewRow && existingTariff.HasValue)
-            ws.Cell(row, WsColTariff).Value = existingTariff.Value;
+        if (row == typeCanonicalRow)
+        {
+            if (!isNewRow && existingTariff.HasValue)
+                ws.Cell(row, WsColTariff).Value = existingTariff.Value;
+        }
+        else
+        {
+            ws.Cell(row, WsColTariff).FormulaA1 =
+                $"IF(K{typeCanonicalRow}=\"\",\"\",K{typeCanonicalRow})";
+            StyleAutoFilledCell(ws.Cell(row, WsColTariff));
+        }
+    }
+
+    // Mirrors ReadNumericCell's null-on-empty semantics for string cells, so a blank
+    // Description isn't round-tripped as a literal "" that overrides the dependent formula.
+    private static string? ReadTextCell(IXLCell cell)
+    {
+        if (cell.HasFormula) return null;
+        if (cell.IsEmpty()) return null;
+        string s = cell.GetString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
     }
 
     private static double? ReadNumericCell(IXLCell cell)
@@ -1933,9 +2069,29 @@ public static class CountsWorkbookService
         ws.Cell(row, 1).Value = date;
         ws.Cell(row, 2).Value = type;
         ws.Cell(row, 3).Value = change;
-        ws.Cell(row, 4).Value = oldVal;
-        ws.Cell(row, 5).Value = newVal;
+        WriteValueCell(ws.Cell(row, 4), oldVal);
+        WriteValueCell(ws.Cell(row, 5), newVal);
         row++;
+    }
+
+    // Writes numeric-looking strings as real numbers (no "Number stored as text" warning)
+    // and non-numeric strings as text. Left-aligned so numbers and strings line up visually.
+    private static void WriteValueCell(IXLCell cell, string value)
+    {
+        cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+        if (double.TryParse(value, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double num))
+        {
+            cell.Value = num;
+            // Preserve trailing-zero formatting (e.g., "117.84" stays as 117.84, not 117.84000001).
+            int dotIdx = value.IndexOf('.');
+            int decimals = dotIdx >= 0 ? value.Length - dotIdx - 1 : 0;
+            cell.Style.NumberFormat.Format = decimals > 0 ? "0." + new string('0', decimals) : "0";
+        }
+        else
+        {
+            cell.Value = value;
+        }
     }
 
     #endregion
@@ -2024,7 +2180,7 @@ public static class CountsWorkbookService
                 Calc = ws.Cell(r, WsColCalc).HasFormula ? string.Empty : ws.Cell(r, WsColCalc).GetString(),
                 PrevQty = ReadCachedDouble(ws.Cell(r, WsColQty)),
                 Phase = ReadNumericCell(ws.Cell(r, WsColPhase)),
-                Description = ws.Cell(r, WsColDesc).HasFormula ? null : ws.Cell(r, WsColDesc).GetString(),
+                Description = ReadTextCell(ws.Cell(r, WsColDesc)),
                 UnitCost = ReadNumericCell(ws.Cell(r, WsColUnitCost)),
                 Markup = ReadNumericCell(ws.Cell(r, WsColMarkup)),
                 Adder = ReadNumericCell(ws.Cell(r, WsColAdder)),
