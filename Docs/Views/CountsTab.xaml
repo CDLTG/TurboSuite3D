@@ -35,9 +35,9 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
                     <TextBlock Text="Rep Directory:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" Width="90" TextAlignment="Right"/>
                     <TextBox Text="{Binding RepDirectoryPath, UpdateSourceTrigger=PropertyChanged}"
-                             Width="360" VerticalContentAlignment="Center" Padding="4,2"/>
+                             Width="290" VerticalContentAlignment="Center" Padding="4,2"/>
                     <Button Content="Browse…" Command="{Binding BrowseRepDirectoryCommand}"
-                            Margin="6,0,0,0" Padding="10,2"/>
+                            Margin="6,0,0,0" Padding="10,2" Width="64"/>
                 </StackPanel>
 
                 <!-- Notify Email -->
