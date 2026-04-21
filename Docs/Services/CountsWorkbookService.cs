@@ -27,19 +27,25 @@ public static class CountsWorkbookService
     private const int WsColTariff = 11;     // K
     private const int WsColAdder = 12;      // L
     private const int WsColPhase = 13;      // M
+    private const int WsColMfrOverride = 14;  // N — user-editable, overrides B
+    private const int WsColQtyOverride = 15;  // O — user-editable, overrides D
+    // Effective Qty lives inside the hidden helper block (BK) rather than adjacent to the
+    // editable columns — keeps the visible worksheet clean and avoids a visually-empty slot
+    // between O and the end of the visible data. =IF(O="",D,O) written per-row.
+    private const int WsColEffQty      = 63;  // BK — hidden helper
 
     // Hidden helper pipeline columns on Worksheet. Active flag (Z) is a per-row 0/1 literal
     // written by C#; every helper spill formula filters on (Z=1) to exclude strikethrough rows.
-    // AA-AG feed the Quote sheet; AI-AN / AP-AU / AW-BB feed Phase 1/2/3. AH/AO/AV are unused
+    // AA-AI feed the Quote sheet; AK-AR / AT-BA / BC-BJ feed Phase 1/2/3. AJ/AS/BB are unused
     // spacers for readability. All columns Z and beyond are hidden and locked.
     private const int WsColActive = 26;     // Z
     private const string HelperFirstCol = "AA";
-    private const int WsColHelperLast = 54; // BB
+    private const int WsColHelperLast = 63; // BK (EffQty)
 
-    private static readonly string[] QuoteHelperCols =   { "AA", "AB", "AC", "AD", "AE", "AF", "AG" };
-    private static readonly string[] Phase1HelperCols =  { "AI", "AJ", "AK", "AL", "AM", "AN" };
-    private static readonly string[] Phase2HelperCols =  { "AP", "AQ", "AR", "AS", "AT", "AU" };
-    private static readonly string[] Phase3HelperCols =  { "AW", "AX", "AY", "AZ", "BA", "BB" };
+    private static readonly string[] QuoteHelperCols =   { "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI" };
+    private static readonly string[] Phase1HelperCols =  { "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR" };
+    private static readonly string[] Phase2HelperCols =  { "AT", "AU", "AV", "AW", "AX", "AY", "AZ", "BA" };
+    private static readonly string[] Phase3HelperCols =  { "BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ" };
 
     // Counts sheet column indices (1-based)
     private const int CsColType = 1;        // A
@@ -212,11 +218,12 @@ public static class CountsWorkbookService
     // Dashboard cell anchors (consumed by helper pipeline via named ranges)
     private const string DashRepDirCell = "B4";
     private const string DashLutronCell = "B8";
-    private const string DashFreightCell = "B9";
-    private const string DashBidDateCell = "B12";
-    private const string DashReleaseDateCell = "B13";
-    private const string DashNotesFirstRow = "36";
-    private const string DashNotesLastRow = "50";
+    private const string DashFreightBuyCell = "B9";
+    private const string DashFreightSellCell = "B10";
+    private const string DashBidDateCell = "B13";
+    private const string DashReleaseDateCell = "B14";
+    private const string DashNotesFirstRow = "37";
+    private const string DashNotesLastRow = "51";
 
     private static readonly XLColor HeaderBlue = XLColor.FromHtml("#4472C4");
 
@@ -248,44 +255,47 @@ public static class CountsWorkbookService
         ws.Cell("A8").Value = "Lutron Lighting Control";
         ws.Cell("B8").Style.NumberFormat.Format = "$#,##0.00";
 
-        ws.Cell("A9").Value = "Estimated Freight";
+        ws.Cell("A9").Value = "Estimated Freight (Buy)";
         ws.Cell("B9").Style.NumberFormat.Format = "$#,##0.00";
 
-        // --- BID LOCK ---
-        WriteSectionBar(ws, 11, "BID LOCK");
-        ws.Cell("A12").Value = "Bid Quote Date";
-        ws.Cell("B12").Style.NumberFormat.Format = "yyyy-mm-dd";
+        ws.Cell("A10").Value = "Estimated Freight (Sell)";
+        ws.Cell("B10").Style.NumberFormat.Format = "$#,##0.00";
 
-        ws.Cell("A13").Value = "Release Lock";
+        // --- BID LOCK ---
+        WriteSectionBar(ws, 12, "BID LOCK");
+        ws.Cell("A13").Value = "Bid Quote Date";
         ws.Cell("B13").Style.NumberFormat.Format = "yyyy-mm-dd";
 
-        ws.Cell("A14").Value = "Bid Status";
-        ws.Cell("B14").FormulaA1 =
-            "IF(B12=\"\",\"Unlocked\",IF(B13=B12,\"Pending release\",\"LOCKED \"&TEXT(B12,\"yyyy-mm-dd\")))";
-        ws.Cell("B14").Style.Font.Italic = true;
+        ws.Cell("A14").Value = "Release Lock";
+        ws.Cell("B14").Style.NumberFormat.Format = "yyyy-mm-dd";
+
+        ws.Cell("A15").Value = "Bid Status";
+        ws.Cell("B15").FormulaA1 =
+            "IF(B13=\"\",\"Unlocked\",IF(B14=B13,\"Pending release\",\"LOCKED \"&TEXT(B13,\"yyyy-mm-dd\")))";
+        ws.Cell("B15").Style.Font.Italic = true;
 
         // --- INTERNAL NOTES ---
-        WriteSectionBar(ws, 16, "INTERNAL NOTES");
-        ws.Cell("A17").Value = "Date";
-        ws.Cell("B17").Value = "Author";
-        ws.Cell("C17").Value = "Status";
-        ws.Cell("D17").Value = "Notes";
-        var notesHdr = ws.Range("A17:D17");
+        WriteSectionBar(ws, 17, "INTERNAL NOTES");
+        ws.Cell("A18").Value = "Date";
+        ws.Cell("B18").Value = "Author";
+        ws.Cell("C18").Value = "Status";
+        ws.Cell("D18").Value = "Notes";
+        var notesHdr = ws.Range("A18:D18");
         notesHdr.Style.Font.Bold = true;
         notesHdr.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
 
         // --- QUOTE FOOTER NOTES ---
-        WriteSectionBar(ws, 34, "QUOTE FOOTER NOTES");
-        ws.Cell("A35").Value = "#";
-        ws.Cell("B35").Value = "BOLD";
-        ws.Cell("C35").Value = "Notes";
-        var fnHdr = ws.Range("A35:C35");
+        WriteSectionBar(ws, 35, "QUOTE FOOTER NOTES");
+        ws.Cell("A36").Value = "#";
+        ws.Cell("B36").Value = "BOLD";
+        ws.Cell("C36").Value = "Notes";
+        var fnHdr = ws.Range("A36:C36");
         fnHdr.Style.Font.Bold = true;
         fnHdr.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
 
         for (int i = 0; i < 15; i++)
         {
-            int r = 36 + i;
+            int r = 37 + i;
             ws.Cell(r, 1).Value = i + 1;
             ws.Cell(r, 2).Value = false; // boolean literal — pass 3 upgrades to native checkbox
             ws.Cell(r, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -300,16 +310,17 @@ public static class CountsWorkbookService
         // Named ranges
         wb.DefinedNames.Add("RepDirectoryPath", ws.Range("B4:B4"));
         wb.DefinedNames.Add("LutronSubtotal", ws.Range("B8:B8"));
-        wb.DefinedNames.Add("Freight", ws.Range("B9:B9"));
-        wb.DefinedNames.Add("BidDate", ws.Range("B12:B12"));
-        wb.DefinedNames.Add("ReleaseDate", ws.Range("B13:B13"));
+        wb.DefinedNames.Add("FreightBuy", ws.Range("B9:B9"));
+        wb.DefinedNames.Add("FreightSell", ws.Range("B10:B10"));
+        wb.DefinedNames.Add("BidDate", ws.Range("B13:B13"));
+        wb.DefinedNames.Add("ReleaseDate", ws.Range("B14:B14"));
         wb.DefinedNames.Add("QuoteNotes", ws.Range($"C{DashNotesFirstRow}:C{DashNotesLastRow}"));
         wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
 
         // Protection: unlock editable cells, lock the rest
-        foreach (string addr in new[] { "B4", "B8", "B9", "B12", "B13" })
+        foreach (string addr in new[] { "B4", "B8", "B9", "B10", "B13", "B14" })
             ws.Cell(addr).Style.Protection.SetLocked(false);
-        ws.Range("A18:D32").Style.Protection.SetLocked(false);
+        ws.Range("A19:D33").Style.Protection.SetLocked(false);
         ws.Range($"B{DashNotesFirstRow}:C{DashNotesLastRow}").Style.Protection.SetLocked(false);
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
 
@@ -661,7 +672,26 @@ public static class CountsWorkbookService
             projectLocation = coverWs.Cell("B7").GetString().Trim();
         }
 
-        // Flatten fixtures to (Type, Mfr, Catalog, Qty) rows
+        // Mfr Override snapshot from Worksheet!N. Overrides are emergency substitutions for
+        // the Revit-authored Mfr — they apply to both the displayed literal and the rep-group
+        // lookup. User must type the canonical Mfr name (matching the directory key), not a
+        // display alias; mistyped overrides fall into Unmatched.
+        var mfrOverrideByKey = new Dictionary<(string Type, string Catalog), string>();
+        if (wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSrc))
+        {
+            int lr = wsSrc.LastRowUsed()?.RowNumber() ?? 1;
+            for (int r = 2; r <= lr; r++)
+            {
+                string t = wsSrc.Cell(r, WsColType).GetString();
+                string c = wsSrc.Cell(r, WsColCatalog).GetString();
+                string ovr = wsSrc.Cell(r, WsColMfrOverride).GetString();
+                if (string.IsNullOrWhiteSpace(t) || string.IsNullOrWhiteSpace(c)) continue;
+                if (!string.IsNullOrWhiteSpace(ovr))
+                    mfrOverrideByKey[(t.ToUpperInvariant(), c.ToUpperInvariant())] = ovr;
+            }
+        }
+
+        // Flatten fixtures to (Type, Mfr, Catalog, Qty) rows, substituting effective Mfr.
         var rows = new List<(string Type, string Mfr, string Catalog, int Qty)>();
         foreach (var f in fixtures)
         {
@@ -669,7 +699,11 @@ public static class CountsWorkbookService
             {
                 string cat = f.CatalogNumbers[c] ?? "";
                 if (string.IsNullOrWhiteSpace(cat)) continue;
-                rows.Add((f.TypeMark, f.Manufacturer, cat, f.Count));
+                string effMfr = mfrOverrideByKey.TryGetValue(
+                    (f.TypeMark.ToUpperInvariant(), cat.ToUpperInvariant()), out var ovr)
+                        ? ovr
+                        : f.Manufacturer;
+                rows.Add((f.TypeMark, effMfr, cat, f.Count));
             }
         }
 
@@ -695,6 +729,23 @@ public static class CountsWorkbookService
             }
         }
 
+        // Catalogs that appear under more than one rep block — flagged per-cell so pricing
+        // notices when an Mfr Override has re-routed a fixture to a different rep but the
+        // Rep List still shows the pre-override row (Rep Lists only re-bucket on Revit update).
+        var repsByCatalog = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        void TrackCatalogRep(string catalog, string repName)
+        {
+            if (!repsByCatalog.TryGetValue(catalog, out var set))
+                repsByCatalog[catalog] = set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            set.Add(repName);
+        }
+        foreach (var (repName, bucket) in matched)
+            foreach (var it in bucket.Items) TrackCatalogRep(it.Catalog, repName);
+        foreach (var it in unmatched) TrackCatalogRep(it.Catalog, "__unmatched__");
+        var crossRepCatalogs = new HashSet<string>(
+            repsByCatalog.Where(kv => kv.Value.Count > 1).Select(kv => kv.Key),
+            StringComparer.OrdinalIgnoreCase);
+
         // Track max data-cell length per column (1–4), widest rep-bar line, and widest contact lines per half.
         var colMax = new[] { "Type".Length, "Mfr".Length, "Catalog Number".Length, "Qty".Length };
         int repBarMax = 0;
@@ -708,7 +759,8 @@ public static class CountsWorkbookService
             curRow = WriteRepBlock(ws, curRow, entry.Rep, entry.QuoteContact, entry.OrderContact,
                 projectName, projectLocation, items,
                 entry.HeaderFill ?? HeaderBlue,
-                colMax, ref repBarMax, ref quoteMax, ref orderMax);
+                colMax, ref repBarMax, ref quoteMax, ref orderMax,
+                crossRepCatalogs);
             curRow++; // spacer
             ws.PageSetup.AddHorizontalPageBreak(curRow);
         }
@@ -717,7 +769,8 @@ public static class CountsWorkbookService
         {
             curRow = WriteRepBlock(ws, curRow, "UNMATCHED MANUFACTURERS", string.Empty, string.Empty,
                 projectName, projectLocation, unmatched,
-                XLColor.FromHtml("#F1A983"), colMax, ref repBarMax, ref quoteMax, ref orderMax);
+                XLColor.FromHtml("#F1A983"), colMax, ref repBarMax, ref quoteMax, ref orderMax,
+                crossRepCatalogs);
         }
 
         // Column widths: max content length + padding, with sensible minimums.
@@ -759,7 +812,8 @@ public static class CountsWorkbookService
         string projectName, string projectLocation,
         List<(string Type, string Mfr, string Catalog, int Qty)> items,
         XLColor headerColor,
-        int[] colMax, ref int repBarMax, ref int quoteMax, ref int orderMax)
+        int[] colMax, ref int repBarMax, ref int quoteMax, ref int orderMax,
+        HashSet<string> crossRepCatalogs)
     {
         int row = startRow;
 
@@ -879,7 +933,17 @@ public static class CountsWorkbookService
             ws.Cell(row, 2).Value = item.Mfr;
             ws.Cell(row, 3).Value = item.Catalog;
             ws.Cell(row, 4).FormulaA1 =
-                $"SUMIFS(Worksheet!D:D,Worksheet!A:A,A{row},Worksheet!C:C,C{row})";
+                $"SUMIFS(Worksheet!BK:BK,Worksheet!A:A,A{row},Worksheet!C:C,C{row})";
+
+            // Flag catalogs that exist under multiple rep blocks — typically the fallout of
+            // an Mfr Override that moved a fixture's rep but left an older row behind until
+            // the next Revit update regenerates the Rep List.
+            if (crossRepCatalogs.Contains(item.Catalog))
+            {
+                ws.Cell(row, 3).Style.Fill.BackgroundColor = YellowFill;
+                ws.Cell(row, 3).GetComment().AddText(
+                    "Catalog number appears under another rep block. Set Mfr. Override and re-run from Revit to rebuild rep blocks.");
+            }
 
             if (item.Type.Length    > colMax[0]) colMax[0] = item.Type.Length;
             if (item.Mfr.Length     > colMax[1]) colMax[1] = item.Mfr.Length;
@@ -966,9 +1030,12 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColMarkup).Value = "Markup %";
         ws.Cell(1, WsColTariff).Value = "Tariff %";
         ws.Cell(1, WsColAdder).Value = "Adder";
+        ws.Cell(1, WsColMfrOverride).Value = "Mfr Override";
+        ws.Cell(1, WsColQtyOverride).Value = "Qty Override";
+        ws.Cell(1, WsColEffQty).Value = "EffQty";
 
         // Style headers
-        var headerRange = ws.Range(1, 1, 1, WsColPhase);
+        var headerRange = ws.Range(1, 1, 1, WsColQtyOverride);
         headerRange.Style.Font.Bold = true;
         headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
         headerRange.Style.Font.FontColor = XLColor.White;
@@ -1050,6 +1117,12 @@ public static class CountsWorkbookService
                 else
                     WriteTariffCell(ws, row, typeFirstRow[f.TypeMark], existingTariff: null, isNewRow: true);
 
+                // EffQty (P) = QtyOverride if present, else Revit Qty (D). Single source of
+                // truth for effective qty — Rep Lists SUMIFS and the helper pipeline read P
+                // instead of duplicating the override fallback.
+                ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(O{row}=\"\",D{row},O{row})";
+                ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
+
                 // Active flag: initial export has no removed rows — always 1.
                 ws.Cell(row, WsColActive).Value = 1;
 
@@ -1071,6 +1144,25 @@ public static class CountsWorkbookService
         ws.Column(WsColTariff).Width = 10;
         ws.Column(WsColAdder).Width = 10;
         ws.Column(WsColPhase).Width = 10;
+        // 16.64 char-width ≈ 190px in the target environment. Matched widths on the two override columns.
+        ws.Column(WsColMfrOverride).Width = 16.64;
+        ws.Column(WsColQtyOverride).Width = 16.64;
+        ws.Column(WsColQtyOverride).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColQtyOverride).Style.NumberFormat.Format = "0";
+
+        // Conditional formatting: overridden cells render bold + red so the pricing team
+        // can see at a glance which Mfr/Qty values are user-authored vs Revit-sourced.
+        if (lastDataRow >= 2)
+        {
+            ws.Range(2, WsColMfrOverride, lastDataRow, WsColMfrOverride)
+                .AddConditionalFormat()
+                .WhenIsTrue($"LEN(N2)>0")
+                .Font.SetBold().Font.SetFontColor(XLColor.Red);
+            ws.Range(2, WsColQtyOverride, lastDataRow, WsColQtyOverride)
+                .AddConditionalFormat()
+                .WhenIsTrue($"LEN(O2)>0")
+                .Font.SetBold().Font.SetFontColor(XLColor.Red);
+        }
 
         ApplyPricingColumnFormats(ws);
 
@@ -1083,10 +1175,10 @@ public static class CountsWorkbookService
         // Light gray divider at the last row of each Type group
         ApplyTypeGroupDividers(ws, 2, row - 1);
 
-        // Helper pipeline (Z hidden flag already written per-row; AA-BB spill formulas here)
+        // Helper pipeline (Z hidden flag already written per-row; AA-BJ spill formulas here)
         WriteHelperPipeline(ws, lastDataRow);
 
-        // Hide helper columns Z..BB
+        // Hide helper columns Z..BJ
         for (int col = WsColActive; col <= WsColHelperLast; col++)
             ws.Column(col).Hide();
 
@@ -1095,7 +1187,7 @@ public static class CountsWorkbookService
         var typeCanonicalRows = new HashSet<int>(typeFirstRow.Values);
         for (int r = 2; r < row; r++)
         {
-            for (int col = WsColDesc; col <= WsColPhase; col++)
+            for (int col = WsColDesc; col <= WsColQtyOverride; col++)
                 ws.Cell(r, col).Style.Protection.SetLocked(false);
             if (!typeCanonicalRows.Contains(r))
                 ws.Cell(r, WsColTariff).Style.Protection.SetLocked(true);
@@ -1136,7 +1228,7 @@ public static class CountsWorkbookService
             if (string.Equals(thisType, nextType, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var rng = ws.Range(r, 1, r, WsColPhase);
+            var rng = ws.Range(r, 1, r, WsColQtyOverride);
             rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
             rng.Style.Border.BottomBorderColor = XLColor.LightGray;
         }
@@ -1172,8 +1264,8 @@ public static class CountsWorkbookService
     }
 
     /// <summary>
-    /// Writes the AA-BB helper column pipeline — one spill formula per final print-output column.
-    /// Quote (AA-AG) + Phase 1/2/3 (AI-AN, AP-AU, AW-BB). Each column's formula:
+    /// Writes the AA-BJ helper column pipeline — one spill formula per final print-output column.
+    /// Quote (AA-AI) + Phase 1/2/3 (AK-AR, AT-BA, BC-BJ). Each column's formula:
     /// FILTER data rows by predicate → inline LAMBDA injects gap rows (type-group boundaries) and
     /// tariff rows (per-Type line item at end of each group) → VSTACK appends Subtotal/Freight/
     /// Grand Total footer to Sell Ea. (labels) and Sell Ext. (amounts). Print sheets consume
@@ -1204,8 +1296,18 @@ public static class CountsWorkbookService
     {
         // Per-row array expressions (unfiltered; FILTER applied inside Gap).
         string Col(string c) => $"{c}2:{c}{lastDataRow}";
+        // Effective Mfr/Qty: override column wins when populated, else fall back to Revit.
+        // effQty reads the P column (populated row-by-row with IF(O="",D,O)) so callers
+        // don't duplicate the fallback logic.
+        string effMfr   = $"IF({Col("N")}=\"\",{Col("B")},{Col("N")})";
+        string effQty   = Col("BK");
+        string effDelta = $"IF({Col("E")}=\"\",\"\",{effQty}-{Col("E")})";
         string sellEa = $"IFERROR(({Col("I")}*(1+{Col("J")}))+{Col("L")},0)";
-        string sellExt = $"({sellEa})*{Col("D")}";
+        string sellExt = $"({sellEa})*{effQty}";
+        // Coerce to number (*1) so text placeholders like "dependent" and blanks
+        // fall through IFERROR to 0 instead of propagating as a string into Buy Ext.
+        string buyEa = $"IFERROR({Col("I")}*1,0)";
+        string buyExt = $"({buyEa})*{effQty}";
         // Tariff base = Sell Ext. (includes Adder). Prior version omitted L, underpricing tariffs.
         string tariffBasePerRow = sellExt;
         // Exclude "dependent" placeholder — it's a visual cue on Worksheet for drag-fill links,
@@ -1242,46 +1344,65 @@ public static class CountsWorkbookService
                  + $")({typesArg},{valsArg},{pctsArg},{baseArg})";
         }
 
-        // Subtotal = Σ(filtered line items) + Σ(filtered per-row tariff allocation).
+        // Sell subtotal = Σ(filtered line items) + Σ(filtered per-row tariff allocation).
         // K is only populated on each Type's canonical row, so we use the per-row XLOOKUP
         // resolver (typeKPerRow) to broadcast the type's tariff % onto every row in the group.
-        string subtotal =
-            $"SUMPRODUCT(({predicate})*{sellEa}*{Col("D")})"
+        string sellSubtotal =
+            $"SUMPRODUCT(({predicate})*{sellEa}*{effQty})"
             + $"+SUMPRODUCT(({predicate})*{tariffBasePerRow}*{typeKPerRow})";
+        // Buy subtotal = Σ(filtered Unit Cost * EffQty). No tariff on Buy side.
+        // Uses the coerced buyEa (not raw Col("I")) so text placeholders like "dependent"
+        // contribute 0 instead of #VALUE-poisoning the whole subtotal.
+        string buySubtotal = $"SUMPRODUCT(({predicate})*{buyEa}*{effQty})";
 
         // Quote footer notes — appended to the Type column under the Grand Total line.
         // FILTER drops empty rows so users can fill fewer than 15 notes without blank spill.
         string notesSpill = "_xlfn._xlws.FILTER(QuoteNotes,QuoteNotes<>\"\",\"\")";
 
+        // Footer labels live on the Qty column and serve both Buy Ext. and Sell Ext.
+        // Lutron row is omitted when Dashboard!LutronSubtotal is blank.
+        string labelFooter =
+            "IF(LutronSubtotal=\"\","
+            + "_xlfn.VSTACK(\"\",\"Fixture Package Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"),"
+            + "_xlfn.VSTACK(\"\",\"Fixture Package Sub-Total:\",\"Lutron Lighting Control Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"))";
+
+        // Sell Ext. footer values (tariff row carries per-type tariff amount).
+        string sellValueFooter =
+            "IF(LutronSubtotal=\"\","
+            + $"_xlfn.VSTACK(\"\",{sellSubtotal},FreightSell,{sellSubtotal}+FreightSell),"
+            + $"_xlfn.VSTACK(\"\",{sellSubtotal},LutronSubtotal,FreightSell,{sellSubtotal}+LutronSubtotal+FreightSell))";
+
+        // Buy Ext. footer values (no tariff on Buy side).
+        string buyValueFooter =
+            "IF(LutronSubtotal=\"\","
+            + $"_xlfn.VSTACK(\"\",{buySubtotal},FreightBuy,{buySubtotal}+FreightBuy),"
+            + $"_xlfn.VSTACK(\"\",{buySubtotal},LutronSubtotal,FreightBuy,{buySubtotal}+LutronSubtotal+FreightBuy))";
+
         int i = 0;
         // Type — blank tariff row, plus notes appended at the bottom (after Grand Total row footprint)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
             $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"")},\"\"),\"\",\"\",\"\",\"\",\"\",{notesSpill})";
-        // Mfr — blank tariff row
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(Col("B"), "\"\"")},\"\")";
+        // Mfr — blank tariff row; uses effMfr so override wins per-row
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "\"\"")},\"\")";
         // Catalog~Desc — "Tariff" label on tariff row
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(catalogCombined, "\"Tariff\"")},\"\")";
-        // Qty — blank tariff row
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(Col("D"), "\"\"")},\"\")";
-        // Delta (Quote only) — blank tariff row
+        // Qty + footer labels (Subtotal / [Lutron?] / Freight / Grand Total).
+        ws.Cell($"{cols[i++]}2").FormulaA1 =
+            $"_xlfn.VSTACK(IFERROR({Gap(effQty, "\"\"")},\"\"),{labelFooter})";
+        // Delta (Quote only) — blank tariff row, no footer. Uses effDelta so the print-sheet
+        // delta reflects the price being quoted; Worksheet's col F stays wired to Revit D−E.
         if (includeDelta)
-            ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(Col("F"), "\"\"")},\"\")";
-        // Sell Ea. + footer labels (Subtotal / [Lutron?] / Freight / Grand Total).
-        // Lutron row is omitted when Dashboard!LutronSubtotal is blank.
-        string labelFooter =
-            "IF(LutronSubtotal=\"\","
-            + "_xlfn.VSTACK(\"\",\"Subtotal:\",\"Freight:\",\"Grand Total:\"),"
-            + "_xlfn.VSTACK(\"\",\"Subtotal:\",\"Lutron Control:\",\"Freight:\",\"Grand Total:\"))";
+            ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effDelta, "\"\"")},\"\")";
+        // Buy Ea. — blank tariff row, no footer rows
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(buyEa, "\"\"")},\"\")";
+        // Buy Ext. + footer values
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellEa, "\"\"")},\"\"),{labelFooter})";
-        // Sell Ext. + footer values (tariff row carries per-type tariff amount).
-        // Grand Total uses N(LutronSubtotal) so a blank cell contributes zero.
-        string valueFooter =
-            "IF(LutronSubtotal=\"\","
-            + $"_xlfn.VSTACK(\"\",{subtotal},Freight,{subtotal}+Freight),"
-            + $"_xlfn.VSTACK(\"\",{subtotal},LutronSubtotal,Freight,{subtotal}+LutronSubtotal+Freight))";
+            $"_xlfn.VSTACK(IFERROR({Gap(buyExt, "\"\"")},\"\"),{buyValueFooter})";
+        // Sell Ea. — blank tariff row, no footer rows (labels live on Qty)
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(sellEa, "\"\"")},\"\")";
+        // Sell Ext. + footer values (tariff row carries per-type tariff amount)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),{valueFooter})";
+            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),{sellValueFooter})";
     }
 
     #endregion
@@ -1332,13 +1453,13 @@ public static class CountsWorkbookService
         if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
             return;
 
-        WritePrintSheetTitle(ws, 7, "\"PRODUCT PRICING \"&Cover!B11");
+        WritePrintSheetTitle(ws, 9, "\"PRODUCT PRICING \"&Cover!B11");
 
         int headerRow = 6;
-        string[] headers = { "Type", "Mfr", "Catalog Number", "Qty", "Δ", "Sell Ea.", "Sell Ext." };
+        string[] headers = { "Type", "Mfr", "Catalog Number", "Qty", "Δ", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
         WritePrintSheetHeaders(ws, headerRow, headers);
 
-        // Spill row — one ANCHORARRAY per column pointing at Worksheet!AAn..AGn.
+        // Spill row — one ANCHORARRAY per column pointing at Worksheet!AAn..AIn.
         // Mfr column (index 1) is wrapped in UPPER for all-caps display, with a
         // hardcoded substitution: "Environmental Lights" → "LUMEN SPEC".
         int spillRow = headerRow + 1;
@@ -1349,19 +1470,26 @@ public static class CountsWorkbookService
         }
 
         // Currency + delta formats
+        ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
         ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(7).Style.NumberFormat.Format = "$#,##0.00";
-        ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
+        ws.Column(8).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(9).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        // Right-align Qty — numbers and footer labels both; labels overflow left into the
+        // (empty) Catalog column on footer rows, which is intentional.
+        ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
 
         // Column widths — pull from Worksheet (ANCHORARRAY cells can't auto-size).
         ws.Column(1).Width = wsSheet.Column(WsColType).Width;
-        ws.Column(2).Width = wsSheet.Column(WsColMfr).Width;
+        ws.Column(2).Width = ComputeMfrDisplayWidth(wsSheet);
         ws.Column(3).Width = ComputeCombinedCatalogWidth(wsSheet);
-        ws.Column(4).Width = 8;
+        ws.Column(4).Width = 8; // Qty — sized for numeric data only; footer labels spill left
         ws.Column(5).Width = 6;
         ws.Column(6).Width = 12;
-        ws.Column(7).Width = 14;
+        ws.Column(7).Width = 12;
+        ws.Column(8).Width = 12;
+        ws.Column(9).Width = 12;
 
         // Print setup
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
@@ -1388,10 +1516,10 @@ public static class CountsWorkbookService
             _ => throw new ArgumentOutOfRangeException(nameof(phase)),
         };
 
-        WritePrintSheetTitle(ws, 6, $"\"PHASE {phase} PRODUCT PRICING \"&Cover!B11");
+        WritePrintSheetTitle(ws, 8, $"\"PHASE {phase} PRODUCT PRICING \"&Cover!B11");
 
         int headerRow = 6;
-        string[] headers = { "Type", "Mfr", "Catalog Number", "Qty", "Sell Ea.", "Sell Ext." };
+        string[] headers = { "Type", "Mfr", "Catalog Number", "Qty", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
         WritePrintSheetHeaders(ws, headerRow, headers);
 
         int spillRow = headerRow + 1;
@@ -1404,15 +1532,22 @@ public static class CountsWorkbookService
         // Currency formats
         ws.Column(5).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(7).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(8).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        // Right-align Qty — numbers and footer labels both; labels overflow left into the
+        // (empty) Catalog column on footer rows, which is intentional.
+        ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
 
         // Column widths
         ws.Column(1).Width = wsSheet.Column(WsColType).Width;
-        ws.Column(2).Width = wsSheet.Column(WsColMfr).Width;
+        ws.Column(2).Width = ComputeMfrDisplayWidth(wsSheet);
         ws.Column(3).Width = ComputeCombinedCatalogWidth(wsSheet);
-        ws.Column(4).Width = 8;
+        ws.Column(4).Width = 8; // Qty — sized for numeric data only; footer labels spill left
         ws.Column(5).Width = 12;
-        ws.Column(6).Width = 14;
+        ws.Column(6).Width = 12;
+        ws.Column(7).Width = 12;
+        ws.Column(8).Width = 12;
 
         // Print setup
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
@@ -1699,6 +1834,17 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
             ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
 
+            // Carry Mfr/Qty overrides forward on matched rows. EffQty (P) is always rewritten.
+            if (existing != null)
+            {
+                if (!string.IsNullOrEmpty(existing.MfrOverride))
+                    ws.Cell(row, WsColMfrOverride).Value = existing.MfrOverride;
+                if (existing.QtyOverride.HasValue)
+                    ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
+            }
+            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(O{row}=\"\",D{row},O{row})";
+            ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
+
             // Prev Qty — prefer the previous Worksheet's cached Qty (reflects Calc adjustments),
             // else recompute from the preserved canonical Calc + prev fixture lengths (cache may
             // be missing on 3rd+ passes — ClosedXML doesn't emit caches for rewritten formulas),
@@ -1801,7 +1947,13 @@ public static class CountsWorkbookService
                 if (existing.Markup.HasValue) ws.Cell(row, WsColMarkup).Value = existing.Markup.Value;
                 if (existing.Tariff.HasValue) ws.Cell(row, WsColTariff).Value = existing.Tariff.Value;
                 if (existing.Adder.HasValue) ws.Cell(row, WsColAdder).Value = existing.Adder.Value;
+                if (!string.IsNullOrEmpty(existing.MfrOverride))
+                    ws.Cell(row, WsColMfrOverride).Value = existing.MfrOverride;
+                if (existing.QtyOverride.HasValue)
+                    ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
             }
+            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(O{row}=\"\",D{row},O{row})";
+            ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
             // Red fill + strikethrough — extends through Phase so the whole row reads as removed
             for (int col = 1; col <= WsColPhase; col++)
@@ -1827,13 +1979,32 @@ public static class CountsWorkbookService
         ApplyQtyColumnFormatting(ws);
         ApplyPricingColumnFormats(ws);
 
+        // Override column formatting — mirrors BuildWorksheetSheet so update passes don't drop it.
+        // 16.64 char-width ≈ 190px in the target environment. Matched widths on the two override columns.
+        ws.Column(WsColMfrOverride).Width = 16.64;
+        ws.Column(WsColQtyOverride).Width = 16.64;
+        ws.Column(WsColQtyOverride).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColQtyOverride).Style.NumberFormat.Format = "0";
+
+        if (lastDataRow >= 2)
+        {
+            ws.Range(2, WsColMfrOverride, lastDataRow, WsColMfrOverride)
+                .AddConditionalFormat()
+                .WhenIsTrue($"LEN(N2)>0")
+                .Font.SetBold().Font.SetFontColor(XLColor.Red);
+            ws.Range(2, WsColQtyOverride, lastDataRow, WsColQtyOverride)
+                .AddConditionalFormat()
+                .WhenIsTrue($"LEN(O2)>0")
+                .Font.SetBold().Font.SetFontColor(XLColor.Red);
+        }
+
         // Light gray divider at the last row of each Type group
         ApplyTypeGroupDividers(ws, 2, lastDataRow);
 
-        // Helper pipeline (AA-BB) — re-emit with updated lastDataRow bounds
+        // Helper pipeline (AA-BJ) — re-emit with updated lastDataRow bounds
         WriteHelperPipeline(ws, lastDataRow);
 
-        // Hide helper columns Z..BB (no-op on re-runs)
+        // Hide helper columns Z..BJ (no-op on re-runs)
         for (int col = WsColActive; col <= WsColHelperLast; col++)
             ws.Column(col).Hide();
 
@@ -1841,7 +2012,7 @@ public static class CountsWorkbookService
         var typeCanonicalRowsSet = new HashSet<int>(typeCanonicalSheetRow.Values);
         for (int r = 2; r < row; r++)
         {
-            for (int col = WsColDesc; col <= WsColPhase; col++)
+            for (int col = WsColDesc; col <= WsColQtyOverride; col++)
                 ws.Cell(r, col).Style.Protection.SetLocked(false);
             if (!typeCanonicalRowsSet.Contains(r))
                 ws.Cell(r, WsColTariff).Style.Protection.SetLocked(true);
@@ -1873,6 +2044,29 @@ public static class CountsWorkbookService
         }
         // Excel column-width units are sized to the digit "0"; letters average wider, so
         // raw char count undercounts. Multiply by 1.2 + small pad to match proportional text.
+        return Math.Ceiling(maxLen * 1.2) + 3;
+    }
+
+    /// <summary>
+    /// Computes the Mfr print-column width from the already-trimmed values in Worksheet!B,
+    /// mirroring the display transformations applied on the print sheets
+    /// (<see cref="BuildMfrDisplayFormula"/>): UPPER and the Environmental Lights → LUMEN SPEC
+    /// substitution. Using AdjustToContents on Worksheet!B is unreliable across update passes,
+    /// so we measure from the source data the same way <see cref="ComputeCombinedCatalogWidth"/> does.
+    /// </summary>
+    private static double ComputeMfrDisplayWidth(IXLWorksheet wsSheet)
+    {
+        int lastRow = wsSheet.LastRowUsed()?.RowNumber() ?? 1;
+        int maxLen = "Mfr".Length;
+        for (int r = 2; r <= lastRow; r++)
+        {
+            string mfr = wsSheet.Cell(r, WsColMfr).GetString();
+            if (string.IsNullOrWhiteSpace(mfr)) continue;
+            string display = mfr.Equals("Environmental Lights", StringComparison.OrdinalIgnoreCase)
+                ? "LUMEN SPEC"
+                : mfr.ToUpperInvariant();
+            if (display.Length > maxLen) maxLen = display.Length;
+        }
         return Math.Ceiling(maxLen * 1.2) + 3;
     }
 
@@ -2189,6 +2383,8 @@ public static class CountsWorkbookService
                 CalcIsFormula = ws.Cell(r, WsColCalc).HasFormula,
                 CostIsFormula = ws.Cell(r, WsColUnitCost).HasFormula,
                 IsStrikethrough = ws.Cell(r, WsColType).Style.Font.Strikethrough,
+                MfrOverride = ws.Cell(r, WsColMfrOverride).GetString(),
+                QtyOverride = ReadNumericCell(ws.Cell(r, WsColQtyOverride)),
             });
         }
 
@@ -2217,6 +2413,8 @@ public static class CountsWorkbookService
         public bool CalcIsFormula { get; init; }
         public bool CostIsFormula { get; init; }
         public bool IsStrikethrough { get; init; }
+        public string MfrOverride { get; init; } = string.Empty;
+        public double? QtyOverride { get; init; }
     }
 
     #endregion
