@@ -286,23 +286,25 @@ public static class CountsWorkbookService
 
         // --- QUOTE FOOTER NOTES ---
         WriteSectionBar(ws, 35, "QUOTE FOOTER NOTES");
-        ws.Cell("A36").Value = "#";
-        ws.Cell("B36").Value = "BOLD";
-        ws.Cell("C36").Value = "Notes";
-        var fnHdr = ws.Range("A36:C36");
+        ws.Cell("A36").Value = "BOLD";
+        ws.Cell("A36").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell("B36").Value = "Notes";
+        var fnHdr = ws.Range("A36:D36");
         fnHdr.Style.Font.Bold = true;
         fnHdr.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
 
         for (int i = 0; i < 15; i++)
         {
             int r = 37 + i;
-            ws.Cell(r, 1).Value = i + 1;
-            ws.Cell(r, 2).Value = false; // boolean literal — pass 3 upgrades to native checkbox
-            ws.Cell(r, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(r, 1).Value = false; // boolean literal — pass 3 upgrades to native checkbox
+            ws.Cell(r, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            // Notes span B:D — merged so long notes aren't clipped by the narrow B column.
+            ws.Range(r, 2, r, 4).Merge();
+            ws.Cell(r, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
         }
 
         // Column widths
-        ws.Column(1).Width = 26;
+        ws.Column(1).Width = 21.18;
         ws.Column(2).Width = 18;
         ws.Column(3).Width = 42;
         ws.Column(4).Width = 40;
@@ -314,14 +316,14 @@ public static class CountsWorkbookService
         wb.DefinedNames.Add("FreightSell", ws.Range("B10:B10"));
         wb.DefinedNames.Add("BidDate", ws.Range("B13:B13"));
         wb.DefinedNames.Add("ReleaseDate", ws.Range("B14:B14"));
-        wb.DefinedNames.Add("QuoteNotes", ws.Range($"C{DashNotesFirstRow}:C{DashNotesLastRow}"));
-        wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
+        wb.DefinedNames.Add("QuoteNotes", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
+        wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"A{DashNotesFirstRow}:A{DashNotesLastRow}"));
 
         // Protection: unlock editable cells, lock the rest
         foreach (string addr in new[] { "B4", "B8", "B9", "B10", "B13", "B14" })
             ws.Cell(addr).Style.Protection.SetLocked(false);
         ws.Range("A19:D33").Style.Protection.SetLocked(false);
-        ws.Range($"B{DashNotesFirstRow}:C{DashNotesLastRow}").Style.Protection.SetLocked(false);
+        ws.Range($"A{DashNotesFirstRow}:B{DashNotesLastRow}").Style.Protection.SetLocked(false);
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
 
         ws.ShowGridLines = false;
@@ -1469,6 +1471,8 @@ public static class CountsWorkbookService
             ws.Cell(spillRow, i + 1).FormulaA1 = i == 1 ? BuildMfrDisplayFormula(anchor) : anchor;
         }
 
+        ApplyNotesBoldConditionalFormat(ws, spillRow);
+
         // Currency + delta formats
         ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
         ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
@@ -1529,6 +1533,8 @@ public static class CountsWorkbookService
             ws.Cell(spillRow, i + 1).FormulaA1 = i == 1 ? BuildMfrDisplayFormula(anchor) : anchor;
         }
 
+        ApplyNotesBoldConditionalFormat(ws, spillRow);
+
         // Currency formats
         ws.Column(5).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
@@ -1565,6 +1571,22 @@ public static class CountsWorkbookService
     {
         string upper = $"UPPER({anchor})";
         return $"IF({upper}=\"ENVIRONMENTAL LIGHTS\",\"LUMEN SPEC\",{upper})";
+    }
+
+    /// <summary>
+    /// Applies conditional formatting to the Type column (A) of a print sheet so notes flagged
+    /// BOLD on the Dashboard render bold. Notes spill into column A after the footer rows via
+    /// FILTER(QuoteNotes) — their position is dynamic, so we broadcast CF over a generous range
+    /// and match each cell's text against QuoteNotes/QuoteNotesBold by INDEX/MATCH. Bolding
+    /// assumes note text is unique; identical notes with different bold flags will all bold.
+    /// </summary>
+    private static void ApplyNotesBoldConditionalFormat(IXLWorksheet ws, int spillRow)
+    {
+        string firstCell = $"A{spillRow}";
+        ws.Range($"{firstCell}:A1000")
+            .AddConditionalFormat()
+            .WhenIsTrue($"IFERROR(INDEX(QuoteNotesBold,MATCH({firstCell},QuoteNotes,0))=TRUE,FALSE)")
+            .Font.SetBold();
     }
 
     /// <summary>Writes the 4-row merged title block shared by Quote and Phase sheets.</summary>
@@ -1903,8 +1925,8 @@ public static class CountsWorkbookService
                 }
                 else
                 {
-                    // New catalog under existing type: yellow through Qty only (Prev Qty/Delta stay clean).
-                    for (int col = 1; col <= WsColQty; col++)
+                    // New catalog under existing type: yellow through Catalog only (Qty delta handles qty changes).
+                    for (int col = 1; col <= WsColCatalog; col++)
                         ws.Cell(row, col).Style.Fill.BackgroundColor = YellowFill;
                 }
             }
@@ -1955,8 +1977,8 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(O{row}=\"\",D{row},O{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
-            // Red fill + strikethrough — extends through Phase so the whole row reads as removed
-            for (int col = 1; col <= WsColPhase; col++)
+            // Red fill + strikethrough — extends through Qty Override so the whole row reads as removed
+            for (int col = 1; col <= WsColQtyOverride; col++)
             {
                 ws.Cell(row, col).Style.Fill.BackgroundColor = RedFill;
                 ws.Cell(row, col).Style.Font.Strikethrough = true;
