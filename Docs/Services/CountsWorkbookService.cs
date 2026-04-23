@@ -36,16 +36,18 @@ public static class CountsWorkbookService
 
     // Hidden helper pipeline columns on Worksheet. Active flag (Z) is a per-row 0/1 literal
     // written by C#; every helper spill formula filters on (Z=1) to exclude strikethrough rows.
-    // AA-AI feed the Quote sheet; AK-AR / AT-BA / BC-BJ feed Phase 1/2/3. AJ/AS/BB are unused
-    // spacers for readability. All columns Z and beyond are hidden and locked.
+    // AA-AI feed the Quote sheet; AK-AR / AT-BA / BC-BJ feed Phase 1/2/3. The final column of
+    // each set (AJ/AS/BB/BL) is an InDataBlock flag (1 for data/tariff/gap rows, blank for
+    // footer/notes) that drives the print-sheet border CF. All columns Z and beyond are hidden
+    // and locked.
     private const int WsColActive = 26;     // Z
     private const string HelperFirstCol = "AA";
-    private const int WsColHelperLast = 63; // BK (EffQty)
+    private const int WsColHelperLast = 64; // BL (Phase 3 InDataBlock flag)
 
-    private static readonly string[] QuoteHelperCols =   { "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI" };
-    private static readonly string[] Phase1HelperCols =  { "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR" };
-    private static readonly string[] Phase2HelperCols =  { "AT", "AU", "AV", "AW", "AX", "AY", "AZ", "BA" };
-    private static readonly string[] Phase3HelperCols =  { "BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ" };
+    private static readonly string[] QuoteHelperCols =   { "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ" };
+    private static readonly string[] Phase1HelperCols =  { "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS" };
+    private static readonly string[] Phase2HelperCols =  { "AT", "AU", "AV", "AW", "AX", "AY", "AZ", "BA", "BB" };
+    private static readonly string[] Phase3HelperCols =  { "BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL" };
 
     // Counts sheet column indices (1-based)
     private const int CsColType = 1;        // A
@@ -1386,8 +1388,8 @@ public static class CountsWorkbookService
             $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"")},\"\"),\"\",\"\",\"\",\"\",\"\",{notesSpill})";
         // Mfr — blank tariff row; uses effMfr so override wins per-row
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "\"\"")},\"\")";
-        // Catalog~Desc — "Tariff" label on tariff row
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(catalogCombined, "\"Tariff\"")},\"\")";
+        // Catalog~Desc — "Tariff …" label on tariff row
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(catalogCombined, "\"Tariff *may be deleted/reduced if tariffs change\"")},\"\")";
         // Qty + footer labels (Subtotal / [Lutron?] / Freight / Grand Total).
         ws.Cell($"{cols[i++]}2").FormulaA1 =
             $"_xlfn.VSTACK(IFERROR({Gap(effQty, "\"\"")},\"\"),{labelFooter})";
@@ -1405,6 +1407,25 @@ public static class CountsWorkbookService
         // Sell Ext. + footer values (tariff row carries per-type tariff amount)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
             $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),{sellValueFooter})";
+        // InDataBlock flag — 1 for every data row, type-gap row, and tariff row; blank for
+        // footer/notes rows (no VSTACK append). Mirrors Gap's structural shape so the flag
+        // column aligns row-for-row with the visible helper columns on the print sheets. The
+        // print sheet drives its border CF against this flag ($flagCol{row}=1).
+        string flagLambda =
+              "_xlfn.LAMBDA(_xlpm.types,_xlpm.pcts,"
+            +   "IF(ROWS(_xlpm.types)<=1,1,"
+            +     "_xlfn.LET("
+            +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
+            +       "_xlpm.nxt,_xlfn.VSTACK(_xlfn.DROP(_xlpm.types,1),\"\"),"
+            +       "_xlpm.gapCol,IF(_xlpm.types<>_xlpm.prev,1,_xlfn.NA()),"
+            +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
+            +       "_xlpm.valsCol,_xlfn.SEQUENCE(ROWS(_xlpm.types),1,1,0),"
+            +       "_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),1,_xlfn.NA()),"
+            +       "_xlfn.TOCOL(_xlfn.HSTACK(_xlpm.gapCol,_xlpm.valsCol,_xlpm.tariffCol),2)"
+            +     ")"
+            +   ")"
+            + $")({typesArg},{pctsArg})";
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({flagLambda},\"\")";
     }
 
     #endregion
@@ -1455,23 +1476,33 @@ public static class CountsWorkbookService
         if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
             return;
 
+        ApplyPrintSheetDefaults(ws);
+
         WritePrintSheetTitle(ws, 9, "\"PRODUCT PRICING \"&Cover!B11");
 
         int headerRow = 6;
-        string[] headers = { "Type", "Mfr", "Catalog Number", "Qty", "Δ", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
+        string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Δ", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
         WritePrintSheetHeaders(ws, headerRow, headers);
 
-        // Spill row — one ANCHORARRAY per column pointing at Worksheet!AAn..AIn.
-        // Mfr column (index 1) is wrapped in UPPER for all-caps display, with a
-        // hardcoded substitution: "Environmental Lights" → "LUMEN SPEC".
-        int spillRow = headerRow + 1;
+        // Spill row shifted to 8 (row 7 is a blank spacer). QuoteHelperCols has 10 entries —
+        // the last is the InDataBlock flag, spilled into hidden column J.
+        int spillRow = 8;
         for (int i = 0; i < QuoteHelperCols.Length; i++)
         {
             string anchor = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteHelperCols[i]}2)";
-            ws.Cell(spillRow, i + 1).FormulaA1 = i == 1 ? BuildMfrDisplayFormula(anchor) : anchor;
+            string formula = i switch
+            {
+                0 => BuildLeadingSpaceFormula(anchor),
+                1 => BuildMfrDisplayFormula(anchor),
+                _ => anchor,
+            };
+            ws.Cell(spillRow, i + 1).FormulaA1 = formula;
         }
+        ws.Column(10).Hide(); // InDataBlock flag — drives border CF only
 
         ApplyNotesBoldConditionalFormat(ws, spillRow);
+        ApplyDataBorderConditionalFormat(ws, spillRow, lastVisibleCol: 9, flagColLetter: "J");
+        ApplyFooterStyling(ws, spillRow, qtyCol: 4, buyExtCol: 7, sellExtCol: 9);
 
         // Currency + delta formats
         ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
@@ -1483,9 +1514,15 @@ public static class CountsWorkbookService
         // Right-align Qty — numbers and footer labels both; labels overflow left into the
         // (empty) Catalog column on footer rows, which is intentional.
         ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        ws.Column(5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        for (int c = 6; c <= 9; c++)
+            ws.Column(c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        // Qty and Δ header cells centered (column-level right-align applies to data rows only)
+        ws.Cell(headerRow, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell(headerRow, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         // Column widths — pull from Worksheet (ANCHORARRAY cells can't auto-size).
-        ws.Column(1).Width = wsSheet.Column(WsColType).Width;
+        ws.Column(1).Width = Math.Max(6.25, wsSheet.Column(WsColType).Width);
         ws.Column(2).Width = ComputeMfrDisplayWidth(wsSheet);
         ws.Column(3).Width = ComputeCombinedCatalogWidth(wsSheet);
         ws.Column(4).Width = 8; // Qty — sized for numeric data only; footer labels spill left
@@ -1498,7 +1535,7 @@ public static class CountsWorkbookService
         // Print setup
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
         ws.PageSetup.FitToPages(1, 0);
-        ws.PageSetup.SetRowsToRepeatAtTop(1, headerRow);
+        ws.PageSetup.SetRowsToRepeatAtTop(1, 7);
     }
 
     /// <summary>
@@ -1520,20 +1557,33 @@ public static class CountsWorkbookService
             _ => throw new ArgumentOutOfRangeException(nameof(phase)),
         };
 
+        ApplyPrintSheetDefaults(ws);
+
         WritePrintSheetTitle(ws, 8, $"\"PHASE {phase} PRODUCT PRICING \"&Cover!B11");
 
         int headerRow = 6;
-        string[] headers = { "Type", "Mfr", "Catalog Number", "Qty", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
+        string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
         WritePrintSheetHeaders(ws, headerRow, headers);
 
-        int spillRow = headerRow + 1;
+        // Spill row shifted to 8 (row 7 is a blank spacer). Phase col arrays have 9 entries —
+        // the last is the InDataBlock flag, spilled into hidden column I.
+        int spillRow = 8;
         for (int i = 0; i < cols.Length; i++)
         {
             string anchor = $"_xlfn.ANCHORARRAY(Worksheet!{cols[i]}2)";
-            ws.Cell(spillRow, i + 1).FormulaA1 = i == 1 ? BuildMfrDisplayFormula(anchor) : anchor;
+            string formula = i switch
+            {
+                0 => BuildLeadingSpaceFormula(anchor),
+                1 => BuildMfrDisplayFormula(anchor),
+                _ => anchor,
+            };
+            ws.Cell(spillRow, i + 1).FormulaA1 = formula;
         }
+        ws.Column(9).Hide(); // InDataBlock flag — drives border CF only
 
         ApplyNotesBoldConditionalFormat(ws, spillRow);
+        ApplyDataBorderConditionalFormat(ws, spillRow, lastVisibleCol: 8, flagColLetter: "I");
+        ApplyFooterStyling(ws, spillRow, qtyCol: 4, buyExtCol: 6, sellExtCol: 8);
 
         // Currency formats
         ws.Column(5).Style.NumberFormat.Format = "$#,##0.00";
@@ -1544,9 +1594,13 @@ public static class CountsWorkbookService
         // Right-align Qty — numbers and footer labels both; labels overflow left into the
         // (empty) Catalog column on footer rows, which is intentional.
         ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        for (int c = 5; c <= 8; c++)
+            ws.Column(c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        // Qty header cell centered (column-level right-align applies to data rows only)
+        ws.Cell(headerRow, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         // Column widths
-        ws.Column(1).Width = wsSheet.Column(WsColType).Width;
+        ws.Column(1).Width = Math.Max(6.25, wsSheet.Column(WsColType).Width);
         ws.Column(2).Width = ComputeMfrDisplayWidth(wsSheet);
         ws.Column(3).Width = ComputeCombinedCatalogWidth(wsSheet);
         ws.Column(4).Width = 8; // Qty — sized for numeric data only; footer labels spill left
@@ -1558,7 +1612,15 @@ public static class CountsWorkbookService
         // Print setup
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
         ws.PageSetup.FitToPages(1, 0);
-        ws.PageSetup.SetRowsToRepeatAtTop(1, headerRow);
+        ws.PageSetup.SetRowsToRepeatAtTop(1, 7);
+    }
+
+    /// <summary>Sets print-sheet-wide defaults: Segoe UI 11 font, gridlines off.</summary>
+    private static void ApplyPrintSheetDefaults(IXLWorksheet ws)
+    {
+        ws.ShowGridLines = false;
+        ws.Style.Font.FontName = "Segoe UI";
+        ws.Style.Font.FontSize = 11;
     }
 
     /// <summary>
@@ -1571,6 +1633,14 @@ public static class CountsWorkbookService
     {
         string upper = $"UPPER({anchor})";
         return $"IF({upper}=\"ENVIRONMENTAL LIGHTS\",\"LUMEN SPEC\",{upper})";
+    }
+
+    /// <summary>Prepends a single space to each spilled value for visual left-padding on a
+    /// text column. Empty spill cells stay empty so the border CF's gap rows don't get turned
+    /// into single-space cells.</summary>
+    private static string BuildLeadingSpaceFormula(string anchor)
+    {
+        return $"IF({anchor}=\"\",\"\",\" \"&{anchor})";
     }
 
     /// <summary>
@@ -1589,44 +1659,142 @@ public static class CountsWorkbookService
             .Font.SetBold();
     }
 
-    /// <summary>Writes the 4-row merged title block shared by Quote and Phase sheets.</summary>
+    // Print sheet border styling — Medium #808080 used for data-row borders, banner borders,
+    // header borders, and footer subtotal/grand-total top borders.
+    private static readonly XLColor PrintBorderColor = XLColor.FromHtml("#808080");
+    private const XLBorderStyleValues PrintBorderStyle = XLBorderStyleValues.Thin;
+
+    /// <summary>Writes the 7-row title block (header at row 6, spacer at row 7) shared by
+    /// Quote and Phase sheets. Row 3 is a thin spacer, row 7 is a larger spacer that separates
+    /// the title block from spilled data. Fonts are Segoe UI inherited from sheet defaults.</summary>
     private static void WritePrintSheetTitle(IXLWorksheet ws, int mergeColCount, string subtitleFormula)
     {
         string lastCol = XLHelper.GetColumnLetterFromNumber(mergeColCount);
 
+        // Row 1 — project title (no fill, black, Segoe UI 12 bold, centered, no border)
         ws.Range($"A1:{lastCol}1").Merge();
         ws.Cell("A1").FormulaA1 = "Cover!B6";
         ws.Cell("A1").Style.Font.Bold = true;
-        ws.Cell("A1").Style.Font.FontSize = 16;
+        ws.Cell("A1").Style.Font.FontSize = 12;
         ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Row(1).Height = 15;
 
+        // Row 2 — subtitle (Segoe UI 11, not bold, centered, no fill, no border)
         ws.Range($"A2:{lastCol}2").Merge();
         ws.Cell("A2").FormulaA1 = subtitleFormula;
-        ws.Cell("A2").Style.Font.Bold = true;
-        ws.Cell("A2").Style.Font.FontSize = 12;
         ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Row(2).Height = 15;
 
-        ws.Range($"A3:{lastCol}3").Merge();
-        ws.Cell("A3").Value = "ANY SUBSTITUTIONS MUST BE APPROVED BY CDLTG";
-        ws.Cell("A3").Style.Font.FontColor = XLColor.Red;
-        ws.Cell("A3").Style.Font.Bold = true;
-        ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        // Row 3 — thin spacer
+        ws.Row(3).Height = 4;
 
+        // Row 4 — substitutions banner (yellow fill, black bold, Medium border)
         ws.Range($"A4:{lastCol}4").Merge();
-        ws.Cell("A4").Value = "ALL PRICING BELOW IS VALID FOR 5 BUSINESS DAYS";
-        ws.Cell("A4").Style.Font.FontColor = XLColor.Red;
+        ws.Cell("A4").Value = "ANY SUBSTITUTIONS MUST BE APPROVED BY CDLTG";
         ws.Cell("A4").Style.Font.Bold = true;
         ws.Cell("A4").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell("A4").Style.Fill.BackgroundColor = YellowFill;
+        ApplyBannerBorder(ws.Range($"A4:{lastCol}4"));
+
+        // Row 5 — 5-day banner (black fill, yellow text, bold, Medium border)
+        ws.Range($"A5:{lastCol}5").Merge();
+        ws.Cell("A5").Value = "ALL PRICING BELOW IS VALID FOR 5 BUSINESS DAYS";
+        ws.Cell("A5").Style.Font.Bold = true;
+        ws.Cell("A5").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell("A5").Style.Fill.BackgroundColor = XLColor.Black;
+        ws.Cell("A5").Style.Font.FontColor = YellowFill;
+        ApplyBannerBorder(ws.Range($"A5:{lastCol}5"));
+
+        // Row 7 — spacer between header row 6 and spill row 8
+        ws.Row(7).Height = 16.5;
     }
 
+    /// <summary>Applies Medium #808080 outside border on the merged banner range.</summary>
+    private static void ApplyBannerBorder(IXLRange range)
+    {
+        range.Style.Border.TopBorder = PrintBorderStyle;
+        range.Style.Border.BottomBorder = PrintBorderStyle;
+        range.Style.Border.LeftBorder = PrintBorderStyle;
+        range.Style.Border.RightBorder = PrintBorderStyle;
+        range.Style.Border.TopBorderColor = PrintBorderColor;
+        range.Style.Border.BottomBorderColor = PrintBorderColor;
+        range.Style.Border.LeftBorderColor = PrintBorderColor;
+        range.Style.Border.RightBorderColor = PrintBorderColor;
+    }
+
+    /// <summary>Writes the header row — bold, no fill, Thin #808080 border per cell, bottom-aligned,
+    /// row height 32 to match the screenshot.</summary>
     private static void WritePrintSheetHeaders(IXLWorksheet ws, int headerRow, string[] headers)
     {
         for (int i = 0; i < headers.Length; i++)
             ws.Cell(headerRow, i + 1).Value = headers[i];
         var range = ws.Range(headerRow, 1, headerRow, headers.Length);
         range.Style.Font.Bold = true;
-        range.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-        range.Style.Font.FontColor = XLColor.White;
+        range.Style.Alignment.Vertical = XLAlignmentVerticalValues.Bottom;
+        range.Style.Border.TopBorder = PrintBorderStyle;
+        range.Style.Border.BottomBorder = PrintBorderStyle;
+        range.Style.Border.LeftBorder = PrintBorderStyle;
+        range.Style.Border.RightBorder = PrintBorderStyle;
+        range.Style.Border.TopBorderColor = PrintBorderColor;
+        range.Style.Border.BottomBorderColor = PrintBorderColor;
+        range.Style.Border.LeftBorderColor = PrintBorderColor;
+        range.Style.Border.RightBorderColor = PrintBorderColor;
+        ws.Row(headerRow).Height = 32;
+    }
+
+    /// <summary>Applies Medium #808080 borders on data/tariff/gap rows only, driven by the hidden
+    /// InDataBlock flag column. Spans rows {spillRow}..1000 across visible columns 1..{lastCol}.
+    /// The CF predicate matches when the flag column equals 1; footer and notes rows have blank
+    /// flag values and remain unbordered.</summary>
+    private static void ApplyDataBorderConditionalFormat(
+        IXLWorksheet ws, int spillRow, int lastVisibleCol, string flagColLetter)
+    {
+        var range = ws.Range(spillRow, 1, 1000, lastVisibleCol);
+        var cf = range.AddConditionalFormat()
+            .WhenIsTrue($"${flagColLetter}{spillRow}=1");
+        cf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+        cf.Border.SetBottomBorder(PrintBorderStyle).Border.SetBottomBorderColor(PrintBorderColor);
+        cf.Border.SetLeftBorder(PrintBorderStyle).Border.SetLeftBorderColor(PrintBorderColor);
+        cf.Border.SetRightBorder(PrintBorderStyle).Border.SetRightBorderColor(PrintBorderColor);
+    }
+
+    /// <summary>Applies footer styling: bold right-aligned labels on the Qty column, Medium
+    /// #808080 top border on Subtotal and Grand Total amount cells (Buy Ext + Sell Ext), and
+    /// bold Grand Total amount cells. Spans rows {spillRow}..1000.</summary>
+    private static void ApplyFooterStyling(
+        IXLWorksheet ws, int spillRow, int qtyCol, int buyExtCol, int sellExtCol)
+    {
+        string qtyLetter = XLHelper.GetColumnLetterFromNumber(qtyCol);
+        string[] labels =
+        {
+            "Fixture Package Sub-Total:",
+            "Lutron Lighting Control Sub-Total:",
+            "Estimated Freight:",
+            "LIGHTING PACKAGE TOTAL:",
+        };
+
+        // Bold + right-align any Qty-column cell that equals one of the footer labels
+        string labelPredicate = string.Join(",", labels.Select(l => $"${qtyLetter}{spillRow}=\"{l}\""));
+        var qtyRange = ws.Range(spillRow, qtyCol, 1000, qtyCol);
+        var qtyCf = qtyRange.AddConditionalFormat().WhenIsTrue($"OR({labelPredicate})");
+        qtyCf.Font.SetBold();
+
+        // Subtotal row — top border on Buy Ext and Sell Ext cells only (skip Sell Ea. between them)
+        foreach (int col in new[] { buyExtCol, sellExtCol })
+        {
+            var subCf = ws.Range(spillRow, col, 1000, col).AddConditionalFormat()
+                .WhenIsTrue($"${qtyLetter}{spillRow}=\"Fixture Package Sub-Total:\"");
+            subCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+        }
+
+        // Grand Total row — top border + bold on Buy Ext and Sell Ext cells only
+        foreach (int col in new[] { buyExtCol, sellExtCol })
+        {
+            var grandCf = ws.Range(spillRow, col, 1000, col).AddConditionalFormat()
+                .WhenIsTrue($"${qtyLetter}{spillRow}=\"LIGHTING PACKAGE TOTAL:\"");
+            grandCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+            grandCf.Font.SetBold();
+        }
     }
 
     #endregion
