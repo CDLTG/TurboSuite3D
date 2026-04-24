@@ -72,6 +72,13 @@ public static class CountsCollectorService
                 var clParam = symbol.LookupParameter("Channel Length");
                 if (clParam is { HasValue: true, StorageType: StorageType.Double })
                     model.ChannelLength = clParam.AsDouble();
+
+                for (int n = 0; n < 6; n++)
+                {
+                    var noteParam = symbol.LookupParameter($"Schedule Notes{n + 1}");
+                    if (noteParam is { HasValue: true })
+                        model.Notes[n] = noteParam.AsString()?.Trim() ?? string.Empty;
+                }
             }
         }
 

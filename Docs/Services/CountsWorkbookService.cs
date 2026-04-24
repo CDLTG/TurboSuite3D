@@ -27,27 +27,36 @@ public static class CountsWorkbookService
     private const int WsColTariff = 11;     // K
     private const int WsColAdder = 12;      // L
     private const int WsColPhase = 13;      // M
-    private const int WsColMfrOverride = 14;  // N — user-editable, overrides B
-    private const int WsColQtyOverride = 15;  // O — user-editable, overrides D
-    // Effective Qty lives inside the hidden helper block (BK) rather than adjacent to the
+    // Per-Type Schedule Notes — canonical literal on each type's first row (unlocked),
+    // gray-italic "---" placeholder on subsequent rows (locked). Seeded once from Revit on
+    // a type's first creation and user-owned thereafter (updates never overwrite).
+    private const int WsColNote1 = 14;      // N
+    private const int WsColNote2 = 15;      // O
+    private const int WsColNote3 = 16;      // P
+    private const int WsColNote4 = 17;      // Q
+    private const int WsColNote5 = 18;      // R
+    private const int WsColNote6 = 19;      // S
+    private const int WsColMfrOverride = 20;  // T — user-editable, overrides B
+    private const int WsColQtyOverride = 21;  // U — user-editable, overrides D
+    // Effective Qty lives inside the hidden helper block (BQ) rather than adjacent to the
     // editable columns — keeps the visible worksheet clean and avoids a visually-empty slot
-    // between O and the end of the visible data. =IF(O="",D,O) written per-row.
-    private const int WsColEffQty      = 63;  // BK — hidden helper
+    // between U and the end of the visible data. =IF(U="",D,U) written per-row.
+    private const int WsColEffQty      = 69;  // BQ — hidden helper
 
-    // Hidden helper pipeline columns on Worksheet. Active flag (Z) is a per-row 0/1 literal
-    // written by C#; every helper spill formula filters on (Z=1) to exclude strikethrough rows.
-    // AA-AI feed the Quote sheet; AK-AR / AT-BA / BC-BJ feed Phase 1/2/3. The final column of
-    // each set (AJ/AS/BB/BL) is an InDataBlock flag (1 for data/tariff/gap rows, blank for
-    // footer/notes) that drives the print-sheet border CF. All columns Z and beyond are hidden
-    // and locked.
-    private const int WsColActive = 26;     // Z
-    private const string HelperFirstCol = "AA";
-    private const int WsColHelperLast = 64; // BL (Phase 3 InDataBlock flag)
+    // Hidden helper pipeline columns on Worksheet. Active flag (AF) is a per-row 0/1 literal
+    // written by C#; every helper spill formula filters on (AF=1) to exclude strikethrough rows.
+    // AG-AP feed the Quote sheet; AQ-AY / AZ-BH / BI-BP feed Phase 1/2/3. The final column of
+    // each set (AP/AY/BH/BR) is an InDataBlock flag (1 for data/tariff/note/gap rows, blank for
+    // footer/notes-library) that drives the print-sheet border CF. All columns AF and beyond
+    // are hidden and locked.
+    private const int WsColActive = 32;     // AF
+    private const string HelperFirstCol = "AG";
+    private const int WsColHelperLast = 70; // BR (Phase 3 InDataBlock flag)
 
-    private static readonly string[] QuoteHelperCols =   { "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ" };
-    private static readonly string[] Phase1HelperCols =  { "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS" };
-    private static readonly string[] Phase2HelperCols =  { "AT", "AU", "AV", "AW", "AX", "AY", "AZ", "BA", "BB" };
-    private static readonly string[] Phase3HelperCols =  { "BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL" };
+    private static readonly string[] QuoteHelperCols =   { "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP" };
+    private static readonly string[] Phase1HelperCols =  { "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY" };
+    private static readonly string[] Phase2HelperCols =  { "AZ", "BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH" };
+    private static readonly string[] Phase3HelperCols =  { "BI", "BJ", "BK", "BL", "BM", "BN", "BO", "BP", "BR" };
 
     // Counts sheet column indices (1-based)
     private const int CsColType = 1;        // A
@@ -62,6 +71,8 @@ public static class CountsWorkbookService
     private const int CsColLinear = 10;     // J
     private const int CsColReel = 11;       // K
     private const int CsColChannel = 12;    // L
+    private const int CsColNote1 = 13;      // M — Schedule Notes 1..6 emitted for reference
+    private const int CsColNote6 = 18;      // R
 
     // Highlight colors
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
@@ -991,9 +1002,11 @@ public static class CountsWorkbookService
         ws.Cell(1, CsColLinear).Value = "Linear Length";
         ws.Cell(1, CsColReel).Value = "Reel Length";
         ws.Cell(1, CsColChannel).Value = "Channel Length";
+        for (int n = 0; n < 6; n++)
+            ws.Cell(1, CsColNote1 + n).Value = $"Schedule Notes {n + 1}";
 
         // Style headers
-        var headerRange = ws.Range(1, 1, 1, CsColChannel);
+        var headerRange = ws.Range(1, 1, 1, CsColNote6);
         headerRange.Style.Font.Bold = true;
         headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
         headerRange.Style.Font.FontColor = XLColor.White;
@@ -1010,11 +1023,19 @@ public static class CountsWorkbookService
             ws.Cell(row, CsColLinear).Value = Math.Round(f.LinearLength, 2);
             ws.Cell(row, CsColReel).Value = Math.Round(f.ReelLength, 2);
             ws.Cell(row, CsColChannel).Value = Math.Round(f.ChannelLength, 2);
+            for (int n = 0; n < 6; n++)
+                ws.Cell(row, CsColNote1 + n).Value = f.Notes[n] ?? string.Empty;
             row++;
         }
 
         // Auto-fit columns
         ws.Columns().AdjustToContents();
+        // Cap Schedule Notes columns — overflow is fine, long notes shouldn't balloon the raw sheet.
+        for (int n = 0; n < 6; n++)
+        {
+            if (ws.Column(CsColNote1 + n).Width > 25)
+                ws.Column(CsColNote1 + n).Width = 25;
+        }
     }
 
     #endregion
@@ -1043,6 +1064,8 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColMarkup).Value = "Markup %";
         ws.Cell(1, WsColTariff).Value = "Tariff %";
         ws.Cell(1, WsColAdder).Value = "Adder";
+        for (int n = 0; n < 6; n++)
+            ws.Cell(1, WsColNote1 + n).Value = $"Note {n + 1}";
         ws.Cell(1, WsColMfrOverride).Value = "Mfr Override";
         ws.Cell(1, WsColQtyOverride).Value = "Qty Override";
         ws.Cell(1, WsColEffQty).Value = "EffQty";
@@ -1125,15 +1148,26 @@ public static class CountsWorkbookService
                 // so users see the tariff on every row while the canonical cell remains the
                 // only editable one. Helper pipeline resolves the Type's tariff % via XLOOKUP
                 // against the full K column (first match = canonical).
+                //
+                // Schedule Notes (N–S) follow the same per-Type pattern: canonical row seeds
+                // from Revit on first creation; subsequent rows show "---" in gray italic.
                 if (!typeFirstRow.ContainsKey(f.TypeMark))
+                {
                     typeFirstRow[f.TypeMark] = row;
+                    for (int n = 0; n < 6; n++)
+                        WriteNoteCell(ws, row, row, n, f.Notes[n]);
+                }
                 else
+                {
                     WriteTariffCell(ws, row, typeFirstRow[f.TypeMark], existingTariff: null, isNewRow: true);
+                    for (int n = 0; n < 6; n++)
+                        WriteNoteCell(ws, row, typeFirstRow[f.TypeMark], n, null);
+                }
 
-                // EffQty (P) = QtyOverride if present, else Revit Qty (D). Single source of
-                // truth for effective qty — Rep Lists SUMIFS and the helper pipeline read P
-                // instead of duplicating the override fallback.
-                ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(O{row}=\"\",D{row},O{row})";
+                // EffQty (BQ) = QtyOverride (U) if present, else Revit Qty (D). Single source
+                // of truth for effective qty — Rep Lists SUMIFS and the helper pipeline read
+                // this column instead of duplicating the override fallback.
+                ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(U{row}=\"\",D{row},U{row})";
                 ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
                 // Active flag: initial export has no removed rows — always 1.
@@ -1157,6 +1191,10 @@ public static class CountsWorkbookService
         ws.Column(WsColTariff).Width = 10;
         ws.Column(WsColAdder).Width = 10;
         ws.Column(WsColPhase).Width = 10;
+        // Note columns N–S: 16.64 width, no wrap — long notes overflow into adjacent empty
+        // cells. Prioritizes compactness over full visibility for rarely-edited content.
+        for (int n = 0; n < 6; n++)
+            ws.Column(WsColNote1 + n).Width = 16.64;
         // 16.64 char-width ≈ 190px in the target environment. Matched widths on the two override columns.
         ws.Column(WsColMfrOverride).Width = 16.64;
         ws.Column(WsColQtyOverride).Width = 16.64;
@@ -1169,11 +1207,11 @@ public static class CountsWorkbookService
         {
             ws.Range(2, WsColMfrOverride, lastDataRow, WsColMfrOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(N2)>0")
+                .WhenIsTrue($"LEN(T2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
             ws.Range(2, WsColQtyOverride, lastDataRow, WsColQtyOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(O2)>0")
+                .WhenIsTrue($"LEN(U2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
         }
 
@@ -1196,15 +1234,20 @@ public static class CountsWorkbookService
         for (int col = WsColActive; col <= WsColHelperLast; col++)
             ws.Column(col).Hide();
 
-        // Sheet protection — lock TurboSuite columns (A-F), unlock user columns (G-M).
-        // Exception: Tariff % (K) is only editable on each Type's canonical (first) row.
+        // Sheet protection — lock TurboSuite columns (A-F), unlock user columns (G-U).
+        // Exception: per-Type canonical fields — Tariff % (K) and Notes (N–S) — are only
+        // editable on each Type's canonical (first) row.
         var typeCanonicalRows = new HashSet<int>(typeFirstRow.Values);
         for (int r = 2; r < row; r++)
         {
             for (int col = WsColDesc; col <= WsColQtyOverride; col++)
                 ws.Cell(r, col).Style.Protection.SetLocked(false);
             if (!typeCanonicalRows.Contains(r))
+            {
                 ws.Cell(r, WsColTariff).Style.Protection.SetLocked(true);
+                for (int n = 0; n < 6; n++)
+                    ws.Cell(r, WsColNote1 + n).Style.Protection.SetLocked(true);
+            }
         }
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
     }
@@ -1295,14 +1338,16 @@ public static class CountsWorkbookService
             return;
         }
 
+        // Active flag lives at WsColActive (AF after the Note-column shift). Every spill
+        // predicate filters on AF=1 to exclude strikethrough rows.
         WriteSingleHelperPipeline(ws, lastDataRow, QuoteHelperCols,
-            predicate: $"(Z2:Z{lastDataRow}=1)", includeDelta: true);
+            predicate: $"(AF2:AF{lastDataRow}=1)", includeDelta: true);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase1HelperCols,
-            predicate: $"(Z2:Z{lastDataRow}=1)*(M2:M{lastDataRow}=1)", includeDelta: false);
+            predicate: $"(AF2:AF{lastDataRow}=1)*(M2:M{lastDataRow}=1)", includeDelta: false);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase2HelperCols,
-            predicate: $"(Z2:Z{lastDataRow}=1)*(M2:M{lastDataRow}=2)", includeDelta: false);
+            predicate: $"(AF2:AF{lastDataRow}=1)*(M2:M{lastDataRow}=2)", includeDelta: false);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase3HelperCols,
-            predicate: $"(Z2:Z{lastDataRow}=1)*(M2:M{lastDataRow}=3)", includeDelta: false);
+            predicate: $"(AF2:AF{lastDataRow}=1)*(M2:M{lastDataRow}=3)", includeDelta: false);
     }
 
     private static void WriteSingleHelperPipeline(
@@ -1311,10 +1356,10 @@ public static class CountsWorkbookService
         // Per-row array expressions (unfiltered; FILTER applied inside Gap).
         string Col(string c) => $"{c}2:{c}{lastDataRow}";
         // Effective Mfr/Qty: override column wins when populated, else fall back to Revit.
-        // effQty reads the P column (populated row-by-row with IF(O="",D,O)) so callers
+        // effQty reads the BQ column (populated row-by-row with IF(U="",D,U)) so callers
         // don't duplicate the fallback logic.
-        string effMfr   = $"IF({Col("N")}=\"\",{Col("B")},{Col("N")})";
-        string effQty   = Col("BK");
+        string effMfr   = $"IF({Col("T")}=\"\",{Col("B")},{Col("T")})";
+        string effQty   = Col("BQ");
         string effDelta = $"IF({Col("E")}=\"\",\"\",{effQty}-{Col("E")})";
         string sellEa = $"IFERROR(({Col("I")}*(1+{Col("J")}))+{Col("L")},0)";
         string sellExt = $"({sellEa})*{effQty}";
@@ -1329,21 +1374,42 @@ public static class CountsWorkbookService
         string catalogCombined =
             $"{Col("C")}&IF(({Col("G")}<>0)*({Col("G")}<>\"\")*({Col("G")}<>\"dependent\"),\" ~ \"&{Col("G")},\"\")";
 
-        // Gap LAMBDA: emits gap rows at type-group boundaries and a "Tariff" row at each
-        // group's end (when tariff% != 0). Inline LAMBDA — defined-name LAMBDAs called from
-        // spill cells trip Excel's load-time parser.
+        // Gap LAMBDA: emits gap rows at type-group boundaries, a "Tariff" row, and up to six
+        // per-Type NOTE rows at each group's end. Inline LAMBDA — defined-name LAMBDAs called
+        // from spill cells trip Excel's load-time parser.
         // Per-row type tariff %: XLOOKUP against the full A/K ranges returns the first match,
         // which is the Type's canonical row (where the literal K value lives). Non-canonical
         // rows have K blank, so only the canonical is found. Wrapped in IFERROR to coerce a
         // blank canonical K to 0 so arithmetic downstream stays numeric.
         string typeKPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("K")}),0)";
+        // Per-row type Note_n: same XLOOKUP pattern against each note column (N–S). Blank
+        // canonical cells make XLOOKUP return the number 0 (not ""), so we wrap in LET and
+        // coerce any numeric result back to "" — otherwise the downstream gate (_xlpm.n<>"")
+        // would fire on every row because 0<>"" is TRUE.
+        string[] noteCols = { "N", "O", "P", "Q", "R", "S" };
+        string NotePerRow(string noteCol) =>
+            $"IFERROR(_xlfn.LET(_xlpm.v,_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col(noteCol)}),IF(_xlpm.v=0,\"\",_xlpm.v)),\"\")";
         string typesArg = $"_xlfn._xlws.FILTER({Col("A")},{predicate})";
         string pctsArg = $"_xlfn._xlws.FILTER({typeKPerRow},{predicate})";
         string baseArg = $"_xlfn._xlws.FILTER({tariffBasePerRow},{predicate})";
-        string Gap(string valsExpr, string tariffContentExpr)
+        string[] noteArgs = noteCols
+            .Select(nc => $"_xlfn._xlws.FILTER({NotePerRow(nc)},{predicate})")
+            .ToArray();
+
+        // Content expressions for the 6 note slots, one per caller. Inside the LAMBDA, the
+        // note values are bound to _xlpm.n1.._xlpm.n6. Slots emit only when isLast AND the
+        // corresponding note is non-empty.
+        string Gap(string valsExpr, string tariffContentExpr, string[] noteContentExprs)
         {
+            if (noteContentExprs.Length != 6)
+                throw new ArgumentException("Expected 6 note content expressions", nameof(noteContentExprs));
             string valsArg = $"_xlfn._xlws.FILTER({valsExpr},{predicate})";
+            string noteLetCols = string.Join(",", Enumerable.Range(1, 6).Select(i =>
+                $"_xlpm.n{i}Col,IF(_xlpm.isLast*(_xlpm.n{i}<>\"\"),{noteContentExprs[i - 1]},_xlfn.NA())"));
+            string hstackCols = "_xlpm.gapCol,_xlpm.vals,_xlpm.tariffCol,"
+                + string.Join(",", Enumerable.Range(1, 6).Select(i => $"_xlpm.n{i}Col"));
             return "_xlfn.LAMBDA(_xlpm.types,_xlpm.vals,_xlpm.pcts,_xlpm.base,"
+                 +   "_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
                  +   "IF(ROWS(_xlpm.vals)<=1,_xlpm.vals,"
                  +     "_xlfn.LET("
                  +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
@@ -1352,11 +1418,19 @@ public static class CountsWorkbookService
                  +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
                  +       "_xlpm.totals,_xlfn.BYROW(_xlpm.types,_xlfn.LAMBDA(_xlpm.tv,SUMPRODUCT((_xlpm.types=_xlpm.tv)*_xlpm.base))),"
                  +       $"_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),{tariffContentExpr},_xlfn.NA()),"
-                 +       "_xlfn.TOCOL(_xlfn.HSTACK(_xlpm.gapCol,_xlpm.vals,_xlpm.tariffCol),2)"
+                 +       noteLetCols + ","
+                 +       $"_xlfn.TOCOL(_xlfn.HSTACK({hstackCols}),2)"
                  +     ")"
                  +   ")"
-                 + $")({typesArg},{valsArg},{pctsArg},{baseArg})";
+                 + $")({typesArg},{valsArg},{pctsArg},{baseArg},{string.Join(",", noteArgs)})";
         }
+
+        // Note content expressions per print-column. Most columns leave note rows blank;
+        // only Type (blank), Mfr ("NOTE:"), Catalog (the note text itself), and InDataBlock
+        // flag (1) carry values into note rows.
+        string[] NoteBlank() => Enumerable.Repeat("\"\"", 6).ToArray();
+        string[] NoteLabel() => Enumerable.Repeat("\"NOTE:\"", 6).ToArray();
+        string[] NoteText() => new[] { "_xlpm.n1", "_xlpm.n2", "_xlpm.n3", "_xlpm.n4", "_xlpm.n5", "_xlpm.n6" };
 
         // Sell subtotal = Σ(filtered line items) + Σ(filtered per-row tariff allocation).
         // K is only populated on each Type's canonical row, so we use the per-row XLOOKUP
@@ -1393,36 +1467,41 @@ public static class CountsWorkbookService
             + $"_xlfn.VSTACK(\"\",{buySubtotal},LutronSubtotal,FreightBuy,{buySubtotal}+LutronSubtotal+FreightBuy))";
 
         int i = 0;
-        // Type — blank tariff row, plus notes appended at the bottom (after Grand Total row footprint)
+        // Type — blank tariff row, blank note rows, plus quote footer notes appended at the bottom
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"")},\"\"),\"\",\"\",\"\",\"\",\"\",{notesSpill})";
-        // Mfr — blank tariff row; uses effMfr so override wins per-row
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "\"\"")},\"\")";
-        // Catalog~Desc — "Tariff …" label on tariff row
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(catalogCombined, "\"Tariff *may be deleted/reduced if tariffs change\"")},\"\")";
+            $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\"),\"\",\"\",\"\",\"\",\"\",{notesSpill})";
+        // Mfr — blank tariff row; "NOTE:" label on note rows; uses effMfr so override wins per-row
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "\"\"", NoteLabel())},\"\")";
+        // Catalog~Desc — "Tariff …" label on tariff row; note text on note rows
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(catalogCombined, "\"Tariff *may be deleted/reduced if tariffs change\"", NoteText())},\"\")";
         // Qty + footer labels (Subtotal / [Lutron?] / Freight / Grand Total).
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(effQty, "\"\"")},\"\"),{labelFooter})";
-        // Delta (Quote only) — blank tariff row, no footer. Uses effDelta so the print-sheet
-        // delta reflects the price being quoted; Worksheet's col F stays wired to Revit D−E.
+            $"_xlfn.VSTACK(IFERROR({Gap(effQty, "\"\"", NoteBlank())},\"\"),{labelFooter})";
+        // Delta (Quote only) — blank tariff row, blank note rows, no footer. Uses effDelta so
+        // the print-sheet delta reflects the price being quoted; Worksheet's col F stays wired
+        // to Revit D−E.
         if (includeDelta)
-            ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effDelta, "\"\"")},\"\")";
-        // Buy Ea. — blank tariff row, no footer rows
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(buyEa, "\"\"")},\"\")";
+            ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effDelta, "\"\"", NoteBlank())},\"\")";
+        // Buy Ea. — blank tariff row, blank note rows, no footer rows
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(buyEa, "\"\"", NoteBlank())},\"\")";
         // Buy Ext. + footer values
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(buyExt, "\"\"")},\"\"),{buyValueFooter})";
-        // Sell Ea. — blank tariff row, no footer rows (labels live on Qty)
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(sellEa, "\"\"")},\"\")";
-        // Sell Ext. + footer values (tariff row carries per-type tariff amount)
+            $"_xlfn.VSTACK(IFERROR({Gap(buyExt, "\"\"", NoteBlank())},\"\"),{buyValueFooter})";
+        // Sell Ea. — blank tariff row, blank note rows, no footer rows (labels live on Qty)
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(sellEa, "\"\"", NoteBlank())},\"\")";
+        // Sell Ext. + footer values (tariff row carries per-type tariff amount; note rows blank)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts")},\"\"),{sellValueFooter})";
-        // InDataBlock flag — 1 for every data row, type-gap row, and tariff row; blank for
-        // footer/notes rows (no VSTACK append). Mirrors Gap's structural shape so the flag
-        // column aligns row-for-row with the visible helper columns on the print sheets. The
-        // print sheet drives its border CF against this flag ($flagCol{row}=1).
+            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts", NoteBlank())},\"\"),{sellValueFooter})";
+        // InDataBlock flag — 1 for every data row, type-gap row, tariff row, and note row;
+        // blank for footer/quote-notes rows (no VSTACK append). Mirrors Gap's structural shape
+        // so the flag column aligns row-for-row with the visible helper columns on the print
+        // sheets. The print sheet drives its border CF against this flag ($flagCol{row}=1).
+        string noteFlagLet = string.Join(",", Enumerable.Range(1, 6).Select(n =>
+            $"_xlpm.n{n}Col,IF(_xlpm.isLast*(_xlpm.n{n}<>\"\"),1,_xlfn.NA())"));
+        string flagHstackCols = "_xlpm.gapCol,_xlpm.valsCol,_xlpm.tariffCol,"
+            + string.Join(",", Enumerable.Range(1, 6).Select(n => $"_xlpm.n{n}Col"));
         string flagLambda =
-              "_xlfn.LAMBDA(_xlpm.types,_xlpm.pcts,"
+              "_xlfn.LAMBDA(_xlpm.types,_xlpm.pcts,_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
             +   "IF(ROWS(_xlpm.types)<=1,1,"
             +     "_xlfn.LET("
             +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
@@ -1431,10 +1510,11 @@ public static class CountsWorkbookService
             +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
             +       "_xlpm.valsCol,_xlfn.SEQUENCE(ROWS(_xlpm.types),1,1,0),"
             +       "_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),1,_xlfn.NA()),"
-            +       "_xlfn.TOCOL(_xlfn.HSTACK(_xlpm.gapCol,_xlpm.valsCol,_xlpm.tariffCol),2)"
+            +       noteFlagLet + ","
+            +       $"_xlfn.TOCOL(_xlfn.HSTACK({flagHstackCols}),2)"
             +     ")"
             +   ")"
-            + $")({typesArg},{pctsArg})";
+            + $")({typesArg},{pctsArg},{string.Join(",", noteArgs)})";
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({flagLambda},\"\")";
     }
 
@@ -1536,6 +1616,8 @@ public static class CountsWorkbookService
         ws.Column(1).Width = Math.Max(6.25, wsSheet.Column(WsColType).Width);
         ws.Column(2).Width = ComputeMfrDisplayWidth(wsSheet);
         ws.Column(3).Width = ComputeCombinedCatalogWidth(wsSheet);
+        // Long note rows wrap inside the catalog column; row height grows automatically.
+        ws.Column(3).Style.Alignment.WrapText = true;
         ws.Column(4).Width = 8; // Qty — sized for numeric data only; footer labels spill left
         ws.Column(5).Width = 6;
         ws.Column(6).Width = 12;
@@ -1614,6 +1696,8 @@ public static class CountsWorkbookService
         ws.Column(1).Width = Math.Max(6.25, wsSheet.Column(WsColType).Width);
         ws.Column(2).Width = ComputeMfrDisplayWidth(wsSheet);
         ws.Column(3).Width = ComputeCombinedCatalogWidth(wsSheet);
+        // Long note rows wrap inside the catalog column; row height grows automatically.
+        ws.Column(3).Style.Alignment.WrapText = true;
         ws.Column(4).Width = 8; // Qty — sized for numeric data only; footer labels spill left
         ws.Column(5).Width = 12;
         ws.Column(6).Width = 12;
@@ -1868,9 +1952,11 @@ public static class CountsWorkbookService
         var newTypeMarks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var newKeys = new HashSet<(string, string)>();
         var newRowEntries = new List<(string Type, string Mfr, string Catalog, int CatPosition)>();
+        var fixtureByType = new Dictionary<string, CountsFixtureModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in fixtures)
         {
             newTypeMarks.Add(f.TypeMark);
+            fixtureByType.TryAdd(f.TypeMark, f);
             for (int c = 0; c < 6; c++)
             {
                 string catNum = f.CatalogNumbers[c] ?? "";
@@ -1892,7 +1978,7 @@ public static class CountsWorkbookService
         int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
         if (lastRow > 1)
         {
-            var dataRange = ws.Range(2, 1, lastRow, WsColAdder);
+            var dataRange = ws.Range(2, 1, lastRow, WsColQtyOverride);
             dataRange.Style.Fill.BackgroundColor = XLColor.NoColor;
             dataRange.Style.Font.Strikethrough = false;
         }
@@ -2019,6 +2105,19 @@ public static class CountsWorkbookService
                 prevTariffByType[er.Type] = er.Tariff.Value;
         }
 
+        // Type → per-Note literals from the prior pass. Notes live only on each Type's
+        // canonical row; sort order may elect a different catalog as canonical on the new
+        // pass, so we index by Type to survive re-canonicalization. Mirrors prevTariffByType.
+        var prevNotesByType = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var er in existingRows)
+        {
+            if (prevNotesByType.ContainsKey(er.Type)) continue;
+            // Only treat as the canonical snapshot if at least one note is a real literal
+            // (skip rows whose notes were the "---" placeholder, normalized to empty by ReadNotes).
+            if (er.Notes.Any(s => !string.IsNullOrEmpty(s)))
+                prevNotesByType[er.Type] = er.Notes;
+        }
+
         int row = 2;
 
         // Write new/matched rows
@@ -2045,7 +2144,7 @@ public static class CountsWorkbookService
                 if (existing.QtyOverride.HasValue)
                     ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
             }
-            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(O{row}=\"\",D{row},O{row})";
+            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(U{row}=\"\",D{row},U{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
             // Prev Qty — prefer the previous Worksheet's cached Qty (reflects Calc adjustments),
@@ -2082,6 +2181,16 @@ public static class CountsWorkbookService
                 double? tariffForRow = existing.Tariff
                     ?? (prevTariffByType.TryGetValue(type, out double t) ? t : (double?)null);
                 WriteTariffCell(ws, row, typeCanonical, tariffForRow, isNewRow: false);
+
+                // Type-canonical fields (Notes N–S): preserve existing literals verbatim. On
+                // re-canonicalization (different catalog elected), fall back to the Type-indexed
+                // snapshot. Notes are never overwritten by Revit data on update — user-owned
+                // after the type's first creation.
+                string[] notesForRow = existing.Notes.Any(s => !string.IsNullOrEmpty(s))
+                    ? existing.Notes
+                    : (prevNotesByType.TryGetValue(type, out var pn) ? pn : new string[6]);
+                for (int n = 0; n < 6; n++)
+                    WriteNoteCell(ws, row, typeCanonical, n, notesForRow[n]);
             }
             else
             {
@@ -2096,6 +2205,20 @@ public static class CountsWorkbookService
                     WriteTariffCell(ws, row, typeCanonical, prevT, isNewRow: false);
                 else
                     WriteTariffCell(ws, row, typeCanonical, null, isNewRow: true);
+
+                // Notes: three cases for a brand-new row landing on the canonical slot —
+                // (a) existing Type with preserved notes → carry forward,
+                // (b) brand-new Type → seed from Revit (only time Revit data lands on Notes),
+                // (c) existing Type with no prior notes → leave blank.
+                string[] notesForRow;
+                if (!isNewType && prevNotesByType.TryGetValue(type, out var pn))
+                    notesForRow = pn;
+                else if (isNewType && fixtureByType.TryGetValue(type, out var f))
+                    notesForRow = f.Notes;
+                else
+                    notesForRow = new string[6];
+                for (int n = 0; n < 6; n++)
+                    WriteNoteCell(ws, row, typeCanonical, n, notesForRow[n]);
 
                 if (isNewType)
                 {
@@ -2150,12 +2273,17 @@ public static class CountsWorkbookService
                 if (existing.Markup.HasValue) ws.Cell(row, WsColMarkup).Value = existing.Markup.Value;
                 if (existing.Tariff.HasValue) ws.Cell(row, WsColTariff).Value = existing.Tariff.Value;
                 if (existing.Adder.HasValue) ws.Cell(row, WsColAdder).Value = existing.Adder.Value;
+                for (int n = 0; n < 6; n++)
+                {
+                    if (!string.IsNullOrEmpty(existing.Notes[n]))
+                        ws.Cell(row, WsColNote1 + n).Value = existing.Notes[n];
+                }
                 if (!string.IsNullOrEmpty(existing.MfrOverride))
                     ws.Cell(row, WsColMfrOverride).Value = existing.MfrOverride;
                 if (existing.QtyOverride.HasValue)
                     ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
             }
-            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(O{row}=\"\",D{row},O{row})";
+            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(U{row}=\"\",D{row},U{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
             // Red fill + strikethrough — extends through Qty Override so the whole row reads as removed
@@ -2182,8 +2310,10 @@ public static class CountsWorkbookService
         ApplyQtyColumnFormatting(ws);
         ApplyPricingColumnFormats(ws);
 
-        // Override column formatting — mirrors BuildWorksheetSheet so update passes don't drop it.
-        // 16.64 char-width ≈ 190px in the target environment. Matched widths on the two override columns.
+        // Override + Notes column formatting — mirrors BuildWorksheetSheet so update passes
+        // don't drop it. 16.64 char-width ≈ 190px in the target environment.
+        for (int n = 0; n < 6; n++)
+            ws.Column(WsColNote1 + n).Width = 16.64;
         ws.Column(WsColMfrOverride).Width = 16.64;
         ws.Column(WsColQtyOverride).Width = 16.64;
         ws.Column(WsColQtyOverride).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -2193,11 +2323,11 @@ public static class CountsWorkbookService
         {
             ws.Range(2, WsColMfrOverride, lastDataRow, WsColMfrOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(N2)>0")
+                .WhenIsTrue($"LEN(T2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
             ws.Range(2, WsColQtyOverride, lastDataRow, WsColQtyOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(O2)>0")
+                .WhenIsTrue($"LEN(U2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
         }
 
@@ -2211,14 +2341,19 @@ public static class CountsWorkbookService
         for (int col = WsColActive; col <= WsColHelperLast; col++)
             ws.Column(col).Hide();
 
-        // Re-apply protection. Tariff % (K) is only editable on each Type's canonical (first) row.
+        // Re-apply protection. Per-Type canonical fields — Tariff % (K) and Notes (N–S) —
+        // are only editable on each Type's canonical (first) row.
         var typeCanonicalRowsSet = new HashSet<int>(typeCanonicalSheetRow.Values);
         for (int r = 2; r < row; r++)
         {
             for (int col = WsColDesc; col <= WsColQtyOverride; col++)
                 ws.Cell(r, col).Style.Protection.SetLocked(false);
             if (!typeCanonicalRowsSet.Contains(r))
+            {
                 ws.Cell(r, WsColTariff).Style.Protection.SetLocked(true);
+                for (int n = 0; n < 6; n++)
+                    ws.Cell(r, WsColNote1 + n).Style.Protection.SetLocked(true);
+            }
         }
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
     }
@@ -2244,10 +2379,21 @@ public static class CountsWorkbookService
             string desc = descCell.HasFormula ? string.Empty : descCell.GetString();
             int len = catalog.Length + (string.IsNullOrWhiteSpace(desc) ? 0 : desc.Length + 3); // " ~ "
             if (len > maxLen) maxLen = len;
+
+            // Include the 6 per-Type notes — they spill into this column as NOTE: rows on the
+            // print sheets. Placeholder "---" mirror cells don't need to count.
+            for (int n = 0; n < 6; n++)
+            {
+                string note = wsSheet.Cell(r, WsColNote1 + n).GetString();
+                if (note == "---" || string.IsNullOrEmpty(note)) continue;
+                if (note.Length > maxLen) maxLen = note.Length;
+            }
         }
         // Excel column-width units are sized to the digit "0"; letters average wider, so
         // raw char count undercounts. Multiply by 1.2 + small pad to match proportional text.
-        return Math.Ceiling(maxLen * 1.2) + 3;
+        // Clamp at 67 — long notes wrap instead of dragging the column wide; row height grows.
+        double width = Math.Ceiling(maxLen * 1.2) + 3;
+        return Math.Min(width, 67);
     }
 
     /// <summary>
@@ -2374,6 +2520,31 @@ public static class CountsWorkbookService
         }
     }
 
+    /// <summary>
+    /// Writes a Schedule Notes cell (N–S). Like Tariff, notes are per-Type and only the first
+    /// row of each Type holds the canonical literal. Subsequent rows display the literal string
+    /// "---" in gray italic as a visual placeholder — the Quote/Phase pipeline reads the
+    /// canonical row directly via XLOOKUP, so the mirror cell's content is never consumed
+    /// downstream. "Seed from Revit" only applies when the canonical row is being created for
+    /// the first time; preserved values are passed through verbatim on update.
+    /// </summary>
+    private static void WriteNoteCell(
+        IXLWorksheet ws, int row, int typeCanonicalRow, int noteIndex,
+        string? seedOrExistingValue)
+    {
+        int col = WsColNote1 + noteIndex;
+        if (row == typeCanonicalRow)
+        {
+            if (!string.IsNullOrEmpty(seedOrExistingValue))
+                ws.Cell(row, col).Value = seedOrExistingValue;
+        }
+        else
+        {
+            ws.Cell(row, col).Value = "---";
+            StyleAutoFilledCell(ws.Cell(row, col));
+        }
+    }
+
     // Mirrors ReadNumericCell's null-on-empty semantics for string cells, so a blank
     // Description isn't round-tripped as a literal "" that overrides the dependent formula.
     private static string? ReadTextCell(IXLCell cell)
@@ -2389,6 +2560,22 @@ public static class CountsWorkbookService
         if (cell.HasFormula) return null;
         if (cell.IsEmpty()) return null;
         return cell.TryGetValue<double>(out double v) ? v : null;
+    }
+
+    /// <summary>
+    /// Reads the 6 Schedule Notes cells for a row. The canonical row holds the authoritative
+    /// literal; dependent rows hold the "---" placeholder which we normalize away to empty
+    /// string so it's never round-tripped back as a literal note on re-canonicalization.
+    /// </summary>
+    private static string[] ReadNotes(IXLWorksheet ws, int row)
+    {
+        var notes = new string[6];
+        for (int n = 0; n < 6; n++)
+        {
+            string s = ws.Cell(row, WsColNote1 + n).GetString();
+            notes[n] = s == "---" ? string.Empty : s;
+        }
+        return notes;
     }
 
     private static double? ReadCachedDouble(IXLCell cell)
@@ -2608,6 +2795,7 @@ public static class CountsWorkbookService
                 IsStrikethrough = ws.Cell(r, WsColType).Style.Font.Strikethrough,
                 MfrOverride = ws.Cell(r, WsColMfrOverride).GetString(),
                 QtyOverride = ReadNumericCell(ws.Cell(r, WsColQtyOverride)),
+                Notes = ReadNotes(ws, r),
             });
         }
 
@@ -2638,6 +2826,7 @@ public static class CountsWorkbookService
         public bool IsStrikethrough { get; init; }
         public string MfrOverride { get; init; } = string.Empty;
         public double? QtyOverride { get; init; }
+        public string[] Notes { get; init; } = new string[6];
     }
 
     #endregion

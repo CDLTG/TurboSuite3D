@@ -9,4 +9,5 @@ public class CountsFixtureModel
     public double LinearLength { get; set; }
     public double ReelLength { get; set; }
     public double ChannelLength { get; set; }
+    public string[] Notes { get; set; } = new string[6];
 }
