@@ -46,4 +46,8 @@ public class DocsSettings
 
     // Counts tab — optional email address; Generate/Update opens a pre-filled mailto draft to this address
     public string CountsNotifyEmail { get; set; } = string.Empty;
+
+    // Counts tab — header/footer images embedded on Quote and Phase 1/2/3 sheets
+    public string CountsHeaderImagePath { get; set; } = string.Empty;
+    public string CountsFooterImagePath { get; set; } = string.Empty;
 }

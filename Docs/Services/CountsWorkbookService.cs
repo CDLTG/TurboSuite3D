@@ -80,7 +80,9 @@ public static class CountsWorkbookService
         string projectName,
         string projectLocation,
         string outputPath,
-        string repDirectoryPath)
+        string repDirectoryPath,
+        string headerImagePath = "",
+        string footerImagePath = "")
     {
         using var wb = new XLWorkbook();
 
@@ -110,6 +112,8 @@ public static class CountsWorkbookService
             ("Phase 3", null),
         };
         PatchDynamicArrayMetadata(outputPath, spillSheets);
+        EmbedHeaderFooterImages(outputPath, headerImagePath, footerImagePath,
+            new[] { "Quote", "Phase 1", "Phase 2", "Phase 3" });
     }
 
     /// <summary>
@@ -118,7 +122,9 @@ public static class CountsWorkbookService
     public static void GenerateUpdate(
         List<CountsFixtureModel> fixtures,
         string existingPath,
-        string repDirectoryPath)
+        string repDirectoryPath,
+        string headerImagePath = "",
+        string footerImagePath = "")
     {
         using var wb = new XLWorkbook(existingPath);
 
@@ -170,6 +176,8 @@ public static class CountsWorkbookService
             ("Phase 3", null),
         };
         PatchDynamicArrayMetadata(existingPath, spillSheets);
+        EmbedHeaderFooterImages(existingPath, headerImagePath, footerImagePath,
+            new[] { "Quote", "Phase 1", "Phase 2", "Phase 3" });
     }
 
     #region Cover Sheet
@@ -210,6 +218,7 @@ public static class CountsWorkbookService
         ws.Column(2).Width = 50;
 
         // Print area
+        ApplyStandardPageSetup(ws);
         ws.PageSetup.PrintAreas.Add("A1:B17");
     }
 
@@ -329,6 +338,7 @@ public static class CountsWorkbookService
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
 
         ws.ShowGridLines = false;
+        ApplyStandardPageSetup(ws);
     }
 
     private static void EnsureDashboardSheet(IXLWorkbook wb, string repDirectoryPath)
@@ -800,8 +810,7 @@ public static class CountsWorkbookService
         // Left-align Qty so it stays visually adjacent to Catalog when the column is wide.
         ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-        ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
-        ws.PageSetup.FitToPages(1, 0);
+        ApplyStandardPageSetup(ws);
         ws.ShowGridLines = false;
     }
 
@@ -1175,6 +1184,7 @@ public static class CountsWorkbookService
 
         // Hide gridlines so only the explicit type-group dividers read as separators
         ws.ShowGridLines = false;
+        ApplyStandardPageSetup(ws);
 
         // Light gray divider at the last row of each Type group
         ApplyTypeGroupDividers(ws, 2, row - 1);
@@ -1503,6 +1513,7 @@ public static class CountsWorkbookService
         ApplyNotesBoldConditionalFormat(ws, spillRow);
         ApplyDataBorderConditionalFormat(ws, spillRow, lastVisibleCol: 9, flagColLetter: "J");
         ApplyFooterStyling(ws, spillRow, qtyCol: 4, buyExtCol: 7, sellExtCol: 9);
+        ws.Rows(spillRow, 1000).Height = 15.5;
 
         // Currency + delta formats
         ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
@@ -1533,8 +1544,7 @@ public static class CountsWorkbookService
         ws.Column(9).Width = 12;
 
         // Print setup
-        ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
-        ws.PageSetup.FitToPages(1, 0);
+        ApplyStandardPageSetup(ws);
         ws.PageSetup.SetRowsToRepeatAtTop(1, 7);
     }
 
@@ -1584,6 +1594,7 @@ public static class CountsWorkbookService
         ApplyNotesBoldConditionalFormat(ws, spillRow);
         ApplyDataBorderConditionalFormat(ws, spillRow, lastVisibleCol: 8, flagColLetter: "I");
         ApplyFooterStyling(ws, spillRow, qtyCol: 4, buyExtCol: 6, sellExtCol: 8);
+        ws.Rows(spillRow, 1000).Height = 15.5;
 
         // Currency formats
         ws.Column(5).Style.NumberFormat.Format = "$#,##0.00";
@@ -1610,8 +1621,7 @@ public static class CountsWorkbookService
         ws.Column(8).Width = 12;
 
         // Print setup
-        ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
-        ws.PageSetup.FitToPages(1, 0);
+        ApplyStandardPageSetup(ws);
         ws.PageSetup.SetRowsToRepeatAtTop(1, 7);
     }
 
@@ -1621,6 +1631,7 @@ public static class CountsWorkbookService
         ws.ShowGridLines = false;
         ws.Style.Font.FontName = "Segoe UI";
         ws.Style.Font.FontSize = 11;
+        ws.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
     }
 
     /// <summary>
@@ -1661,7 +1672,7 @@ public static class CountsWorkbookService
 
     // Print sheet border styling — Medium #808080 used for data-row borders, banner borders,
     // header borders, and footer subtotal/grand-total top borders.
-    private static readonly XLColor PrintBorderColor = XLColor.FromHtml("#808080");
+    private static readonly XLColor PrintBorderColor = XLColor.Black;
     private const XLBorderStyleValues PrintBorderStyle = XLBorderStyleValues.Thin;
 
     /// <summary>Writes the 7-row title block (header at row 6, spacer at row 7) shared by
@@ -1821,6 +1832,8 @@ public static class CountsWorkbookService
         ws.Column(3).Width = 18;
         ws.Column(4).Width = 30;
         ws.Column(5).Width = 30;
+
+        ApplyStandardPageSetup(ws);
     }
 
     #endregion
@@ -2482,6 +2495,26 @@ public static class CountsWorkbookService
 
     #region Helpers
 
+    /// <summary>
+    /// Applies the standard Counts print setup: Portrait, fit-all-columns-on-one-page,
+    /// horizontally centered, with the shared margin profile. Callers may add
+    /// sheet-specific extras (print area, repeating rows, page breaks) afterward.
+    /// </summary>
+    private static void ApplyStandardPageSetup(IXLWorksheet ws)
+    {
+        var ps = ws.PageSetup;
+        ps.PageOrientation = XLPageOrientation.Portrait;
+        ps.FitToPages(1, 0);
+        ps.CenterHorizontally = true;
+
+        ps.Margins.Top = 1.15;
+        ps.Margins.Header = 0.301875;
+        ps.Margins.Left = 0.7;
+        ps.Margins.Right = 0.7036111;
+        ps.Margins.Bottom = 0.75;
+        ps.Margins.Footer = 0.3;
+    }
+
     private static string ResolveCountsSheetName(IXLWorkbook wb, string dateString)
     {
         string baseName = $"Counts {dateString}";
@@ -2798,6 +2831,386 @@ public static class CountsWorkbookService
         foreach (char c in letters)
             col = col * 26 + (char.ToUpper(c) - 'A' + 1);
         return col;
+    }
+
+    #endregion
+
+    #region Header/Footer Image Embedding
+
+    /// <summary>
+    /// Post-processes the saved xlsx to embed a center-header and/or center-footer image
+    /// on the listed sheets using the legacy VML HF mechanism (&amp;G placeholder).
+    /// Image dimensions are read from PNG/JPEG headers; shape size in points = pixels * 72 / 96.
+    /// No-op if both paths are empty or files don't exist.
+    /// </summary>
+    private static void EmbedHeaderFooterImages(string filePath, string headerPath, string footerPath, string[] targetSheets)
+    {
+        bool hasHeader = !string.IsNullOrWhiteSpace(headerPath) && File.Exists(headerPath);
+        bool hasFooter = !string.IsNullOrWhiteSpace(footerPath) && File.Exists(footerPath);
+        if (!hasHeader && !hasFooter) return;
+
+        XNamespace sml = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        XNamespace ct = "http://schemas.openxmlformats.org/package/2006/content-types";
+        XNamespace rel = "http://schemas.openxmlformats.org/package/2006/relationships";
+        XNamespace orel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+        using var archive = ZipFile.Open(filePath, ZipArchiveMode.Update);
+
+        // Resolve sheet name → worksheet entry path via workbook.xml + workbook.xml.rels
+        var sheetEntryByName = ResolveSheetEntryPaths(archive, sml, rel, orel);
+
+        byte[]? headerBytes = hasHeader ? File.ReadAllBytes(headerPath) : null;
+        byte[]? footerBytes = hasFooter ? File.ReadAllBytes(footerPath) : null;
+        (double wPt, double hPt)? headerSize = hasHeader ? GetImagePointSize(headerBytes!, headerPath) : null;
+        (double wPt, double hPt)? footerSize = hasFooter ? GetImagePointSize(footerBytes!, footerPath) : null;
+        string headerExt = hasHeader ? Path.GetExtension(headerPath).TrimStart('.').ToLowerInvariant() : "";
+        string footerExt = hasFooter ? Path.GetExtension(footerPath).TrimStart('.').ToLowerInvariant() : "";
+        if (headerExt == "jpg") headerExt = "jpeg";
+        if (footerExt == "jpg") footerExt = "jpeg";
+
+        // Write shared image bytes into xl/media (single copy, reused across sheets)
+        string headerMedia = hasHeader ? $"xl/media/turboHF_header.{headerExt}" : "";
+        string footerMedia = hasFooter ? $"xl/media/turboHF_footer.{footerExt}" : "";
+        if (hasHeader && archive.GetEntry(headerMedia) == null)
+            WriteBinary(archive, headerMedia, headerBytes!);
+        if (hasFooter && archive.GetEntry(footerMedia) == null)
+            WriteBinary(archive, footerMedia, footerBytes!);
+
+        // Ensure Default content types exist for image extensions and vml
+        EnsureContentTypeDefaults(archive, ct, headerExt, footerExt);
+
+        int vmlIndex = GetNextVmlIndex(archive);
+
+        foreach (var sheetName in targetSheets)
+        {
+            if (!sheetEntryByName.TryGetValue(sheetName, out string? sheetEntryPath) || sheetEntryPath == null)
+                continue;
+
+            string vmlEntryPath = $"xl/drawings/vmlDrawing{vmlIndex}.vml";
+            string sheetRelsPath = SheetRelsPath(sheetEntryPath);
+
+            // Build VML drawing relationships (image references)
+            var vmlRels = new XDocument(new XElement(rel + "Relationships"));
+            string? headerRid = null;
+            string? footerRid = null;
+            int ridCounter = 1;
+            if (hasHeader)
+            {
+                headerRid = $"rId{ridCounter++}";
+                vmlRels.Root!.Add(new XElement(rel + "Relationship",
+                    new XAttribute("Id", headerRid),
+                    new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"),
+                    new XAttribute("Target", $"../media/turboHF_header.{headerExt}")));
+            }
+            if (hasFooter)
+            {
+                footerRid = $"rId{ridCounter++}";
+                vmlRels.Root!.Add(new XElement(rel + "Relationship",
+                    new XAttribute("Id", footerRid),
+                    new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"),
+                    new XAttribute("Target", $"../media/turboHF_footer.{footerExt}")));
+            }
+            string vmlRelsPath = $"xl/drawings/_rels/vmlDrawing{vmlIndex}.vml.rels";
+            WriteXml(archive, vmlRelsPath, vmlRels);
+
+            // Build VML drawing document
+            string vmlContent = BuildHeaderFooterVml(headerRid, footerRid, headerSize, footerSize);
+            var vmlEntry = archive.CreateEntry(vmlEntryPath);
+            using (var stream = vmlEntry.Open())
+            using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+                writer.Write(vmlContent);
+
+            // Add relationship from worksheet → VML drawing
+            string vmlRid = AddSheetVmlRelationship(archive, sheetRelsPath, vmlIndex, rel);
+
+            // Patch worksheet XML: headerFooter + legacyDrawingHF
+            PatchSheetForHeaderFooter(archive, sheetEntryPath, vmlRid, hasHeader, hasFooter, sml, orel);
+
+            vmlIndex++;
+        }
+    }
+
+    private static Dictionary<string, string> ResolveSheetEntryPaths(ZipArchive archive, XNamespace sml, XNamespace rel, XNamespace orel)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var wbEntry = archive.GetEntry("xl/workbook.xml");
+        var wbRelsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
+        if (wbEntry == null || wbRelsEntry == null) return map;
+
+        XDocument wb, wbRels;
+        using (var s = wbEntry.Open()) wb = XDocument.Load(s);
+        using (var s = wbRelsEntry.Open()) wbRels = XDocument.Load(s);
+
+        var relTargetById = wbRels.Root!.Elements(rel + "Relationship")
+            .ToDictionary(e => e.Attribute("Id")!.Value, e => e.Attribute("Target")!.Value);
+
+        foreach (var sheet in wb.Root!.Element(sml + "sheets")!.Elements(sml + "sheet"))
+        {
+            string name = sheet.Attribute("name")!.Value;
+            string rid = sheet.Attribute(orel + "id")!.Value;
+            if (relTargetById.TryGetValue(rid, out string? target))
+            {
+                string entryPath = target.StartsWith("/") ? target.TrimStart('/') : $"xl/{target}";
+                map[name] = entryPath;
+            }
+        }
+        return map;
+    }
+
+    private static string SheetRelsPath(string sheetEntryPath)
+    {
+        int lastSlash = sheetEntryPath.LastIndexOf('/');
+        string dir = sheetEntryPath.Substring(0, lastSlash);
+        string file = sheetEntryPath.Substring(lastSlash + 1);
+        return $"{dir}/_rels/{file}.rels";
+    }
+
+    private static int GetNextVmlIndex(ZipArchive archive)
+    {
+        int max = 0;
+        foreach (var e in archive.Entries)
+        {
+            var name = e.FullName;
+            if (name.StartsWith("xl/drawings/vmlDrawing", StringComparison.OrdinalIgnoreCase) &&
+                name.EndsWith(".vml", StringComparison.OrdinalIgnoreCase))
+            {
+                var stem = Path.GetFileNameWithoutExtension(name);
+                if (int.TryParse(stem.Substring("vmlDrawing".Length), out int n) && n > max)
+                    max = n;
+            }
+        }
+        return max + 1;
+    }
+
+    private static void EnsureContentTypeDefaults(ZipArchive archive, XNamespace ct, string headerExt, string footerExt)
+    {
+        var entry = archive.GetEntry("[Content_Types].xml")!;
+        XDocument doc;
+        using (var s = entry.Open()) doc = XDocument.Load(s);
+
+        bool changed = false;
+        var existingDefaults = doc.Root!.Elements(ct + "Default")
+            .Select(e => e.Attribute("Extension")?.Value.ToLowerInvariant())
+            .Where(v => v != null).ToHashSet();
+
+        void AddDefault(string ext, string type)
+        {
+            if (!existingDefaults.Contains(ext))
+            {
+                doc.Root.Add(new XElement(ct + "Default",
+                    new XAttribute("Extension", ext),
+                    new XAttribute("ContentType", type)));
+                existingDefaults.Add(ext);
+                changed = true;
+            }
+        }
+
+        AddDefault("vml", "application/vnd.openxmlformats-officedocument.vmlDrawing");
+        if (!string.IsNullOrEmpty(headerExt))
+            AddDefault(headerExt, headerExt == "png" ? "image/png" : "image/jpeg");
+        if (!string.IsNullOrEmpty(footerExt))
+            AddDefault(footerExt, footerExt == "png" ? "image/png" : "image/jpeg");
+
+        if (changed)
+        {
+            entry.Delete();
+            var newEntry = archive.CreateEntry("[Content_Types].xml");
+            using var s = newEntry.Open();
+            doc.Save(s);
+        }
+    }
+
+    private static string AddSheetVmlRelationship(ZipArchive archive, string sheetRelsPath, int vmlIndex, XNamespace rel)
+    {
+        var entry = archive.GetEntry(sheetRelsPath);
+        XDocument doc;
+        if (entry != null)
+        {
+            using var s = entry.Open();
+            doc = XDocument.Load(s);
+        }
+        else
+        {
+            doc = new XDocument(new XElement(rel + "Relationships"));
+        }
+
+        int maxRid = 0;
+        foreach (var r in doc.Root!.Elements(rel + "Relationship"))
+        {
+            string id = r.Attribute("Id")!.Value;
+            if (id.StartsWith("rId") && int.TryParse(id.Substring(3), out int n) && n > maxRid)
+                maxRid = n;
+        }
+        string newRid = $"rId{maxRid + 1}";
+
+        doc.Root.Add(new XElement(rel + "Relationship",
+            new XAttribute("Id", newRid),
+            new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing"),
+            new XAttribute("Target", $"../drawings/vmlDrawing{vmlIndex}.vml")));
+
+        entry?.Delete();
+        var newEntry = archive.CreateEntry(sheetRelsPath);
+        using (var s = newEntry.Open()) doc.Save(s);
+        return newRid;
+    }
+
+    private static void PatchSheetForHeaderFooter(ZipArchive archive, string sheetEntryPath, string vmlRid,
+        bool hasHeader, bool hasFooter, XNamespace sml, XNamespace orel)
+    {
+        var entry = archive.GetEntry(sheetEntryPath)!;
+        XDocument doc;
+        using (var s = entry.Open()) doc = XDocument.Load(s);
+
+        var ws = doc.Root!;
+
+        // Remove any existing headerFooter + legacyDrawingHF we'd conflict with
+        ws.Elements(sml + "headerFooter").Remove();
+        ws.Elements(sml + "legacyDrawingHF").Remove();
+
+        string headerText = hasHeader ? "&C&G" : "";
+        string footerText = hasFooter ? "&C&G" : "";
+
+        var headerFooter = new XElement(sml + "headerFooter",
+            new XAttribute("differentOddEven", "0"),
+            new XAttribute("differentFirst", "0"),
+            new XAttribute("scaleWithDoc", "0"),
+            new XAttribute("alignWithMargins", "0"),
+            new XElement(sml + "oddHeader", headerText),
+            new XElement(sml + "oddFooter", footerText));
+
+        var legacyDrawingHF = new XElement(sml + "legacyDrawingHF",
+            new XAttribute(orel + "id", vmlRid));
+
+        // Insert in CT_Worksheet order: ... pageSetup, headerFooter, rowBreaks/colBreaks, ..., drawing, legacyDrawing, legacyDrawingHF, drawingHF, ...
+        InsertAfter(ws, headerFooter, sml,
+            new[] { "headerFooter", "pageSetup", "pageMargins", "printOptions", "sheetData" });
+        InsertAfter(ws, legacyDrawingHF, sml,
+            new[] { "legacyDrawing", "drawing", "picture", "headerFooter", "pageSetup", "pageMargins" });
+
+        entry.Delete();
+        var newEntry = archive.CreateEntry(sheetEntryPath);
+        using (var s = newEntry.Open()) doc.Save(s);
+    }
+
+    // Insert `child` immediately after the first existing element in `precedingNames` order.
+    // Falls back to appending if none found.
+    private static void InsertAfter(XElement parent, XElement child, XNamespace sml, string[] precedingNames)
+    {
+        foreach (var name in precedingNames)
+        {
+            var anchor = parent.Element(sml + name);
+            if (anchor != null)
+            {
+                anchor.AddAfterSelf(child);
+                return;
+            }
+        }
+        parent.Add(child);
+    }
+
+    private static string BuildHeaderFooterVml(string? headerRid, string? footerRid,
+        (double wPt, double hPt)? headerSize, (double wPt, double hPt)? footerSize)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<xml xmlns:v=\"urn:schemas-microsoft-com:vml\" ");
+        sb.Append("xmlns:o=\"urn:schemas-microsoft-com:office:office\" ");
+        sb.Append("xmlns:x=\"urn:schemas-microsoft-com:office:excel\">");
+        sb.Append("<o:shapelayout v:ext=\"edit\"><o:idmap v:ext=\"edit\" data=\"1\"/></o:shapelayout>");
+        sb.Append("<v:shapetype id=\"_x0000_t75\" coordsize=\"21600,21600\" o:spt=\"75\" o:preferrelative=\"t\" ");
+        sb.Append("path=\"m@4@5l@4@11@9@11@9@5xe\" filled=\"f\" stroked=\"f\">");
+        sb.Append("<v:stroke joinstyle=\"miter\"/>");
+        sb.Append("<v:formulas>");
+        sb.Append("<v:f eqn=\"if lineDrawn pixelLineWidth 0\"/>");
+        sb.Append("<v:f eqn=\"sum @0 1 0\"/>");
+        sb.Append("<v:f eqn=\"sum 0 0 @1\"/>");
+        sb.Append("<v:f eqn=\"prod @2 1 2\"/>");
+        sb.Append("<v:f eqn=\"prod @3 21600 pixelWidth\"/>");
+        sb.Append("<v:f eqn=\"prod @3 21600 pixelHeight\"/>");
+        sb.Append("<v:f eqn=\"sum @0 0 1\"/>");
+        sb.Append("<v:f eqn=\"prod @6 1 2\"/>");
+        sb.Append("<v:f eqn=\"prod @7 21600 pixelWidth\"/>");
+        sb.Append("<v:f eqn=\"sum @8 21600 0\"/>");
+        sb.Append("<v:f eqn=\"prod @7 21600 pixelHeight\"/>");
+        sb.Append("<v:f eqn=\"sum @10 21600 0\"/>");
+        sb.Append("</v:formulas>");
+        sb.Append("<v:path o:extrusionok=\"f\" gradientshapeok=\"t\" o:connecttype=\"rect\"/>");
+        sb.Append("<o:lock v:ext=\"edit\" aspectratio=\"t\"/>");
+        sb.Append("</v:shapetype>");
+
+        int spid = 1025;
+        if (headerRid != null && headerSize.HasValue)
+        {
+            var (w, h) = headerSize.Value;
+            sb.Append($"<v:shape id=\"CH\" o:spid=\"_x0000_s{spid++}\" type=\"#_x0000_t75\" ");
+            sb.Append($"style='position:absolute;margin-left:0;margin-top:0;width:{w.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}pt;height:{h.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}pt;z-index:1'>");
+            sb.Append($"<v:imagedata o:relid=\"{headerRid}\" o:title=\"header\"/>");
+            sb.Append("<o:lock v:ext=\"edit\" rotation=\"t\"/>");
+            sb.Append("</v:shape>");
+        }
+        if (footerRid != null && footerSize.HasValue)
+        {
+            var (w, h) = footerSize.Value;
+            sb.Append($"<v:shape id=\"CF\" o:spid=\"_x0000_s{spid}\" type=\"#_x0000_t75\" ");
+            sb.Append($"style='position:absolute;margin-left:0;margin-top:0;width:{w.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}pt;height:{h.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}pt;z-index:2'>");
+            sb.Append($"<v:imagedata o:relid=\"{footerRid}\" o:title=\"footer\"/>");
+            sb.Append("<o:lock v:ext=\"edit\" rotation=\"t\"/>");
+            sb.Append("</v:shape>");
+        }
+        sb.Append("</xml>");
+        return sb.ToString();
+    }
+
+    private static void WriteBinary(ZipArchive archive, string entryPath, byte[] bytes)
+    {
+        var entry = archive.CreateEntry(entryPath);
+        using var s = entry.Open();
+        s.Write(bytes, 0, bytes.Length);
+    }
+
+    private static void WriteXml(ZipArchive archive, string entryPath, XDocument doc)
+    {
+        var existing = archive.GetEntry(entryPath);
+        existing?.Delete();
+        var entry = archive.CreateEntry(entryPath);
+        using var s = entry.Open();
+        doc.Save(s);
+    }
+
+    // Parse image header for pixel width/height. Convert to points assuming 300 DPI
+    // (points = pixels * 72 / 300). Falls back to 200x50 pt on unrecognized formats.
+    private static (double wPt, double hPt) GetImagePointSize(byte[] bytes, string path)
+    {
+        try
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext == ".png" && bytes.Length >= 24 &&
+                bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                int w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+                int h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+                return (w * 72.0 / 300.0, h * 72.0 / 300.0);
+            }
+            if ((ext == ".jpg" || ext == ".jpeg") && bytes.Length > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                int i = 2;
+                while (i < bytes.Length - 9)
+                {
+                    if (bytes[i] != 0xFF) { i++; continue; }
+                    byte marker = bytes[i + 1];
+                    // SOF markers: C0-CF except C4, C8, CC
+                    if (marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC)
+                    {
+                        int h = (bytes[i + 5] << 8) | bytes[i + 6];
+                        int w = (bytes[i + 7] << 8) | bytes[i + 8];
+                        return (w * 72.0 / 300.0, h * 72.0 / 300.0);
+                    }
+                    int segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+                    i += 2 + segLen;
+                }
+            }
+        }
+        catch { }
+        return (200.0, 50.0);
     }
 
     #endregion

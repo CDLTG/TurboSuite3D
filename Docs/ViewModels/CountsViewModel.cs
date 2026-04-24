@@ -20,6 +20,8 @@ public class CountsViewModel : ViewModelBase
     private bool _isUpdateMode;
     private string _repDirectoryPath = string.Empty;
     private string _notifyEmail = string.Empty;
+    private string _headerImagePath = string.Empty;
+    private string _footerImagePath = string.Empty;
 
     public string ProjectName { get; }
 
@@ -64,6 +66,8 @@ public class CountsViewModel : ViewModelBase
 
     public RelayCommand GenerateCommand { get; }
     public RelayCommand BrowseRepDirectoryCommand { get; }
+    public RelayCommand BrowseHeaderImageCommand { get; }
+    public RelayCommand BrowseFooterImageCommand { get; }
 
     public string RepDirectoryPath
     {
@@ -77,6 +81,18 @@ public class CountsViewModel : ViewModelBase
         set => SetProperty(ref _notifyEmail, value);
     }
 
+    public string HeaderImagePath
+    {
+        get => _headerImagePath;
+        set => SetProperty(ref _headerImagePath, value);
+    }
+
+    public string FooterImagePath
+    {
+        get => _footerImagePath;
+        set => SetProperty(ref _footerImagePath, value);
+    }
+
     public CountsViewModel(string projectName, DocsViewModel parent)
     {
         _parent = parent;
@@ -84,8 +100,12 @@ public class CountsViewModel : ViewModelBase
         var settings = DocsSettingsService.Load();
         _repDirectoryPath = settings.RepDirectoryPath;
         _notifyEmail = settings.CountsNotifyEmail;
+        _headerImagePath = settings.CountsHeaderImagePath;
+        _footerImagePath = settings.CountsFooterImagePath;
         GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && _fixtures.Count > 0);
         BrowseRepDirectoryCommand = new RelayCommand(ExecuteBrowseRepDirectory);
+        BrowseHeaderImageCommand = new RelayCommand(() => BrowseImage(p => HeaderImagePath = p, HeaderImagePath));
+        BrowseFooterImageCommand = new RelayCommand(() => BrowseImage(p => FooterImagePath = p, FooterImagePath));
     }
 
     public void LoadData(List<CountsFixtureModel> fixtures)
@@ -100,7 +120,22 @@ public class CountsViewModel : ViewModelBase
         var settings = DocsSettingsService.Load();
         settings.RepDirectoryPath = _repDirectoryPath;
         settings.CountsNotifyEmail = _notifyEmail;
+        settings.CountsHeaderImagePath = _headerImagePath;
+        settings.CountsFooterImagePath = _footerImagePath;
         DocsSettingsService.Save(settings);
+    }
+
+    private static void BrowseImage(Action<string> setter, string current)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Filter = "Image Files|*.png;*.jpg;*.jpeg",
+            Title = "Select Image"
+        };
+        if (!string.IsNullOrWhiteSpace(current) && File.Exists(current))
+            dlg.InitialDirectory = Path.GetDirectoryName(current);
+        if (dlg.ShowDialog() == true)
+            setter(dlg.FileName);
     }
 
     private void ExecuteBrowseRepDirectory()
@@ -154,6 +189,8 @@ public class CountsViewModel : ViewModelBase
             string projName = ProjectName;
             string projLocation = _parent.ProjectLocation;
             string repDirPath = _repDirectoryPath;
+            string headerImg = _headerImagePath;
+            string footerImg = _footerImagePath;
 
             StatusText = updateMode ? "Updating workbook..." : "Generating workbook...";
             Progress = 30;
@@ -161,9 +198,9 @@ public class CountsViewModel : ViewModelBase
             await Task.Run(() =>
             {
                 if (updateMode)
-                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath);
+                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath, headerImg, footerImg);
                 else
-                    CountsWorkbookService.GenerateNew(fixtures, projName, projLocation, outputPath, repDirPath);
+                    CountsWorkbookService.GenerateNew(fixtures, projName, projLocation, outputPath, repDirPath, headerImg, footerImg);
             });
 
             Progress = 100;

@@ -37,7 +37,27 @@
                     <TextBox Text="{Binding RepDirectoryPath, UpdateSourceTrigger=PropertyChanged}"
                              Width="290" VerticalContentAlignment="Center" Padding="4,2"/>
                     <Button Content="Browse…" Command="{Binding BrowseRepDirectoryCommand}"
-                            Margin="6,0,0,0" Padding="10,2" Width="64"/>
+                            Margin="6,0,0,0" Padding="10,2" Width="64" Cursor="Hand"/>
+                </StackPanel>
+
+                <!-- Header Image -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+                    <TextBlock Text="Header Image:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" Width="90" TextAlignment="Right"/>
+                    <TextBox Text="{Binding HeaderImagePath, UpdateSourceTrigger=PropertyChanged}"
+                             Width="290" VerticalContentAlignment="Center" Padding="4,2"
+                             ToolTip="Optional. Embedded at center of header on Quote and Phase 1/2/3 sheets."/>
+                    <Button Content="Browse…" Command="{Binding BrowseHeaderImageCommand}"
+                            Margin="6,0,0,0" Padding="10,2" Width="64" Cursor="Hand"/>
+                </StackPanel>
+
+                <!-- Footer Image -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+                    <TextBlock Text="Footer Image:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" Width="90" TextAlignment="Right"/>
+                    <TextBox Text="{Binding FooterImagePath, UpdateSourceTrigger=PropertyChanged}"
+                             Width="290" VerticalContentAlignment="Center" Padding="4,2"
+                             ToolTip="Optional. Embedded at center of footer on Quote and Phase 1/2/3 sheets."/>
+                    <Button Content="Browse…" Command="{Binding BrowseFooterImageCommand}"
+                            Margin="6,0,0,0" Padding="10,2" Width="64" Cursor="Hand"/>
                 </StackPanel>
 
                 <!-- Notify Email -->
