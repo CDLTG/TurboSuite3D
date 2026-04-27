@@ -110,8 +110,35 @@ public class BubbleCommand : IExternalCommand
         var flipPoint = PromptForFlipPoint(uidoc, doc, placement.FixturePoint);
         placement.CalculateFinalPositions(flipPoint);
 
+        var dynamicDriverTagsEnabled = GeneralSettingsCache.Get(doc).EnableDynamicDriverTags;
+
         ElementId? tagTypeId;
-        if (hasRemotePowerSupply)
+        if (hasRemotePowerSupply && isLineBased && !dynamicDriverTagsEnabled)
+        {
+            var lineBasedPlacement = (LineBasedPlacementCalculator)placement;
+            var isUp = lineBasedPlacement.IsUp;
+
+            var linearFeedTagId = FixtureAnalysisService.FindTagType(
+                doc, BubbleConstants.LinearFeedTagFamily, BubbleConstants.LinearFeedTagDefaultType);
+            if (linearFeedTagId == null)
+            {
+                ShowError($"Load tag type '{BubbleConstants.LinearFeedTagFamily}' - '{BubbleConstants.LinearFeedTagDefaultType}' before using TurboBubble.");
+                return Result.Cancelled;
+            }
+
+            var detailSymbol = FixtureAnalysisService.FindDetailComponentSymbol(
+                doc, BubbleConstants.LinearFeedDetailFamily);
+            if (detailSymbol == null)
+            {
+                ShowError($"Load detail family '{BubbleConstants.LinearFeedDetailFamily}' before using TurboBubble.");
+                return Result.Cancelled;
+            }
+
+            LinearFeedPlacementService.Place(
+                doc, activeView, fixture, lineBasedPlacement, linearFeedTagId, detailSymbol, isUp);
+            return Result.Succeeded;
+        }
+        else if (hasRemotePowerSupply)
         {
             bool effectiveFlip;
             if (isLineBased)

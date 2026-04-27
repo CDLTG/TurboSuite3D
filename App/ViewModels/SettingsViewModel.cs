@@ -20,6 +20,7 @@ public class SettingsViewModel : ViewModelBase
     // General
     private bool _showCircuitCommentsDialog = true;
     private bool _autoSplitFixtures = true;
+    private bool _enableDynamicDriverTags = true;
 
     // CAD Room Source
     private bool _isBlockMode = true;
@@ -166,6 +167,12 @@ public class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _autoSplitFixtures, value);
     }
 
+    public bool EnableDynamicDriverTags
+    {
+        get => _enableDynamicDriverTags;
+        set => SetProperty(ref _enableDynamicDriverTags, value);
+    }
+
     public ICommand SaveCommand { get; }
     public ICommand ResetDefaultsCommand { get; }
 
@@ -205,6 +212,7 @@ public class SettingsViewModel : ViewModelBase
     {
         ShowCircuitCommentsDialog = settings.ShowCircuitCommentsDialog;
         AutoSplitFixtures = settings.AutoSplitFixtures;
+        EnableDynamicDriverTags = settings.EnableDynamicDriverTags;
     }
 
     private void LoadCadSettings(CadRoomSourceSettings settings)
@@ -236,7 +244,8 @@ public class SettingsViewModel : ViewModelBase
     public GeneralSettings ToGeneralModel() => new()
     {
         ShowCircuitCommentsDialog = ShowCircuitCommentsDialog,
-        AutoSplitFixtures = AutoSplitFixtures
+        AutoSplitFixtures = AutoSplitFixtures,
+        EnableDynamicDriverTags = EnableDynamicDriverTags
     };
 
     public CadRoomSourceSettings ToCadModel() => new()

@@ -4,6 +4,7 @@ public class GeneralSettings
 {
     public bool ShowCircuitCommentsDialog { get; set; } = true;
     public bool AutoSplitFixtures { get; set; } = true;
+    public bool EnableDynamicDriverTags { get; set; } = true;
 
     public static GeneralSettings CreateDefaults() => new();
 }

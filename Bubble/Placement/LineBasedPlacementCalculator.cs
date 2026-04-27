@@ -22,6 +22,7 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
     public XYZ Vertex2 { get; private set; } = XYZ.Zero;
     public XYZ Vertex3 { get; private set; } = XYZ.Zero;
     public bool IsFlipped { get; private set; }
+    public bool IsUp { get; private set; }
 
     /// <summary>
     /// True if line direction is between 91 and 270 degrees (X component is negative).
@@ -120,6 +121,7 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
         _condition = flipLocal.Y >= _connectorLocal.Y
             ? PlacementCondition.Up
             : PlacementCondition.Down;
+        IsUp = _condition == PlacementCondition.Up;
 
         var flipState = DetermineFlipState(flipLocal);
         IsFlipped = flipState;

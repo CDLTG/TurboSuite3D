@@ -56,6 +56,22 @@ internal static class FixtureAnalysisService
         return null;
     }
 
+    /// <summary>
+    /// Finds a detail component family symbol by family name. Returns the first type if no name given.
+    /// </summary>
+    public static FamilySymbol? FindDetailComponentSymbol(Document doc, string familyName)
+    {
+        using var collector = new FilteredElementCollector(doc);
+        foreach (var elem in collector
+            .OfCategory(BuiltInCategory.OST_DetailComponents)
+            .OfClass(typeof(FamilySymbol)))
+        {
+            if (elem is FamilySymbol fs && fs.FamilyName == familyName)
+                return fs;
+        }
+        return null;
+    }
+
     public static ElementId? FindFirstWireType(Document doc)
     {
         using var collector = new FilteredElementCollector(doc);

@@ -59,6 +59,10 @@
                                   Margin="0,0,0,4"/>
                         <CheckBox Content="Auto-split linear fixtures when TurboDriver splits segments (TurboDriver)"
                                   IsChecked="{Binding AutoSplitFixtures}"
+                                  VerticalContentAlignment="Center"
+                                  Margin="0,0,0,4"/>
+                        <CheckBox Content="Enable dynamic driver tags (TurboBubble)"
+                                  IsChecked="{Binding EnableDynamicDriverTags}"
                                   VerticalContentAlignment="Center"/>
                     </StackPanel>
                 </GroupBox>

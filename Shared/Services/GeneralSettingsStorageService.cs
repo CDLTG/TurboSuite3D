@@ -7,10 +7,11 @@ namespace TurboSuite.Shared.Services;
 
 public static class GeneralSettingsStorageService
 {
-    private static readonly Guid SchemaGuid = new("c3d4e5f6-a7b8-9012-cdef-234567890abd");
+    private static readonly Guid SchemaGuid = new("c3d4e5f6-a7b8-9012-cdef-234567890abe");
     private const string SchemaName = "TurboSuiteGeneralSettings";
     private const string ShowCommentsDialogField = "ShowCircuitCommentsDialog";
     private const string AutoSplitFixturesField = "AutoSplitFixtures";
+    private const string EnableDynamicDriverTagsField = "EnableDynamicDriverTags";
 
     private static Schema GetOrCreateSchema()
     {
@@ -23,6 +24,7 @@ public static class GeneralSettingsStorageService
         builder.SetWriteAccessLevel(AccessLevel.Public);
         builder.AddSimpleField(ShowCommentsDialogField, typeof(bool));
         builder.AddSimpleField(AutoSplitFixturesField, typeof(bool));
+        builder.AddSimpleField(EnableDynamicDriverTagsField, typeof(bool));
         return builder.Finish();
     }
 
@@ -40,7 +42,8 @@ public static class GeneralSettingsStorageService
         return new GeneralSettings
         {
             ShowCircuitCommentsDialog = schema.GetField(ShowCommentsDialogField) != null && entity.Get<bool>(ShowCommentsDialogField),
-            AutoSplitFixtures = schema.GetField(AutoSplitFixturesField) != null && entity.Get<bool>(AutoSplitFixturesField)
+            AutoSplitFixtures = schema.GetField(AutoSplitFixturesField) != null && entity.Get<bool>(AutoSplitFixturesField),
+            EnableDynamicDriverTags = schema.GetField(EnableDynamicDriverTagsField) == null || entity.Get<bool>(EnableDynamicDriverTagsField)
         };
     }
 
@@ -57,6 +60,8 @@ public static class GeneralSettingsStorageService
             entity.Set(ShowCommentsDialogField, settings.ShowCircuitCommentsDialog);
         if (schema.GetField(AutoSplitFixturesField) != null)
             entity.Set(AutoSplitFixturesField, settings.AutoSplitFixtures);
+        if (schema.GetField(EnableDynamicDriverTagsField) != null)
+            entity.Set(EnableDynamicDriverTagsField, settings.EnableDynamicDriverTags);
         storage.SetEntity(entity);
 
         tx.Commit();

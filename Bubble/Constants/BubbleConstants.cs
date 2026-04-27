@@ -92,6 +92,19 @@ internal static class BubbleConstants
     public const double TagXOffsetFt = 9.0 * InchesToFeet;
     public const double RemoteSwitchlegExtraXOffsetFt = 5.15625 * InchesToFeet;
 
+    // Linear Feed (static driver tag) — used when "Enable dynamic driver tags" is OFF
+    // and the fixture is line-based with a remote power supply.
+    public const string LinearFeedDetailFamily = "AL_Detail_LV Leader (Switch)";
+    public const string LinearFeedTagFamily = "AL_Tag_Linear Feed";
+    public const string LinearFeedTagDefaultType = "SwitchID";
+    // Detail leader: placement line offset 1" perpendicular from connector (default "down" side),
+    // running along the fixture for a placeholder length to be dialed in.
+    public const double LinearFeedDetailPerpOffsetFt = 1.0 * InchesToFeet;
+    public const double LinearFeedDetailLengthFt = 12.0 * InchesToFeet;
+    // Tag: 6" past the end of the detail leader (parallel) and 5" off the fixture line (perpendicular).
+    public const double LinearFeedTagParallelGapFt = 6.5 * InchesToFeet;
+    public const double LinearFeedTagPerpOffsetFt = 5.0 * InchesToFeet;
+
     // Rotation/normal comparison threshold
     public const double RotationEpsilon = 0.001;
     public const double NormalEpsilon = 0.001;
