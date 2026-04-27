@@ -5,6 +5,6 @@ Update docs, commit all changes, and push to remote.
 3. Run `git log --oneline -5` to see recent commit message style.
 4. Stage all changed/new files (be specific — don't use `git add -A`). Do NOT stage files matching gitignore patterns or sensitive files (.env, credentials).
 5. Write a concise commit message that summarizes the changes, following the style of recent commits. End the message with:
-   `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
+   `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`
 6. Commit and then push to the current branch.
 7. Report what was committed and pushed.

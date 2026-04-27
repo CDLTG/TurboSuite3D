@@ -1470,8 +1470,9 @@ public static class CountsWorkbookService
         // Type — blank tariff row, blank note rows, plus quote footer notes appended at the bottom
         ws.Cell($"{cols[i++]}2").FormulaA1 =
             $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\"),\"\",\"\",\"\",\"\",\"\",{notesSpill})";
-        // Mfr — blank tariff row; "NOTE:" label on note rows; uses effMfr so override wins per-row
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "\"\"", NoteLabel())},\"\")";
+        // Mfr — tariff row carries the type's Mfr (vals = effMfr per-row, isLast picks the
+        // last row of each group); "NOTE:" label on note rows; uses effMfr so override wins per-row
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "_xlpm.vals", NoteLabel())},\"\")";
         // Catalog~Desc — "Tariff …" label on tariff row; note text on note rows
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(catalogCombined, "\"Tariff *may be deleted/reduced if tariffs change\"", NoteText())},\"\")";
         // Qty + footer labels (Subtotal / [Lutron?] / Freight / Grand Total).
