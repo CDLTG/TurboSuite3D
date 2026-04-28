@@ -20,28 +20,31 @@ public static class CountsWorkbookService
     private const int WsColQty = 4;         // D
     private const int WsColPrevQty = 5;     // E
     private const int WsColDelta = 6;       // F
-    private const int WsColDesc = 7;        // G
-    private const int WsColCalc = 8;        // H
-    private const int WsColUnitCost = 9;    // I
-    private const int WsColMarkup = 10;     // J
-    private const int WsColTariff = 11;     // K
-    private const int WsColAdder = 12;      // L
-    private const int WsColPhase = 13;      // M
+    // Visual separator between the locked Revit-side block (A–F) and the editable
+    // pricing block (H–V). Mirrors the Type value in gray italic; locked.
+    private const int WsColTypeRepeat = 7;  // G
+    private const int WsColDesc = 8;        // H
+    private const int WsColCalc = 9;        // I
+    private const int WsColUnitCost = 10;   // J
+    private const int WsColMarkup = 11;     // K
+    private const int WsColTariff = 12;     // L
+    private const int WsColAdder = 13;      // M
+    private const int WsColPhase = 14;      // N
     // Per-Type Schedule Notes — canonical literal on each type's first row (unlocked),
     // gray-italic "---" placeholder on subsequent rows (locked). Seeded once from Revit on
     // a type's first creation and user-owned thereafter (updates never overwrite).
-    private const int WsColNote1 = 14;      // N
-    private const int WsColNote2 = 15;      // O
-    private const int WsColNote3 = 16;      // P
-    private const int WsColNote4 = 17;      // Q
-    private const int WsColNote5 = 18;      // R
-    private const int WsColNote6 = 19;      // S
-    private const int WsColMfrOverride = 20;  // T — user-editable, overrides B
-    private const int WsColQtyOverride = 21;  // U — user-editable, overrides D
-    // Effective Qty lives inside the hidden helper block (BQ) rather than adjacent to the
+    private const int WsColNote1 = 15;      // O
+    private const int WsColNote2 = 16;      // P
+    private const int WsColNote3 = 17;      // Q
+    private const int WsColNote4 = 18;      // R
+    private const int WsColNote5 = 19;      // S
+    private const int WsColNote6 = 20;      // T
+    private const int WsColMfrOverride = 21;  // U — user-editable, overrides B
+    private const int WsColQtyOverride = 22;  // V — user-editable, overrides D
+    // Effective Qty lives inside the hidden helper block (BR) rather than adjacent to the
     // editable columns — keeps the visible worksheet clean and avoids a visually-empty slot
-    // between U and the end of the visible data. =IF(U="",D,U) written per-row.
-    private const int WsColEffQty      = 69;  // BQ — hidden helper
+    // between V and the end of the visible data. =IF(V="",D,V) written per-row.
+    private const int WsColEffQty      = 70;  // BR — hidden helper
 
     // Hidden helper pipeline columns on Worksheet. Active flag (AF) is a per-row 0/1 literal
     // written by C#; every helper spill formula filters on (AF=1) to exclude strikethrough rows.
@@ -49,14 +52,14 @@ public static class CountsWorkbookService
     // each set (AP/AY/BH/BR) is an InDataBlock flag (1 for data/tariff/note/gap rows, blank for
     // footer/notes-library) that drives the print-sheet border CF. All columns AF and beyond
     // are hidden and locked.
-    private const int WsColActive = 32;     // AF
-    private const string HelperFirstCol = "AG";
-    private const int WsColHelperLast = 70; // BR (Phase 3 InDataBlock flag)
+    private const int WsColActive = 33;     // AG
+    private const string HelperFirstCol = "AH";
+    private const int WsColHelperLast = 71; // BS (Phase 3 InDataBlock flag)
 
-    private static readonly string[] QuoteHelperCols =   { "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP" };
-    private static readonly string[] Phase1HelperCols =  { "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY" };
-    private static readonly string[] Phase2HelperCols =  { "AZ", "BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH" };
-    private static readonly string[] Phase3HelperCols =  { "BI", "BJ", "BK", "BL", "BM", "BN", "BO", "BP", "BR" };
+    private static readonly string[] QuoteHelperCols =   { "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ" };
+    private static readonly string[] Phase1HelperCols =  { "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ" };
+    private static readonly string[] Phase2HelperCols =  { "BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH", "BI" };
+    private static readonly string[] Phase3HelperCols =  { "BJ", "BK", "BL", "BM", "BN", "BO", "BP", "BQ", "BS" };
 
     // Counts sheet column indices (1-based)
     private const int CsColType = 1;        // A
@@ -83,7 +86,7 @@ public static class CountsWorkbookService
 
     /// <summary>
     /// Creates a new Counts workbook. Rep directory path comes from TurboDocs user settings
-    /// (CountsViewModel passes it); seeds Dashboard!B4 and is used to build the Rep Lists sheet.
+    /// (CountsViewModel passes it); seeds Dashboard!B3 and is used to build the Rep Lists sheet.
     /// Descriptions and pricing are no longer auto-filled — pricing team enters them manually.
     /// </summary>
     public static void GenerateNew(
@@ -149,7 +152,7 @@ public static class CountsWorkbookService
         // Migrate legacy workbooks (no Dashboard) and seed/keep Rep Directory path.
         EnsureDashboardSheet(wb, repDirectoryPath);
 
-        // Dashboard!B4 is authoritative; fall back to settings only when empty.
+        // Dashboard!B3 is authoritative; fall back to settings only when empty.
         string effectiveRepPath = ReadRepDirectoryPathFromDashboard(wb);
         if (string.IsNullOrWhiteSpace(effectiveRepPath))
             effectiveRepPath = repDirectoryPath;
@@ -238,14 +241,14 @@ public static class CountsWorkbookService
     #region Dashboard Sheet
 
     // Dashboard cell anchors (consumed by helper pipeline via named ranges)
-    private const string DashRepDirCell = "B4";
-    private const string DashLutronCell = "B8";
-    private const string DashFreightBuyCell = "B9";
-    private const string DashFreightSellCell = "B10";
-    private const string DashBidDateCell = "B13";
-    private const string DashReleaseDateCell = "B14";
-    private const string DashNotesFirstRow = "37";
-    private const string DashNotesLastRow = "51";
+    private const string DashRepDirCell = "B3";
+    private const string DashLutronCell = "B6";
+    private const string DashFreightBuyCell = "B7";
+    private const string DashFreightSellCell = "B8";
+    private const string DashBidDateCell = "B11";
+    private const string DashReleaseDateCell = "B12";
+    private const string DashNotesFirstRow = "35";
+    private const string DashNotesLastRow = "49";
 
     private static readonly XLColor HeaderBlue = XLColor.FromHtml("#4472C4");
 
@@ -259,71 +262,86 @@ public static class CountsWorkbookService
         var ws = wb.Worksheets.Add("Dashboard");
         ws.Position = 2; // after Cover
 
-        // Title bar (rows 1-2)
-        ws.Range("A1:D2").Merge();
+        // Sheet defaults — Segoe UI 11 matches the Counts/Changes raw tabs (and stays
+        // dense enough that all 4 columns fit without scrolling).
+        ws.Style.Font.FontName = "Segoe UI";
+        ws.Style.Font.FontSize = 11;
+        ws.Style.Alignment.WrapText = false;
+
+        // Title row — same dark/amber strip the Worksheet uses for its header, full 45 height.
         ws.Cell("A1").Value = $"COUNTS DASHBOARD — {projectName}";
-        StyleSectionBar(ws.Range("A1:D2"), fontSize: 14);
+        StyleSectionBar(ws.Range("A1:D1"), fontSize: 16);
+        ws.Row(1).Height = 45;
 
         // --- CONFIGURATION ---
-        WriteSectionBar(ws, 3, "CONFIGURATION");
-        ws.Cell("A4").Value = "Rep Directory Path";
-        ws.Range("B4:D4").Merge();
-        ws.Cell("B4").Value = repDirectoryPath ?? string.Empty;
+        WriteSectionBar(ws, 2, "CONFIGURATION");
+        ws.Cell("A3").Value = "Rep Directory Path";
+        ws.Range("B3:D3").Merge();
+        ws.Cell("B3").Value = repDirectoryPath ?? string.Empty;
+        StyleEditableCell(ws.Cell("B3"));
 
         // --- QUOTE ADJUSTMENTS ---
-        WriteSectionBar(ws, 7, "QUOTE ADJUSTMENTS");
-        // Left blank by default — the Quote/Phase sheets omit the Lutron row when B8 is empty,
+        WriteSectionBar(ws, 5, "QUOTE ADJUSTMENTS");
+        // Left blank by default — the Quote/Phase sheets omit the Lutron row when B6 is empty,
         // and blank cells coerce to 0 inside the Grand Total arithmetic.
-        ws.Cell("A8").Value = "Lutron Lighting Control";
+        ws.Cell("A6").Value = "Lutron Lighting Control";
+        ws.Cell("B6").Style.NumberFormat.Format = "$#,##0.00";
+        StyleEditableCell(ws.Cell("B6"));
+
+        ws.Cell("A7").Value = "Estimated Freight (Buy)";
+        ws.Cell("B7").Style.NumberFormat.Format = "$#,##0.00";
+        StyleEditableCell(ws.Cell("B7"));
+
+        ws.Cell("A8").Value = "Estimated Freight (Sell)";
         ws.Cell("B8").Style.NumberFormat.Format = "$#,##0.00";
-
-        ws.Cell("A9").Value = "Estimated Freight (Buy)";
-        ws.Cell("B9").Style.NumberFormat.Format = "$#,##0.00";
-
-        ws.Cell("A10").Value = "Estimated Freight (Sell)";
-        ws.Cell("B10").Style.NumberFormat.Format = "$#,##0.00";
+        StyleEditableCell(ws.Cell("B8"));
 
         // --- BID LOCK ---
-        WriteSectionBar(ws, 12, "BID LOCK");
-        ws.Cell("A13").Value = "Bid Quote Date";
-        ws.Cell("B13").Style.NumberFormat.Format = "yyyy-mm-dd";
+        WriteSectionBar(ws, 10, "BID LOCK");
+        ws.Cell("A11").Value = "Bid Quote Date";
+        ws.Cell("B11").Style.NumberFormat.Format = "yyyy-mm-dd";
+        StyleEditableCell(ws.Cell("B11"));
 
-        ws.Cell("A14").Value = "Release Lock";
-        ws.Cell("B14").Style.NumberFormat.Format = "yyyy-mm-dd";
+        ws.Cell("A12").Value = "Release Lock";
+        ws.Cell("B12").Style.NumberFormat.Format = "yyyy-mm-dd";
+        StyleEditableCell(ws.Cell("B12"));
 
-        ws.Cell("A15").Value = "Bid Status";
-        ws.Cell("B15").FormulaA1 =
-            "IF(B13=\"\",\"Unlocked\",IF(B14=B13,\"Pending release\",\"LOCKED \"&TEXT(B13,\"yyyy-mm-dd\")))";
-        ws.Cell("B15").Style.Font.Italic = true;
+        ws.Cell("A13").Value = "Bid Status";
+        ws.Cell("B13").FormulaA1 =
+            "IF(B11=\"\",\"Unlocked\",IF(B12=B11,\"Pending release\",\"LOCKED \"&TEXT(B11,\"yyyy-mm-dd\")))";
+        ws.Cell("B13").Style.Font.Italic = true;
+        ws.Cell("B13").Style.Font.FontColor = XLColor.FromHtml("#A6A6A6");
+
+        // Bold all column-A labels so they read as field captions against the input cells.
+        foreach (string addr in new[] { "A3", "A6", "A7", "A8", "A11", "A12", "A13" })
+            ws.Cell(addr).Style.Font.Bold = true;
 
         // --- INTERNAL NOTES ---
-        WriteSectionBar(ws, 17, "INTERNAL NOTES");
-        ws.Cell("A18").Value = "Date";
-        ws.Cell("B18").Value = "Author";
-        ws.Cell("C18").Value = "Status";
-        ws.Cell("D18").Value = "Notes";
-        var notesHdr = ws.Range("A18:D18");
-        notesHdr.Style.Font.Bold = true;
-        notesHdr.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        WriteSectionBar(ws, 15, "INTERNAL NOTES");
+        ws.Cell("A16").Value = "Date";
+        ws.Cell("B16").Value = "Author";
+        ws.Cell("C16").Value = "Status";
+        ws.Cell("D16").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A16:D16"));
+        StyleInputBlock(ws.Range("A17:D31"), headerRow: ws.Range("A16:D16"));
 
         // --- QUOTE FOOTER NOTES ---
-        WriteSectionBar(ws, 35, "QUOTE FOOTER NOTES");
-        ws.Cell("A36").Value = "BOLD";
-        ws.Cell("A36").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        ws.Cell("B36").Value = "Notes";
-        var fnHdr = ws.Range("A36:D36");
-        fnHdr.Style.Font.Bold = true;
-        fnHdr.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        WriteSectionBar(ws, 33, "QUOTE FOOTER NOTES");
+        ws.Cell("A34").Value = "BOLD";
+        ws.Cell("A34").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell("B34").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A34:D34"));
 
         for (int i = 0; i < 15; i++)
         {
-            int r = 37 + i;
+            int r = 35 + i;
             ws.Cell(r, 1).Value = false; // boolean literal — pass 3 upgrades to native checkbox
             ws.Cell(r, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             // Notes span B:D — merged so long notes aren't clipped by the narrow B column.
             ws.Range(r, 2, r, 4).Merge();
             ws.Cell(r, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
         }
+        StyleInputBlock(ws.Range("A35:D49"), headerRow: ws.Range("A34:D34"));
 
         // Column widths
         ws.Column(1).Width = 21.18;
@@ -332,19 +350,19 @@ public static class CountsWorkbookService
         ws.Column(4).Width = 40;
 
         // Named ranges
-        wb.DefinedNames.Add("RepDirectoryPath", ws.Range("B4:B4"));
-        wb.DefinedNames.Add("LutronSubtotal", ws.Range("B8:B8"));
-        wb.DefinedNames.Add("FreightBuy", ws.Range("B9:B9"));
-        wb.DefinedNames.Add("FreightSell", ws.Range("B10:B10"));
-        wb.DefinedNames.Add("BidDate", ws.Range("B13:B13"));
-        wb.DefinedNames.Add("ReleaseDate", ws.Range("B14:B14"));
+        wb.DefinedNames.Add("RepDirectoryPath", ws.Range("B3:B3"));
+        wb.DefinedNames.Add("LutronSubtotal", ws.Range("B6:B6"));
+        wb.DefinedNames.Add("FreightBuy", ws.Range("B7:B7"));
+        wb.DefinedNames.Add("FreightSell", ws.Range("B8:B8"));
+        wb.DefinedNames.Add("BidDate", ws.Range("B11:B11"));
+        wb.DefinedNames.Add("ReleaseDate", ws.Range("B12:B12"));
         wb.DefinedNames.Add("QuoteNotes", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
         wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"A{DashNotesFirstRow}:A{DashNotesLastRow}"));
 
         // Protection: unlock editable cells, lock the rest
-        foreach (string addr in new[] { "B4", "B8", "B9", "B10", "B13", "B14" })
+        foreach (string addr in new[] { "B3", "B6", "B7", "B8", "B11", "B12" })
             ws.Cell(addr).Style.Protection.SetLocked(false);
-        ws.Range("A19:D33").Style.Protection.SetLocked(false);
+        ws.Range("A17:D31").Style.Protection.SetLocked(false);
         ws.Range($"A{DashNotesFirstRow}:B{DashNotesLastRow}").Style.Protection.SetLocked(false);
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
 
@@ -379,17 +397,61 @@ public static class CountsWorkbookService
         var rng = ws.Range(row, 1, row, 4);
         rng.Merge();
         rng.FirstCell().Value = text;
-        StyleSectionBar(rng, fontSize: 11);
+        StyleSectionBar(rng, fontSize: 12);
+        ws.Row(row).Height = 22;
     }
 
+    // Dashboard bars use the same dark-strip / amber-text scheme as the Worksheet
+    // pricing-block header so the styling reads as one workbook. Slight left indent
+    // so the label doesn't collide with the cell edge at small zoom levels.
     private static void StyleSectionBar(IXLRange rng, double fontSize)
     {
-        rng.Style.Fill.BackgroundColor = HeaderBlue;
-        rng.Style.Font.FontColor = XLColor.White;
+        rng.Style.Fill.BackgroundColor = XLColor.FromHtml("#262626");
+        rng.Style.Font.FontColor = XLColor.FromHtml("#FACC75");
         rng.Style.Font.Bold = true;
         rng.Style.Font.FontSize = fontSize;
         rng.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
         rng.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        rng.Style.Alignment.Indent = 1;
+    }
+
+    // Sub-header row inside a section (e.g. the column captions above Internal Notes
+    // and Quote Footer Notes). Light fill + thin dark bottom border — quieter than a
+    // section bar but still clearly demarcates the data block underneath.
+    private static void StyleSubHeaderRow(IXLRange rng)
+    {
+        rng.Style.Font.Bold = true;
+        rng.Style.Fill.BackgroundColor = XLColor.FromHtml("#F2F2F2");
+        rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        rng.Style.Border.BottomBorderColor = XLColor.FromHtml("#262626");
+    }
+
+    // Editable single cell — thin gray box border so the input target is visible
+    // without gridlines.
+    private static void StyleEditableCell(IXLCell cell)
+    {
+        cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#D9D9D9");
+    }
+
+    // Multi-row input block (Internal Notes table, Quote Footer Notes table).
+    // Thin gray grid inside the data rows, slightly darker outside around the whole
+    // block (header row included when supplied) — same visual language as the
+    // Counts/Changes raw tabs.
+    private static void StyleInputBlock(IXLRange rng, IXLRange? headerRow = null)
+    {
+        rng.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        rng.Style.Border.InsideBorderColor = XLColor.FromHtml("#D9D9D9");
+
+        var outline = headerRow == null
+            ? rng
+            : rng.Worksheet.Range(
+                headerRow.FirstRow().RowNumber(),
+                Math.Min(headerRow.FirstColumn().ColumnNumber(), rng.FirstColumn().ColumnNumber()),
+                rng.LastRow().RowNumber(),
+                Math.Max(headerRow.LastColumn().ColumnNumber(), rng.LastColumn().ColumnNumber()));
+        outline.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        outline.Style.Border.OutsideBorderColor = XLColor.FromHtml("#A6A6A6");
     }
 
     #endregion
@@ -697,7 +759,7 @@ public static class CountsWorkbookService
             projectLocation = coverWs.Cell("B7").GetString().Trim();
         }
 
-        // Mfr Override snapshot from Worksheet!N. Overrides are emergency substitutions for
+        // Mfr Override snapshot from Worksheet!U. Overrides are emergency substitutions for
         // the Revit-authored Mfr — they apply to both the displayed literal and the rep-group
         // lookup. User must type the canonical Mfr name (matching the directory key), not a
         // display alias; mistyped overrides fall into Unmatched.
@@ -957,7 +1019,7 @@ public static class CountsWorkbookService
             ws.Cell(row, 2).Value = item.Mfr;
             ws.Cell(row, 3).Value = item.Catalog;
             ws.Cell(row, 4).FormulaA1 =
-                $"SUMIFS(Worksheet!BK:BK,Worksheet!A:A,A{row},Worksheet!C:C,C{row})";
+                $"SUMIFS(Worksheet!BL:BL,Worksheet!A:A,A{row},Worksheet!C:C,C{row})";
 
             // Flag catalogs that exist under multiple rep blocks — typically the fallout of
             // an Mfr Override that moved a fixture's rep but left an older row behind until
@@ -1005,12 +1067,6 @@ public static class CountsWorkbookService
         for (int n = 0; n < 6; n++)
             ws.Cell(1, CsColNote1 + n).Value = $"Schedule Notes {n + 1}";
 
-        // Style headers
-        var headerRange = ws.Range(1, 1, 1, CsColNote6);
-        headerRange.Style.Font.Bold = true;
-        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-        headerRange.Style.Font.FontColor = XLColor.White;
-
         // Data rows
         int row = 2;
         foreach (var f in fixtures)
@@ -1027,14 +1083,23 @@ public static class CountsWorkbookService
                 ws.Cell(row, CsColNote1 + n).Value = f.Notes[n] ?? string.Empty;
             row++;
         }
+        int lastDataRow = row - 1;
 
-        // Auto-fit columns
+        ApplyRawSheetStyling(ws, CsColNote6, lastDataRow);
+
+        // Auto-fit columns against the typography set above (Segoe UI 11).
         ws.Columns().AdjustToContents();
         // Cap Schedule Notes columns — overflow is fine, long notes shouldn't balloon the raw sheet.
         for (int n = 0; n < 6; n++)
         {
-            if (ws.Column(CsColNote1 + n).Width > 25)
-                ws.Column(CsColNote1 + n).Width = 25;
+            if (ws.Column(CsColNote1 + n).Width > 22)
+                ws.Column(CsColNote1 + n).Width = 22;
+        }
+        // Cap catalog columns too — keeps all 18 columns on screen for typical catalog lengths.
+        for (int c = 0; c < 6; c++)
+        {
+            if (ws.Column(CsColCat1 + c).Width > 18)
+                ws.Column(CsColCat1 + c).Width = 18;
         }
     }
 
@@ -1061,8 +1126,8 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColPhase).Value = "Phase";
         ws.Cell(1, WsColDesc).Value = "Description";
         ws.Cell(1, WsColUnitCost).Value = "Unit Cost";
-        ws.Cell(1, WsColMarkup).Value = "Markup %";
-        ws.Cell(1, WsColTariff).Value = "Tariff %";
+        ws.Cell(1, WsColMarkup).Value = "Markup";
+        ws.Cell(1, WsColTariff).Value = "Tariff";
         ws.Cell(1, WsColAdder).Value = "Adder";
         for (int n = 0; n < 6; n++)
             ws.Cell(1, WsColNote1 + n).Value = $"Note {n + 1}";
@@ -1070,11 +1135,8 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColQtyOverride).Value = "Qty Override";
         ws.Cell(1, WsColEffQty).Value = "EffQty";
 
-        // Style headers
-        var headerRange = ws.Range(1, 1, 1, WsColQtyOverride);
-        headerRange.Style.Font.Bold = true;
-        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-        headerRange.Style.Font.FontColor = XLColor.White;
+        // Style headers — uniform #262626 background and bold; per-section font colors below.
+        ApplyWorksheetHeaderStyling(ws);
 
         string csRef = $"'{countsSheetName}'";
 
@@ -1108,6 +1170,7 @@ public static class CountsWorkbookService
                 ws.Cell(row, WsColType).Value = f.TypeMark;
                 ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(f.Manufacturer);
                 ws.Cell(row, WsColCatalog).Value = catNum;
+                ws.Cell(row, WsColTypeRepeat).Value = f.TypeMark;
 
                 // Qty formula
                 string qtyFormula = BuildQtyFormula(row, csRef);
@@ -1126,9 +1189,9 @@ public static class CountsWorkbookService
                 {
                     // Desc / Unit Cost: empty canonical → "dependent" placeholder so the link
                     // is visible. Calc: plain ref (no wrap) — dropdown cell stays usable.
-                    ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("G", firstRow);
-                    ws.Cell(row, WsColCalc).FormulaA1 = $"IF(H{firstRow}=\"\",\"\",H{firstRow})";
-                    ws.Cell(row, WsColUnitCost).FormulaA1 = DependentFormula("I", firstRow);
+                    ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("H", firstRow);
+                    ws.Cell(row, WsColCalc).FormulaA1 = $"IF(I{firstRow}=\"\",\"\",I{firstRow})";
+                    ws.Cell(row, WsColUnitCost).FormulaA1 = DependentFormula("J", firstRow);
                     StyleAutoFilledCell(ws.Cell(row, WsColDesc));
                     StyleAutoFilledCell(ws.Cell(row, WsColCalc));
                     StyleAutoFilledCell(ws.Cell(row, WsColUnitCost));
@@ -1167,7 +1230,7 @@ public static class CountsWorkbookService
                 // EffQty (BQ) = QtyOverride (U) if present, else Revit Qty (D). Single source
                 // of truth for effective qty — Rep Lists SUMIFS and the helper pipeline read
                 // this column instead of duplicating the override fallback.
-                ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(U{row}=\"\",D{row},U{row})";
+                ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
                 ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
                 // Active flag: initial export has no removed rows — always 1.
@@ -1178,6 +1241,11 @@ public static class CountsWorkbookService
         }
 
         int lastDataRow = row - 1;
+
+        // Apply typography first so AdjustToContents below measures against Segoe UI 12
+        // (the sheet font) rather than ClosedXML's default. Col G's auto-fit lives inside
+        // ApplyWorksheetTypography because it uses size 11.
+        ApplyWorksheetTypography(ws);
 
         // Column widths
         ws.Column(WsColType).AdjustToContents();
@@ -1207,24 +1275,28 @@ public static class CountsWorkbookService
         {
             ws.Range(2, WsColMfrOverride, lastDataRow, WsColMfrOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(T2)>0")
+                .WhenIsTrue($"LEN(U2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
             ws.Range(2, WsColQtyOverride, lastDataRow, WsColQtyOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(U2)>0")
+                .WhenIsTrue($"LEN(V2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
         }
 
         ApplyPricingColumnFormats(ws);
 
-        // Visual separator between TurboSuite (locked) and pricing (editable) columns
-        ws.Column(WsColDelta).Style.Border.RightBorder = XLBorderStyleValues.Thick;
-
         // Hide gridlines so only the explicit type-group dividers read as separators
         ws.ShowGridLines = false;
         ApplyStandardPageSetup(ws);
 
-        // Light gray divider at the last row of each Type group
+        // Borders, row heights, banding — col G (already styled by ApplyWorksheetTypography
+        // above) acts as the visual separator between the locked Revit-side block (A–F)
+        // and the editable pricing block (H–V).
+        ApplyWorksheetRowHeights(ws);
+        ApplyWorksheetBorders(ws, lastDataRow);
+        ApplyAltRowFill(ws, lastDataRow);
+
+        // Dark divider at the last row of each Type group (cuts across col G + the pricing block border)
         ApplyTypeGroupDividers(ws, 2, row - 1);
 
         // Helper pipeline (Z hidden flag already written per-row; AA-BJ spill formulas here)
@@ -1261,6 +1333,13 @@ public static class CountsWorkbookService
         ws.Column(WsColMarkup).Style.NumberFormat.Format = "0%";
         ws.Column(WsColTariff).Style.NumberFormat.Format = "0%";
         ws.Column(WsColAdder).Style.NumberFormat.Format = "$#,##0.00";
+
+        // Center Markup / Tariff / Adder / Phase (header + data) — short numeric values read
+        // better centered, and the trimmed "Markup"/"Tariff" headers no longer fit cleanly left-aligned.
+        ws.Column(WsColMarkup).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColTariff).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColAdder).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(WsColPhase).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
     }
 
     // Width/alignment/number-format for Qty, Prev, Δ. Applied from both build and update
@@ -1285,10 +1364,89 @@ public static class CountsWorkbookService
             if (string.Equals(thisType, nextType, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var rng = ws.Range(r, 1, r, WsColQtyOverride);
+            var rng = ws.Range(r, WsColType, r, WsColQtyOverride);
             rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
-            rng.Style.Border.BottomBorderColor = XLColor.LightGray;
+            rng.Style.Border.BottomBorderColor = XLColor.FromHtml("#262626");
         }
+    }
+
+    // Worksheet header strip: uniform #262626 background, bold, with per-section font colors.
+    // A–F (Revit-side) and G (Type repeat) = #A6A6A6; H–T (pricing inputs) = #FACC75;
+    // U–V (overrides) = red, matching the override-value CF.
+    private static void ApplyWorksheetHeaderStyling(IXLWorksheet ws)
+    {
+        var headerRange = ws.Range(1, WsColType, 1, WsColQtyOverride);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#262626");
+
+        ws.Range(1, WsColType, 1, WsColDelta).Style.Font.FontColor = XLColor.FromHtml("#A6A6A6");
+        ws.Cell(1, WsColTypeRepeat).Style.Font.FontColor = XLColor.FromHtml("#A6A6A6");
+        ws.Range(1, WsColDesc, 1, WsColNote6).Style.Font.FontColor = XLColor.FromHtml("#FACC75");
+        ws.Range(1, WsColMfrOverride, 1, WsColQtyOverride).Style.Font.FontColor = XLColor.Red;
+    }
+
+    // Whole-sheet font Segoe UI 12, with col G overridden to size 11 italic gray right-aligned
+    // to mirror the Type value as a thin visual separator between locked and pricing blocks.
+    private static void ApplyWorksheetTypography(IXLWorksheet ws)
+    {
+        ws.Style.Font.FontName = "Segoe UI";
+        ws.Style.Font.FontSize = 12;
+
+        var typeRepeat = ws.Column(WsColTypeRepeat);
+        typeRepeat.Style.Font.FontName = "Segoe UI";
+        typeRepeat.Style.Font.FontSize = 11;
+        typeRepeat.Style.Font.Italic = true;
+        typeRepeat.Style.Font.FontColor = XLColor.FromHtml("#A6A6A6");
+        typeRepeat.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        typeRepeat.AdjustToContents();
+
+        // Header row 1 keeps Segoe UI 12 (sheet default) plus bold + per-section colors set
+        // by ApplyWorksheetHeaderStyling. Re-apply the gray font on G1 so the column-level
+        // override doesn't leak italic onto a header cell that should stay blank.
+        ws.Cell(1, WsColTypeRepeat).Style.Font.Italic = false;
+        ws.Cell(1, WsColTypeRepeat).Style.Font.FontSize = 12;
+    }
+
+    private static void ApplyWorksheetRowHeights(IXLWorksheet ws)
+    {
+        ws.RowHeight = 17.5;
+        ws.Row(1).Height = 45;
+    }
+
+    // Per-row literal #F2F2F2 fill on every other data row, skipping col G entirely so the
+    // visual gap between the Revit-side block (A–F) and the pricing block (H–V) reads cleanly.
+    // Pricing team can't add rows; new rows only come from Revit-side updates which always
+    // re-run the build/update path and re-apply this banding from scratch.
+    private static void ApplyAltRowFill(IXLWorksheet ws, int lastDataRow)
+    {
+        if (lastDataRow < 3) return;
+        var fill = XLColor.FromHtml("#F2F2F2");
+        for (int r = 3; r <= lastDataRow; r += 2)
+        {
+            ws.Range(r, WsColType, r, WsColDelta).Style.Fill.BackgroundColor = fill;
+            ws.Range(r, WsColDesc, r, WsColQtyOverride).Style.Fill.BackgroundColor = fill;
+        }
+    }
+
+    // Thin #D9D9D9 grid inside both data blocks (A2:F{last} and H2:V{last}), medium black
+    // outer border around each block. Headers excluded — header strip stands on its own
+    // via the dark #262626 fill. Col G has no borders (visual gap by design).
+    private static void ApplyWorksheetBorders(IXLWorksheet ws, int lastDataRow)
+    {
+        if (lastDataRow < 2) return;
+        var inside = XLColor.FromHtml("#D9D9D9");
+
+        var lockedBlock = ws.Range(2, WsColType, lastDataRow, WsColDelta);
+        lockedBlock.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        lockedBlock.Style.Border.InsideBorderColor = inside;
+        lockedBlock.Style.Border.OutsideBorder = XLBorderStyleValues.Medium;
+        lockedBlock.Style.Border.OutsideBorderColor = XLColor.Black;
+
+        var pricingBlock = ws.Range(2, WsColDesc, lastDataRow, WsColQtyOverride);
+        pricingBlock.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        pricingBlock.Style.Border.InsideBorderColor = inside;
+        pricingBlock.Style.Border.OutsideBorder = XLBorderStyleValues.Medium;
+        pricingBlock.Style.Border.OutsideBorderColor = XLColor.Black;
     }
 
     // C# mirror of BuildQtyFormula for recomputing Qty when the Excel-side cached value
@@ -1309,13 +1467,13 @@ public static class CountsWorkbookService
     private static string BuildQtyFormula(int row, string csRef)
     {
         // VLOOKUP indices: Col 9=Count, Col 10=LinearLength, Col 11=ReelLength, Col 12=ChannelLength
-        return $"IF(H{row}=\"Reel\"," +
+        return $"IF(I{row}=\"Reel\"," +
                $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,11,FALSE),1),1)," +
-               $"IF(H{row}=\"Channel\"," +
+               $"IF(I{row}=\"Channel\"," +
                $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,12,FALSE),1),1)," +
-               $"IF(H{row}=\"End Cap\"," +
+               $"IF(I{row}=\"End Cap\"," +
                $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)," +
-               $"IF(H{row}=\"Clip\"," +
+               $"IF(I{row}=\"Clip\"," +
                $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/1.75,1)," +
                $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)))))";
     }
@@ -1338,16 +1496,16 @@ public static class CountsWorkbookService
             return;
         }
 
-        // Active flag lives at WsColActive (AF after the Note-column shift). Every spill
-        // predicate filters on AF=1 to exclude strikethrough rows.
+        // Active flag lives at WsColActive (AG after the Type-repeat column shift). Every spill
+        // predicate filters on AG=1 to exclude strikethrough rows. Phase column is N.
         WriteSingleHelperPipeline(ws, lastDataRow, QuoteHelperCols,
-            predicate: $"(AF2:AF{lastDataRow}=1)", includeDelta: true);
+            predicate: $"(AG2:AG{lastDataRow}=1)", includeDelta: true);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase1HelperCols,
-            predicate: $"(AF2:AF{lastDataRow}=1)*(M2:M{lastDataRow}=1)", includeDelta: false);
+            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=1)", includeDelta: false);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase2HelperCols,
-            predicate: $"(AF2:AF{lastDataRow}=1)*(M2:M{lastDataRow}=2)", includeDelta: false);
+            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=2)", includeDelta: false);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase3HelperCols,
-            predicate: $"(AF2:AF{lastDataRow}=1)*(M2:M{lastDataRow}=3)", includeDelta: false);
+            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=3)", includeDelta: false);
     }
 
     private static void WriteSingleHelperPipeline(
@@ -1356,37 +1514,37 @@ public static class CountsWorkbookService
         // Per-row array expressions (unfiltered; FILTER applied inside Gap).
         string Col(string c) => $"{c}2:{c}{lastDataRow}";
         // Effective Mfr/Qty: override column wins when populated, else fall back to Revit.
-        // effQty reads the BQ column (populated row-by-row with IF(U="",D,U)) so callers
+        // effQty reads the BR column (populated row-by-row with IF(V="",D,V)) so callers
         // don't duplicate the fallback logic.
-        string effMfr   = $"IF({Col("T")}=\"\",{Col("B")},{Col("T")})";
-        string effQty   = Col("BQ");
+        string effMfr   = $"IF({Col("U")}=\"\",{Col("B")},{Col("U")})";
+        string effQty   = Col("BR");
         string effDelta = $"IF({Col("E")}=\"\",\"\",{effQty}-{Col("E")})";
-        string sellEa = $"IFERROR(({Col("I")}*(1+{Col("J")}))+{Col("L")},0)";
+        string sellEa = $"IFERROR(({Col("J")}*(1+{Col("K")}))+{Col("M")},0)";
         string sellExt = $"({sellEa})*{effQty}";
         // Coerce to number (*1) so text placeholders like "dependent" and blanks
         // fall through IFERROR to 0 instead of propagating as a string into Buy Ext.
-        string buyEa = $"IFERROR({Col("I")}*1,0)";
+        string buyEa = $"IFERROR({Col("J")}*1,0)";
         string buyExt = $"({buyEa})*{effQty}";
-        // Tariff base = Sell Ext. (includes Adder). Prior version omitted L, underpricing tariffs.
+        // Tariff base = Sell Ext. (includes Adder). Prior version omitted M, underpricing tariffs.
         string tariffBasePerRow = sellExt;
         // Exclude "dependent" placeholder — it's a visual cue on Worksheet for drag-fill links,
         // not a real description. Treated as blank here so it doesn't leak into print sheets.
         string catalogCombined =
-            $"{Col("C")}&IF(({Col("G")}<>0)*({Col("G")}<>\"\")*({Col("G")}<>\"dependent\"),\" ~ \"&{Col("G")},\"\")";
+            $"{Col("C")}&IF(({Col("H")}<>0)*({Col("H")}<>\"\")*({Col("H")}<>\"dependent\"),\" ~ \"&{Col("H")},\"\")";
 
         // Gap LAMBDA: emits gap rows at type-group boundaries, a "Tariff" row, and up to six
         // per-Type NOTE rows at each group's end. Inline LAMBDA — defined-name LAMBDAs called
         // from spill cells trip Excel's load-time parser.
-        // Per-row type tariff %: XLOOKUP against the full A/K ranges returns the first match,
-        // which is the Type's canonical row (where the literal K value lives). Non-canonical
-        // rows have K blank, so only the canonical is found. Wrapped in IFERROR to coerce a
-        // blank canonical K to 0 so arithmetic downstream stays numeric.
-        string typeKPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("K")}),0)";
-        // Per-row type Note_n: same XLOOKUP pattern against each note column (N–S). Blank
+        // Per-row type tariff %: XLOOKUP against the full A/L ranges returns the first match,
+        // which is the Type's canonical row (where the literal L value lives). Non-canonical
+        // rows have L blank, so only the canonical is found. Wrapped in IFERROR to coerce a
+        // blank canonical L to 0 so arithmetic downstream stays numeric.
+        string typeKPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("L")}),0)";
+        // Per-row type Note_n: same XLOOKUP pattern against each note column (O–T). Blank
         // canonical cells make XLOOKUP return the number 0 (not ""), so we wrap in LET and
         // coerce any numeric result back to "" — otherwise the downstream gate (_xlpm.n<>"")
         // would fire on every row because 0<>"" is TRUE.
-        string[] noteCols = { "N", "O", "P", "Q", "R", "S" };
+        string[] noteCols = { "O", "P", "Q", "R", "S", "T" };
         string NotePerRow(string noteCol) =>
             $"IFERROR(_xlfn.LET(_xlpm.v,_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col(noteCol)}),IF(_xlpm.v=0,\"\",_xlpm.v)),\"\")";
         string typesArg = $"_xlfn._xlws.FILTER({Col("A")},{predicate})";
@@ -1897,6 +2055,12 @@ public static class CountsWorkbookService
 
     #region Changes Sheet
 
+    // Hidden marker column. Each AppendChanges run writes "|" to this column on the last
+    // row of its batch so subsequent appends can re-draw divider lines after the banding
+    // pass overwrites them. Same-date repeat runs only differ here, so this is also how
+    // we distinguish them visually.
+    private const int ChangesBatchMarkerCol = 6;
+
     private static void BuildChangesSheet(IXLWorkbook wb)
     {
         var ws = wb.Worksheets.Add("Changes");
@@ -1907,16 +2071,14 @@ public static class CountsWorkbookService
         ws.Cell(1, 4).Value = "Old Value";
         ws.Cell(1, 5).Value = "New Value";
 
-        var headerRange = ws.Range(1, 1, 1, 5);
-        headerRange.Style.Font.Bold = true;
-        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#4472C4");
-        headerRange.Style.Font.FontColor = XLColor.White;
+        ApplyRawSheetStyling(ws, lastCol: 5, lastDataRow: 1);
 
         ws.Column(1).Width = 14;
         ws.Column(2).Width = 12;
         ws.Column(3).Width = 18;
         ws.Column(4).Width = 30;
         ws.Column(5).Width = 30;
+        ws.Column(ChangesBatchMarkerCol).Hide();
 
         ApplyStandardPageSetup(ws);
     }
@@ -2025,9 +2187,13 @@ public static class CountsWorkbookService
         }
         if (lastRow >= 2)
         {
-            // Clear contents + formats on the visible columns A..helper-last. The helper-pipeline
-            // cells at row 2 will be overwritten by WriteHelperPipeline at the end of this method.
-            ws.Range(2, 1, 2, WsColHelperLast).Clear(XLClearOptions.Contents | XLClearOptions.NormalFormats);
+            // Clear contents + formats + conditional formats on the visible columns A..helper-last.
+            // CFs are included because rows 3+ are deleted (which removes their CFs), but row 2 is
+            // cleared in place — without this, stale per-cell CFs (e.g. the Delta yellow-on-change
+            // rule) accumulate across update passes and override the green new-type fill.
+            // The helper-pipeline cells at row 2 will be overwritten by WriteHelperPipeline below.
+            ws.Range(2, 1, 2, WsColHelperLast).Clear(
+                XLClearOptions.Contents | XLClearOptions.NormalFormats | XLClearOptions.ConditionalFormats);
         }
 
         // Step 3: Write all rows sorted by Type Mark then catalog position
@@ -2119,6 +2285,12 @@ public static class CountsWorkbookService
                 prevNotesByType[er.Type] = er.Notes;
         }
 
+        // Paint alt-row banding before the row-write loops so per-row green/yellow/red
+        // highlights assigned during the loops override the gray fill on alt rows.
+        // (Painting after the loops would overpaint the green new-type fill on cols A:F.)
+        int plannedLastDataRow = 2 + newRowEntries.Count + removedEntries.Count - 1;
+        ApplyAltRowFill(ws, plannedLastDataRow);
+
         int row = 2;
 
         // Write new/matched rows
@@ -2133,6 +2305,7 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColType).Value = type;
             ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(mfr);
             ws.Cell(row, WsColCatalog).Value = catalog;
+            ws.Cell(row, WsColTypeRepeat).Value = type;
             ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
             ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
             ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
@@ -2145,7 +2318,7 @@ public static class CountsWorkbookService
                 if (existing.QtyOverride.HasValue)
                     ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
             }
-            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(U{row}=\"\",D{row},U{row})";
+            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
             // Prev Qty — prefer the previous Worksheet's cached Qty (reflects Calc adjustments),
@@ -2264,6 +2437,7 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColType).Value = type;
             ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(mfr);
             ws.Cell(row, WsColCatalog).Value = catalog;
+            ws.Cell(row, WsColTypeRepeat).Value = type;
 
             if (existing != null)
             {
@@ -2284,7 +2458,7 @@ public static class CountsWorkbookService
                 if (existing.QtyOverride.HasValue)
                     ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
             }
-            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(U{row}=\"\",D{row},U{row})";
+            ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
             // Red fill + strikethrough — extends through Qty Override so the whole row reads as removed
@@ -2302,14 +2476,17 @@ public static class CountsWorkbookService
 
         int lastDataRow = row - 1;
 
-        // Visual separator between TurboSuite (locked) and pricing (editable) columns
-        ws.Column(WsColDelta).Style.Border.RightBorder = XLBorderStyleValues.Thick;
-
         // Hide gridlines so only the explicit type-group dividers read as separators
         ws.ShowGridLines = false;
 
         ApplyQtyColumnFormatting(ws);
         ApplyPricingColumnFormats(ws);
+        ApplyWorksheetHeaderStyling(ws);
+        ApplyWorksheetTypography(ws);
+        ApplyWorksheetRowHeights(ws);
+        ApplyWorksheetBorders(ws, lastDataRow);
+        // Alt-row banding is painted before the row-write loops above so the per-row
+        // green/yellow/red highlights override it; not re-applied here.
 
         // Override + Notes column formatting — mirrors BuildWorksheetSheet so update passes
         // don't drop it. 16.64 char-width ≈ 190px in the target environment.
@@ -2324,11 +2501,11 @@ public static class CountsWorkbookService
         {
             ws.Range(2, WsColMfrOverride, lastDataRow, WsColMfrOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(T2)>0")
+                .WhenIsTrue($"LEN(U2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
             ws.Range(2, WsColQtyOverride, lastDataRow, WsColQtyOverride)
                 .AddConditionalFormat()
-                .WhenIsTrue($"LEN(U2)>0")
+                .WhenIsTrue($"LEN(V2)>0")
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
         }
 
@@ -2471,7 +2648,7 @@ public static class CountsWorkbookService
         }
         else
         {
-            ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("G", canonicalRow);
+            ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("H", canonicalRow);
             StyleAutoFilledCell(ws.Cell(row, WsColDesc));
         }
 
@@ -2481,7 +2658,7 @@ public static class CountsWorkbookService
         }
         else
         {
-            ws.Cell(row, WsColCalc).FormulaA1 = $"IF(H{canonicalRow}=\"\",\"\",H{canonicalRow})";
+            ws.Cell(row, WsColCalc).FormulaA1 = $"IF(I{canonicalRow}=\"\",\"\",I{canonicalRow})";
             StyleAutoFilledCell(ws.Cell(row, WsColCalc));
         }
 
@@ -2491,7 +2668,7 @@ public static class CountsWorkbookService
         }
         else
         {
-            ws.Cell(row, WsColUnitCost).FormulaA1 = DependentFormula("I", canonicalRow);
+            ws.Cell(row, WsColUnitCost).FormulaA1 = DependentFormula("J", canonicalRow);
             StyleAutoFilledCell(ws.Cell(row, WsColUnitCost));
         }
     }
@@ -2516,7 +2693,7 @@ public static class CountsWorkbookService
         else
         {
             ws.Cell(row, WsColTariff).FormulaA1 =
-                $"IF(K{typeCanonicalRow}=\"\",\"\",K{typeCanonicalRow})";
+                $"IF(L{typeCanonicalRow}=\"\",\"\",L{typeCanonicalRow})";
             StyleAutoFilledCell(ws.Cell(row, WsColTariff));
         }
     }
@@ -2602,7 +2779,8 @@ public static class CountsWorkbookService
             return;
 
         string dateStr = DateTime.Now.ToString("yyyy.MM.dd");
-        int row = (ws.LastRowUsed()?.RowNumber() ?? 1) + 1;
+        int startRow = (ws.LastRowUsed()?.RowNumber() ?? 1) + 1;
+        int row = startRow;
 
         var newByType = fixtures.ToDictionary(f => f.TypeMark, StringComparer.OrdinalIgnoreCase);
 
@@ -2647,6 +2825,30 @@ public static class CountsWorkbookService
                     WriteChangeRow(ws, ref row, dateStr, f.TypeMark, $"Catalog Number {c + 1}", oldCat, newCat);
             }
         }
+
+        if (row > startRow)
+        {
+            // Mark the last row of this batch in the hidden marker column so the divider
+            // can be re-drawn on every subsequent append (banding wipes interior borders).
+            ws.Cell(row - 1, ChangesBatchMarkerCol).Value = "|";
+            ws.Column(ChangesBatchMarkerCol).Hide();
+
+            // Reapply banding/borders across the full data range so newly appended rows
+            // pick up the same styling as the existing ones (parity is anchored to row 3
+            // inside the helper, so prior bands stay aligned).
+            ApplyRawSheetBandingAndBorders(ws, lastCol: 5, firstDataRow: 2, lastDataRow: row - 1);
+
+            // Re-apply the thin #262626 batch separator (same style the Worksheet uses
+            // between Type groups) on every marked row — including prior batches whose
+            // dividers were just clobbered by the banding pass.
+            for (int r = 2; r <= row - 1; r++)
+            {
+                if (ws.Cell(r, ChangesBatchMarkerCol).GetString() != "|") continue;
+                var divider = ws.Range(r, 1, r, 5);
+                divider.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+                divider.Style.Border.BottomBorderColor = XLColor.FromHtml("#262626");
+            }
+        }
     }
 
     private static void WriteChangeRow(IXLWorksheet ws, ref int row, string date, string type, string change, string oldVal, string newVal)
@@ -2688,6 +2890,47 @@ public static class CountsWorkbookService
     /// horizontally centered, with the shared margin profile. Callers may add
     /// sheet-specific extras (print area, repeating rows, page breaks) afterward.
     /// </summary>
+    /// <summary>
+    /// Applies the shared "raw data tab" styling: Segoe UI 11, dark header strip with
+    /// amber font, no wrap, frozen top row, gridlines off, plus alt-row banding and a
+    /// thin grid + medium outside border on the data range. Caller is responsible for
+    /// column widths (we want columns to fit on screen so users don't scroll right).
+    /// Safe to call before data is written by passing lastDataRow == 1; banding/borders
+    /// will be skipped. AppendChanges re-applies banding/borders on newly added rows.
+    /// </summary>
+    private static void ApplyRawSheetStyling(IXLWorksheet ws, int lastCol, int lastDataRow)
+    {
+        ws.Style.Font.FontName = "Segoe UI";
+        ws.Style.Font.FontSize = 11;
+        ws.Style.Alignment.WrapText = false;
+        ws.ShowGridLines = false;
+
+        var header = ws.Range(1, 1, 1, lastCol);
+        header.Style.Font.Bold = true;
+        header.Style.Fill.BackgroundColor = XLColor.FromHtml("#262626");
+        header.Style.Font.FontColor = XLColor.FromHtml("#FACC75");
+        ws.Row(1).Height = 45;
+
+        ApplyRawSheetBandingAndBorders(ws, lastCol, firstDataRow: 2, lastDataRow);
+    }
+
+    private static void ApplyRawSheetBandingAndBorders(IXLWorksheet ws, int lastCol, int firstDataRow, int lastDataRow)
+    {
+        if (lastDataRow < firstDataRow) return;
+
+        var fill = XLColor.FromHtml("#F2F2F2");
+        // Band every other row, anchored to row 3 so the parity is stable across appends.
+        int firstBand = firstDataRow + ((firstDataRow % 2 == 1) ? 0 : 1);
+        for (int r = firstBand; r <= lastDataRow; r += 2)
+            ws.Range(r, 1, r, lastCol).Style.Fill.BackgroundColor = fill;
+
+        var data = ws.Range(firstDataRow, 1, lastDataRow, lastCol);
+        data.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        data.Style.Border.InsideBorderColor = XLColor.FromHtml("#D9D9D9");
+        data.Style.Border.OutsideBorder = XLBorderStyleValues.Medium;
+        data.Style.Border.OutsideBorderColor = XLColor.Black;
+    }
+
     private static void ApplyStandardPageSetup(IXLWorksheet ws)
     {
         var ps = ws.PageSetup;
@@ -2760,7 +3003,7 @@ public static class CountsWorkbookService
     {
         if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var ws))
             return string.Empty;
-        return ws.Cell("B4").GetString();
+        return ws.Cell(DashRepDirCell).GetString();
     }
 
     private static List<WorksheetRowData> ReadExistingWorksheetRows(IXLWorkbook wb)
