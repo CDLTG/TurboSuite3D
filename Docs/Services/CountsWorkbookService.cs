@@ -76,6 +76,9 @@ public static class CountsWorkbookService
     private const int CsColChannel = 12;    // L
     private const int CsColNote1 = 13;      // M — Schedule Notes 1..6 emitted for reference
     private const int CsColNote6 = 18;      // R
+    // Hidden helper column — Type|Cat1Cat2…Cat6 concatenation used by Worksheet col E's
+    // SUMIFS lookup when a Reference Counts baseline is selected on the Dashboard.
+    private const int CsColCatCombo = 19;   // S
 
     // Highlight colors
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
@@ -164,6 +167,9 @@ public static class CountsWorkbookService
         // Build new Counts sheet
         BuildCountsSheet(wb, fixtures, countsSheetName);
 
+        // Refresh Reference Counts dropdown now that today's Counts sheet exists.
+        RefreshReferenceCountsDropdown(wb);
+
         // Update Worksheet
         UpdateWorksheetSheet(wb, fixtures, countsSheetName, existingRows, prevData);
 
@@ -246,16 +252,22 @@ public static class CountsWorkbookService
     private const string DashFreightBuyCell = "B7";
     private const string DashFreightSellCell = "B8";
     private const string DashBidDateCell = "B11";
-    private const string DashReleaseDateCell = "B12";
-    private const string DashNotesFirstRow = "35";
-    private const string DashNotesLastRow = "49";
+    private const string DashNotesFirstRow = "33";
+    private const string DashNotesLastRow = "47";
+
+    // Hidden helper range on Dashboard holding the parsed dates of every Counts sheet
+    // currently in the workbook. Drives the Reference Counts dropdown's data-validation
+    // list source. Refreshed on every build/update of the workbook.
+    private const string DashCountsListFirstCell = "Z1";
+    private const int DashCountsListMaxRows = 200;
 
     private static readonly XLColor HeaderBlue = XLColor.FromHtml("#4472C4");
 
     /// <summary>
     /// Creates the Dashboard sheet holding all workbook configuration, quote adjustments,
-    /// bid lock state, internal notes, and the quote-footer notes library. All named ranges
-    /// used by the helper pipeline and external readers are defined here.
+    /// the Reference Counts baseline pointer, internal notes, and the quote-footer notes
+    /// library. All named ranges used by the helper pipeline and external readers are
+    /// defined here.
     /// </summary>
     private static void BuildDashboardSheet(IXLWorkbook wb, string projectName, string repDirectoryPath)
     {
@@ -268,17 +280,32 @@ public static class CountsWorkbookService
         ws.Style.Font.FontSize = 11;
         ws.Style.Alignment.WrapText = false;
 
-        // Title row — same dark/amber strip the Worksheet uses for its header, full 45 height.
-        ws.Cell("A1").Value = $"COUNTS DASHBOARD — {projectName}";
+        // Title row — same dark/amber strip the Worksheet uses for its header. Rows 1+2 share
+        // the dark fill so we split the visual 45-height into 23 (title, top-aligned) + 22
+        // (CONFIGURATION bar) — matches the 45 used elsewhere while letting row 2 host its own
+        // section bar at the standard 22 height.
+        ws.Cell("A1").Value = $" COUNTS DASHBOARD — {projectName}";
         StyleSectionBar(ws.Range("A1:D1"), fontSize: 16);
-        ws.Row(1).Height = 45;
+        ws.Range("A1:D1").Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
+        ws.Row(1).Height = 23;
 
         // --- CONFIGURATION ---
         WriteSectionBar(ws, 2, "CONFIGURATION");
         ws.Cell("A3").Value = "Rep Directory Path";
         ws.Range("B3:D3").Merge();
         ws.Cell("B3").Value = repDirectoryPath ?? string.Empty;
-        StyleEditableCell(ws.Cell("B3"));
+        // Border drawn around the full merged span — Excel won't paint inner cell edges
+        // inside a merge, so a B3:C3 border would lose its right side. Top border is
+        // omitted because the CONFIGURATION bar's #262626 bottom edge already closes the
+        // top, and a gray rule there would bleed into the dark fill above.
+        var b3d3 = ws.Range("B3:D3");
+        var grayBorder = XLColor.FromHtml("#D9D9D9");
+        b3d3.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+        b3d3.Style.Border.LeftBorderColor = grayBorder;
+        b3d3.Style.Border.RightBorder = XLBorderStyleValues.Thin;
+        b3d3.Style.Border.RightBorderColor = grayBorder;
+        b3d3.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        b3d3.Style.Border.BottomBorderColor = grayBorder;
 
         // --- QUOTE ADJUSTMENTS ---
         WriteSectionBar(ws, 5, "QUOTE ADJUSTMENTS");
@@ -287,6 +314,9 @@ public static class CountsWorkbookService
         ws.Cell("A6").Value = "Lutron Lighting Control";
         ws.Cell("B6").Style.NumberFormat.Format = "$#,##0.00";
         StyleEditableCell(ws.Cell("B6"));
+        // Sits directly under the QUOTE ADJUSTMENTS bar — drop the top border so the gray
+        // outline doesn't show against the dark #262626 fill above.
+        ws.Cell("B6").Style.Border.TopBorder = XLBorderStyleValues.None;
 
         ws.Cell("A7").Value = "Estimated Freight (Buy)";
         ws.Cell("B7").Style.NumberFormat.Format = "$#,##0.00";
@@ -296,55 +326,53 @@ public static class CountsWorkbookService
         ws.Cell("B8").Style.NumberFormat.Format = "$#,##0.00";
         StyleEditableCell(ws.Cell("B8"));
 
-        // --- BID LOCK ---
-        WriteSectionBar(ws, 10, "BID LOCK");
-        ws.Cell("A11").Value = "Bid Quote Date";
+        // --- REFERENCE COUNTS ---
+        // Live pointer to a historical Counts sheet. When set, Worksheet col E (and the
+        // Quote Δ column it feeds) re-resolves against that snapshot via INDIRECT/SUMIFS.
+        // When blank, behavior falls back to "compare against latest prior run."
+        WriteSectionBar(ws, 10, "REFERENCE COUNTS");
+        ws.Cell("A11").Value = "Compare to";
         ws.Cell("B11").Style.NumberFormat.Format = "yyyy-mm-dd";
         StyleEditableCell(ws.Cell("B11"));
-
-        ws.Cell("A12").Value = "Release Lock";
-        ws.Cell("B12").Style.NumberFormat.Format = "yyyy-mm-dd";
-        StyleEditableCell(ws.Cell("B12"));
-
-        ws.Cell("A13").Value = "Bid Status";
-        ws.Cell("B13").FormulaA1 =
-            "IF(B11=\"\",\"Unlocked\",IF(B12=B11,\"Pending release\",\"LOCKED \"&TEXT(B11,\"yyyy-mm-dd\")))";
-        ws.Cell("B13").Style.Font.Italic = true;
-        ws.Cell("B13").Style.Font.FontColor = XLColor.FromHtml("#A6A6A6");
+        // Same dark-bar abutment fix as B6 — see comment above.
+        ws.Cell("B11").Style.Border.TopBorder = XLBorderStyleValues.None;
+        // Data-validation dropdown is wired up in RefreshReferenceCountsDropdown — that
+        // helper also runs on every GenerateUpdate so the list stays in sync as new
+        // Counts sheets accumulate.
 
         // Bold all column-A labels so they read as field captions against the input cells.
-        foreach (string addr in new[] { "A3", "A6", "A7", "A8", "A11", "A12", "A13" })
+        foreach (string addr in new[] { "A3", "A6", "A7", "A8", "A11" })
             ws.Cell(addr).Style.Font.Bold = true;
 
         // --- INTERNAL NOTES ---
-        WriteSectionBar(ws, 15, "INTERNAL NOTES");
-        ws.Cell("A16").Value = "Date";
-        ws.Cell("B16").Value = "Author";
-        ws.Cell("C16").Value = "Status";
-        ws.Cell("D16").Value = "Notes";
-        StyleSubHeaderRow(ws.Range("A16:D16"));
-        StyleInputBlock(ws.Range("A17:D31"), headerRow: ws.Range("A16:D16"));
+        WriteSectionBar(ws, 13, "INTERNAL NOTES");
+        ws.Cell("A14").Value = "Date";
+        ws.Cell("B14").Value = "Author";
+        ws.Cell("C14").Value = "Status";
+        ws.Cell("D14").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A14:D14"));
+        StyleInputBlock(ws.Range("A15:D29"), headerRow: ws.Range("A14:D14"));
 
         // --- QUOTE FOOTER NOTES ---
-        WriteSectionBar(ws, 33, "QUOTE FOOTER NOTES");
-        ws.Cell("A34").Value = "BOLD";
-        ws.Cell("A34").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        ws.Cell("B34").Value = "Notes";
-        StyleSubHeaderRow(ws.Range("A34:D34"));
+        WriteSectionBar(ws, 31, "QUOTE FOOTER NOTES");
+        ws.Cell("A32").Value = "BOLD";
+        ws.Cell("A32").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell("B32").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A32:D32"));
 
         for (int i = 0; i < 15; i++)
         {
-            int r = 35 + i;
+            int r = 33 + i;
             ws.Cell(r, 1).Value = false; // boolean literal — pass 3 upgrades to native checkbox
             ws.Cell(r, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             // Notes span B:D — merged so long notes aren't clipped by the narrow B column.
             ws.Range(r, 2, r, 4).Merge();
             ws.Cell(r, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
         }
-        StyleInputBlock(ws.Range("A35:D49"), headerRow: ws.Range("A34:D34"));
+        StyleInputBlock(ws.Range("A33:D47"), headerRow: ws.Range("A32:D32"));
 
         // Column widths
-        ws.Column(1).Width = 21.18;
+        ws.Column(1).Width = 24;
         ws.Column(2).Width = 18;
         ws.Column(3).Width = 42;
         ws.Column(4).Width = 40;
@@ -355,19 +383,20 @@ public static class CountsWorkbookService
         wb.DefinedNames.Add("FreightBuy", ws.Range("B7:B7"));
         wb.DefinedNames.Add("FreightSell", ws.Range("B8:B8"));
         wb.DefinedNames.Add("BidDate", ws.Range("B11:B11"));
-        wb.DefinedNames.Add("ReleaseDate", ws.Range("B12:B12"));
         wb.DefinedNames.Add("QuoteNotes", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
         wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"A{DashNotesFirstRow}:A{DashNotesLastRow}"));
 
         // Protection: unlock editable cells, lock the rest
-        foreach (string addr in new[] { "B3", "B6", "B7", "B8", "B11", "B12" })
+        foreach (string addr in new[] { "B3", "B6", "B7", "B8", "B11" })
             ws.Cell(addr).Style.Protection.SetLocked(false);
-        ws.Range("A17:D31").Style.Protection.SetLocked(false);
+        ws.Range("A15:D29").Style.Protection.SetLocked(false);
         ws.Range($"A{DashNotesFirstRow}:B{DashNotesLastRow}").Style.Protection.SetLocked(false);
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
 
         ws.ShowGridLines = false;
         ApplyStandardPageSetup(ws);
+
+        RefreshReferenceCountsDropdown(wb);
     }
 
     private static void EnsureDashboardSheet(IXLWorkbook wb, string repDirectoryPath)
@@ -392,12 +421,119 @@ public static class CountsWorkbookService
         BuildDashboardSheet(wb, projectName, repDirectoryPath);
     }
 
+    /// <summary>
+    /// Repopulates the hidden helper range on Dashboard with the parsed dates of every
+    /// Counts sheet currently in the workbook, then re-applies the data-validation list
+    /// to B11. Called from BuildDashboardSheet and from GenerateUpdate so the dropdown
+    /// stays in sync as new Counts sheets accumulate. Sheet protection is briefly
+    /// suspended because the helper range and B11 are otherwise locked.
+    /// </summary>
+    /// <summary>
+    /// Returns true if Dashboard!B11 holds a non-empty value (i.e. user has chosen a
+    /// Reference Counts baseline). The actual sheet-name resolution happens at formula-
+    /// evaluation time inside Excel via INDIRECT/TEXT — this only governs whether we
+    /// emit the live formula or stay with the legacy literal write.
+    /// </summary>
+    private static bool HasReferenceCountsBaseline(IXLWorkbook wb)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var ws))
+            return false;
+        var cell = ws.Cell("B11");
+        if (cell.IsEmpty()) return false;
+        // Numeric serial (date) or non-empty string both count.
+        return !string.IsNullOrWhiteSpace(cell.GetFormattedString());
+    }
+
+    /// <summary>
+    /// Builds the Worksheet col E formula that resolves to the Reference Counts SUMIFS
+    /// when BidDate matches a historical Counts sheet, or the literal fallback (the value
+    /// that would have been written under the legacy "vs. latest run" behavior) otherwise.
+    /// </summary>
+    private static string BuildReferenceCountsFormula(int row, double fallback)
+    {
+        // Preserve nothing-to-compare-to as blank so col F's IF(E="","",...) chain still
+        // shows blank Δ for brand-new rows when fallback is 0.
+        string fallbackLiteral = fallback == 0 ? "0" : fallback.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        const string sheetName = "\"'Counts \"&TEXT(BidDate,\"yyyy.mm.dd\")&\"'!\"";
+        // Each INDIRECT pins one column on the resolved Counts sheet. SUMIFS sums col I
+        // (Count) where col A (Type) matches A{row} and col S (CatCombo) matches A{row}|catalog.
+        string sumIfs =
+            $"SUMIFS(" +
+            $"INDIRECT({sheetName}&\"I:I\")," +
+            $"INDIRECT({sheetName}&\"A:A\"),A{row}," +
+            $"INDIRECT({sheetName}&\"S:S\"),A{row}&\"|\"&C{row})";
+        return $"IFERROR({sumIfs},{fallbackLiteral})";
+    }
+
+    private static void RefreshReferenceCountsDropdown(IXLWorkbook wb)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var ws))
+            return;
+
+        bool wasProtected = ws.IsProtected;
+        if (wasProtected)
+            ws.Unprotect();
+
+        // Clear prior helper range
+        ws.Range($"Z1:Z{DashCountsListMaxRows}").Clear(XLClearOptions.Contents);
+
+        var dates = new List<DateTime>();
+        foreach (var cs in EnumerateCountsSheets(wb))
+        {
+            // Sheet name format: "Counts yyyy.MM.dd"
+            string suffix = cs.Name.Length > 7 ? cs.Name.Substring(7) : string.Empty;
+            if (DateTime.TryParseExact(suffix, "yyyy.MM.dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var dt))
+            {
+                dates.Add(dt);
+            }
+        }
+
+        // Most recent first — helps the user pick the typical baseline (the latest priced bid).
+        dates.Sort((a, b) => b.CompareTo(a));
+
+        int count = Math.Min(dates.Count, DashCountsListMaxRows);
+        for (int i = 0; i < count; i++)
+        {
+            var cell = ws.Cell(i + 1, 26); // col Z
+            cell.Value = dates[i];
+            cell.Style.NumberFormat.Format = "yyyy-mm-dd";
+            cell.Style.Protection.SetLocked(true);
+        }
+        ws.Column(26).Hide();
+
+        // Re-apply data validation to B11. Use a closed (non-empty) range so Excel doesn't
+        // show every empty Z row as a blank entry.
+        var b11 = ws.Cell("B11");
+        b11.GetDataValidation().Clear();
+        if (count > 0)
+        {
+            var listSource = $"=Dashboard!$Z$1:$Z${count}";
+            var dv = b11.GetDataValidation();
+            dv.List(listSource, true);
+            dv.IgnoreBlanks = true;
+        }
+        b11.Style.Protection.SetLocked(false);
+
+        if (wasProtected)
+            ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
+    }
+
     private static void WriteSectionBar(IXLWorksheet ws, int row, string text)
     {
         var rng = ws.Range(row, 1, row, 4);
         rng.Merge();
-        rng.FirstCell().Value = text;
+        // Leading spaces (rather than Alignment.Indent) so clicking Excel's Align Left
+        // button can't collapse the buffer — the spaces are part of the value.
+        rng.FirstCell().Value = " " + text;
         StyleSectionBar(rng, fontSize: 12);
+        // Hard #262626 bottom edge so the side borders of any editable cell directly
+        // below the bar (B6, B11, …) don't bleed up into the dark fill. Row 1 uses
+        // StyleSectionBar directly and intentionally has no bottom rule (it abuts the
+        // CONFIGURATION bar in row 2).
+        rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        rng.Style.Border.BottomBorderColor = XLColor.FromHtml("#262626");
         ws.Row(row).Height = 22;
     }
 
@@ -412,7 +548,8 @@ public static class CountsWorkbookService
         rng.Style.Font.FontSize = fontSize;
         rng.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
         rng.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-        rng.Style.Alignment.Indent = 1;
+        // Buffer is provided via leading spaces in the value (see WriteSectionBar) — using
+        // Alignment.Indent here would get cleared by Excel's Align Left toolbar button.
     }
 
     // Sub-header row inside a section (e.g. the column captions above Internal Notes
@@ -423,7 +560,9 @@ public static class CountsWorkbookService
         rng.Style.Font.Bold = true;
         rng.Style.Fill.BackgroundColor = XLColor.FromHtml("#F2F2F2");
         rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
-        rng.Style.Border.BottomBorderColor = XLColor.FromHtml("#262626");
+        // Same #A6A6A6 as the data-block outline below — without this match the underline
+        // reads as a hard dark rule that disagrees with the rest of the section frame.
+        rng.Style.Border.BottomBorderColor = XLColor.FromHtml("#A6A6A6");
     }
 
     // Editable single cell — thin gray box border so the input target is visible
@@ -1066,6 +1205,7 @@ public static class CountsWorkbookService
         ws.Cell(1, CsColChannel).Value = "Channel Length";
         for (int n = 0; n < 6; n++)
             ws.Cell(1, CsColNote1 + n).Value = $"Schedule Notes {n + 1}";
+        ws.Cell(1, CsColCatCombo).Value = "_CatCombo";
 
         // Data rows
         int row = 2;
@@ -1081,9 +1221,11 @@ public static class CountsWorkbookService
             ws.Cell(row, CsColChannel).Value = Math.Round(f.ChannelLength, 2);
             for (int n = 0; n < 6; n++)
                 ws.Cell(row, CsColNote1 + n).Value = f.Notes[n] ?? string.Empty;
+            ws.Cell(row, CsColCatCombo).FormulaA1 = BuildCatComboFormula(row);
             row++;
         }
         int lastDataRow = row - 1;
+        ws.Column(CsColCatCombo).Hide();
 
         ApplyRawSheetStyling(ws, CsColNote6, lastDataRow);
 
@@ -1727,7 +1869,13 @@ public static class CountsWorkbookService
 
         ApplyPrintSheetDefaults(ws);
 
-        WritePrintSheetTitle(ws, 9, "\"PRODUCT PRICING \"&Cover!B11");
+        // Subtitle includes a second line indicating what the Δ column compares against —
+        // either the latest prior run (default) or the user-selected Reference Counts date.
+        WritePrintSheetTitle(ws, 9,
+            "\"PRODUCT PRICING \"&Cover!B11&CHAR(10)&" +
+            "IF(BidDate=\"\",\"Δ vs. last run\",\"Δ vs. \"&TEXT(BidDate,\"yyyy-mm-dd\"))");
+        ws.Cell("A2").Style.Alignment.WrapText = true;
+        ws.Row(2).Height = 30;
 
         int headerRow = 6;
         string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Δ", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
@@ -2103,6 +2251,13 @@ public static class CountsWorkbookService
 
         string csRef = $"'{countsSheetName}'";
 
+        // When the user has selected a Reference Counts baseline on Dashboard!B11, col E
+        // is written as a live SUMIFS formula against that historical Counts sheet (with
+        // the literal-fallback baked into IFERROR). When B11 is blank, E stays a literal —
+        // matching the legacy "compare against latest prior run" behavior. Toggling the
+        // mode requires re-running TurboDocs.
+        bool useReferenceCountsFormula = HasReferenceCountsBaseline(wb);
+
         // Build lookup of existing rows by (Type, Catalog)
         var existingByKey = new Dictionary<(string, string), WorksheetRowData>();
         foreach (var er in existingRows)
@@ -2325,14 +2480,30 @@ public static class CountsWorkbookService
             // else recompute from the preserved canonical Calc + prev fixture lengths (cache may
             // be missing on 3rd+ passes — ClosedXML doesn't emit caches for rewritten formulas),
             // else fall back to raw Count for types that weren't present before.
+            // When useReferenceCountsFormula is set, write the live SUMIFS instead, with the
+            // computed literal preserved as the IFERROR fallback (so a typo'd / cleared B11
+            // still yields the legacy "vs. latest run" number).
             if (existing?.PrevQty.HasValue == true)
             {
-                ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
+                double prevQtyLiteral = existing.PrevQty.Value;
+                if (useReferenceCountsFormula)
+                    ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, prevQtyLiteral);
+                else
+                    ws.Cell(row, WsColPrevQty).Value = prevQtyLiteral;
             }
             else if (prevData != null && prevData.TryGetValue(type, out var prevFixture))
             {
                 prevCalcByCatalog.TryGetValue(catalog, out string? prevCalc);
-                ws.Cell(row, WsColPrevQty).Value = ComputeQtyForCalc(prevCalc, prevFixture);
+                double prevQtyLiteral = ComputeQtyForCalc(prevCalc, prevFixture);
+                if (useReferenceCountsFormula)
+                    ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, prevQtyLiteral);
+                else
+                    ws.Cell(row, WsColPrevQty).Value = prevQtyLiteral;
+            }
+            else if (useReferenceCountsFormula)
+            {
+                // No literal fallback available; emit the formula with 0 as the IFERROR result.
+                ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, 0);
             }
 
             int typeCanonical = typeCanonicalSheetRow[type];
@@ -2397,7 +2568,10 @@ public static class CountsWorkbookService
                 if (isNewType)
                 {
                     // Brand-new type: Prev Qty = 0 so delta shows +qty; green across Revit-side cells.
-                    ws.Cell(row, WsColPrevQty).Value = 0;
+                    if (useReferenceCountsFormula)
+                        ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, 0);
+                    else
+                        ws.Cell(row, WsColPrevQty).Value = 0;
                     for (int col = 1; col <= WsColDelta; col++)
                         ws.Cell(row, col).Style.Fill.BackgroundColor = GreenFill;
                 }
@@ -2968,6 +3142,16 @@ public static class CountsWorkbookService
             .OrderByDescending(ws => ws.Name)
             .FirstOrDefault();
     }
+
+    private static IEnumerable<IXLWorksheet> EnumerateCountsSheets(IXLWorkbook wb)
+    {
+        return wb.Worksheets
+            .Where(ws => ws.Name.StartsWith("Counts ", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(ws => ws.Name);
+    }
+
+    private static string BuildCatComboFormula(int row) =>
+        $"A{row}&\"|\"&C{row}&D{row}&E{row}&F{row}&G{row}&H{row}";
 
     private static Dictionary<string, CountsFixtureModel> ReadCountsSheetData(IXLWorksheet ws)
     {
