@@ -191,6 +191,7 @@ public class CountsViewModel : ViewModelBase
             string repDirPath = _repDirectoryPath;
             string headerImg = _headerImagePath;
             string footerImg = _footerImagePath;
+            DateTime headerDate = _parent.HeaderDate;
 
             StatusText = updateMode ? "Updating workbook..." : "Generating workbook...";
             Progress = 30;
@@ -198,9 +199,9 @@ public class CountsViewModel : ViewModelBase
             await Task.Run(() =>
             {
                 if (updateMode)
-                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath, headerImg, footerImg);
+                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath, headerDate, headerImg, footerImg);
                 else
-                    CountsWorkbookService.GenerateNew(fixtures, projName, projLocation, outputPath, repDirPath, headerImg, footerImg);
+                    CountsWorkbookService.GenerateNew(fixtures, projName, projLocation, outputPath, repDirPath, headerDate, headerImg, footerImg);
             });
 
             Progress = 100;

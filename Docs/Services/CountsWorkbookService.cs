@@ -98,17 +98,18 @@ public static class CountsWorkbookService
         string projectLocation,
         string outputPath,
         string repDirectoryPath,
+        DateTime headerDate,
         string headerImagePath = "",
         string footerImagePath = "")
     {
         using var wb = new XLWorkbook();
 
-        string dateString = DateTime.Now.ToString("yyyy.MM.dd");
+        string dateString = headerDate.ToString("yyyy.MM.dd");
         string countsSheetName = $"Counts {dateString}";
 
         var repDirectory = ReadRepDirectory(repDirectoryPath);
 
-        BuildCoverSheet(wb, projectName, projectLocation);
+        BuildCoverSheet(wb, projectName, projectLocation, headerDate);
         BuildDashboardSheet(wb, projectName, repDirectoryPath);
         BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
         BuildRepListsSheet(wb, fixtures, repDirectory);
@@ -140,12 +141,13 @@ public static class CountsWorkbookService
         List<CountsFixtureModel> fixtures,
         string existingPath,
         string repDirectoryPath,
+        DateTime headerDate,
         string headerImagePath = "",
         string footerImagePath = "")
     {
         using var wb = new XLWorkbook(existingPath);
 
-        string dateString = DateTime.Now.ToString("yyyy.MM.dd");
+        string dateString = headerDate.ToString("yyyy.MM.dd");
         string countsSheetName = ResolveCountsSheetName(wb, dateString);
 
         // Find previous Counts sheet for change detection
@@ -154,6 +156,11 @@ public static class CountsWorkbookService
 
         // Migrate legacy workbooks (no Dashboard) and seed/keep Rep Directory path.
         EnsureDashboardSheet(wb, repDirectoryPath);
+
+        // Overwrite Cover!B11 with the current settings header date. User can manually edit
+        // it between updates to show a different date on the quote; the next update resets it.
+        if (wb.Worksheets.TryGetWorksheet("Cover", out var coverWs))
+            coverWs.Cell("B11").Value = headerDate.ToString("MMM dd, yyyy");
 
         // Dashboard!B3 is authoritative; fall back to settings only when empty.
         string effectiveRepPath = ReadRepDirectoryPathFromDashboard(wb);
@@ -183,7 +190,7 @@ public static class CountsWorkbookService
 
         // Append changes
         if (prevData != null)
-            AppendChanges(wb, fixtures, prevData);
+            AppendChanges(wb, fixtures, prevData, headerDate);
 
         wb.Save();
 
@@ -202,7 +209,7 @@ public static class CountsWorkbookService
 
     #region Cover Sheet
 
-    private static void BuildCoverSheet(IXLWorkbook wb, string projectName, string projectLocation)
+    private static void BuildCoverSheet(IXLWorkbook wb, string projectName, string projectLocation, DateTime headerDate)
     {
         var ws = wb.Worksheets.Add("Cover");
 
@@ -220,6 +227,10 @@ public static class CountsWorkbookService
         ws.Cell("A9").Style.Font.FontSize = 16;
 
         ws.Cell("A11").Value = "Release Date:";
+        // Seeded from TurboDocs settings header date. Quote/Phase subtitles read B11 via
+        // formula, so manual edits flow through until the next GenerateUpdate (which
+        // overwrites B11 with the current settings date).
+        ws.Cell("B11").Value = headerDate.ToString("MMM dd, yyyy");
         ws.Cell("A12").Value = "Project Number:";
         ws.Cell("A13").Value = "For:";
         ws.Cell("A14").Value = "Prepared by:";
@@ -884,6 +895,7 @@ public static class CountsWorkbookService
             existing.Delete();
 
         var ws = wb.Worksheets.Add("Rep Lists");
+        ws.TabColor = XLColor.FromHtml("#FFFACC75");
         // Position between Worksheet and Quote
         if (wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
             ws.Position = wsSheet.Position + 1;
@@ -1256,6 +1268,7 @@ public static class CountsWorkbookService
         Dictionary<(string Type, string Catalog), WorksheetRowData>? existingRows)
     {
         var ws = wb.Worksheets.Add("Worksheet");
+        ws.TabColor = XLColor.FromHtml("#FFFACC75");
 
         // Headers
         ws.Cell(1, WsColType).Value = "Type";
@@ -1869,13 +1882,8 @@ public static class CountsWorkbookService
 
         ApplyPrintSheetDefaults(ws);
 
-        // Subtitle includes a second line indicating what the Δ column compares against —
-        // either the latest prior run (default) or the user-selected Reference Counts date.
-        WritePrintSheetTitle(ws, 9,
-            "\"PRODUCT PRICING \"&Cover!B11&CHAR(10)&" +
-            "IF(BidDate=\"\",\"Δ vs. last run\",\"Δ vs. \"&TEXT(BidDate,\"yyyy-mm-dd\"))");
-        ws.Cell("A2").Style.Alignment.WrapText = true;
-        ws.Row(2).Height = 30;
+        WritePrintSheetTitle(ws, 9, "\"PRODUCT PRICING \"&Cover!B11");
+        ws.TabColor = XLColor.FromHtml("#FF8ED973");
 
         int headerRow = 6;
         string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Δ", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
@@ -1959,6 +1967,7 @@ public static class CountsWorkbookService
         ApplyPrintSheetDefaults(ws);
 
         WritePrintSheetTitle(ws, 8, $"\"PHASE {phase} PRODUCT PRICING \"&Cover!B11");
+        ws.TabColor = XLColor.FromHtml("#FF8ED973");
 
         int headerRow = 6;
         string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
@@ -2258,14 +2267,6 @@ public static class CountsWorkbookService
         // mode requires re-running TurboDocs.
         bool useReferenceCountsFormula = HasReferenceCountsBaseline(wb);
 
-        // Build lookup of existing rows by (Type, Catalog)
-        var existingByKey = new Dictionary<(string, string), WorksheetRowData>();
-        foreach (var er in existingRows)
-        {
-            var key = (er.Type.ToUpperInvariant(), er.Catalog.ToUpperInvariant());
-            existingByKey.TryAdd(key, er);
-        }
-
         // Build set of new (Type, Catalog) pairs
         var newTypeMarks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var newKeys = new HashSet<(string, string)>();
@@ -2285,6 +2286,24 @@ public static class CountsWorkbookService
             }
         }
 
+        // Drop rows that were marked removed (strikethrough) on a prior update and are still
+        // not in the new data. They've had one update to come back; if they didn't, retire them
+        // permanently. Resurrected ones (key now in newKeys) fall through and get treated as
+        // matched rows with the strikethrough/red-fill cleared by the styling reset below.
+        // Captured from WorksheetRowData.IsStrikethrough — must read it before the worksheet
+        // styling is cleared, since that wipes the strikethrough flag in the cells themselves.
+        existingRows = existingRows
+            .Where(er => !er.IsStrikethrough || newKeys.Contains((er.Type.ToUpperInvariant(), er.Catalog.ToUpperInvariant())))
+            .ToList();
+
+        // Build lookup of (filtered) existing rows by (Type, Catalog)
+        var existingByKey = new Dictionary<(string, string), WorksheetRowData>();
+        foreach (var er in existingRows)
+        {
+            var key = (er.Type.ToUpperInvariant(), er.Catalog.ToUpperInvariant());
+            existingByKey.TryAdd(key, er);
+        }
+
         // Determine which existing types existed before (from prev data)
         var prevTypeMarks = prevData?.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
                             ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2292,44 +2311,15 @@ public static class CountsWorkbookService
         // Unprotect before editing
         ws.Unprotect();
 
-        // Clear all existing styling (highlights from prior update)
+        // Clear all existing styling (highlights from prior update). Step 2 below wipes the
+        // data rows entirely, but row 2 is cleared in place (it anchors the helper-pipeline
+        // spills and cannot be deleted), so the reset still matters there.
         int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
         if (lastRow > 1)
         {
             var dataRange = ws.Range(2, 1, lastRow, WsColQtyOverride);
             dataRange.Style.Fill.BackgroundColor = XLColor.NoColor;
             dataRange.Style.Font.Strikethrough = false;
-        }
-
-        // Step 1: Delete rows that were already marked as removed (red strikethrough)
-        // We detect these by checking if the row's (Type, Catalog) is not in new data
-        // AND was already not in prev data (meaning it was marked red last time)
-        // NOTE: row 2 must never be deleted — the helper pipeline spill anchors live there
-        // (AA2, AB2, …) and the print sheets reference them via ANCHORARRAY. Deleting row 2
-        // causes ClosedXML to shift those cross-sheet references (AD2# → AD1#). Clear in
-        // place instead.
-        for (int r = lastRow; r >= 2; r--)
-        {
-            string rowType = ws.Cell(r, WsColType).GetString();
-            string rowCat = ws.Cell(r, WsColCatalog).GetString();
-            var key = (rowType.ToUpperInvariant(), rowCat.ToUpperInvariant());
-
-            if (!newKeys.Contains(key) && ws.Cell(r, WsColType).Style.Font.Strikethrough)
-            {
-                if (r == 2)
-                    ws.Row(r).Clear(XLClearOptions.Contents | XLClearOptions.NormalFormats);
-                else
-                    ws.Row(r).Delete();
-            }
-        }
-
-        // Re-read existing rows after deletions
-        existingRows = ReadExistingWorksheetRows(wb);
-        existingByKey.Clear();
-        foreach (var er in existingRows)
-        {
-            var key = (er.Type.ToUpperInvariant(), er.Catalog.ToUpperInvariant());
-            existingByKey.TryAdd(key, er);
         }
 
         // Step 2: Clear existing data rows and rebuild.
@@ -2575,12 +2565,21 @@ public static class CountsWorkbookService
                     for (int col = 1; col <= WsColDelta; col++)
                         ws.Cell(row, col).Style.Fill.BackgroundColor = GreenFill;
                 }
-                else
-                {
-                    // New catalog under existing type: yellow through Catalog only (Qty delta handles qty changes).
-                    for (int col = 1; col <= WsColCatalog; col++)
-                        ws.Cell(row, col).Style.Fill.BackgroundColor = YellowFill;
-                }
+            }
+
+            // Yellow on Type/Mfr/Catalog when this catalog isn't in prevData under this type
+            // (catalog change vs the prior snapshot). Triggers in both branches above:
+            //   - existing == null: brand-new worksheet row (the original "new catalog" case)
+            //   - existing != null: resurrected strikethrough row, or any catalog whose key
+            //     happens to match a stale row but wasn't in prevData
+            // Skipped for isNewType (whole row is green) and when prevData is unavailable.
+            if (!isNewType && prevData != null
+                && prevData.TryGetValue(type, out var prevFix)
+                && !prevFix.CatalogNumbers.Any(c => !string.IsNullOrEmpty(c)
+                    && string.Equals(c, catalog, StringComparison.OrdinalIgnoreCase)))
+            {
+                for (int col = 1; col <= WsColCatalog; col++)
+                    ws.Cell(row, col).Style.Fill.BackgroundColor = YellowFill;
             }
 
             // Yellow delta cell when qty changed (non-blank, non-zero). Skipped on new-type
@@ -2947,81 +2946,97 @@ public static class CountsWorkbookService
     private static void AppendChanges(
         IXLWorkbook wb,
         List<CountsFixtureModel> fixtures,
-        Dictionary<string, CountsFixtureModel> prevData)
+        Dictionary<string, CountsFixtureModel> prevData,
+        DateTime headerDate)
     {
         if (!wb.Worksheets.TryGetWorksheet("Changes", out var ws))
             return;
 
-        string dateStr = DateTime.Now.ToString("yyyy.MM.dd");
-        int startRow = (ws.LastRowUsed()?.RowNumber() ?? 1) + 1;
-        int row = startRow;
+        string dateStr = headerDate.ToString("yyyy.MM.dd");
 
         var newByType = fixtures.ToDictionary(f => f.TypeMark, StringComparer.OrdinalIgnoreCase);
 
-        // Added types
+        // Collect this batch's rows first; we insert them at the top (newest first) once
+        // we know how many there are. Insert order: Added, Removed, Changed (same as the
+        // legacy append order, so within a batch the visual sequence is unchanged).
+        var batch = new List<(string Type, string Change, string Old, string New)>();
+
         foreach (var f in fixtures)
         {
             if (!prevData.ContainsKey(f.TypeMark))
-            {
-                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Added", "", "");
-            }
+                batch.Add((f.TypeMark, "Added", "", ""));
         }
 
-        // Removed types
         foreach (var kvp in prevData)
         {
             if (!newByType.ContainsKey(kvp.Key))
-            {
-                WriteChangeRow(ws, ref row, dateStr, kvp.Key, "Removed", "", "");
-            }
+                batch.Add((kvp.Key, "Removed", "", ""));
         }
 
-        // Changed values
         foreach (var f in fixtures)
         {
             if (!prevData.TryGetValue(f.TypeMark, out var prev)) continue;
 
             if (f.Count != prev.Count)
-                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Qty", prev.Count.ToString(), f.Count.ToString());
+                batch.Add((f.TypeMark, "Qty", prev.Count.ToString(), f.Count.ToString()));
 
             if (f.Manufacturer != prev.Manufacturer)
-                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Mfr", prev.Manufacturer, f.Manufacturer);
+                batch.Add((f.TypeMark, "Mfr", prev.Manufacturer, f.Manufacturer));
 
             if (Math.Abs(f.LinearLength - prev.LinearLength) > 0.01)
-                WriteChangeRow(ws, ref row, dateStr, f.TypeMark, "Linear Length",
-                    prev.LinearLength.ToString("F2"), f.LinearLength.ToString("F2"));
+                batch.Add((f.TypeMark, "Linear Length",
+                    prev.LinearLength.ToString("F2"), f.LinearLength.ToString("F2")));
 
             for (int c = 0; c < 6; c++)
             {
                 string oldCat = prev.CatalogNumbers[c] ?? "";
                 string newCat = f.CatalogNumbers[c] ?? "";
                 if (oldCat != newCat)
-                    WriteChangeRow(ws, ref row, dateStr, f.TypeMark, $"Catalog Number {c + 1}", oldCat, newCat);
+                    batch.Add((f.TypeMark, $"Catalog Number {c + 1}", oldCat, newCat));
             }
         }
 
-        if (row > startRow)
+        if (batch.Count == 0)
+            return;
+
+        // Insert this batch at the top so newest updates appear first. If the sheet has
+        // no prior data rows, write directly into rows 2+; otherwise push existing rows
+        // down by batch.Count and write the new batch into rows 2..1+batch.Count.
+        bool hadPriorData = (ws.LastRowUsed()?.RowNumber() ?? 1) >= 2;
+        if (hadPriorData)
         {
-            // Mark the last row of this batch in the hidden marker column so the divider
-            // can be re-drawn on every subsequent append (banding wipes interior borders).
-            ws.Cell(row - 1, ChangesBatchMarkerCol).Value = "|";
-            ws.Column(ChangesBatchMarkerCol).Hide();
+            ws.Row(2).InsertRowsAbove(batch.Count);
+            // InsertRowsAbove clones the format of the row above (row 1 = dark amber header
+            // strip), so clear styling on the inserted block before writing data. The
+            // banding/border pass below paints fresh row formatting.
+            ws.Range(2, 1, 1 + batch.Count, ChangesBatchMarkerCol)
+                .Clear(XLClearOptions.NormalFormats);
+        }
 
-            // Reapply banding/borders across the full data range so newly appended rows
-            // pick up the same styling as the existing ones (parity is anchored to row 3
-            // inside the helper, so prior bands stay aligned).
-            ApplyRawSheetBandingAndBorders(ws, lastCol: 5, firstDataRow: 2, lastDataRow: row - 1);
+        int row = 2;
+        foreach (var (type, change, oldVal, newVal) in batch)
+            WriteChangeRow(ws, ref row, dateStr, type, change, oldVal, newVal);
 
-            // Re-apply the thin #262626 batch separator (same style the Worksheet uses
-            // between Type groups) on every marked row — including prior batches whose
-            // dividers were just clobbered by the banding pass.
-            for (int r = 2; r <= row - 1; r++)
-            {
-                if (ws.Cell(r, ChangesBatchMarkerCol).GetString() != "|") continue;
-                var divider = ws.Range(r, 1, r, 5);
-                divider.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
-                divider.Style.Border.BottomBorderColor = XLColor.FromHtml("#262626");
-            }
+        // Mark the last row of this batch in the hidden marker column so the divider
+        // separating this batch from older batches below can be re-drawn on every
+        // subsequent append (banding wipes interior borders).
+        ws.Cell(row - 1, ChangesBatchMarkerCol).Value = "|";
+        ws.Column(ChangesBatchMarkerCol).Hide();
+
+        int lastDataRow = ws.LastRowUsed()?.RowNumber() ?? (row - 1);
+
+        // Reapply banding/borders across the full data range so newly inserted rows
+        // pick up the same styling as the existing ones.
+        ApplyRawSheetBandingAndBorders(ws, lastCol: 5, firstDataRow: 2, lastDataRow: lastDataRow);
+
+        // Re-apply the thin #262626 batch separator on every marked row — including
+        // prior batches whose dividers were just clobbered by the banding pass.
+        for (int r = 2; r <= lastDataRow; r++)
+        {
+            if (ws.Cell(r, ChangesBatchMarkerCol).GetString() != "|") continue;
+            var divider = ws.Range(r, 1, r, 5);
+            divider.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+            divider.Style.Border.BottomBorderColor = XLColor.FromHtml("#262626");
         }
     }
 
