@@ -54,12 +54,16 @@ public static class CountsWorkbookService
     // are hidden and locked.
     private const int WsColActive = 33;     // AG
     private const string HelperFirstCol = "AH";
-    private const int WsColHelperLast = 71; // BS (Phase 3 InDataBlock flag)
+    private const int WsColHelperLast = 82; // CD (Bid Compare IsRemoved flag)
 
     private static readonly string[] QuoteHelperCols =   { "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ" };
     private static readonly string[] Phase1HelperCols =  { "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ" };
     private static readonly string[] Phase2HelperCols =  { "BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH", "BI" };
     private static readonly string[] Phase3HelperCols =  { "BJ", "BK", "BL", "BM", "BN", "BO", "BP", "BQ", "BS" };
+    // Bid Compare pipeline (BT–CD). 8 visible columns + 3 hidden flag columns.
+    // Visible: BT=Type, BU=Mfr, BV=Catalog, BW=Qty(+labels), BX=Δ, BY=SellEa, BZ=ΔSell, CA=SellExt(+totals).
+    // Flags:   CB=InDataBlock (border CF), CC=IsAdded (added-row tint), CD=IsRemoved (strike/gray CF).
+    private static readonly string[] BidCompareHelperCols = { "BT", "BU", "BV", "BW", "BX", "BY", "BZ", "CA", "CB", "CC", "CD" };
 
     // Counts sheet column indices (1-based)
     private const int CsColType = 1;        // A
@@ -76,9 +80,16 @@ public static class CountsWorkbookService
     private const int CsColChannel = 12;    // L
     private const int CsColNote1 = 13;      // M — Schedule Notes 1..6 emitted for reference
     private const int CsColNote6 = 18;      // R
-    // Hidden helper column — Type|Cat1Cat2…Cat6 concatenation used by Worksheet col E's
-    // SUMIFS lookup when a Reference Counts baseline is selected on the Dashboard.
+    // Hidden helper column — Type|Cat1Cat2…Cat6 concatenation used by the Bid Compare sheet's
+    // SUMIFS lookup against the historical Counts snapshot selected on Dashboard!B11.
     private const int CsColCatCombo = 19;   // S
+    // Frozen unit prices captured at snapshot write time so Bid Compare can show price changes
+    // since the bid. Sell Ea. = (UnitCost * (1 + Markup)) + Adder; Buy Ea. = UnitCost.
+    private const int CsColSellEa = 20;     // T
+    private const int CsColBuyEa = 21;      // U
+    // Frozen Dashboard meta on column V (hidden): V1 = Lutron (B6), V2 = Freight Sell (B8).
+    // Sheet-scoped named ranges LutronFrozen / FreightSellFrozen point at these cells.
+    private const int CsColFrozenMeta = 22; // V
 
     // Highlight colors
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
@@ -114,10 +125,16 @@ public static class CountsWorkbookService
         BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
         BuildRepListsSheet(wb, fixtures, repDirectory);
         BuildQuoteSheet(wb);
+        BuildBidCompareSheet(wb, fixtures, null);
         for (int p = 1; p <= 3; p++)
             BuildPhaseQuoteSheet(wb, p);
         BuildChangesSheet(wb);
         BuildCountsSheet(wb, fixtures, countsSheetName);
+
+        // Dashboard was built before the Counts sheet existed; refresh the "Compare to" dropdown
+        // now that today's snapshot is in place so the pricing team can lock the bid against the
+        // initial generation without waiting for an update.
+        RefreshReferenceCountsDropdown(wb);
 
         wb.SaveAs(outputPath);
 
@@ -125,13 +142,14 @@ public static class CountsWorkbookService
         {
             ("Worksheet", WsColActive),
             ("Quote", null),
+            ("Bid Compare", null),
             ("Phase 1", null),
             ("Phase 2", null),
             ("Phase 3", null),
         };
         PatchDynamicArrayMetadata(outputPath, spillSheets);
         EmbedHeaderFooterImages(outputPath, headerImagePath, footerImagePath,
-            new[] { "Quote", "Phase 1", "Phase 2", "Phase 3" });
+            new[] { "Quote", "Bid Compare", "Phase 1", "Phase 2", "Phase 3" });
     }
 
     /// <summary>
@@ -145,66 +163,87 @@ public static class CountsWorkbookService
         string headerImagePath = "",
         string footerImagePath = "")
     {
-        using var wb = new XLWorkbook(existingPath);
-
-        string dateString = headerDate.ToString("yyyy.MM.dd");
-        string countsSheetName = ResolveCountsSheetName(wb, dateString);
-
-        // Find previous Counts sheet for change detection
-        var prevCountsSheet = FindLatestCountsSheet(wb);
-        var prevData = prevCountsSheet != null ? ReadCountsSheetData(prevCountsSheet) : null;
-
-        // Migrate legacy workbooks (no Dashboard) and seed/keep Rep Directory path.
-        EnsureDashboardSheet(wb, repDirectoryPath);
-
-        // Overwrite Cover!B11 with the current settings header date. User can manually edit
-        // it between updates to show a different date on the quote; the next update resets it.
-        if (wb.Worksheets.TryGetWorksheet("Cover", out var coverWs))
-            coverWs.Cell("B11").Value = headerDate.ToString("MMM dd, yyyy");
-
-        // Dashboard!B3 is authoritative; fall back to settings only when empty.
-        string effectiveRepPath = ReadRepDirectoryPathFromDashboard(wb);
-        if (string.IsNullOrWhiteSpace(effectiveRepPath))
-            effectiveRepPath = repDirectoryPath;
-        var repDirectory = ReadRepDirectory(effectiveRepPath);
-
-        // Read existing Worksheet rows
-        var existingRows = ReadExistingWorksheetRows(wb);
-
-        // Build new Counts sheet
-        BuildCountsSheet(wb, fixtures, countsSheetName);
-
-        // Refresh Reference Counts dropdown now that today's Counts sheet exists.
-        RefreshReferenceCountsDropdown(wb);
-
-        // Update Worksheet
-        UpdateWorksheetSheet(wb, fixtures, countsSheetName, existingRows, prevData);
-
-        // Rebuild Rep Lists (deleted + recreated; pure derived output)
-        BuildRepListsSheet(wb, fixtures, repDirectory);
-
-        // Rebuild Quote and Phase sheets. They are pure ANCHORARRAY consumers
-        // of Worksheet helper columns with no user-editable state. Copy+overwrite
-        // workflows can duplicate spill formulas across re-saves, so rebuild fresh.
-        RebuildQuoteAndPhaseSheets(wb);
-
-        // Append changes
-        if (prevData != null)
-            AppendChanges(wb, fixtures, prevData, headerDate);
-
-        wb.Save();
-
-        var spillSheets = new List<(string sheetName, int? minColumn)>
+        string stage = "open-workbook";
+        try
         {
-            ("Worksheet", WsColActive),
-            ("Quote", null),
-            ("Phase 1", null),
-            ("Phase 2", null),
-            ("Phase 3", null),
-        };
-        PatchDynamicArrayMetadata(existingPath, spillSheets);
-        EmbedHeaderFooterImages(existingPath, headerImagePath, footerImagePath,
-            new[] { "Quote", "Phase 1", "Phase 2", "Phase 3" });
+            using var wb = new XLWorkbook(existingPath);
+
+            stage = "resolve-counts-name";
+            string dateString = headerDate.ToString("yyyy.MM.dd");
+            string countsSheetName = ResolveCountsSheetName(wb, dateString);
+
+            stage = "read-prev-counts";
+            var prevCountsSheet = FindLatestCountsSheet(wb);
+            var prevData = prevCountsSheet != null ? ReadCountsSheetData(prevCountsSheet) : null;
+
+            stage = "ensure-dashboard";
+            EnsureDashboardSheet(wb, repDirectoryPath);
+
+            stage = "set-cover-b11";
+            if (wb.Worksheets.TryGetWorksheet("Cover", out var coverWs))
+                coverWs.Cell("B11").Value = headerDate.ToString("MMM dd, yyyy");
+
+            stage = "read-rep-directory";
+            string effectiveRepPath = ReadRepDirectoryPathFromDashboard(wb);
+            if (string.IsNullOrWhiteSpace(effectiveRepPath))
+                effectiveRepPath = repDirectoryPath;
+            var repDirectory = ReadRepDirectory(effectiveRepPath);
+
+            stage = "read-existing-worksheet-rows";
+            var existingRows = ReadExistingWorksheetRows(wb);
+
+            stage = "build-pricing-snapshot";
+            var pricingForSnapshot = new Dictionary<(string Type, string Catalog), WorksheetRowData>();
+            foreach (var er in existingRows)
+            {
+                var key = (er.Type, er.Catalog);
+                if (!pricingForSnapshot.ContainsKey(key))
+                    pricingForSnapshot.Add(key, er);
+            }
+
+            stage = "build-counts-sheet";
+            BuildCountsSheet(wb, fixtures, countsSheetName, pricingForSnapshot);
+
+            stage = "refresh-reference-dropdown";
+            RefreshReferenceCountsDropdown(wb);
+
+            stage = "update-worksheet";
+            UpdateWorksheetSheet(wb, fixtures, countsSheetName, existingRows, prevData);
+
+            stage = "build-rep-lists";
+            BuildRepListsSheet(wb, fixtures, repDirectory);
+
+            stage = "rebuild-contractor-sheets";
+            RebuildContractorSheets(wb, fixtures, pricingForSnapshot);
+
+            stage = "append-changes";
+            if (prevData != null)
+                AppendChanges(wb, fixtures, prevData, headerDate);
+
+            stage = "save";
+            wb.Save();
+
+            stage = "patch-dynamic-array";
+            var spillSheets = new List<(string sheetName, int? minColumn)>
+            {
+                ("Worksheet", WsColActive),
+                ("Quote", null),
+                ("Bid Compare", null),
+                ("Phase 1", null),
+                ("Phase 2", null),
+                ("Phase 3", null),
+            };
+            PatchDynamicArrayMetadata(existingPath, spillSheets);
+
+            stage = "embed-header-footer";
+            EmbedHeaderFooterImages(existingPath, headerImagePath, footerImagePath,
+                new[] { "Quote", "Bid Compare", "Phase 1", "Phase 2", "Phase 3" });
+        }
+        catch (Exception ex) when (!(ex is InvalidOperationException && ex.Message.StartsWith("[stage=")))
+        {
+            throw new InvalidOperationException(
+                $"[stage={stage}] {ex.GetType().Name}: {ex.Message}", ex);
+        }
     }
 
     #region Cover Sheet
@@ -439,43 +478,6 @@ public static class CountsWorkbookService
     /// stays in sync as new Counts sheets accumulate. Sheet protection is briefly
     /// suspended because the helper range and B11 are otherwise locked.
     /// </summary>
-    /// <summary>
-    /// Returns true if Dashboard!B11 holds a non-empty value (i.e. user has chosen a
-    /// Reference Counts baseline). The actual sheet-name resolution happens at formula-
-    /// evaluation time inside Excel via INDIRECT/TEXT — this only governs whether we
-    /// emit the live formula or stay with the legacy literal write.
-    /// </summary>
-    private static bool HasReferenceCountsBaseline(IXLWorkbook wb)
-    {
-        if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var ws))
-            return false;
-        var cell = ws.Cell("B11");
-        if (cell.IsEmpty()) return false;
-        // Numeric serial (date) or non-empty string both count.
-        return !string.IsNullOrWhiteSpace(cell.GetFormattedString());
-    }
-
-    /// <summary>
-    /// Builds the Worksheet col E formula that resolves to the Reference Counts SUMIFS
-    /// when BidDate matches a historical Counts sheet, or the literal fallback (the value
-    /// that would have been written under the legacy "vs. latest run" behavior) otherwise.
-    /// </summary>
-    private static string BuildReferenceCountsFormula(int row, double fallback)
-    {
-        // Preserve nothing-to-compare-to as blank so col F's IF(E="","",...) chain still
-        // shows blank Δ for brand-new rows when fallback is 0.
-        string fallbackLiteral = fallback == 0 ? "0" : fallback.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        const string sheetName = "\"'Counts \"&TEXT(BidDate,\"yyyy.mm.dd\")&\"'!\"";
-        // Each INDIRECT pins one column on the resolved Counts sheet. SUMIFS sums col I
-        // (Count) where col A (Type) matches A{row} and col S (CatCombo) matches A{row}|catalog.
-        string sumIfs =
-            $"SUMIFS(" +
-            $"INDIRECT({sheetName}&\"I:I\")," +
-            $"INDIRECT({sheetName}&\"A:A\"),A{row}," +
-            $"INDIRECT({sheetName}&\"S:S\"),A{row}&\"|\"&C{row})";
-        return $"IFERROR({sumIfs},{fallbackLiteral})";
-    }
-
     private static void RefreshReferenceCountsDropdown(IXLWorkbook wb)
     {
         if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var ws))
@@ -1198,7 +1200,11 @@ public static class CountsWorkbookService
 
     #region Counts Sheet
 
-    private static void BuildCountsSheet(IXLWorkbook wb, List<CountsFixtureModel> fixtures, string sheetName)
+    private static void BuildCountsSheet(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> fixtures,
+        string sheetName,
+        Dictionary<(string Type, string Catalog), WorksheetRowData>? pricing = null)
     {
         var ws = wb.Worksheets.Add(sheetName);
 
@@ -1218,6 +1224,8 @@ public static class CountsWorkbookService
         for (int n = 0; n < 6; n++)
             ws.Cell(1, CsColNote1 + n).Value = $"Schedule Notes {n + 1}";
         ws.Cell(1, CsColCatCombo).Value = "_CatCombo";
+        ws.Cell(1, CsColSellEa).Value = "_SellEa";
+        ws.Cell(1, CsColBuyEa).Value = "_BuyEa";
 
         // Data rows
         int row = 2;
@@ -1234,10 +1242,64 @@ public static class CountsWorkbookService
             for (int n = 0; n < 6; n++)
                 ws.Cell(row, CsColNote1 + n).Value = f.Notes[n] ?? string.Empty;
             ws.Cell(row, CsColCatCombo).FormulaA1 = BuildCatComboFormula(row);
+
+            // Freeze pricing per row. Pricing is keyed by (Type, Catalog) using the first non-blank
+            // catalog the type publishes — that matches how Worksheet canonicalizes pricing today.
+            if (pricing != null)
+            {
+                string firstCat = string.Empty;
+                for (int c = 0; c < 6; c++)
+                {
+                    string cn = f.CatalogNumbers[c] ?? "";
+                    if (!string.IsNullOrWhiteSpace(cn)) { firstCat = cn; break; }
+                }
+                if (!string.IsNullOrEmpty(firstCat) &&
+                    pricing.TryGetValue((f.TypeMark, firstCat), out var p))
+                {
+                    double uc = p.UnitCost ?? 0;
+                    double mk = p.Markup ?? 0;
+                    double ad = p.Adder ?? 0;
+                    double sellEa = (uc * (1 + mk)) + ad;
+                    if (sellEa != 0)
+                    {
+                        ws.Cell(row, CsColSellEa).Value = sellEa;
+                        ws.Cell(row, CsColSellEa).Style.NumberFormat.Format = "$#,##0.00";
+                    }
+                    if (uc != 0)
+                    {
+                        ws.Cell(row, CsColBuyEa).Value = uc;
+                        ws.Cell(row, CsColBuyEa).Style.NumberFormat.Format = "$#,##0.00";
+                    }
+                }
+            }
+
             row++;
         }
         int lastDataRow = row - 1;
         ws.Column(CsColCatCombo).Hide();
+        ws.Column(CsColSellEa).Hide();
+        ws.Column(CsColBuyEa).Hide();
+
+        // Frozen Dashboard meta on column V (hidden). Sheet-scoped names so Bid Compare can
+        // resolve the snapshot's bid-time Lutron / Freight Sell values from any sheet.
+        if (wb.Worksheets.TryGetWorksheet("Dashboard", out var dashWs))
+        {
+            var lutronCell = dashWs.Cell(DashLutronCell);
+            var freightCell = dashWs.Cell(DashFreightSellCell);
+            if (!lutronCell.IsEmpty() && lutronCell.TryGetValue(out double lutronVal))
+            {
+                ws.Cell(1, CsColFrozenMeta).Value = lutronVal;
+                ws.Cell(1, CsColFrozenMeta).Style.NumberFormat.Format = "$#,##0.00";
+            }
+            if (!freightCell.IsEmpty() && freightCell.TryGetValue(out double freightVal))
+            {
+                ws.Cell(2, CsColFrozenMeta).Value = freightVal;
+                ws.Cell(2, CsColFrozenMeta).Style.NumberFormat.Format = "$#,##0.00";
+            }
+        }
+        ws.DefinedNames.Add("LutronFrozen", ws.Range(1, CsColFrozenMeta, 1, CsColFrozenMeta));
+        ws.DefinedNames.Add("FreightSellFrozen", ws.Range(2, CsColFrozenMeta, 2, CsColFrozenMeta));
+        ws.Column(CsColFrozenMeta).Hide();
 
         ApplyRawSheetStyling(ws, CsColNote6, lastDataRow);
 
@@ -1661,6 +1723,15 @@ public static class CountsWorkbookService
             predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=2)", includeDelta: false);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase3HelperCols,
             predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=3)", includeDelta: false);
+        try
+        {
+            WriteBidCompareHelperPipeline(ws, lastDataRow);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"WriteBidCompareHelperPipeline failed (lastDataRow={lastDataRow}): {ex.GetType().Name}: {ex.Message}", ex);
+        }
     }
 
     private static void WriteSingleHelperPipeline(
@@ -1832,6 +1903,349 @@ public static class CountsWorkbookService
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({flagLambda},\"\")";
     }
 
+    // Bid Compare formula prefix — resolves the active baseline snapshot's sheet name from
+    // BidDate (Dashboard!B11). When BidDate is empty, INDIRECT(prefix&...) produces #REF! and
+    // every per-row IFERROR-wrapped lookup naturally collapses to "". So the same formula text
+    // serves both the empty-baseline (no overlay) and active-baseline cases.
+    private const string BcSnapPrefix = "\"'Counts \"&TEXT(BidDate,\"yyyy.mm.dd\")&\"'!\"";
+
+    /// <summary>
+    /// Writes the Bid Compare helper pipeline (BT–CC). Same Gap LAMBDA pattern as Quote
+    /// (gap rows between Type groups, tariff row, 6 note rows). Differences vs. Quote:
+    /// - No Buy columns (8 visible: Type, Mfr, Catalog, Qty, Δ, Sell Ea., ΔSell, Sell Ext.)
+    /// - Δ = current_qty − baseline_qty (against Counts snapshot via INDIRECT), shown only
+    ///   on each Type's canonical Worksheet row to avoid misleading per-catalog deltas.
+    /// - ΔSell = current_sell_ea − baseline_sell_ea, blank when delta = 0 or baseline unknown.
+    /// - Footer: 5 rows (Bid Total / Current Total / Additions / Credits / Net Change vs Bid).
+    /// - Lutron/Freight rows VSTACK-appended conditionally (read from Dashboard B6/B8 or
+    ///   snapshot V1/V2 frozen meta at rebuild time).
+    /// - Removed-from-bid rows: literal HSTACK block computed at rebuild from baseline
+    ///   snapshot rows whose Type isn't on current Worksheet. Not FILTER-live; updates on
+    ///   rebuild only. Acceptable since fixture removal already requires a Revit export.
+    /// </summary>
+    private static void WriteBidCompareHelperPipeline(IXLWorksheet ws, int lastDataRow)
+    {
+        var wb = ws.Workbook;
+        string[] cols = BidCompareHelperCols;
+
+        string Col(string c) => $"{c}2:{c}{lastDataRow}";
+        string predicate = $"(AG2:AG{lastDataRow}=1)";
+
+        string effMfr = $"IF({Col("U")}=\"\",{Col("B")},{Col("U")})";
+        string effQty = Col("BR");
+        string sellEa = $"IFERROR(({Col("J")}*(1+{Col("K")}))+{Col("M")},0)";
+        string sellExt = $"({sellEa})*{effQty}";
+        string catalogCombined =
+            $"{Col("C")}&IF(({Col("H")}<>0)*({Col("H")}<>\"\")*({Col("H")}<>\"dependent\"),\" ~ \"&{Col("H")},\"\")";
+
+        // Per-row baseline lookups. INDIRECT(snap&"...") returns #REF! when BidDate is blank
+        // (TEXT("","yyyy.mm.dd") yields ""), so the IFERROR collapses every row to "". When
+        // BidDate is set, MATCH on Type against snapshot col A; INDEX over col I (Count) or
+        // T (frozen Sell Ea.). Missing types → #N/A → "". 0 in T (legacy snapshot, no freeze) →
+        // INDEX returns 0 numerically, which is honest: the contractor sees price-from-zero.
+        string snapTypeRange = $"INDIRECT({BcSnapPrefix}&\"A:A\")";
+        string snapQtyRange = $"INDIRECT({BcSnapPrefix}&\"I:I\")";
+        string snapSellRange = $"INDIRECT({BcSnapPrefix}&\"T:T\")";
+        string baselineQtyArr =
+            $"IFERROR(INDEX({snapQtyRange},MATCH({Col("A")},{snapTypeRange},0)),\"\")";
+        string baselineSellArr =
+            $"IFERROR(INDEX({snapSellRange},MATCH({Col("A")},{snapTypeRange},0)),\"\")";
+
+        // Canonical-row mask — TRUE on the first occurrence of each Type. MATCH over array
+        // lookup_value broadcasts in dynamic-array Excel (365), returning per-row first-match
+        // index. SEQUENCE produces 1..N matching the row positions. Only rows where these
+        // agree are canonical for their Type.
+        string isCanonical = $"(MATCH({Col("A")},{Col("A")},0)=_xlfn.SEQUENCE(ROWS({Col("A")})))";
+
+        // Δ shown only on canonical row of each Type (others blank, since qty is Type-aggregated
+        // on Worksheet so non-canonical rows would echo the same delta misleadingly).
+        string bidDelta =
+            $"IF({isCanonical},IF({baselineQtyArr}=\"\",\"\",{effQty}-{baselineQtyArr}),\"\")";
+        // ΔSell per row — best-effort against the type's frozen Sell Ea. (snapshot has 1
+        // Sell Ea. per Type; Worksheet may have multiple). Blank when baseline unknown OR
+        // delta is exactly zero.
+        string bidSellDelta =
+            $"IF({baselineSellArr}=\"\",\"\","
+            + $"IF(({sellEa})-{baselineSellArr}=0,\"\",({sellEa})-{baselineSellArr}))";
+        // IsAdded — 1 only on canonical rows where BidDate is set AND baseline qty missing
+        string isAddedArr =
+            $"IF({isCanonical},IF((BidDate<>\"\")*({baselineQtyArr}=\"\"),1,\"\"),\"\")";
+
+        // Same Gap LAMBDA shape as WriteSingleHelperPipeline — gap row at type-group boundary,
+        // tariff row at last row of each group, 6 note rows.
+        string typeKPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("L")}),0)";
+        string[] noteCols = { "O", "P", "Q", "R", "S", "T" };
+        string NotePerRow(string noteCol) =>
+            $"IFERROR(_xlfn.LET(_xlpm.v,_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col(noteCol)}),IF(_xlpm.v=0,\"\",_xlpm.v)),\"\")";
+        string typesArg = $"_xlfn._xlws.FILTER({Col("A")},{predicate})";
+        string pctsArg = $"_xlfn._xlws.FILTER({typeKPerRow},{predicate})";
+        string baseArg = $"_xlfn._xlws.FILTER({sellExt},{predicate})";
+        string[] noteArgs = noteCols
+            .Select(nc => $"_xlfn._xlws.FILTER({NotePerRow(nc)},{predicate})")
+            .ToArray();
+
+        string Gap(string valsExpr, string tariffContentExpr, string[] noteContentExprs)
+        {
+            string valsArg = $"_xlfn._xlws.FILTER({valsExpr},{predicate})";
+            string noteLetCols = string.Join(",", Enumerable.Range(1, 6).Select(i =>
+                $"_xlpm.n{i}Col,IF(_xlpm.isLast*(_xlpm.n{i}<>\"\"),{noteContentExprs[i - 1]},_xlfn.NA())"));
+            string hstackCols = "_xlpm.gapCol,_xlpm.vals,_xlpm.tariffCol,"
+                + string.Join(",", Enumerable.Range(1, 6).Select(i => $"_xlpm.n{i}Col"));
+            return "_xlfn.LAMBDA(_xlpm.types,_xlpm.vals,_xlpm.pcts,_xlpm.base,"
+                 +   "_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
+                 +   "IF(ROWS(_xlpm.vals)<=1,_xlpm.vals,"
+                 +     "_xlfn.LET("
+                 +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
+                 +       "_xlpm.nxt,_xlfn.VSTACK(_xlfn.DROP(_xlpm.types,1),\"\"),"
+                 +       "_xlpm.gapCol,IF(_xlpm.types<>_xlpm.prev,\"\",_xlfn.NA()),"
+                 +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
+                 +       "_xlpm.totals,_xlfn.BYROW(_xlpm.types,_xlfn.LAMBDA(_xlpm.tv,SUMPRODUCT((_xlpm.types=_xlpm.tv)*_xlpm.base))),"
+                 +       $"_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),{tariffContentExpr},_xlfn.NA()),"
+                 +       noteLetCols + ","
+                 +       $"_xlfn.TOCOL(_xlfn.HSTACK({hstackCols}),2)"
+                 +     ")"
+                 +   ")"
+                 + $")({typesArg},{valsArg},{pctsArg},{baseArg},{string.Join(",", noteArgs)})";
+        }
+
+        string[] NoteBlank() => Enumerable.Repeat("\"\"", 6).ToArray();
+        string[] NoteLabel() => Enumerable.Repeat("\"NOTE:\"", 6).ToArray();
+        string[] NoteText() => new[] { "_xlpm.n1", "_xlpm.n2", "_xlpm.n3", "_xlpm.n4", "_xlpm.n5", "_xlpm.n6" };
+
+        // Footer math: subtotals over Worksheet (current) and over snapshot (baseline).
+        string sellSubtotalCurrent =
+            $"SUMPRODUCT(({predicate})*{sellEa}*{effQty})"
+            + $"+SUMPRODUCT(({predicate})*{sellExt}*{typeKPerRow})";
+        // Bid Total — sum over baseline snapshot's frozen Sell Ext per Type. Snapshot has 1
+        // row per Type with frozen T (Sell Ea.) and I (Count). When BidDate is blank or no
+        // snapshot exists, IFERROR collapses to 0.
+        string bidTotal =
+            $"IFERROR(SUMPRODUCT(IFERROR(--{snapQtyRange},0)*IFERROR(--{snapSellRange},0)),0)";
+        // Add Lutron and Freight contributions to both totals.
+        string lutronFrozenExpr = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V1\"),0)";
+        string freightFrozenExpr = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V2\"),0)";
+        string lutronCurrentExpr = "IF(LutronSubtotal=\"\",0,LutronSubtotal)";
+        string freightCurrentExpr = "IF(FreightSell=\"\",0,FreightSell)";
+
+        string bidTotalAll = $"({bidTotal})+({lutronFrozenExpr})+({freightFrozenExpr})";
+        string currentTotalAll = $"({sellSubtotalCurrent})+({lutronCurrentExpr})+({freightCurrentExpr})";
+        string netChange = $"({currentTotalAll})-({bidTotalAll})";
+        // Additions/Credits via per-row positive/negative ext deltas. Use the full broadcast.
+        string extDelta = $"({sellExt}-IFERROR({baselineQtyArr}*{baselineSellArr},0))";
+        string additionsCurrent = $"SUMPRODUCT(({predicate})*({extDelta})*(({extDelta})>0))";
+        string creditsCurrent = $"SUMPRODUCT(({predicate})*({extDelta})*(({extDelta})<0))";
+
+        // Decide whether to emit Lutron / Freight rows. Done once at rebuild against current
+        // Dashboard values + baseline frozen meta. Once emitted, the formula cells track live
+        // edits to B6/B8 (and snapshot V1/V2 stays frozen).
+        bool emitLutron, emitFreight;
+        try
+        {
+            var baselineSheet = ResolveBaselineSheet(wb);
+            emitLutron = HasAdjustmentValue(wb, baselineSheet, DashLutronCell, frozenMetaRow: 1);
+            emitFreight = HasAdjustmentValue(wb, baselineSheet, DashFreightSellCell, frozenMetaRow: 2);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"BC.HasAdjustmentValue: {ex.GetType().Name}: {ex.Message}", ex);
+        }
+
+        // Live FILTER-driven removed-block. Each column gets a column-shaped array sliced from
+        // the active baseline snapshot (resolved live via BcSnapPrefix → INDIRECT). Predicate:
+        // baseline-row Type is non-blank AND not present anywhere in current Worksheet col A.
+        // The whole suffix is gated on hasRem=SUMPRODUCT(predicate)>0 so:
+        //   - When BidDate is blank → INDIRECT errors → IFERROR collapses hasRem to FALSE,
+        //     suffix skips the FILTER block entirely (no phantom blank row).
+        //   - When baseline has zero removed types → same path, no FILTER block.
+        //   - When B11 retargets to a baseline with different removed types → FILTER recomputes
+        //     live, no rebuild required (Phase F deviation #1 closed).
+        string snapTypes10k = $"INDIRECT({BcSnapPrefix}&\"A2:A10000\")";
+        string snapMfrs10k = $"INDIRECT({BcSnapPrefix}&\"B2:B10000\")";
+        string snapCatC10k = $"INDIRECT({BcSnapPrefix}&\"C2:C10000\")";
+        string snapCatH10k = $"INDIRECT({BcSnapPrefix}&\"H2:H10000\")";
+        string snapQty10k = $"INDIRECT({BcSnapPrefix}&\"I2:I10000\")";
+        string snapSell10k = $"INDIRECT({BcSnapPrefix}&\"T2:T10000\")";
+        // Catalog combined matches body's display rule (C & " ~ " & H when H meaningful).
+        string snapCatCombined =
+            $"({snapCatC10k})&IF(({snapCatH10k}<>0)*({snapCatH10k}<>\"\")*({snapCatH10k}<>\"dependent\"),"
+            + $"\" ~ \"&{snapCatH10k},\"\")";
+
+        // Column-specific FILTER expression: returns a column-shaped array of the right length
+        // (one row per removed-type-row in the baseline). _xlpm.pred is provided by the outer LET.
+        // Each branch must produce a column-shaped result of length matching the predicate
+        // count. For constant-broadcast columns (Qty=0, SellExt=0, flags=1, blank columns)
+        // we anchor on a boolean comparison of FILTERed snapTypes so the result is numeric/
+        // text-coerced correctly: `text*0` produces #VALUE!, but `(text<>"~~")*0` is 0.
+        string FilteredTypes = $"_xlfn._xlws.FILTER({snapTypes10k},_xlpm.pred)";
+        string FilterCol(int colIdx) => colIdx switch
+        {
+            0 => FilteredTypes,
+            1 => $"UPPER(_xlfn._xlws.FILTER({snapMfrs10k},_xlpm.pred))",
+            2 => $"_xlfn._xlws.FILTER({snapCatCombined},_xlpm.pred)",
+            3 => $"({FilteredTypes}<>\"~~\")*0",
+            4 => $"-_xlfn._xlws.FILTER({snapQty10k},_xlpm.pred)",
+            5 => $"_xlfn._xlws.FILTER({snapSell10k},_xlpm.pred)",
+            6 => $"IF({FilteredTypes}<>\"~~\",\"\",\"\")",
+            7 => $"({FilteredTypes}<>\"~~\")*0",
+            8 => $"({FilteredTypes}<>\"~~\")*1",
+            9 => $"IF({FilteredTypes}<>\"~~\",\"\",\"\")",
+            10 => $"({FilteredTypes}<>\"~~\")*1",
+            _ => "\"\"",
+        };
+
+        // Fixed (scalar) suffix rows beyond the removed block: optional Lutron, optional Freight,
+        // and (BW/CA only) the 6-row totals footer. colIdx selects each row's value per column.
+        string[] FixedSuffixRows(int colIdx)
+        {
+            var rows = new List<string>();
+            if (emitLutron)
+            {
+                rows.Add(colIdx switch
+                {
+                    0 => "\"Lutron Lighting Control\"",
+                    1 => "\"\"",
+                    2 => "\"\"",
+                    3 => "1",
+                    4 => "\"\"",
+                    5 => lutronCurrentExpr,
+                    6 => $"IF({lutronFrozenExpr}=0,\"\",{lutronCurrentExpr}-{lutronFrozenExpr})",
+                    7 => lutronCurrentExpr,
+                    _ => "\"\"",
+                });
+            }
+            if (emitFreight)
+            {
+                rows.Add(colIdx switch
+                {
+                    0 => "\"Estimated Freight\"",
+                    1 => "\"\"",
+                    2 => "\"\"",
+                    3 => "1",
+                    4 => "\"\"",
+                    5 => freightCurrentExpr,
+                    6 => $"IF({freightFrozenExpr}=0,\"\",{freightCurrentExpr}-{freightFrozenExpr})",
+                    7 => freightCurrentExpr,
+                    _ => "\"\"",
+                });
+            }
+            // Footer block (6 rows: spacer + 5 totals) — only on BW(3)/CA(7). Other cols omit
+            // entirely so their spill doesn't pad past the visible totals.
+            string[] footerRows = colIdx switch
+            {
+                3 => new[]
+                {
+                    "\"\"",
+                    "\"Bid Total (\"&IF(BidDate=\"\",\"—\",TEXT(BidDate,\"yyyy-mm-dd\"))&\"):\"",
+                    "\"Current Total:\"",
+                    "\"Additions:\"",
+                    "\"Credits:\"",
+                    "\"Net Change vs Bid:\"",
+                },
+                7 => new[]
+                {
+                    "\"\"",
+                    bidTotalAll,
+                    currentTotalAll,
+                    additionsCurrent,
+                    creditsCurrent,
+                    netChange,
+                },
+                _ => Array.Empty<string>(),
+            };
+            rows.AddRange(footerRows);
+            return rows.ToArray();
+        }
+
+        // Builds: =LET(_xlpm.snapType, ..., _xlpm.pred, ..., _xlpm.removed, IFERROR(<FILTER>, ""),
+        //              VSTACK(body, _xlpm.removed, fixed...))
+        // When predicate matches no rows (empty BidDate, no removeds, etc.), IFERROR collapses
+        // _xlpm.removed to a single "" cell — adds 1 phantom blank row before lutron/freight/
+        // footer. Acceptable tradeoff to keep the formula scalar-valued and avoid array-branch
+        // IF which can confuse static spill-shape analysis.
+        string BodyWithSuffix(string body, int colIdx)
+        {
+            string[] fixedRows = FixedSuffixRows(colIdx);
+            string filter = FilterCol(colIdx);
+            string fixedJoined = fixedRows.Length == 0 ? "" : "," + string.Join(",", fixedRows);
+            return
+                "_xlfn.LET("
+                + $"_xlpm.snapType,{snapTypes10k},"
+                + $"_xlpm.pred,(_xlpm.snapType<>\"\")*ISNA(MATCH(_xlpm.snapType,A2:A{lastDataRow},0)),"
+                + $"_xlpm.removed,IFERROR({filter},\"\"),"
+                + $"_xlfn.VSTACK({body},_xlpm.removed{fixedJoined}))";
+        }
+
+        int idx = 0;
+        // BT — Type
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\")", 0);
+        // BU — Mfr
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(effMfr, "_xlpm.vals", NoteLabel())},\"\")", 1);
+        // BV — Catalog
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(catalogCombined, "\"Tariff *may be deleted/reduced if tariffs change\"", NoteText())},\"\")", 2);
+        // BW — Qty + footer labels
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(effQty, "\"\"", NoteBlank())},\"\")", 3);
+        // BX — Δ (canonical-row only, baseline-aware)
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(bidDelta, "\"\"", NoteBlank())},\"\")", 4);
+        // BY — Sell Ea.
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(sellEa, "\"\"", NoteBlank())},\"\")", 5);
+        // BZ — ΔSell
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(bidSellDelta, "\"\"", NoteBlank())},\"\")", 6);
+        // CA — Sell Ext. + footer values
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts", NoteBlank())},\"\")", 7);
+
+        // CB — InDataBlock flag (1 for body data/tariff/note/gap rows + removed rows; blank for
+        // Lutron/Freight/footer). Body uses the same flag-LAMBDA shape as Quote.
+        string noteFlagLet = string.Join(",", Enumerable.Range(1, 6).Select(n =>
+            $"_xlpm.n{n}Col,IF(_xlpm.isLast*(_xlpm.n{n}<>\"\"),1,_xlfn.NA())"));
+        string flagHstackCols = "_xlpm.gapCol,_xlpm.valsCol,_xlpm.tariffCol,"
+            + string.Join(",", Enumerable.Range(1, 6).Select(n => $"_xlpm.n{n}Col"));
+        string flagLambda =
+              "_xlfn.LAMBDA(_xlpm.types,_xlpm.pcts,_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
+            +   "IF(ROWS(_xlpm.types)<=1,1,"
+            +     "_xlfn.LET("
+            +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
+            +       "_xlpm.nxt,_xlfn.VSTACK(_xlfn.DROP(_xlpm.types,1),\"\"),"
+            +       "_xlpm.gapCol,IF(_xlpm.types<>_xlpm.prev,1,_xlfn.NA()),"
+            +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
+            +       "_xlpm.valsCol,_xlfn.SEQUENCE(ROWS(_xlpm.types),1,1,0),"
+            +       "_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),1,_xlfn.NA()),"
+            +       noteFlagLet + ","
+            +       $"_xlfn.TOCOL(_xlfn.HSTACK({flagHstackCols}),2)"
+            +     ")"
+            +   ")"
+            + $")({typesArg},{pctsArg},{string.Join(",", noteArgs)})";
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({flagLambda},\"\")", 8);
+
+        // CC — IsAdded flag (1 only on canonical rows of types added since bid). Body broadcasts
+        // isAddedArr through Gap; suffix rows blank for lutron/freight/footer (and removed rows
+        // aren't "added"). The FILTER-block returns "" via FilterCol(9).
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(isAddedArr, "\"\"", NoteBlank())},\"\")", 9);
+
+        // CD — IsRemoved flag (1 only on rows from the FILTER-driven removed block). Body and
+        // lutron/freight/footer all blank; FilterCol(10) emits 1s aligned with the removed array.
+        // Body broadcast: feed Gap a same-shape array of "" so Gap's TOCOL output is all blank.
+        string blankBody = $"IF({Col("A")}<>\"~~\",\"\",\"\")";
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(blankBody, "\"\"", NoteBlank())},\"\")", 10);
+    }
+
+    private static IXLWorksheet? ResolveBaselineSheet(IXLWorkbook wb)
+    {
+        var bidDate = ReadBidDate(wb);
+        if (bidDate == null) return null;
+        return wb.Worksheets.TryGetWorksheet($"Counts {bidDate:yyyy.MM.dd}", out var s) ? s : null;
+    }
+
     #endregion
 
     #region Print Sheets (Quote, Phase 1/2/3)
@@ -1842,9 +2256,12 @@ public static class CountsWorkbookService
     /// tariff rows, subtotal/freight/grand-total footer) lives on Worksheet — this sheet is
     /// print formatting only.
     /// </summary>
-    private static void RebuildQuoteAndPhaseSheets(IXLWorkbook wb)
+    private static void RebuildContractorSheets(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> currentFixtures,
+        Dictionary<(string Type, string Catalog), WorksheetRowData>? currentPricing)
     {
-        var names = new[] { "Quote", "Phase 1", "Phase 2", "Phase 3" };
+        var names = new[] { "Quote", "Bid Compare", "Phase 1", "Phase 2", "Phase 3" };
         var positions = new Dictionary<string, int>();
         foreach (var name in names)
         {
@@ -1855,11 +2272,12 @@ public static class CountsWorkbookService
             }
         }
         BuildQuoteSheet(wb);
+        BuildBidCompareSheet(wb, currentFixtures, currentPricing);
         for (int p = 1; p <= 3; p++)
             BuildPhaseQuoteSheet(wb, p);
         // Restore positions. Insert each sheet at the anchor (smallest saved
         // position) in reverse name order — each insertion pushes previously
-        // placed sheets one slot right, yielding Quote|Phase 1|Phase 2|Phase 3.
+        // placed sheets one slot right, yielding Quote|Bid Compare|Phase 1|Phase 2|Phase 3.
         if (positions.Count > 0)
         {
             int anchor = positions.Values.Min();
@@ -1943,6 +2361,207 @@ public static class CountsWorkbookService
         // Print setup
         ApplyStandardPageSetup(ws);
         ws.PageSetup.SetRowsToRepeatAtTop(1, 7);
+    }
+
+    private static readonly XLColor BcQtyTint = XLColor.FromHtml("#FFF6CE");        // pale yellow
+    private static readonly XLColor BcPriceUpTint = XLColor.FromHtml("#FBD9D5");    // pale red
+    private static readonly XLColor BcPriceDownTint = XLColor.FromHtml("#D9F2D9");  // pale green
+    private static readonly XLColor BcAddedTint = XLColor.FromHtml("#E5F5E5");      // pale green
+
+    /// <summary>
+    /// Builds the Bid Compare print sheet — same shape as Quote (true ANCHORARRAY consumer
+    /// of a Worksheet helper pipeline) with Buy Ea./Buy Ext. removed and ΔSell inserted.
+    /// 8 visible columns + 2 hidden flag columns (InDataBlock for borders, IsAdded for tint).
+    /// All overlay logic (baseline lookups, removed-rows block, Lutron/Freight, footer) lives
+    /// inside the helper pipeline on Worksheet (BT–CC) — this sheet is print formatting only.
+    /// </summary>
+    private static void BuildBidCompareSheet(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> currentFixtures,
+        Dictionary<(string Type, string Catalog), WorksheetRowData>? currentPricing)
+    {
+        // Helpers carry all live values from Worksheet — these args retained for API stability.
+        _ = currentFixtures;
+        _ = currentPricing;
+
+        var ws = wb.Worksheets.Add("Bid Compare");
+        if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
+            return;
+
+        ApplyPrintSheetDefaults(ws);
+        WritePrintSheetTitle(ws, 8,
+            "IF(BidDate=\"\",\"BID COMPARE\",\"BID COMPARE — \"&TEXT(BidDate,\"MMM dd, yyyy\"))");
+        ws.TabColor = XLColor.FromHtml("#FF8ED973");
+
+        int headerRow = 6;
+        string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Δ", "Sell Ea.", "ΔSell", "Sell Ext." };
+        WritePrintSheetHeaders(ws, headerRow, headers);
+
+        // Spill row 8 — 11 ANCHORARRAY cells: 8 visible (BT..CA) + 3 hidden flags (CB, CC, CD).
+        int spillRow = 8;
+        for (int i = 0; i < BidCompareHelperCols.Length; i++)
+        {
+            string anchor = $"_xlfn.ANCHORARRAY(Worksheet!{BidCompareHelperCols[i]}2)";
+            string formula = i switch
+            {
+                0 => BuildLeadingSpaceFormula(anchor),
+                1 => BuildMfrDisplayFormula(anchor),
+                _ => anchor,
+            };
+            ws.Cell(spillRow, i + 1).FormulaA1 = formula;
+        }
+        ws.Column(9).Hide();   // CB — InDataBlock flag (drives border CF)
+        ws.Column(10).Hide();  // CC — IsAdded flag (drives added-row tint)
+        ws.Column(11).Hide();  // CD — IsRemoved flag (drives strikethrough/gray CF)
+
+        ApplyNotesBoldConditionalFormat(ws, spillRow);
+        ApplyDataBorderConditionalFormat(ws, spillRow, lastVisibleCol: 8, flagColLetter: "I");
+        ApplyBidCompareFooterStyling(ws, spillRow, qtyCol: 4, sellExtCol: 8);
+        ApplyBidCompareTints(ws, spillRow);
+        ws.Rows(spillRow, 1000).Height = 15.5;
+
+        // Currency + delta formats
+        ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
+        ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(7).Style.NumberFormat.Format = "+$#,##0.00;-$#,##0.00;;@";
+        ws.Column(8).Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
+        ws.Column(2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        ws.Column(5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        for (int c = 6; c <= 8; c++)
+            ws.Column(c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        ws.Cell(headerRow, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell(headerRow, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell(headerRow, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        // Column widths — pull from Worksheet (ANCHORARRAY cells can't auto-size).
+        ws.Column(1).Width = Math.Max(6.25, wsSheet.Column(WsColType).Width);
+        ws.Column(2).Width = ComputeMfrDisplayWidth(wsSheet);
+        ws.Column(3).Width = ComputeCombinedCatalogWidth(wsSheet);
+        ws.Column(3).Style.Alignment.WrapText = true;
+        ws.Column(4).Width = 8;
+        ws.Column(5).Width = 6;
+        ws.Column(6).Width = 12;
+        ws.Column(7).Width = 10;
+        ws.Column(8).Width = 13;
+
+        ApplyStandardPageSetup(ws);
+        ws.PageSetup.SetRowsToRepeatAtTop(1, 7);
+    }
+
+    /// <summary>Bid-Compare-specific footer label styling. Bold + top border on the Bid Total /
+    /// Current Total / Net Change vs Bid rows; Net cell red font when negative.</summary>
+    private static void ApplyBidCompareFooterStyling(
+        IXLWorksheet ws, int spillRow, int qtyCol, int sellExtCol)
+    {
+        string qtyLetter = XLHelper.GetColumnLetterFromNumber(qtyCol);
+        string sellExtLetter = XLHelper.GetColumnLetterFromNumber(sellExtCol);
+
+        // Footer labels live on the Qty column. Each label triggers its own styling rule.
+        // The Bid Total label has a date suffix so we match by prefix via SEARCH.
+        var qtyRange = ws.Range(spillRow, qtyCol, 1000, qtyCol);
+
+        // Bold all footer labels.
+        var labelCf = qtyRange.AddConditionalFormat().WhenIsTrue(
+            $"OR(ISNUMBER(SEARCH(\"Bid Total\",${qtyLetter}{spillRow})),"
+            + $"${qtyLetter}{spillRow}=\"Current Total:\","
+            + $"${qtyLetter}{spillRow}=\"Additions:\","
+            + $"${qtyLetter}{spillRow}=\"Credits:\","
+            + $"${qtyLetter}{spillRow}=\"Net Change vs Bid:\")");
+        labelCf.Font.SetBold();
+
+        // Top border on Sell Ext at Bid Total and Current Total rows.
+        foreach (var label in new[] { "Bid Total", "Current Total:" })
+        {
+            string predicate = label.EndsWith(":")
+                ? $"${qtyLetter}{spillRow}=\"{label}\""
+                : $"ISNUMBER(SEARCH(\"{label}\",${qtyLetter}{spillRow}))";
+            var cf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol)
+                .AddConditionalFormat().WhenIsTrue(predicate);
+            cf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+        }
+
+        // Net Change row: bold + top border + red font when negative.
+        var netCf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol).AddConditionalFormat()
+            .WhenIsTrue($"${qtyLetter}{spillRow}=\"Net Change vs Bid:\"");
+        netCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+        netCf.Font.SetBold();
+        var netNegCf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol).AddConditionalFormat()
+            .WhenIsTrue(
+                $"AND(${qtyLetter}{spillRow}=\"Net Change vs Bid:\","
+                + $"ISNUMBER(${sellExtLetter}{spillRow}),${sellExtLetter}{spillRow}<0)");
+        netNegCf.Font.FontColor = XLColor.FromHtml("#C00000");
+    }
+
+    /// <summary>Bid Compare row tints. Driven by Δ (col E), ΔSell (col G), IsAdded flag
+    /// (hidden col J), and IsRemoved flag (hidden col K). 5 rules total:
+    /// 1) Qty change → yellow on D, H (Qty + Sell Ext.)
+    /// 2) Sell up    → red on F, G, H (Sell Ea. + ΔSell + Sell Ext.)
+    /// 3) Sell down  → green on F, G, H
+    /// 4) Added row  → pale-green tint across A:H
+    /// 5) Removed row → strikethrough + gray font across A:H. Direct cell formatting can't
+    ///    apply to spilled cells, so this CF rule is the only way to surface removed rows
+    ///    visually beyond the −baselineQty Δ value.</summary>
+    private static void ApplyBidCompareTints(IXLWorksheet ws, int spillRow)
+    {
+        // Rule 1: qty change — Δ (col E) is a signed number when qty differs from baseline.
+        foreach (int col in new[] { 4, 8 })
+        {
+            ws.Range(spillRow, col, 1000, col).AddConditionalFormat()
+                .WhenIsTrue($"ISNUMBER($E{spillRow})")
+                .Fill.BackgroundColor = BcQtyTint;
+        }
+
+        // Rule 2/3: sell-price up/down — ΔSell (col G) carries the sign.
+        foreach (int col in new[] { 6, 7, 8 })
+        {
+            ws.Range(spillRow, col, 1000, col).AddConditionalFormat()
+                .WhenIsTrue($"AND(ISNUMBER($G{spillRow}),$G{spillRow}>0)")
+                .Fill.BackgroundColor = BcPriceUpTint;
+            ws.Range(spillRow, col, 1000, col).AddConditionalFormat()
+                .WhenIsTrue($"AND(ISNUMBER($G{spillRow}),$G{spillRow}<0)")
+                .Fill.BackgroundColor = BcPriceDownTint;
+        }
+
+        // Rule 4: added row — IsAdded flag in hidden col J.
+        ws.Range(spillRow, 1, 1000, 8).AddConditionalFormat()
+            .WhenIsTrue($"$J{spillRow}=1")
+            .Fill.BackgroundColor = BcAddedTint;
+
+        // Rule 5: removed row — IsRemoved flag in hidden col K. Strikethrough + gray font.
+        var removedCf = ws.Range(spillRow, 1, 1000, 8).AddConditionalFormat()
+            .WhenIsTrue($"$K{spillRow}=1");
+        removedCf.Font.Strikethrough = true;
+        removedCf.Font.FontColor = XLColor.FromHtml("#808080");
+    }
+
+    /// <summary>True when either Dashboard's current cell or the baseline's frozen meta
+    /// cell holds a non-zero numeric value. Used to decide whether to emit a Lutron /
+    /// Freight adjustment row at rebuild — once emitted, formulas track live edits.</summary>
+    private static bool HasAdjustmentValue(
+        IXLWorkbook wb, IXLWorksheet? baselineSheet, string dashboardCell, int frozenMetaRow)
+    {
+        if (wb.Worksheets.TryGetWorksheet("Dashboard", out var dashWs))
+        {
+            var c = dashWs.Cell(dashboardCell);
+            if (!c.IsEmpty() && c.TryGetValue(out double v) && v != 0) return true;
+        }
+        if (baselineSheet != null)
+        {
+            var c = baselineSheet.Cell(frozenMetaRow, CsColFrozenMeta);
+            if (!c.IsEmpty() && c.TryGetValue(out double v) && v != 0) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Returns Dashboard!B11 as a DateTime, or null when blank/unparseable.</summary>
+    private static DateTime? ReadBidDate(IXLWorkbook wb)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var dashWs)) return null;
+        var b11 = dashWs.Cell(DashBidDateCell);
+        if (b11.IsEmpty()) return null;
+        if (b11.TryGetValue(out DateTime dt)) return dt;
+        return null;
     }
 
     /// <summary>
@@ -2251,22 +2870,36 @@ public static class CountsWorkbookService
         List<WorksheetRowData> existingRows,
         Dictionary<string, CountsFixtureModel>? prevData)
     {
+        string sub = "ws.start";
+        try
+        {
+            UpdateWorksheetSheetCore(wb, fixtures, countsSheetName, existingRows, prevData, ref sub);
+        }
+        catch (Exception ex) when (!(ex is InvalidOperationException && ex.Message.StartsWith("[ws-stage=")))
+        {
+            throw new InvalidOperationException(
+                $"[ws-stage={sub}] {ex.GetType().Name}: {ex.Message}", ex);
+        }
+    }
+
+    private static void UpdateWorksheetSheetCore(
+        IXLWorkbook wb,
+        List<CountsFixtureModel> fixtures,
+        string countsSheetName,
+        List<WorksheetRowData> existingRows,
+        Dictionary<string, CountsFixtureModel>? prevData,
+        ref string sub)
+    {
+        sub = "get-worksheet";
         if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var ws))
         {
-            // No existing Worksheet — build fresh
             BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
             return;
         }
 
         string csRef = $"'{countsSheetName}'";
 
-        // When the user has selected a Reference Counts baseline on Dashboard!B11, col E
-        // is written as a live SUMIFS formula against that historical Counts sheet (with
-        // the literal-fallback baked into IFERROR). When B11 is blank, E stays a literal —
-        // matching the legacy "compare against latest prior run" behavior. Toggling the
-        // mode requires re-running TurboDocs.
-        bool useReferenceCountsFormula = HasReferenceCountsBaseline(wb);
-
+        sub = "build-new-keys";
         // Build set of new (Type, Catalog) pairs
         var newTypeMarks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var newKeys = new HashSet<(string, string)>();
@@ -2308,39 +2941,35 @@ public static class CountsWorkbookService
         var prevTypeMarks = prevData?.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
                             ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Unprotect before editing
+        sub = "unprotect.call";
         ws.Unprotect();
 
-        // Clear all existing styling (highlights from prior update). Step 2 below wipes the
-        // data rows entirely, but row 2 is cleared in place (it anchors the helper-pipeline
-        // spills and cannot be deleted), so the reset still matters there.
+        sub = "unprotect.lastRow1";
         int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
         if (lastRow > 1)
         {
+            sub = $"unprotect.styleReset(lastRow={lastRow})";
             var dataRange = ws.Range(2, 1, lastRow, WsColQtyOverride);
             dataRange.Style.Fill.BackgroundColor = XLColor.NoColor;
             dataRange.Style.Font.Strikethrough = false;
         }
 
-        // Step 2: Clear existing data rows and rebuild.
-        // Row 2 is cleared in place (see note in step 1); rows 3+ are safe to delete.
+        sub = "unprotect.lastRow2";
         lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
-        if (lastRow >= 3)
-        {
-            for (int r = lastRow; r >= 3; r--)
-                ws.Row(r).Delete();
-        }
+        // Clear contents/formats on rows 2..lastRow rather than deleting rows. Once Excel
+        // opens the workbook it materializes the row-2 dynamic-array spills (BT2:CC2 etc.)
+        // and tags every spilled cell with array-formula metadata; ClosedXML's Row.Delete
+        // then trips an IndexOutOfRangeException trying to fix up references. Clearing the
+        // range avoids the delete path entirely and lets the row-write loop overwrite from
+        // row 2 onward.
         if (lastRow >= 2)
         {
-            // Clear contents + formats + conditional formats on the visible columns A..helper-last.
-            // CFs are included because rows 3+ are deleted (which removes their CFs), but row 2 is
-            // cleared in place — without this, stale per-cell CFs (e.g. the Delta yellow-on-change
-            // rule) accumulate across update passes and override the green new-type fill.
-            // The helper-pipeline cells at row 2 will be overwritten by WriteHelperPipeline below.
-            ws.Range(2, 1, 2, WsColHelperLast).Clear(
+            sub = $"unprotect.clearRange(2..{lastRow})";
+            ws.Range(2, 1, lastRow, WsColHelperLast).Clear(
                 XLClearOptions.Contents | XLClearOptions.NormalFormats | XLClearOptions.ConditionalFormats);
         }
 
+        sub = "sort-new-rows";
         // Step 3: Write all rows sorted by Type Mark then catalog position
         newRowEntries.Sort((a, b) =>
         {
@@ -2436,6 +3065,7 @@ public static class CountsWorkbookService
         int plannedLastDataRow = 2 + newRowEntries.Count + removedEntries.Count - 1;
         ApplyAltRowFill(ws, plannedLastDataRow);
 
+        sub = "write-new-rows";
         int row = 2;
 
         // Write new/matched rows
@@ -2466,34 +3096,19 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
-            // Prev Qty — prefer the previous Worksheet's cached Qty (reflects Calc adjustments),
-            // else recompute from the preserved canonical Calc + prev fixture lengths (cache may
-            // be missing on 3rd+ passes — ClosedXML doesn't emit caches for rewritten formulas),
-            // else fall back to raw Count for types that weren't present before.
-            // When useReferenceCountsFormula is set, write the live SUMIFS instead, with the
-            // computed literal preserved as the IFERROR fallback (so a typo'd / cleared B11
-            // still yields the legacy "vs. latest run" number).
+            // Prev Qty — always the literal prior-update value. Prefer the previous Worksheet's
+            // cached Qty (reflects Calc adjustments), else recompute from the preserved canonical
+            // Calc + prev fixture lengths (cache may be missing on 3rd+ passes — ClosedXML doesn't
+            // emit caches for rewritten formulas), else leave blank for types not previously present.
+            // The B11-driven "Compare to" baseline is consumed by the Bid Compare sheet, not here.
             if (existing?.PrevQty.HasValue == true)
             {
-                double prevQtyLiteral = existing.PrevQty.Value;
-                if (useReferenceCountsFormula)
-                    ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, prevQtyLiteral);
-                else
-                    ws.Cell(row, WsColPrevQty).Value = prevQtyLiteral;
+                ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
             }
             else if (prevData != null && prevData.TryGetValue(type, out var prevFixture))
             {
                 prevCalcByCatalog.TryGetValue(catalog, out string? prevCalc);
-                double prevQtyLiteral = ComputeQtyForCalc(prevCalc, prevFixture);
-                if (useReferenceCountsFormula)
-                    ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, prevQtyLiteral);
-                else
-                    ws.Cell(row, WsColPrevQty).Value = prevQtyLiteral;
-            }
-            else if (useReferenceCountsFormula)
-            {
-                // No literal fallback available; emit the formula with 0 as the IFERROR result.
-                ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, 0);
+                ws.Cell(row, WsColPrevQty).Value = ComputeQtyForCalc(prevCalc, prevFixture);
             }
 
             int typeCanonical = typeCanonicalSheetRow[type];
@@ -2558,10 +3173,7 @@ public static class CountsWorkbookService
                 if (isNewType)
                 {
                     // Brand-new type: Prev Qty = 0 so delta shows +qty; green across Revit-side cells.
-                    if (useReferenceCountsFormula)
-                        ws.Cell(row, WsColPrevQty).FormulaA1 = BuildReferenceCountsFormula(row, 0);
-                    else
-                        ws.Cell(row, WsColPrevQty).Value = 0;
+                    ws.Cell(row, WsColPrevQty).Value = 0;
                     for (int col = 1; col <= WsColDelta; col++)
                         ws.Cell(row, col).Style.Fill.BackgroundColor = GreenFill;
                 }
@@ -2601,6 +3213,7 @@ public static class CountsWorkbookService
             row++;
         }
 
+        sub = "write-removed-rows";
         // Write removed rows with red strikethrough
         foreach (var (type, mfr, catalog) in removedEntries)
         {
@@ -2652,11 +3265,17 @@ public static class CountsWorkbookService
         // Hide gridlines so only the explicit type-group dividers read as separators
         ws.ShowGridLines = false;
 
+        sub = "apply-qty-formatting";
         ApplyQtyColumnFormatting(ws);
+        sub = "apply-pricing-formats";
         ApplyPricingColumnFormats(ws);
+        sub = "apply-header-styling";
         ApplyWorksheetHeaderStyling(ws);
+        sub = "apply-typography";
         ApplyWorksheetTypography(ws);
+        sub = "apply-row-heights";
         ApplyWorksheetRowHeights(ws);
+        sub = "apply-borders";
         ApplyWorksheetBorders(ws, lastDataRow);
         // Alt-row banding is painted before the row-write loops above so the per-row
         // green/yellow/red highlights override it; not re-applied here.
@@ -2682,16 +3301,20 @@ public static class CountsWorkbookService
                 .Font.SetBold().Font.SetFontColor(XLColor.Red);
         }
 
+        sub = "type-group-dividers";
         // Light gray divider at the last row of each Type group
         ApplyTypeGroupDividers(ws, 2, lastDataRow);
 
+        sub = "write-helper-pipeline";
         // Helper pipeline (AA-BJ) — re-emit with updated lastDataRow bounds
         WriteHelperPipeline(ws, lastDataRow);
 
+        sub = "hide-helper-columns";
         // Hide helper columns Z..BJ (no-op on re-runs)
         for (int col = WsColActive; col <= WsColHelperLast; col++)
             ws.Column(col).Hide();
 
+        sub = "reapply-protection";
         // Re-apply protection. Per-Type canonical fields — Tariff % (K) and Notes (N–S) —
         // are only editable on each Type's canonical (first) row.
         var typeCanonicalRowsSet = new HashSet<int>(typeCanonicalSheetRow.Values);
