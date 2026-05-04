@@ -107,7 +107,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | Namespace | Purpose |
 |-----------|---------|
 | `TurboSuite.App` | Entry point, `SettingsCommand`, ViewModels, Views |
-| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper` |
+| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `NaturalStringComparer` |
 | `TurboSuite.Shared.Filters` | `FixtureSelectionFilter`, `LightingFixtureTagFilter` |
 | `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings` |
 | `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `UpdateService`, settings storage/cache services |

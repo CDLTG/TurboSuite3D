@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Win32;
 using TurboSuite.Docs.Models;
 using TurboSuite.Docs.Services;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Docs.ViewModels;
@@ -93,8 +94,8 @@ public class LoadsViewModel : ViewModelBase
             "LoadName" => Circuits.OrderBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
             "TotalWatts" when SortDescending => Circuits.OrderByDescending(c => c.ApparentLoadVA),
             "TotalWatts" => Circuits.OrderBy(c => c.ApparentLoadVA),
-            _ when SortDescending => Circuits.OrderByDescending(c => c.CircuitNumber, StringComparer.OrdinalIgnoreCase),
-            _ => Circuits.OrderBy(c => c.CircuitNumber, StringComparer.OrdinalIgnoreCase),
+            _ when SortDescending => Circuits.OrderByDescending(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
+            _ => Circuits.OrderBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
         };
         return ordered.ToList();
     }

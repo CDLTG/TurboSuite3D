@@ -88,7 +88,7 @@ public static class LoadsCollectorService
             }
         }
 
-        results.Sort((a, b) => string.Compare(a.CircuitNumber, b.CircuitNumber, StringComparison.OrdinalIgnoreCase));
+        results.Sort((a, b) => NaturalStringComparer.OrdinalIgnoreCase.Compare(a.CircuitNumber, b.CircuitNumber));
         return results;
     }
 }
