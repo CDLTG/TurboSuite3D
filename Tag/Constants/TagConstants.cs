@@ -4,6 +4,10 @@ internal static class TagConstants
 {
     public const string TagFamilyName = "AL_Tag_Lighting Fixture (Type)";
     public const string LinearTagFamilyName = "AL_Tag_Lighting Fixture (Linear Length)";
+    public const string CombinedLinearTagFamilyName = "AL_Tag_Lighting Fixture (Run Length)";
+    public const string RunLengthParamName = "Run Length";
+    // 1/32" expressed in feet — tolerance for endpoint adjacency when grouping continuous linear runs.
+    public const double LinearContinuityToleranceFeet = (1.0 / 32.0) / 12.0;
     public const double DefaultSymbolSizeFeet = 4.5 / 12.0;
     public const double OffsetMarginRightFeet = 2.35 / 12.0;
     public const double OffsetMarginLeftFeet = 1.7 / 12.0;

@@ -11,6 +11,7 @@ internal static class TagTypeService
     private static ElementId _cachedTagTypeId = ElementId.InvalidElementId;
     private static readonly Dictionary<string, ElementId> _cachedKeypadTagTypeIds = new();
     private static readonly Dictionary<string, ElementId> _cachedLinearTagTypeIds = new();
+    private static readonly Dictionary<string, ElementId> _cachedCombinedLinearTagTypeIds = new();
     private static string? _cachedDocumentPath;
 
     private static bool IsSameDocument(Document doc)
@@ -23,6 +24,7 @@ internal static class TagTypeService
         _cachedTagTypeId = ElementId.InvalidElementId;
         _cachedKeypadTagTypeIds.Clear();
         _cachedLinearTagTypeIds.Clear();
+        _cachedCombinedLinearTagTypeIds.Clear();
         return false;
     }
 
@@ -90,6 +92,28 @@ internal static class TagTypeService
 
         if (tagType != null)
             _cachedKeypadTagTypeIds[cacheKey] = tagType.Id;
+
+        return tagType;
+    }
+
+    public static FamilySymbol? GetCombinedLinearTagType(Document doc, string typeName)
+    {
+        if (IsSameDocument(doc) && _cachedCombinedLinearTagTypeIds.TryGetValue(typeName, out var cachedId))
+        {
+            var cached = doc.GetElement(cachedId) as FamilySymbol;
+            if (cached != null && cached.IsValidObject)
+                return cached;
+        }
+
+        var tagType = new FilteredElementCollector(doc)
+            .OfClass(typeof(FamilySymbol))
+            .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
+            .Cast<FamilySymbol>()
+            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.CombinedLinearTagFamilyName, StringComparison.OrdinalIgnoreCase)
+                               && string.Equals(fs.Name, typeName, StringComparison.OrdinalIgnoreCase));
+
+        if (tagType != null)
+            _cachedCombinedLinearTagTypeIds[typeName] = tagType.Id;
 
         return tagType;
     }

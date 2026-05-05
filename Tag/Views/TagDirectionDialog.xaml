@@ -42,6 +42,8 @@
                             Click="Left_Click"/>
                     <Button x:Name="RightButton" Content="Right" Height="28" Margin="0,2" Cursor="Hand"
                             Click="Right_Click"/>
+                    <Button x:Name="CombinedButton" Content="Combined" Height="28" Margin="0,2" Cursor="Hand"
+                            Click="Combined_Click"/>
                 </StackPanel>
             </StackPanel>
         </StackPanel>

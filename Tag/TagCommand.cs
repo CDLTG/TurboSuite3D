@@ -62,21 +62,30 @@ public class TagCommand : IExternalCommand
 
             if (lineBasedFixtures.Count > 0)
             {
-                TagDirection linearDirection = PromptForDirectionLinear();
-                if (linearDirection == TagDirection.None)
+                TagDirection linearChoice = PromptForDirectionLinear();
+                if (linearChoice == TagDirection.None)
                 {
                     return Result.Cancelled;
                 }
 
-                string linearTypeName = linearDirection == TagDirection.Up ? "Tag_Top" : "Tag_Bottom";
-                FamilySymbol? linearTagType = TagTypeService.GetLinearTagType(doc, linearTypeName);
-                if (linearTagType == null)
+                if (linearChoice == TagDirection.Combined)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag type '{linearTypeName}' in family '{TagConstants.LinearTagFamilyName}' not found.\nLoad this tag family into the project.");
-                    return Result.Cancelled;
+                    Result combinedResult = HandleCombinedLinear(doc, lineBasedFixtures, ref totalTagged);
+                    if (combinedResult != Result.Succeeded)
+                        return combinedResult;
                 }
+                else
+                {
+                    string linearTypeName = linearChoice == TagDirection.Up ? "Tag_Top" : "Tag_Bottom";
+                    FamilySymbol? linearTagType = TagTypeService.GetLinearTagType(doc, linearTypeName);
+                    if (linearTagType == null)
+                    {
+                        TaskDialog.Show("TurboTag", $"Tag type '{linearTypeName}' in family '{TagConstants.LinearTagFamilyName}' not found.\nLoad this tag family into the project.");
+                        return Result.Cancelled;
+                    }
 
-                totalTagged += PlaceTags(doc, lineBasedFixtures, linearTagType, linearDirection, true);
+                    totalTagged += PlaceTags(doc, lineBasedFixtures, linearTagType, linearChoice, true);
+                }
             }
 
             if (pointBasedFixtures.Count > 0)
@@ -149,14 +158,17 @@ public class TagCommand : IExternalCommand
     }
 
     private TagDirection PromptForDirectionLinear()
-        => PromptForDirection(includeLeftRight: false);
+        => PromptForDirection(includeLeftRight: false, includeCombined: true);
+
+    private TagDirection PromptForDirectionLinearUpDownOnly()
+        => PromptForDirection(includeLeftRight: false, includeCombined: false);
 
     private TagDirection PromptForDirection()
-        => PromptForDirection(includeLeftRight: true);
+        => PromptForDirection(includeLeftRight: true, includeCombined: false);
 
-    private TagDirection PromptForDirection(bool includeLeftRight)
+    private TagDirection PromptForDirection(bool includeLeftRight, bool includeCombined = false)
     {
-        var dialog = new TagDirectionDialog(includeLeftRight, _revitHandle);
+        var dialog = new TagDirectionDialog(includeLeftRight, _revitHandle, includeCombined);
         return dialog.ShowDialog() == true ? dialog.SelectedDirection : TagDirection.None;
     }
 
@@ -538,6 +550,129 @@ public class TagCommand : IExternalCommand
         {
             return false;
         }
+    }
+
+    private Result HandleCombinedLinear(Document doc, List<FamilyInstance> lineBasedFixtures, ref int totalTagged)
+    {
+        List<LinearRun> runs = LinearRunService.BuildRuns(lineBasedFixtures);
+        var multiRuns = runs.Where(r => r.Members.Count > 1).ToList();
+        var singleRuns = runs.Where(r => r.Members.Count == 1).ToList();
+
+        // Pre-flight: combined tag family must have both Top and Bottom types loaded.
+        FamilySymbol? combinedTop = TagTypeService.GetCombinedLinearTagType(doc, "Tag_Top");
+        FamilySymbol? combinedBottom = TagTypeService.GetCombinedLinearTagType(doc, "Tag_Bottom");
+        if (combinedTop == null || combinedBottom == null)
+        {
+            TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.CombinedLinearTagFamilyName}' (types 'Tag_Top' and 'Tag_Bottom') not found.\nLoad this tag family into the project.");
+            return Result.Cancelled;
+        }
+
+        // Pre-flight: standard linear tag family must be loaded if any run-of-one will fall back.
+        FamilySymbol? linearTop = null;
+        FamilySymbol? linearBottom = null;
+        if (singleRuns.Count > 0)
+        {
+            linearTop = TagTypeService.GetLinearTagType(doc, "Tag_Top");
+            linearBottom = TagTypeService.GetLinearTagType(doc, "Tag_Bottom");
+            if (linearTop == null || linearBottom == null)
+            {
+                TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.LinearTagFamilyName}' (types 'Tag_Top' and 'Tag_Bottom') not found.\nLoad this tag family into the project (required for run-of-one fallback).");
+                return Result.Cancelled;
+            }
+        }
+
+        // Pre-flight: every fixture in every multi-fixture run must have a writable Run Length parameter.
+        var missingParam = new List<string>();
+        foreach (var run in multiRuns)
+        {
+            foreach (var member in run.Members)
+            {
+                Parameter? p = member.LookupParameter(TagConstants.RunLengthParamName);
+                if (p == null || p.IsReadOnly || p.StorageType != StorageType.Double)
+                {
+                    string famName = member.Symbol?.Family?.Name ?? "(unknown family)";
+                    string entry = $"{famName} (id {member.Id})";
+                    if (!missingParam.Contains(entry))
+                        missingParam.Add(entry);
+                }
+            }
+        }
+
+        if (missingParam.Count > 0)
+        {
+            string list = string.Join("\n  ", missingParam.Take(10));
+            string suffix = missingParam.Count > 10 ? $"\n  …and {missingParam.Count - 10} more" : string.Empty;
+            TaskDialog.Show("TurboTag",
+                $"Combined tagging requires a writable Length instance parameter named '{TagConstants.RunLengthParamName}' on every fixture in a run.\nMissing or invalid on:\n  {list}{suffix}");
+            return Result.Cancelled;
+        }
+
+        // Direction prompt for the combined run tag (and any run-of-one fallback tags).
+        TagDirection direction = PromptForDirectionLinearUpDownOnly();
+        if (direction == TagDirection.None)
+            return Result.Cancelled;
+
+        FamilySymbol combinedTagType = direction == TagDirection.Up ? combinedTop : combinedBottom;
+        FamilySymbol? singleTagType = direction == TagDirection.Up ? linearTop : linearBottom;
+
+        View activeView = doc.ActiveView;
+        ElementId viewId = activeView.Id;
+
+        using (var trans = new Transaction(doc, "TurboTag - Place Combined Tags"))
+        {
+            var failureOptions = trans.GetFailureHandlingOptions();
+            failureOptions.SetFailuresPreprocessor(new TagFailurePreprocessor());
+            trans.SetFailureHandlingOptions(failureOptions);
+
+            trans.Start();
+
+            foreach (var run in multiRuns)
+            {
+                // Sum Linear Length across all members.
+                double total = 0.0;
+                foreach (var member in run.Members)
+                {
+                    Parameter? ll = member.LookupParameter("Linear Length");
+                    if (ll != null && ll.StorageType == StorageType.Double)
+                        total += ll.AsDouble();
+                }
+
+                // Write total to the lead, clear on every other member.
+                foreach (var member in run.Members)
+                {
+                    Parameter rl = member.LookupParameter(TagConstants.RunLengthParamName);
+                    rl.Set(member.Id == run.Lead.Id ? total : 0.0);
+                }
+
+                // Remove existing linear/combined tags from every member in this view.
+                foreach (var member in run.Members)
+                {
+                    DeleteExistingTags(doc, member.Id, viewId, TagConstants.LinearTagFamilyName);
+                    DeleteExistingTags(doc, member.Id, viewId, TagConstants.CombinedLinearTagFamilyName);
+                }
+
+                if (TryPlaceTag(doc, run.Lead, combinedTagType.Id, viewId, direction, isLineBased: true))
+                    totalTagged++;
+            }
+
+            // Run-of-one falls back to the standard linear tag.
+            if (singleRuns.Count > 0 && singleTagType != null)
+            {
+                foreach (var run in singleRuns)
+                {
+                    var fixture = run.Members[0];
+                    DeleteExistingTags(doc, fixture.Id, viewId, TagConstants.LinearTagFamilyName);
+                    DeleteExistingTags(doc, fixture.Id, viewId, TagConstants.CombinedLinearTagFamilyName);
+
+                    if (TryPlaceTag(doc, fixture, singleTagType.Id, viewId, direction, isLineBased: true))
+                        totalTagged++;
+                }
+            }
+
+            trans.Commit();
+        }
+
+        return Result.Succeeded;
     }
 
     private bool TryPlaceTag(Document doc, FamilyInstance fixture, ElementId tagTypeId, ElementId viewId, TagDirection direction, bool isLineBased = false)

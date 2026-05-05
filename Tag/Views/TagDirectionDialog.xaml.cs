@@ -46,7 +46,7 @@ public partial class TagDirectionDialog : Window
         public uint dwFlags;
     }
 
-    public TagDirectionDialog(bool includeLeftRight, IntPtr ownerHandle)
+    public TagDirectionDialog(bool includeLeftRight, IntPtr ownerHandle, bool includeCombined = false)
     {
         InitializeComponent();
         new WindowInteropHelper(this) { Owner = ownerHandle };
@@ -55,6 +55,11 @@ public partial class TagDirectionDialog : Window
         {
             RightButton.Visibility = Visibility.Collapsed;
             LeftButton.Visibility = Visibility.Collapsed;
+        }
+
+        if (!includeCombined)
+        {
+            CombinedButton.Visibility = Visibility.Collapsed;
         }
 
         Loaded += OnLoaded;
@@ -138,6 +143,12 @@ public partial class TagDirectionDialog : Window
     private void Left_Click(object sender, RoutedEventArgs e)
     {
         SelectedDirection = TagDirection.Left;
+        DialogResult = true;
+    }
+
+    private void Combined_Click(object sender, RoutedEventArgs e)
+    {
+        SelectedDirection = TagDirection.Combined;
         DialogResult = true;
     }
 

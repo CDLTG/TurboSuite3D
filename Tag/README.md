@@ -10,6 +10,7 @@ Batch-places lighting fixture type tags on selected fixtures with configurable d
 |---|---|---|
 | Point-based (ceiling/floor) | `AL_Tag_Lighting Fixture (Type)` | Up, Down, Left, or Right (user choice) |
 | Line-based (linear) | `AL_Tag_Lighting Fixture (Linear Length)` | Up or Down (user choice) |
+| Line-based (linear, Combined) | `AL_Tag_Lighting Fixture (Run Length)` | One tag per continuous run, placed on the middle fixture, displaying the summed run length |
 | Face-based (wall sconce) | `AL_Tag_Lighting Fixture (Type)` | Automatic — offset along wall normal |
 
 ## Usage
@@ -28,6 +29,7 @@ Existing tags of the same family are deleted per-fixture before placing new ones
 |-------------|----------|----------|
 | `AL_Tag_Lighting Fixture (Type)` | Lighting Fixture Tags | Point-based and face-based (wall sconce) fixtures |
 | `AL_Tag_Lighting Fixture (Linear Length)` | Lighting Fixture Tags | Line-based (linear) fixtures — requires types `Tag_Top` and `Tag_Bottom` |
+| `AL_Tag_Lighting Fixture (Run Length)` | Lighting Fixture Tags | Combined linear tagging — requires types `Tag_Top` and `Tag_Bottom`, label bound to `Run Length` |
 | `AL_Tag_Lighting Device (SwitchID)` | Lighting Device Tags | Power supply devices |
 | `AL_Tag_Lighting Device (Keypad)` | Lighting Device Tags | Keypad devices — requires type `2. Two Gang` for two-gang keypads |
 
@@ -37,6 +39,8 @@ Existing tags of the same family are deleted per-fixture before placing new ones
 |-----------|----|------|---------|
 | `Sub-Driver Power` | Lighting Device types | Double | Identifies power supplies (vs. keypads) |
 | `Two Gang` | Keypad instances | Yes/No (Integer) | Selects two-gang tag type variant |
+| `Run Length` | Linear lighting fixture instances | Length (Double) | Holds the summed length of a continuous run on the lead fixture; cleared on other run members. Required when using Combined |
+| `Linear Length` | Linear lighting fixture instances | Length (Double) | Per-fixture length, summed across run members for Combined |
 
 ### Other Requirements
 

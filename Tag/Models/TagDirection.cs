@@ -6,5 +6,6 @@ public enum TagDirection
     Up,
     Down,
     Left,
-    Right
+    Right,
+    Combined
 }
