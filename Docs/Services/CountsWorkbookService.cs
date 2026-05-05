@@ -301,6 +301,7 @@ public static class CountsWorkbookService
     private const string DashLutronCell = "B6";
     private const string DashFreightBuyCell = "B7";
     private const string DashFreightSellCell = "B8";
+    private const string DashBidDateCell = "B11";
     private const string DashNotesFirstRow = "33";
     private const string DashNotesLastRow = "47";
 
@@ -1909,233 +1910,351 @@ public static class CountsWorkbookService
     private const string BcSnapPrefix = "\"'Counts \"&TEXT(BidDate,\"yyyy.mm.dd\")&\"'!\"";
 
     /// <summary>
-    /// Writes the Bid Compare helper pipeline as a single 2D dynamic-array formula in BT2 that
-    /// spills across BT2:CD&lt;n&gt; (11 cols × N rows). Body, removed-types block, and footer
-    /// are HSTACKs of 11 cols each, then VSTACKed. Baseline lookups key off (Type, CatCombo)
-    /// so per-row Δ and IsAdded reflect real per-catalog changes. Footer mirrors Quote
-    /// (Bid Total / Fixture Sub-Total / [Lutron] / Freight / Lighting Total).
+    /// Writes the Bid Compare helper pipeline (BT–CC). Same Gap LAMBDA pattern as Quote
+    /// (gap rows between Type groups, tariff row, 6 note rows). Differences vs. Quote:
+    /// - No Buy columns (8 visible: Type, Mfr, Catalog, Qty, Δ, Sell Ea., ΔSell, Sell Ext.)
+    /// - Δ = current_qty − baseline_qty (against Counts snapshot via INDIRECT), shown only
+    ///   on each Type's canonical Worksheet row to avoid misleading per-catalog deltas.
+    /// - ΔSell = current_sell_ea − baseline_sell_ea, blank when delta = 0 or baseline unknown.
+    /// - Footer: 5 rows (Bid Total / Current Total / Additions / Credits / Net Change vs Bid).
+    /// - Lutron/Freight rows VSTACK-appended conditionally (read from Dashboard B6/B8 or
+    ///   snapshot V1/V2 frozen meta at rebuild time).
+    /// - Removed-from-bid rows: literal HSTACK block computed at rebuild from baseline
+    ///   snapshot rows whose Type isn't on current Worksheet. Not FILTER-live; updates on
+    ///   rebuild only. Acceptable since fixture removal already requires a Revit export.
     /// </summary>
     private static void WriteBidCompareHelperPipeline(IXLWorksheet ws, int lastDataRow)
     {
+        var wb = ws.Workbook;
         string[] cols = BidCompareHelperCols;
+
         string Col(string c) => $"{c}2:{c}{lastDataRow}";
+        string predicate = $"(AG2:AG{lastDataRow}=1)";
 
-        // ----- Source expressions (text only — referenced inside master LET below) -----
-        string predicateExpr = $"(AG2:AG{lastDataRow}=1)";
-        string effMfrExpr = $"IF({Col("U")}=\"\",{Col("B")},{Col("U")})";
-        string effQtyExpr = Col("BR");
-        string sellEaExpr = $"IFERROR(({Col("J")}*(1+{Col("K")}))+{Col("M")},0)";
-        string sellExtExpr = "(_xlpm.sellEa*_xlpm.effQty)";
-        string catalogCombinedExpr =
+        string effMfr = $"IF({Col("U")}=\"\",{Col("B")},{Col("U")})";
+        string effQty = Col("BR");
+        string sellEa = $"IFERROR(({Col("J")}*(1+{Col("K")}))+{Col("M")},0)";
+        string sellExt = $"({sellEa})*{effQty}";
+        string catalogCombined =
             $"{Col("C")}&IF(({Col("H")}<>0)*({Col("H")}<>\"\")*({Col("H")}<>\"dependent\"),\" ~ \"&{Col("H")},\"\")";
-        string typeKPerRowExpr = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("L")}),0)";
+
+        // Per-row baseline lookups. INDIRECT(snap&"...") returns #REF! when BidDate is blank
+        // (TEXT("","yyyy.mm.dd") yields ""), so the IFERROR collapses every row to "". When
+        // BidDate is set, MATCH on Type against snapshot col A; INDEX over col I (Count) or
+        // T (frozen Sell Ea.). Missing types → #N/A → "". 0 in T (legacy snapshot, no freeze) →
+        // INDEX returns 0 numerically, which is honest: the contractor sees price-from-zero.
+        string snapTypeRange = $"INDIRECT({BcSnapPrefix}&\"A:A\")";
+        string snapCatCRange = $"INDIRECT({BcSnapPrefix}&\"C:C\")";
+        string snapCatHRange = $"INDIRECT({BcSnapPrefix}&\"H:H\")";
+        string snapQtyRange = $"INDIRECT({BcSnapPrefix}&\"I:I\")";
+        string snapSellRange = $"INDIRECT({BcSnapPrefix}&\"T:T\")";
+        // (Type, CatCombo) composite keys. Snapshot rows are per-fixture (one row per Type+
+        // catalog combo at bid time), so the concat key uniquely identifies a snapshot row.
+        // Baseline lookups match per-row, so a multi-catalog Type sees per-catalog deltas
+        // instead of one delta echoed onto the canonical row.
+        string snapCatCombined =
+            $"({snapCatCRange})&IF(({snapCatHRange}<>0)*({snapCatHRange}<>\"\")*({snapCatHRange}<>\"dependent\"),"
+            + $"\" ~ \"&{snapCatHRange},\"\")";
+        string currentKey = $"({Col("A")}&\"|\"&{catalogCombined})";
+        string snapKey = $"({snapTypeRange}&\"|\"&{snapCatCombined})";
+        string baselineQtyArr =
+            $"IFERROR(INDEX({snapQtyRange},MATCH({currentKey},{snapKey},0)),\"\")";
+        string baselineSellArr =
+            $"IFERROR(INDEX({snapSellRange},MATCH({currentKey},{snapKey},0)),\"\")";
+
+        // Δ per-row, keyed on (Type, CatCombo) — multi-catalog Types now show per-catalog deltas.
+        string bidDelta =
+            $"IF({baselineQtyArr}=\"\",\"\",{effQty}-{baselineQtyArr})";
+        // ΔSell per row — keyed on (Type, CatCombo). Blank when baseline unknown OR delta is 0.
+        string bidSellDelta =
+            $"IF({baselineSellArr}=\"\",\"\","
+            + $"IF(({sellEa})-{baselineSellArr}=0,\"\",({sellEa})-{baselineSellArr}))";
+        // IsAdded — 1 per row where BidDate is set AND no matching (Type, CatCombo) in baseline.
+        string isAddedArr =
+            $"IF((BidDate<>\"\")*({baselineQtyArr}=\"\"),1,\"\")";
+
+        // Same Gap LAMBDA shape as WriteSingleHelperPipeline — gap row at type-group boundary,
+        // tariff row at last row of each group, 6 note rows.
+        string typeKPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("L")}),0)";
         string[] noteCols = { "O", "P", "Q", "R", "S", "T" };
-        string NotePerRow(string nc) =>
-            $"IFERROR(_xlfn.LET(_xlpm.v,_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col(nc)}),IF(_xlpm.v=0,\"\",_xlpm.v)),\"\")";
+        string NotePerRow(string noteCol) =>
+            $"IFERROR(_xlfn.LET(_xlpm.v,_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col(noteCol)}),IF(_xlpm.v=0,\"\",_xlpm.v)),\"\")";
+        string typesArg = $"_xlfn._xlws.FILTER({Col("A")},{predicate})";
+        string pctsArg = $"_xlfn._xlws.FILTER({typeKPerRow},{predicate})";
+        string baseArg = $"_xlfn._xlws.FILTER({sellExt},{predicate})";
+        string[] noteArgs = noteCols
+            .Select(nc => $"_xlfn._xlws.FILTER({NotePerRow(nc)},{predicate})")
+            .ToArray();
 
-        // Snapshot ranges — INDIRECT errors when BidDate is blank; downstream IFERROR wrappers
-        // collapse to "" / 0 so the same formula text serves both empty + active baseline.
-        string snapA = $"INDIRECT({BcSnapPrefix}&\"A2:A10000\")";
-        string snapB = $"INDIRECT({BcSnapPrefix}&\"B2:B10000\")";
-        string snapC = $"INDIRECT({BcSnapPrefix}&\"C2:C10000\")";
-        string snapH = $"INDIRECT({BcSnapPrefix}&\"H2:H10000\")";
-        string snapI = $"INDIRECT({BcSnapPrefix}&\"I2:I10000\")";
-        string snapT = $"INDIRECT({BcSnapPrefix}&\"T2:T10000\")";
-        // snapCatComb depends on _xlpm.snapCatC / _xlpm.snapCatH bound earlier in the LET.
-        string snapCatCombExpr =
-            "_xlpm.snapCatC&IF((_xlpm.snapCatH<>0)*(_xlpm.snapCatH<>\"\")*(_xlpm.snapCatH<>\"dependent\"),"
-            + "\" ~ \"&_xlpm.snapCatH,\"\")";
-
-        // (Type, CatCombo) keying. Both keys reference outer-LET names.
-        string currentKeyExpr = $"({Col("A")}&\"|\"&{catalogCombinedExpr})";
-        string snapKeyExpr = "(_xlpm.snapType&\"|\"&_xlpm.snapCatComb)";
-
-        // Footer values — formed inside master LET so they can reference outer names.
-        string sellSubCurrent =
-            $"SUMPRODUCT(({predicateExpr})*_xlpm.sellEa*_xlpm.effQty)"
-            + $"+SUMPRODUCT(({predicateExpr})*_xlpm.sellExt*_xlpm.typeKPerRow)";
-        string bidTotalExpr =
-            "IFERROR(SUMPRODUCT(IFERROR(--_xlpm.snapQty,0)*IFERROR(--_xlpm.snapSell,0)),0)";
-        string lutFrozen = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V1\"),0)";
-        string frtFrozen = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V2\"),0)";
-        const string lutCurrent = "IF(LutronSubtotal=\"\",0,LutronSubtotal)";
-        const string frtCurrent = "IF(FreightSell=\"\",0,FreightSell)";
-        string bidTotalAll = $"({bidTotalExpr})+({lutFrozen})+({frtFrozen})";
-        string lightingTotal = $"({sellSubCurrent})+({lutCurrent})+({frtCurrent})";
-        const string bidTotalLabel =
-            "\"Bid Total (\"&IF(BidDate=\"\",\"—\",TEXT(BidDate,\"yyyy-mm-dd\"))&\"):\"";
-
-        // ----- Gap LAMBDA, defined ONCE — closes over hoisted prev/isLast/fPcts/fN1..fN6 -----
-        // Per-call args: vals (filtered column array), tariffVal (scalar or per-row array used
-        // on the last row of each group when pcts<>0), and 6 note values (scalar text or per-
-        // row array, displayed on the last row of each group when fN_i is non-empty).
-        string gapLambda =
-              "_xlfn.LAMBDA(_xlpm.vals,_xlpm.tariffVal,_xlpm.note1,_xlpm.note2,_xlpm.note3,_xlpm.note4,_xlpm.note5,_xlpm.note6,"
-            +   "IF(ROWS(_xlpm.vals)<=1,_xlpm.vals,"
-            +     "_xlfn.TOCOL(_xlfn.HSTACK("
-            +       "IF(_xlpm.fTypes<>_xlpm.prev,\"\",_xlfn.NA()),"
-            +       "_xlpm.vals,"
-            +       "IF(_xlpm.isLast*(_xlpm.fPcts<>0),_xlpm.tariffVal,_xlfn.NA()),"
-            +       "IF(_xlpm.isLast*(_xlpm.fN1<>\"\"),_xlpm.note1,_xlfn.NA()),"
-            +       "IF(_xlpm.isLast*(_xlpm.fN2<>\"\"),_xlpm.note2,_xlfn.NA()),"
-            +       "IF(_xlpm.isLast*(_xlpm.fN3<>\"\"),_xlpm.note3,_xlfn.NA()),"
-            +       "IF(_xlpm.isLast*(_xlpm.fN4<>\"\"),_xlpm.note4,_xlfn.NA()),"
-            +       "IF(_xlpm.isLast*(_xlpm.fN5<>\"\"),_xlpm.note5,_xlfn.NA()),"
-            +       "IF(_xlpm.isLast*(_xlpm.fN6<>\"\"),_xlpm.note6,_xlfn.NA())"
-            +     "),2)"
-            +   ")"
-            + ")";
-
-        // InDataBlock col — flag (1) version of Gap shape, computed inline once.
-        string flagBody =
-              "IF(ROWS(_xlpm.fTypes)<=1,1,"
-            +   "_xlfn.TOCOL(_xlfn.HSTACK("
-            +     "IF(_xlpm.fTypes<>_xlpm.prev,1,_xlfn.NA()),"
-            +     "_xlfn.SEQUENCE(ROWS(_xlpm.fTypes),1,1,0),"
-            +     "IF(_xlpm.isLast*(_xlpm.fPcts<>0),1,_xlfn.NA()),"
-            +     "IF(_xlpm.isLast*(_xlpm.fN1<>\"\"),1,_xlfn.NA()),"
-            +     "IF(_xlpm.isLast*(_xlpm.fN2<>\"\"),1,_xlfn.NA()),"
-            +     "IF(_xlpm.isLast*(_xlpm.fN3<>\"\"),1,_xlfn.NA()),"
-            +     "IF(_xlpm.isLast*(_xlpm.fN4<>\"\"),1,_xlfn.NA()),"
-            +     "IF(_xlpm.isLast*(_xlpm.fN5<>\"\"),1,_xlfn.NA()),"
-            +     "IF(_xlpm.isLast*(_xlpm.fN6<>\"\"),1,_xlfn.NA())"
-            +   "),2)"
-            + ")";
-
-        // Per-column body invocations of _xlpm.gap. Note args are scalar "" or "NOTE:" or the
-        // per-row filtered note arrays (for the Catalog column).
-        const string b = "\"\"";
-        const string nl = "\"NOTE:\"";
-        string nt(string n) => $"_xlpm.fN{n}";
-        string Call(string vals, string tariff, string n1, string n2, string n3, string n4, string n5, string n6)
-            => $"_xlpm.gap({vals},{tariff},{n1},{n2},{n3},{n4},{n5},{n6})";
-        string BodyCol(string expr) => $"IFERROR({expr},\"\")";
-        string bodyHstack =
-            "_xlfn.HSTACK("
-            + BodyCol(Call("_xlpm.fTypes", b, b, b, b, b, b, b)) + ","
-            + BodyCol(Call("_xlpm.fEffMfr", "_xlpm.fEffMfr", nl, nl, nl, nl, nl, nl)) + ","
-            + BodyCol(Call("_xlpm.fCatalog",
-                           "\"Tariff *may be deleted/reduced if tariffs change\"",
-                           nt("1"), nt("2"), nt("3"), nt("4"), nt("5"), nt("6"))) + ","
-            + BodyCol(Call("_xlpm.fEffQty", b, b, b, b, b, b, b)) + ","
-            + BodyCol(Call("_xlpm.fBidDelta", b, b, b, b, b, b, b)) + ","
-            + BodyCol(Call("_xlpm.fSellEa", b, b, b, b, b, b, b)) + ","
-            + BodyCol(Call("_xlpm.fBidSellDelta", b, b, b, b, b, b, b)) + ","
-            + BodyCol(Call("_xlpm.fSellExt", "_xlpm.totals*_xlpm.fPcts", b, b, b, b, b, b)) + ","
-            + BodyCol(flagBody) + ","
-            + BodyCol(Call("_xlpm.fIsAdded", b, b, b, b, b, b, b)) + ","
-            + BodyCol(Call("_xlpm.fBlank", b, b, b, b, b, b, b))
-            + ")";
-
-        // 11-col removed-block. Per-col IFERROR — when pred matches no rows, each col collapses
-        // to scalar "" and HSTACK yields a single 1×11 phantom blank row before the footer.
-        const string fr = "_xlfn._xlws.FILTER(_xlpm.snapType,_xlpm.predRem)";
-        string[] removedCols = new[]
+        string Gap(string valsExpr, string tariffContentExpr, string[] noteContentExprs)
         {
-            fr,                                                                    // Type
-            $"UPPER(_xlfn._xlws.FILTER(_xlpm.snapMfr,_xlpm.predRem))",              // Mfr
-            $"_xlfn._xlws.FILTER(_xlpm.snapCatComb,_xlpm.predRem)",                 // Catalog
-            $"IF({fr}<>\"~~\",0,0)",                                                // Qty=0
-            $"-_xlfn._xlws.FILTER(_xlpm.snapQty,_xlpm.predRem)",                    // Δ
-            $"_xlfn._xlws.FILTER(_xlpm.snapSell,_xlpm.predRem)",                    // Sell Ea
-            $"IF({fr}<>\"~~\",\"\",\"\")",                                          // ΔSell
-            $"IF({fr}<>\"~~\",0,0)",                                                // Sell Ext
-            $"IF({fr}<>\"~~\",1,1)",                                                // InDataBlock
-            $"IF({fr}<>\"~~\",\"\",\"\")",                                          // IsAdded
-            $"IF({fr}<>\"~~\",1,1)",                                                // IsRemoved
-        };
-        string removedHstack = "_xlfn.HSTACK("
-            + string.Join(",", removedCols.Select(c => $"IFERROR({c},\"\")")) + ")";
-
-        // 11-col footer HSTACK. Per-col conditional VSTACK so all cols agree on row count.
-        string FooterCol(int c)
-        {
-            string bidV, sub, lut, frt, tot;
-            switch (c)
-            {
-                case 3:
-                    bidV = bidTotalLabel;
-                    sub = "\"Fixture Package Sub-Total:\"";
-                    lut = "\"Lutron Lighting Control Sub-Total:\"";
-                    frt = "\"Estimated Freight:\"";
-                    tot = "\"LIGHTING PACKAGE TOTAL:\"";
-                    break;
-                case 7:
-                    bidV = bidTotalAll;
-                    sub = sellSubCurrent;
-                    lut = lutCurrent;
-                    frt = frtCurrent;
-                    tot = lightingTotal;
-                    break;
-                default:
-                    bidV = b; sub = b; lut = b; frt = b; tot = b;
-                    break;
-            }
-            return "IF(LutronSubtotal=\"\","
-                 + $"_xlfn.VSTACK({b},{bidV},{sub},{frt},{tot}),"
-                 + $"_xlfn.VSTACK({b},{bidV},{sub},{lut},{frt},{tot}))";
+            string valsArg = $"_xlfn._xlws.FILTER({valsExpr},{predicate})";
+            string noteLetCols = string.Join(",", Enumerable.Range(1, 6).Select(i =>
+                $"_xlpm.n{i}Col,IF(_xlpm.isLast*(_xlpm.n{i}<>\"\"),{noteContentExprs[i - 1]},_xlfn.NA())"));
+            string hstackCols = "_xlpm.gapCol,_xlpm.vals,_xlpm.tariffCol,"
+                + string.Join(",", Enumerable.Range(1, 6).Select(i => $"_xlpm.n{i}Col"));
+            return "_xlfn.LAMBDA(_xlpm.types,_xlpm.vals,_xlpm.pcts,_xlpm.base,"
+                 +   "_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
+                 +   "IF(ROWS(_xlpm.vals)<=1,_xlpm.vals,"
+                 +     "_xlfn.LET("
+                 +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
+                 +       "_xlpm.nxt,_xlfn.VSTACK(_xlfn.DROP(_xlpm.types,1),\"\"),"
+                 +       "_xlpm.gapCol,IF(_xlpm.types<>_xlpm.prev,\"\",_xlfn.NA()),"
+                 +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
+                 +       "_xlpm.totals,_xlfn.BYROW(_xlpm.types,_xlfn.LAMBDA(_xlpm.tv,SUMPRODUCT((_xlpm.types=_xlpm.tv)*_xlpm.base))),"
+                 +       $"_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),{tariffContentExpr},_xlfn.NA()),"
+                 +       noteLetCols + ","
+                 +       $"_xlfn.TOCOL(_xlfn.HSTACK({hstackCols}),2)"
+                 +     ")"
+                 +   ")"
+                 + $")({typesArg},{valsArg},{pctsArg},{baseArg},{string.Join(",", noteArgs)})";
         }
-        string footerHstack = "_xlfn.HSTACK("
-            + string.Join(",", Enumerable.Range(0, 11).Select(FooterCol)) + ")";
 
-        // ----- Master LET — bind every reusable subexpression once, then VSTACK body/removed/footer.
-        string master =
-            "_xlfn.LET("
-            // Worksheet-side ranges
-            + $"_xlpm.A,{Col("A")},"
-            + $"_xlpm.pred,{predicateExpr},"
-            + $"_xlpm.effMfr,{effMfrExpr},"
-            + $"_xlpm.effQty,{effQtyExpr},"
-            + $"_xlpm.sellEa,{sellEaExpr},"
-            + $"_xlpm.sellExt,{sellExtExpr},"
-            + $"_xlpm.catalog,{catalogCombinedExpr},"
-            + $"_xlpm.typeKPerRow,{typeKPerRowExpr},"
-            // Snapshot-side
-            + $"_xlpm.snapType,{snapA},"
-            + $"_xlpm.snapMfr,{snapB},"
-            + $"_xlpm.snapCatC,{snapC},"
-            + $"_xlpm.snapCatH,{snapH},"
-            + $"_xlpm.snapCatComb,{snapCatCombExpr},"
-            + $"_xlpm.snapQty,{snapI},"
-            + $"_xlpm.snapSell,{snapT},"
-            // Per-row baseline lookups (Type, CatCombo)
-            + $"_xlpm.baseQty,IFERROR(INDEX(_xlpm.snapQty,MATCH({currentKeyExpr},{snapKeyExpr},0)),\"\"),"
-            + $"_xlpm.baseSell,IFERROR(INDEX(_xlpm.snapSell,MATCH({currentKeyExpr},{snapKeyExpr},0)),\"\"),"
-            + "_xlpm.bidDelta,IF(_xlpm.baseQty=\"\",\"\",_xlpm.effQty-_xlpm.baseQty),"
-            + "_xlpm.bidSellDelta,IF(_xlpm.baseSell=\"\",\"\","
-            +     "IF(_xlpm.sellEa-_xlpm.baseSell=0,\"\",_xlpm.sellEa-_xlpm.baseSell)),"
-            + "_xlpm.isAdded,IF((BidDate<>\"\")*(_xlpm.baseQty=\"\"),1,\"\"),"
-            // Predicates / FILTERed per-column views (computed once, re-used across body cols)
-            + $"_xlpm.predRem,(_xlpm.snapType<>\"\")*ISNA(MATCH(_xlpm.snapType&\"|\"&_xlpm.snapCatComb,{currentKeyExpr},0)),"
-            + "_xlpm.fTypes,IFERROR(_xlfn._xlws.FILTER(_xlpm.A,_xlpm.pred),\"\"),"
-            + "_xlpm.fEffMfr,IFERROR(_xlfn._xlws.FILTER(_xlpm.effMfr,_xlpm.pred),\"\"),"
-            + "_xlpm.fCatalog,IFERROR(_xlfn._xlws.FILTER(_xlpm.catalog,_xlpm.pred),\"\"),"
-            + "_xlpm.fEffQty,IFERROR(_xlfn._xlws.FILTER(_xlpm.effQty,_xlpm.pred),\"\"),"
-            + "_xlpm.fSellEa,IFERROR(_xlfn._xlws.FILTER(_xlpm.sellEa,_xlpm.pred),\"\"),"
-            + "_xlpm.fSellExt,IFERROR(_xlfn._xlws.FILTER(_xlpm.sellExt,_xlpm.pred),\"\"),"
-            + "_xlpm.fPcts,IFERROR(_xlfn._xlws.FILTER(_xlpm.typeKPerRow,_xlpm.pred),0),"
-            + "_xlpm.fBidDelta,IFERROR(_xlfn._xlws.FILTER(_xlpm.bidDelta,_xlpm.pred),\"\"),"
-            + "_xlpm.fBidSellDelta,IFERROR(_xlfn._xlws.FILTER(_xlpm.bidSellDelta,_xlpm.pred),\"\"),"
-            + "_xlpm.fIsAdded,IFERROR(_xlfn._xlws.FILTER(_xlpm.isAdded,_xlpm.pred),\"\"),"
-            + $"_xlpm.fBlank,IFERROR(_xlfn._xlws.FILTER(IF({Col("A")}<>\"~~\",\"\",\"\"),_xlpm.pred),\"\"),"
-            + string.Join(",", Enumerable.Range(0, 6).Select(i =>
-                $"_xlpm.fN{i + 1},IFERROR(_xlfn._xlws.FILTER({NotePerRow(noteCols[i])},_xlpm.pred),\"\")"))
-            + ","
-            // Group-structure helpers — computed once, used by gapLambda + flag body
-            + "_xlpm.prev,IFERROR(_xlfn.VSTACK(INDEX(_xlpm.fTypes,1),_xlfn.DROP(_xlpm.fTypes,-1)),\"\"),"
-            + "_xlpm.nxt,IFERROR(_xlfn.VSTACK(_xlfn.DROP(_xlpm.fTypes,1),\"\"),\"\"),"
-            + "_xlpm.isLast,(_xlpm.fTypes<>_xlpm.nxt),"
-            + "_xlpm.totals,IFERROR(_xlfn.BYROW(_xlpm.fTypes,_xlfn.LAMBDA(_xlpm.tv,SUMPRODUCT((_xlpm.fTypes=_xlpm.tv)*_xlpm.fSellExt))),0),"
-            // Gap LAMBDA — defined once, invoked from each body col below.
-            + $"_xlpm.gap,{gapLambda},"
-            // Output blocks
-            + $"_xlpm.body,IFERROR({bodyHstack},\"\"),"
-            + $"_xlpm.removed,IFERROR({removedHstack},\"\"),"
-            + $"_xlpm.footer,{footerHstack},"
-            + "_xlfn.VSTACK(_xlpm.body,_xlpm.removed,_xlpm.footer))";
+        string[] NoteBlank() => Enumerable.Repeat("\"\"", 6).ToArray();
+        string[] NoteLabel() => Enumerable.Repeat("\"NOTE:\"", 6).ToArray();
+        string[] NoteText() => new[] { "_xlpm.n1", "_xlpm.n2", "_xlpm.n3", "_xlpm.n4", "_xlpm.n5", "_xlpm.n6" };
 
-        // BT2 anchors the 2D spill; BU2..CD2 stay empty.
-        ws.Cell($"{cols[0]}2").FormulaA1 = master;
+        // Footer math: subtotals over Worksheet (current) and over snapshot (baseline).
+        string sellSubtotalCurrent =
+            $"SUMPRODUCT(({predicate})*{sellEa}*{effQty})"
+            + $"+SUMPRODUCT(({predicate})*{sellExt}*{typeKPerRow})";
+        // Bid Total — sum over baseline snapshot's frozen Sell Ext per Type. Snapshot has 1
+        // row per Type with frozen T (Sell Ea.) and I (Count). When BidDate is blank or no
+        // snapshot exists, IFERROR collapses to 0.
+        string bidTotal =
+            $"IFERROR(SUMPRODUCT(IFERROR(--{snapQtyRange},0)*IFERROR(--{snapSellRange},0)),0)";
+        // Add Lutron and Freight contributions to both totals.
+        string lutronFrozenExpr = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V1\"),0)";
+        string freightFrozenExpr = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V2\"),0)";
+        string lutronCurrentExpr = "IF(LutronSubtotal=\"\",0,LutronSubtotal)";
+        string freightCurrentExpr = "IF(FreightSell=\"\",0,FreightSell)";
+
+        string bidTotalAll = $"({bidTotal})+({lutronFrozenExpr})+({freightFrozenExpr})";
+        string currentTotalAll = $"({sellSubtotalCurrent})+({lutronCurrentExpr})+({freightCurrentExpr})";
+        string netChange = $"({currentTotalAll})-({bidTotalAll})";
+        // Additions/Credits via per-row positive/negative ext deltas. Use the full broadcast.
+        string extDelta = $"({sellExt}-IFERROR({baselineQtyArr}*{baselineSellArr},0))";
+        string additionsCurrent = $"SUMPRODUCT(({predicate})*({extDelta})*(({extDelta})>0))";
+        string creditsCurrent = $"SUMPRODUCT(({predicate})*({extDelta})*(({extDelta})<0))";
+
+        // Decide whether to emit Lutron / Freight rows. Done once at rebuild against current
+        // Dashboard values + baseline frozen meta. Once emitted, the formula cells track live
+        // edits to B6/B8 (and snapshot V1/V2 stays frozen).
+        bool emitLutron, emitFreight;
+        try
+        {
+            var baselineSheet = ResolveBaselineSheet(wb);
+            emitLutron = HasAdjustmentValue(wb, baselineSheet, DashLutronCell, frozenMetaRow: 1);
+            emitFreight = HasAdjustmentValue(wb, baselineSheet, DashFreightSellCell, frozenMetaRow: 2);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"BC.HasAdjustmentValue: {ex.GetType().Name}: {ex.Message}", ex);
+        }
+
+        // Live FILTER-driven removed-block. Each column gets a column-shaped array sliced from
+        // the active baseline snapshot (resolved live via BcSnapPrefix → INDIRECT). Predicate:
+        // baseline-row Type is non-blank AND not present anywhere in current Worksheet col A.
+        // The whole suffix is gated on hasRem=SUMPRODUCT(predicate)>0 so:
+        //   - When BidDate is blank → INDIRECT errors → IFERROR collapses hasRem to FALSE,
+        //     suffix skips the FILTER block entirely (no phantom blank row).
+        //   - When baseline has zero removed types → same path, no FILTER block.
+        //   - When B11 retargets to a baseline with different removed types → FILTER recomputes
+        //     live, no rebuild required (Phase F deviation #1 closed).
+        string snapTypes10k = $"INDIRECT({BcSnapPrefix}&\"A2:A10000\")";
+        string snapMfrs10k = $"INDIRECT({BcSnapPrefix}&\"B2:B10000\")";
+        string snapCatC10k = $"INDIRECT({BcSnapPrefix}&\"C2:C10000\")";
+        string snapCatH10k = $"INDIRECT({BcSnapPrefix}&\"H2:H10000\")";
+        string snapQty10k = $"INDIRECT({BcSnapPrefix}&\"I2:I10000\")";
+        string snapSell10k = $"INDIRECT({BcSnapPrefix}&\"T2:T10000\")";
+        // Catalog combined matches body's display rule (C & " ~ " & H when H meaningful).
+        string snapCatCombined10k =
+            $"({snapCatC10k})&IF(({snapCatH10k}<>0)*({snapCatH10k}<>\"\")*({snapCatH10k}<>\"dependent\"),"
+            + $"\" ~ \"&{snapCatH10k},\"\")";
+
+        // Column-specific FILTER expression: returns a column-shaped array of the right length
+        // (one row per removed-type-row in the baseline). _xlpm.pred is provided by the outer LET.
+        // Each branch must produce a column-shaped result of length matching the predicate
+        // count. For constant-broadcast columns (Qty=0, SellExt=0, flags=1, blank columns)
+        // we anchor on a boolean comparison of FILTERed snapTypes so the result is numeric/
+        // text-coerced correctly: `text*0` produces #VALUE!, but `(text<>"~~")*0` is 0.
+        string FilteredTypes = $"_xlfn._xlws.FILTER({snapTypes10k},_xlpm.pred)";
+        string FilterCol(int colIdx) => colIdx switch
+        {
+            0 => FilteredTypes,
+            1 => $"UPPER(_xlfn._xlws.FILTER({snapMfrs10k},_xlpm.pred))",
+            2 => $"_xlfn._xlws.FILTER({snapCatCombined10k},_xlpm.pred)",
+            3 => $"({FilteredTypes}<>\"~~\")*0",
+            4 => $"-_xlfn._xlws.FILTER({snapQty10k},_xlpm.pred)",
+            5 => $"_xlfn._xlws.FILTER({snapSell10k},_xlpm.pred)",
+            6 => $"IF({FilteredTypes}<>\"~~\",\"\",\"\")",
+            7 => $"({FilteredTypes}<>\"~~\")*0",
+            8 => $"({FilteredTypes}<>\"~~\")*1",
+            9 => $"IF({FilteredTypes}<>\"~~\",\"\",\"\")",
+            10 => $"({FilteredTypes}<>\"~~\")*1",
+            _ => "\"\"",
+        };
+
+        // Fixed (scalar) suffix rows beyond the removed block: optional Lutron, optional Freight,
+        // and (BW/CA only) the 6-row totals footer. colIdx selects each row's value per column.
+        string[] FixedSuffixRows(int colIdx)
+        {
+            var rows = new List<string>();
+            if (emitLutron)
+            {
+                rows.Add(colIdx switch
+                {
+                    0 => "\"Lutron Lighting Control\"",
+                    1 => "\"\"",
+                    2 => "\"\"",
+                    3 => "1",
+                    4 => "\"\"",
+                    5 => lutronCurrentExpr,
+                    6 => $"IF({lutronFrozenExpr}=0,\"\",{lutronCurrentExpr}-{lutronFrozenExpr})",
+                    7 => lutronCurrentExpr,
+                    _ => "\"\"",
+                });
+            }
+            if (emitFreight)
+            {
+                rows.Add(colIdx switch
+                {
+                    0 => "\"Estimated Freight\"",
+                    1 => "\"\"",
+                    2 => "\"\"",
+                    3 => "1",
+                    4 => "\"\"",
+                    5 => freightCurrentExpr,
+                    6 => $"IF({freightFrozenExpr}=0,\"\",{freightCurrentExpr}-{freightFrozenExpr})",
+                    7 => freightCurrentExpr,
+                    _ => "\"\"",
+                });
+            }
+            // Footer block (6 rows: spacer + 5 totals) — only on BW(3)/CA(7). Other cols omit
+            // entirely so their spill doesn't pad past the visible totals.
+            string[] footerRows = colIdx switch
+            {
+                3 => new[]
+                {
+                    "\"\"",
+                    "\"Bid Total (\"&IF(BidDate=\"\",\"—\",TEXT(BidDate,\"yyyy-mm-dd\"))&\"):\"",
+                    "\"Current Total:\"",
+                    "\"Additions:\"",
+                    "\"Credits:\"",
+                    "\"Net Change vs Bid:\"",
+                },
+                7 => new[]
+                {
+                    "\"\"",
+                    bidTotalAll,
+                    currentTotalAll,
+                    additionsCurrent,
+                    creditsCurrent,
+                    netChange,
+                },
+                _ => Array.Empty<string>(),
+            };
+            rows.AddRange(footerRows);
+            return rows.ToArray();
+        }
+
+        // Builds: =LET(_xlpm.snapType, ..., _xlpm.pred, ..., _xlpm.removed, IFERROR(<FILTER>, ""),
+        //              VSTACK(body, _xlpm.removed, fixed...))
+        // When predicate matches no rows (empty BidDate, no removeds, etc.), IFERROR collapses
+        // _xlpm.removed to a single "" cell — adds 1 phantom blank row before lutron/freight/
+        // footer. Acceptable tradeoff to keep the formula scalar-valued and avoid array-branch
+        // IF which can confuse static spill-shape analysis.
+        string BodyWithSuffix(string body, int colIdx)
+        {
+            string[] fixedRows = FixedSuffixRows(colIdx);
+            string filter = FilterCol(colIdx);
+            string fixedJoined = fixedRows.Length == 0 ? "" : "," + string.Join(",", fixedRows);
+            // Removed-row predicate: snapshot rows whose (Type, CatCombo) composite key
+            // is absent from current Worksheet. Matches the keying used by baselineQtyArr/
+            // baselineSellArr so a row that's been re-cataloged (same Type, different CatCombo)
+            // appears as removed-from-baseline + added-to-current rather than vanishing.
+            return
+                "_xlfn.LET("
+                + $"_xlpm.snapType,{snapTypes10k},"
+                + $"_xlpm.snapCatC,{snapCatC10k},"
+                + $"_xlpm.snapCatH,{snapCatH10k},"
+                + "_xlpm.snapCatComb,_xlpm.snapCatC&IF((_xlpm.snapCatH<>0)*(_xlpm.snapCatH<>\"\")*(_xlpm.snapCatH<>\"dependent\"),\" ~ \"&_xlpm.snapCatH,\"\"),"
+                + "_xlpm.snapKey,_xlpm.snapType&\"|\"&_xlpm.snapCatComb,"
+                + $"_xlpm.curKey,A2:A{lastDataRow}&\"|\"&{catalogCombined},"
+                + "_xlpm.pred,(_xlpm.snapType<>\"\")*ISNA(MATCH(_xlpm.snapKey,_xlpm.curKey,0)),"
+                + $"_xlpm.removed,IFERROR({filter},\"\"),"
+                + $"_xlfn.VSTACK({body},_xlpm.removed{fixedJoined}))";
+        }
+
+        int idx = 0;
+        // BT — Type
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\")", 0);
+        // BU — Mfr
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(effMfr, "_xlpm.vals", NoteLabel())},\"\")", 1);
+        // BV — Catalog
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(catalogCombined, "\"Tariff *may be deleted/reduced if tariffs change\"", NoteText())},\"\")", 2);
+        // BW — Qty + footer labels
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(effQty, "\"\"", NoteBlank())},\"\")", 3);
+        // BX — Δ (canonical-row only, baseline-aware)
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(bidDelta, "\"\"", NoteBlank())},\"\")", 4);
+        // BY — Sell Ea.
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(sellEa, "\"\"", NoteBlank())},\"\")", 5);
+        // BZ — ΔSell
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(bidSellDelta, "\"\"", NoteBlank())},\"\")", 6);
+        // CA — Sell Ext. + footer values
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts", NoteBlank())},\"\")", 7);
+
+        // CB — InDataBlock flag (1 for body data/tariff/note/gap rows + removed rows; blank for
+        // Lutron/Freight/footer). Body uses the same flag-LAMBDA shape as Quote.
+        string noteFlagLet = string.Join(",", Enumerable.Range(1, 6).Select(n =>
+            $"_xlpm.n{n}Col,IF(_xlpm.isLast*(_xlpm.n{n}<>\"\"),1,_xlfn.NA())"));
+        string flagHstackCols = "_xlpm.gapCol,_xlpm.valsCol,_xlpm.tariffCol,"
+            + string.Join(",", Enumerable.Range(1, 6).Select(n => $"_xlpm.n{n}Col"));
+        string flagLambda =
+              "_xlfn.LAMBDA(_xlpm.types,_xlpm.pcts,_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
+            +   "IF(ROWS(_xlpm.types)<=1,1,"
+            +     "_xlfn.LET("
+            +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
+            +       "_xlpm.nxt,_xlfn.VSTACK(_xlfn.DROP(_xlpm.types,1),\"\"),"
+            +       "_xlpm.gapCol,IF(_xlpm.types<>_xlpm.prev,1,_xlfn.NA()),"
+            +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
+            +       "_xlpm.valsCol,_xlfn.SEQUENCE(ROWS(_xlpm.types),1,1,0),"
+            +       "_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),1,_xlfn.NA()),"
+            +       noteFlagLet + ","
+            +       $"_xlfn.TOCOL(_xlfn.HSTACK({flagHstackCols}),2)"
+            +     ")"
+            +   ")"
+            + $")({typesArg},{pctsArg},{string.Join(",", noteArgs)})";
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({flagLambda},\"\")", 8);
+
+        // CC — IsAdded flag (1 only on canonical rows of types added since bid). Body broadcasts
+        // isAddedArr through Gap; suffix rows blank for lutron/freight/footer (and removed rows
+        // aren't "added"). The FILTER-block returns "" via FilterCol(9).
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(isAddedArr, "\"\"", NoteBlank())},\"\")", 9);
+
+        // CD — IsRemoved flag (1 only on rows from the FILTER-driven removed block). Body and
+        // lutron/freight/footer all blank; FilterCol(10) emits 1s aligned with the removed array.
+        // Body broadcast: feed Gap a same-shape array of "" so Gap's TOCOL output is all blank.
+        string blankBody = $"IF({Col("A")}<>\"~~\",\"\",\"\")";
+        ws.Cell($"{cols[idx++]}2").FormulaA1 =
+            BodyWithSuffix($"IFERROR({Gap(blankBody, "\"\"", NoteBlank())},\"\")", 10);
+    }
+
+    private static IXLWorksheet? ResolveBaselineSheet(IXLWorkbook wb)
+    {
+        var bidDate = ReadBidDate(wb);
+        if (bidDate == null) return null;
+        return wb.Worksheets.TryGetWorksheet($"Counts {bidDate:yyyy.MM.dd}", out var s) ? s : null;
     }
 
     #endregion
@@ -2289,12 +2408,11 @@ public static class CountsWorkbookService
         string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Δ", "Sell Ea.", "ΔSell", "Sell Ext." };
         WritePrintSheetHeaders(ws, headerRow, headers);
 
-        // Spill row 8 — 11 INDEX-slice cells consuming the single 2D dynamic-array spill at
-        // Worksheet!BT2 (which spreads BT2:CD<n>). 8 visible (cols 1–8) + 3 hidden flags (9–11).
+        // Spill row 8 — 11 ANCHORARRAY cells: 8 visible (BT..CA) + 3 hidden flags (CB, CC, CD).
         int spillRow = 8;
         for (int i = 0; i < BidCompareHelperCols.Length; i++)
         {
-            string anchor = $"INDEX(_xlfn.ANCHORARRAY(Worksheet!BT2),,{i + 1})";
+            string anchor = $"_xlfn.ANCHORARRAY(Worksheet!{BidCompareHelperCols[i]}2)";
             string formula = i switch
             {
                 0 => BuildLeadingSpaceFormula(anchor),
@@ -2342,46 +2460,48 @@ public static class CountsWorkbookService
         ws.PageSetup.SetRowsToRepeatAtTop(1, 7);
     }
 
-    /// <summary>Bid-Compare-specific footer label styling. Mirrors Quote's ApplyFooterStyling
-    /// — bold labels on Qty, top border on Sell Ext for Bid Total / Fixture Sub-Total /
-    /// Lighting Package Total rows, bold + top border on Bid Total and Lighting Package Total
-    /// Sell Ext cells.</summary>
+    /// <summary>Bid-Compare-specific footer label styling. Bold + top border on the Bid Total /
+    /// Current Total / Net Change vs Bid rows; Net cell red font when negative.</summary>
     private static void ApplyBidCompareFooterStyling(
         IXLWorksheet ws, int spillRow, int qtyCol, int sellExtCol)
     {
         string qtyLetter = XLHelper.GetColumnLetterFromNumber(qtyCol);
-        string[] exactLabels =
-        {
-            "Fixture Package Sub-Total:",
-            "Lutron Lighting Control Sub-Total:",
-            "Estimated Freight:",
-            "LIGHTING PACKAGE TOTAL:",
-        };
+        string sellExtLetter = XLHelper.GetColumnLetterFromNumber(sellExtCol);
 
-        // Bold + right-align labels (Qty col). Bid Total carries a date suffix → prefix-match.
-        string labelPredicate = "OR("
-            + $"ISNUMBER(SEARCH(\"Bid Total\",${qtyLetter}{spillRow})),"
-            + string.Join(",", exactLabels.Select(l => $"${qtyLetter}{spillRow}=\"{l}\""))
-            + ")";
+        // Footer labels live on the Qty column. Each label triggers its own styling rule.
+        // The Bid Total label has a date suffix so we match by prefix via SEARCH.
         var qtyRange = ws.Range(spillRow, qtyCol, 1000, qtyCol);
-        qtyRange.AddConditionalFormat().WhenIsTrue(labelPredicate).Font.SetBold();
 
-        // Bid Total row — top border + bold on Sell Ext (date-suffix prefix-match).
-        var bidTotalCf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol).AddConditionalFormat()
-            .WhenIsTrue($"ISNUMBER(SEARCH(\"Bid Total\",${qtyLetter}{spillRow}))");
-        bidTotalCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
-        bidTotalCf.Font.SetBold();
+        // Bold all footer labels.
+        var labelCf = qtyRange.AddConditionalFormat().WhenIsTrue(
+            $"OR(ISNUMBER(SEARCH(\"Bid Total\",${qtyLetter}{spillRow})),"
+            + $"${qtyLetter}{spillRow}=\"Current Total:\","
+            + $"${qtyLetter}{spillRow}=\"Additions:\","
+            + $"${qtyLetter}{spillRow}=\"Credits:\","
+            + $"${qtyLetter}{spillRow}=\"Net Change vs Bid:\")");
+        labelCf.Font.SetBold();
 
-        // Fixture Package Sub-Total — top border on Sell Ext.
-        var subCf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol).AddConditionalFormat()
-            .WhenIsTrue($"${qtyLetter}{spillRow}=\"Fixture Package Sub-Total:\"");
-        subCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+        // Top border on Sell Ext at Bid Total and Current Total rows.
+        foreach (var label in new[] { "Bid Total", "Current Total:" })
+        {
+            string predicate = label.EndsWith(":")
+                ? $"${qtyLetter}{spillRow}=\"{label}\""
+                : $"ISNUMBER(SEARCH(\"{label}\",${qtyLetter}{spillRow}))";
+            var cf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol)
+                .AddConditionalFormat().WhenIsTrue(predicate);
+            cf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+        }
 
-        // Lighting Package Total — top border + bold on Sell Ext.
-        var grandCf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol).AddConditionalFormat()
-            .WhenIsTrue($"${qtyLetter}{spillRow}=\"LIGHTING PACKAGE TOTAL:\"");
-        grandCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
-        grandCf.Font.SetBold();
+        // Net Change row: bold + top border + red font when negative.
+        var netCf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol).AddConditionalFormat()
+            .WhenIsTrue($"${qtyLetter}{spillRow}=\"Net Change vs Bid:\"");
+        netCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
+        netCf.Font.SetBold();
+        var netNegCf = ws.Range(spillRow, sellExtCol, 1000, sellExtCol).AddConditionalFormat()
+            .WhenIsTrue(
+                $"AND(${qtyLetter}{spillRow}=\"Net Change vs Bid:\","
+                + $"ISNUMBER(${sellExtLetter}{spillRow}),${sellExtLetter}{spillRow}<0)");
+        netNegCf.Font.FontColor = XLColor.FromHtml("#C00000");
     }
 
     /// <summary>Bid Compare row tints. Driven by Δ (col E), ΔSell (col G), IsAdded flag
@@ -2424,23 +2544,35 @@ public static class CountsWorkbookService
             .WhenIsTrue($"$K{spillRow}=1");
         removedCf.Font.Strikethrough = true;
         removedCf.Font.FontColor = XLColor.FromHtml("#808080");
+    }
 
-        // Rule 6/7: Lutron / Freight Sell Ext yellow fill when current value differs from the
-        // active snapshot's frozen V1 / V2 meta. Uses INDIRECT against BcSnapPrefix so the
-        // highlight retargets when B11 changes (sheet-scoped LutronFrozen / FreightSellFrozen
-        // names would not). ROUND(...,2) defends against float artifacts.
-        string lutronFrozen = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V1\"),0)";
-        string freightFrozen = $"IFERROR(--INDIRECT({BcSnapPrefix}&\"V2\"),0)";
-        ws.Range(spillRow, 8, 1000, 8).AddConditionalFormat()
-            .WhenIsTrue(
-                $"AND($D{spillRow}=\"Lutron Lighting Control Sub-Total:\","
-                + $"ROUND($H{spillRow},2)<>ROUND({lutronFrozen},2))")
-            .Fill.BackgroundColor = BcQtyTint;
-        ws.Range(spillRow, 8, 1000, 8).AddConditionalFormat()
-            .WhenIsTrue(
-                $"AND($D{spillRow}=\"Estimated Freight:\","
-                + $"ROUND($H{spillRow},2)<>ROUND({freightFrozen},2))")
-            .Fill.BackgroundColor = BcQtyTint;
+    /// <summary>True when either Dashboard's current cell or the baseline's frozen meta
+    /// cell holds a non-zero numeric value. Used to decide whether to emit a Lutron /
+    /// Freight adjustment row at rebuild — once emitted, formulas track live edits.</summary>
+    private static bool HasAdjustmentValue(
+        IXLWorkbook wb, IXLWorksheet? baselineSheet, string dashboardCell, int frozenMetaRow)
+    {
+        if (wb.Worksheets.TryGetWorksheet("Dashboard", out var dashWs))
+        {
+            var c = dashWs.Cell(dashboardCell);
+            if (!c.IsEmpty() && c.TryGetValue(out double v) && v != 0) return true;
+        }
+        if (baselineSheet != null)
+        {
+            var c = baselineSheet.Cell(frozenMetaRow, CsColFrozenMeta);
+            if (!c.IsEmpty() && c.TryGetValue(out double v) && v != 0) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Returns Dashboard!B11 as a DateTime, or null when blank/unparseable.</summary>
+    private static DateTime? ReadBidDate(IXLWorkbook wb)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var dashWs)) return null;
+        var b11 = dashWs.Cell(DashBidDateCell);
+        if (b11.IsEmpty()) return null;
+        if (b11.TryGetValue(out DateTime dt)) return dt;
+        return null;
     }
 
     /// <summary>
