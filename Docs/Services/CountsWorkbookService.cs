@@ -85,14 +85,16 @@ public static class CountsWorkbookService
     private const int CsColNote1 = 13;      // M — Schedule Notes 1..6 emitted for reference
     private const int CsColNote6 = 18;      // R
     // Hidden helper column — Type|Cat1Cat2…Cat6 concatenation used by the Bid Compare sheet's
-    // SUMIFS lookup against the historical Counts snapshot selected on Dashboard!B11.
+    // SUMIFS lookup against the historical Counts snapshot selected on Dashboard!B12.
     private const int CsColCatCombo = 19;   // S
     // Frozen unit prices captured at snapshot write time so Bid Compare can show price changes
     // since the bid. Sell Ea. = (UnitCost * (1 + Markup)) + Adder; Buy Ea. = UnitCost.
     private const int CsColSellEa = 20;     // T
     private const int CsColBuyEa = 21;      // U
-    // Frozen Dashboard meta on column V (hidden): V1 = Lutron (B6), V2 = Freight Sell (B8).
-    // Sheet-scoped named ranges LutronFrozen / FreightSellFrozen point at these cells.
+    // Frozen Dashboard meta on column V (hidden): V1 = Lutron (B7), V2 = Freight Sell (B9),
+    // V3 = Sales Tax rate (B6, written for future Bid Compare consumption — not read yet).
+    // Sheet-scoped named ranges LutronFrozen / FreightSellFrozen / SalesTaxRateFrozen point
+    // at these cells.
     private const int CsColFrozenMeta = 22; // V
 
     // Highlight colors
@@ -358,12 +360,13 @@ public static class CountsWorkbookService
 
     // Dashboard cell anchors (consumed by helper pipeline via named ranges)
     private const string DashRepDirCell = "B3";
-    private const string DashLutronCell = "B6";
-    private const string DashFreightBuyCell = "B7";
-    private const string DashFreightSellCell = "B8";
-    private const string DashBidDateCell = "B11";
-    private const string DashNotesFirstRow = "33";
-    private const string DashNotesLastRow = "47";
+    private const string DashSalesTaxCell = "B6";
+    private const string DashLutronCell = "B7";
+    private const string DashFreightBuyCell = "B8";
+    private const string DashFreightSellCell = "B9";
+    private const string DashBidDateCell = "B12";
+    private const string DashNotesFirstRow = "34";
+    private const string DashNotesLastRow = "48";
 
     // Default quote-footer notes seeded into a freshly built Dashboard. Order is grouped
     // by theme: pricing & validity → billing → tax → fulfillment → contractor/exclusions.
@@ -439,60 +442,66 @@ public static class CountsWorkbookService
 
         // --- QUOTE ADJUSTMENTS ---
         WriteSectionBar(ws, 5, "QUOTE ADJUSTMENTS");
-        // Left blank by default — the Quote/Phase sheets omit the Lutron row when B6 is empty,
-        // and blank cells coerce to 0 inside the Grand Total arithmetic.
-        ws.Cell("A6").Value = "Lutron Lighting Control";
-        ws.Cell("B6").Style.NumberFormat.Format = "$#,##0.00";
+        // Sales Tax is a percent applied to the fixture subtotal only. Quote/Phase sheets
+        // omit the row when B6 is blank; an explicit 0% emits the row at $0.
+        ws.Cell("A6").Value = "Sales Tax";
+        ws.Cell("B6").Style.NumberFormat.Format = "0.00%";
         StyleEditableCell(ws.Cell("B6"));
         // Sits directly under the QUOTE ADJUSTMENTS bar — drop the top border so the gray
         // outline doesn't show against the dark #262626 fill above.
         ws.Cell("B6").Style.Border.TopBorder = XLBorderStyleValues.None;
 
-        ws.Cell("A7").Value = "Estimated Freight (Buy)";
+        // Left blank by default — the Quote/Phase sheets omit the Lutron row when B7 is empty,
+        // and blank cells coerce to 0 inside the Grand Total arithmetic.
+        ws.Cell("A7").Value = "Lutron Lighting Control";
         ws.Cell("B7").Style.NumberFormat.Format = "$#,##0.00";
         StyleEditableCell(ws.Cell("B7"));
 
-        ws.Cell("A8").Value = "Estimated Freight (Sell)";
+        ws.Cell("A8").Value = "Estimated Freight (Buy)";
         ws.Cell("B8").Style.NumberFormat.Format = "$#,##0.00";
         StyleEditableCell(ws.Cell("B8"));
+
+        ws.Cell("A9").Value = "Estimated Freight (Sell)";
+        ws.Cell("B9").Style.NumberFormat.Format = "$#,##0.00";
+        StyleEditableCell(ws.Cell("B9"));
 
         // --- REFERENCE COUNTS ---
         // Live pointer to a historical Counts sheet. When set, Worksheet col E (and the
         // Quote Δ column it feeds) re-resolves against that snapshot via INDIRECT/SUMIFS.
         // When blank, behavior falls back to "compare against latest prior run."
-        WriteSectionBar(ws, 10, "REFERENCE COUNTS");
-        ws.Cell("A11").Value = "Compare to";
-        ws.Cell("B11").Style.NumberFormat.Format = "yyyy-mm-dd";
-        StyleEditableCell(ws.Cell("B11"));
+        WriteSectionBar(ws, 11, "REFERENCE COUNTS");
+        ws.Cell("A12").Value = "Compare to";
+        ws.Cell("B12").Style.NumberFormat.Format = "yyyy-mm-dd";
+        StyleEditableCell(ws.Cell("B12"));
         // Same dark-bar abutment fix as B6 — see comment above.
-        ws.Cell("B11").Style.Border.TopBorder = XLBorderStyleValues.None;
+        ws.Cell("B12").Style.Border.TopBorder = XLBorderStyleValues.None;
         // Data-validation dropdown is wired up in RefreshReferenceCountsDropdown — that
         // helper also runs on every GenerateUpdate so the list stays in sync as new
         // Counts sheets accumulate.
 
         // Bold all column-A labels so they read as field captions against the input cells.
-        foreach (string addr in new[] { "A3", "A6", "A7", "A8", "A11" })
+        foreach (string addr in new[] { "A3", "A6", "A7", "A8", "A9", "A12" })
             ws.Cell(addr).Style.Font.Bold = true;
 
         // --- INTERNAL NOTES ---
-        WriteSectionBar(ws, 13, "INTERNAL NOTES");
-        ws.Cell("A14").Value = "Date";
-        ws.Cell("B14").Value = "Author";
-        ws.Cell("C14").Value = "Status";
-        ws.Cell("D14").Value = "Notes";
-        StyleSubHeaderRow(ws.Range("A14:D14"));
-        StyleInputBlock(ws.Range("A15:D29"), headerRow: ws.Range("A14:D14"));
+        WriteSectionBar(ws, 14, "INTERNAL NOTES");
+        ws.Cell("A15").Value = "Date";
+        ws.Cell("B15").Value = "Author";
+        ws.Cell("C15").Value = "Status";
+        ws.Cell("D15").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A15:D15"));
+        StyleInputBlock(ws.Range("A16:D30"), headerRow: ws.Range("A15:D15"));
 
         // --- QUOTE FOOTER NOTES ---
-        WriteSectionBar(ws, 31, "QUOTE FOOTER NOTES");
-        ws.Cell("A32").Value = "BOLD";
-        ws.Cell("A32").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        ws.Cell("B32").Value = "Notes";
-        StyleSubHeaderRow(ws.Range("A32:D32"));
+        WriteSectionBar(ws, 32, "QUOTE FOOTER NOTES");
+        ws.Cell("A33").Value = "BOLD";
+        ws.Cell("A33").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell("B33").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A33:D33"));
 
         for (int i = 0; i < 15; i++)
         {
-            int r = 33 + i;
+            int r = 34 + i;
             // Seed the first N rows from DefaultQuoteNotes; remaining rows stay blank for the user.
             bool boldDefault = i < DefaultQuoteNotes.Length && DefaultQuoteNotes[i].Bold;
             ws.Cell(r, 1).Value = boldDefault; // boolean literal — pass 3 upgrades to native checkbox
@@ -504,7 +513,7 @@ public static class CountsWorkbookService
             if (i < DefaultQuoteNotes.Length)
                 ws.Cell(r, 2).Value = DefaultQuoteNotes[i].Text;
         }
-        StyleInputBlock(ws.Range("A33:D47"), headerRow: ws.Range("A32:D32"));
+        StyleInputBlock(ws.Range("A34:D48"), headerRow: ws.Range("A33:D33"));
 
         // Constrain the BOLD column to TRUE/FALSE so the print-sheet CF
         // (which compares against the boolean TRUE) always matches what the user picks.
@@ -520,17 +529,18 @@ public static class CountsWorkbookService
 
         // Named ranges
         wb.DefinedNames.Add("RepDirectoryPath", ws.Range("B3:B3"));
-        wb.DefinedNames.Add("LutronSubtotal", ws.Range("B6:B6"));
-        wb.DefinedNames.Add("FreightBuy", ws.Range("B7:B7"));
-        wb.DefinedNames.Add("FreightSell", ws.Range("B8:B8"));
-        wb.DefinedNames.Add("BidDate", ws.Range("B11:B11"));
+        wb.DefinedNames.Add("SalesTaxRate", ws.Range("B6:B6"));
+        wb.DefinedNames.Add("LutronSubtotal", ws.Range("B7:B7"));
+        wb.DefinedNames.Add("FreightBuy", ws.Range("B8:B8"));
+        wb.DefinedNames.Add("FreightSell", ws.Range("B9:B9"));
+        wb.DefinedNames.Add("BidDate", ws.Range("B12:B12"));
         wb.DefinedNames.Add("QuoteNotes", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
         wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"A{DashNotesFirstRow}:A{DashNotesLastRow}"));
 
         // Protection: unlock editable cells, lock the rest
-        foreach (string addr in new[] { "B3", "B6", "B7", "B8", "B11" })
+        foreach (string addr in new[] { "B3", "B6", "B7", "B8", "B9", "B12" })
             ws.Cell(addr).Style.Protection.SetLocked(false);
-        ws.Range("A15:D29").Style.Protection.SetLocked(false);
+        ws.Range("A16:D30").Style.Protection.SetLocked(false);
         ws.Range($"A{DashNotesFirstRow}:B{DashNotesLastRow}").Style.Protection.SetLocked(false);
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
 
@@ -561,9 +571,9 @@ public static class CountsWorkbookService
     /// <summary>
     /// Repopulates the hidden helper range on Dashboard with the parsed dates of every
     /// Counts sheet currently in the workbook, then re-applies the data-validation list
-    /// to B11. Called from BuildDashboardSheet and from GenerateUpdate so the dropdown
+    /// to B12. Called from BuildDashboardSheet and from GenerateUpdate so the dropdown
     /// stays in sync as new Counts sheets accumulate. Sheet protection is briefly
-    /// suspended because the helper range and B11 are otherwise locked.
+    /// suspended because the helper range and B12 are otherwise locked.
     /// </summary>
     private static void RefreshReferenceCountsDropdown(IXLWorkbook wb)
     {
@@ -603,18 +613,18 @@ public static class CountsWorkbookService
         }
         ws.Column(26).Hide();
 
-        // Re-apply data validation to B11. Use a closed (non-empty) range so Excel doesn't
+        // Re-apply data validation to B12. Use a closed (non-empty) range so Excel doesn't
         // show every empty Z row as a blank entry.
-        var b11 = ws.Cell("B11");
-        b11.GetDataValidation().Clear();
+        var bidCell = ws.Cell(DashBidDateCell);
+        bidCell.GetDataValidation().Clear();
         if (count > 0)
         {
             var listSource = $"=Dashboard!$Z$1:$Z${count}";
-            var dv = b11.GetDataValidation();
+            var dv = bidCell.GetDataValidation();
             dv.List(listSource, true);
             dv.IgnoreBlanks = true;
         }
-        b11.Style.Protection.SetLocked(false);
+        bidCell.Style.Protection.SetLocked(false);
 
         if (wasProtected)
             ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
@@ -629,7 +639,7 @@ public static class CountsWorkbookService
         rng.FirstCell().Value = " " + text;
         StyleSectionBar(rng, fontSize: 12);
         // Hard #262626 bottom edge so the side borders of any editable cell directly
-        // below the bar (B6, B11, …) don't bleed up into the dark fill. Row 1 uses
+        // below the bar (B6, B12, …) don't bleed up into the dark fill. Row 1 uses
         // StyleSectionBar directly and intentionally has no bottom rule (it abuts the
         // CONFIGURATION bar in row 2).
         rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
@@ -1368,11 +1378,12 @@ public static class CountsWorkbookService
         ws.Column(CsColBuyEa).Hide();
 
         // Frozen Dashboard meta on column V (hidden). Sheet-scoped names so Bid Compare can
-        // resolve the snapshot's bid-time Lutron / Freight Sell values from any sheet.
+        // resolve the snapshot's bid-time Lutron / Freight Sell / Sales Tax rate from any sheet.
         if (wb.Worksheets.TryGetWorksheet("Dashboard", out var dashWs))
         {
             var lutronCell = dashWs.Cell(DashLutronCell);
             var freightCell = dashWs.Cell(DashFreightSellCell);
+            var taxCell = dashWs.Cell(DashSalesTaxCell);
             if (!lutronCell.IsEmpty() && lutronCell.TryGetValue(out double lutronVal))
             {
                 ws.Cell(1, CsColFrozenMeta).Value = lutronVal;
@@ -1383,9 +1394,15 @@ public static class CountsWorkbookService
                 ws.Cell(2, CsColFrozenMeta).Value = freightVal;
                 ws.Cell(2, CsColFrozenMeta).Style.NumberFormat.Format = "$#,##0.00";
             }
+            if (!taxCell.IsEmpty() && taxCell.TryGetValue(out double taxVal))
+            {
+                ws.Cell(3, CsColFrozenMeta).Value = taxVal;
+                ws.Cell(3, CsColFrozenMeta).Style.NumberFormat.Format = "0.00%";
+            }
         }
         ws.DefinedNames.Add("LutronFrozen", ws.Range(1, CsColFrozenMeta, 1, CsColFrozenMeta));
         ws.DefinedNames.Add("FreightSellFrozen", ws.Range(2, CsColFrozenMeta, 2, CsColFrozenMeta));
+        ws.DefinedNames.Add("SalesTaxRateFrozen", ws.Range(3, CsColFrozenMeta, 3, CsColFrozenMeta));
         ws.Column(CsColFrozenMeta).Hide();
 
         ApplyRawSheetStyling(ws, CsColNote6, lastDataRow);
@@ -1920,30 +1937,75 @@ public static class CountsWorkbookService
         string notesSpill = "_xlfn._xlws.FILTER(QuoteNotes,QuoteNotes<>\"\",\"\")";
 
         // Footer labels live on the Qty column and serve both Buy Ext. and Sell Ext.
-        // Lutron row is omitted when Dashboard!LutronSubtotal is blank.
-        // Two leading blank rows — buffer between the last data row and the totals block,
-        // matches the manually-tuned reference layout (Specs/Screenshot_31.png).
-        string labelFooter =
-            "IF(LutronSubtotal=\"\","
-            + "_xlfn.VSTACK(\"\",\"\",\"Fixture Package Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"),"
-            + "_xlfn.VSTACK(\"\",\"\",\"Fixture Package Sub-Total:\",\"Lutron Lighting Control Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"))";
+        // Optional rows (Sales Tax, Lutron) are omitted when the Dashboard cell is blank.
+        // 2×2 matrix over (tax?, lutron?) — branching once per spill cell keeps the formula
+        // shape Excel-compatible (FILTER over VSTACK trips the load-time parser).
+        // Two leading blank rows buffer between the last data row and the totals block.
+        string taxLabel = "\"Sales Tax (\"&TEXT(SalesTaxRate,\"0.00%\")&\"):\"";
+        string sellTax = $"({sellSubtotal})*SalesTaxRate";
+        string buyTax  = $"({buySubtotal})*SalesTaxRate";
 
-        // Sell Ext. footer values (tariff row carries per-type tariff amount).
-        string sellValueFooter =
-            "IF(LutronSubtotal=\"\","
-            + $"_xlfn.VSTACK(\"\",\"\",{sellSubtotal},FreightSell,{sellSubtotal}+FreightSell),"
-            + $"_xlfn.VSTACK(\"\",\"\",{sellSubtotal},LutronSubtotal,FreightSell,{sellSubtotal}+LutronSubtotal+FreightSell))";
+        // 2×2×2 matrix over (tax?, lutron?, freight?) — freight row appears when either
+        // FreightBuy or FreightSell has a value. N(FreightSell)/N(FreightBuy) coerce blank
+        // cells to 0 for the grand total when only one side is populated.
+        // VSTACK args: blank, blank, Subtotal, [Tax?], [Lutron?], [Freight?], Grand Total.
+        // Sell/Buy stacks reference _xlpm.sub (bound via LET below) instead of inlining the
+        // multi-hundred-char subtotal expression — keeps each footer formula well under
+        // Excel's 8192-char per-formula ceiling across the 8 branches.
+        string LabelStack(bool tax, bool lutron, bool freight)
+        {
+            var parts = new List<string> { "\"\"", "\"\"", "\"Fixture Package Sub-Total:\"" };
+            if (tax)     parts.Add(taxLabel);
+            if (lutron)  parts.Add("\"Lutron Lighting Control Sub-Total:\"");
+            if (freight) parts.Add("\"Estimated Freight:\"");
+            parts.Add("\"LIGHTING PACKAGE TOTAL:\"");
+            return $"_xlfn.VSTACK({string.Join(",", parts)})";
+        }
+        string ValueStack(bool tax, bool lutron, bool freight, string freightCell, bool isSell)
+        {
+            const string sub = "_xlpm.sub";
+            string taxExpr = $"{sub}*SalesTaxRate";
+            var parts = new List<string> { "\"\"", "\"\"", sub };
+            string total = sub;
+            if (tax)     { parts.Add(taxExpr);          total += $"+({taxExpr})"; }
+            if (lutron)  { parts.Add("LutronSubtotal"); total += "+LutronSubtotal"; }
+            if (freight) { parts.Add(freightCell);      total += $"+N({freightCell})"; }
+            parts.Add(total);
+            return $"_xlfn.VSTACK({string.Join(",", parts)})";
+        }
+        string SellStack(bool tax, bool lutron, bool freight) => ValueStack(tax, lutron, freight, "FreightSell", true);
+        string BuyStack(bool tax, bool lutron, bool freight)  => ValueStack(tax, lutron, freight, "FreightBuy",  false);
 
-        // Buy Ext. footer values (no tariff on Buy side).
-        string buyValueFooter =
-            "IF(LutronSubtotal=\"\","
-            + $"_xlfn.VSTACK(\"\",\"\",{buySubtotal},FreightBuy,{buySubtotal}+FreightBuy),"
-            + $"_xlfn.VSTACK(\"\",\"\",{buySubtotal},LutronSubtotal,FreightBuy,{buySubtotal}+LutronSubtotal+FreightBuy))";
+        // Freight predicate: row appears unless BOTH cells are blank.
+        const string freightBlank = "AND(FreightBuy=\"\",FreightSell=\"\")";
+        string Branch8(Func<bool, bool, bool, string> stack)
+        {
+            string Pair(bool tax, bool lutron) =>
+                $"IF({freightBlank},{stack(tax, lutron, false)},{stack(tax, lutron, true)})";
+            return "IF(SalesTaxRate=\"\","
+                + $"IF(LutronSubtotal=\"\",{Pair(false,false)},{Pair(false,true)}),"
+                + $"IF(LutronSubtotal=\"\",{Pair(true,false)},{Pair(true,true)}))";
+        }
+
+        string labelFooter = Branch8(LabelStack);
+        string sellValueFooter = $"_xlfn.LET(_xlpm.sub,{sellSubtotal},{Branch8(SellStack)})";
+        string buyValueFooter  = $"_xlfn.LET(_xlpm.sub,{buySubtotal},{Branch8(BuyStack)})";
+
+        // Type-column padding before the spilled quote-footer notes. Must grow row-for-row with
+        // the footer block so notes always sit a fixed gap below the Grand Total. Footer occupies
+        // 4 rows (no opt) up to 7 (all opts). Pad = footer + 1-row visual gap.
+        string TypePad(bool tax, bool lutron, bool freight)
+        {
+            int n = 5 + (tax ? 1 : 0) + (lutron ? 1 : 0) + (freight ? 1 : 0);
+            return $"_xlfn.VSTACK({string.Join(",", Enumerable.Repeat("\"\"", n))})";
+        }
+        string typePadFooter = Branch8(TypePad);
 
         int i = 0;
-        // Type — blank tariff row, blank note rows, plus quote footer notes appended at the bottom
+        // Type — blank tariff row, blank note rows, dynamic pad sized to the footer block, then
+        // quote footer notes appended at the bottom.
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\"),\"\",\"\",\"\",\"\",\"\",\"\",{notesSpill})";
+            $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\"),{typePadFooter},{notesSpill})";
         // Mfr — tariff row carries the type's Mfr (vals = effMfr per-row, isLast picks the
         // last row of each group); "NOTE:" label on note rows; uses effMfr so override wins per-row
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "_xlpm.vals", NoteLabel())},\"\")";
@@ -1996,7 +2058,7 @@ public static class CountsWorkbookService
     }
 
     // Bid Compare formula prefix — resolves the active baseline snapshot's sheet name from
-    // BidDate (Dashboard!B11). When BidDate is empty, INDIRECT(prefix&...) produces #REF! and
+    // BidDate (Dashboard!B12). When BidDate is empty, INDIRECT(prefix&...) produces #REF! and
     // every per-row IFERROR-wrapped lookup naturally collapses to "". So the same formula text
     // serves both the empty-baseline (no overlay) and active-baseline cases.
     private const string BcSnapPrefix = "\"'Counts \"&TEXT(BidDate,\"yyyy.mm.dd\")&\"'!\"";
@@ -2161,7 +2223,7 @@ public static class CountsWorkbookService
         //   - When BidDate is blank → INDIRECT errors → IFERROR collapses hasRem to FALSE,
         //     suffix skips the FILTER block entirely (no phantom blank row).
         //   - When baseline has zero removed types → same path, no FILTER block.
-        //   - When B11 retargets to a baseline with different removed types → FILTER recomputes
+        //   - When B12 retargets to a baseline with different removed types → FILTER recomputes
         //     live, no rebuild required (Phase F deviation #1 closed).
         string snapTypes10k = $"INDIRECT({BcSnapPrefix}&\"A2:A10000\")";
         string snapMfrs10k = $"INDIRECT({BcSnapPrefix}&\"B2:B10000\")";
@@ -2671,7 +2733,7 @@ public static class CountsWorkbookService
         return false;
     }
 
-    /// <summary>Returns Dashboard!B11 as a DateTime, or null when blank/unparseable.</summary>
+    /// <summary>Returns Dashboard!B12 as a DateTime, or null when blank/unparseable.</summary>
     private static DateTime? ReadBidDate(IXLWorkbook wb)
     {
         if (!wb.Worksheets.TryGetWorksheet("Dashboard", out var dashWs)) return null;
@@ -2920,8 +2982,10 @@ public static class CountsWorkbookService
             "LIGHTING PACKAGE TOTAL:",
         };
 
-        // Bold + right-align any Qty-column cell that equals one of the footer labels
+        // Bold + right-align any Qty-column cell that equals one of the footer labels.
+        // Sales Tax label includes the rate inline ("Sales Tax (8.05%):"), so match by prefix.
         string labelPredicate = string.Join(",", labels.Select(l => $"${qtyLetter}{spillRow}=\"{l}\""));
+        labelPredicate += $",LEFT(${qtyLetter}{spillRow},10)=\"Sales Tax \"";
         var qtyRange = ws.Range(spillRow, qtyCol, 1000, qtyCol);
         var qtyCf = qtyRange.AddConditionalFormat().WhenIsTrue($"OR({labelPredicate})");
         qtyCf.Font.SetBold();
@@ -3218,7 +3282,7 @@ public static class CountsWorkbookService
             // cached Qty (reflects Calc adjustments), else recompute from the preserved canonical
             // Calc + prev fixture lengths (cache may be missing on 3rd+ passes — ClosedXML doesn't
             // emit caches for rewritten formulas), else leave blank for types not previously present.
-            // The B11-driven "Compare to" baseline is consumed by the Bid Compare sheet, not here.
+            // The B12-driven "Compare to" baseline is consumed by the Bid Compare sheet, not here.
             if (existing?.PrevQty.HasValue == true)
             {
                 ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
