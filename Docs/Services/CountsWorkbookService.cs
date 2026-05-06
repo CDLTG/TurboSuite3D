@@ -41,6 +41,10 @@ public static class CountsWorkbookService
     private const int WsColNote6 = 20;      // T
     private const int WsColMfrOverride = 21;  // U — user-editable, overrides B
     private const int WsColQtyOverride = 22;  // V — user-editable, overrides D
+    // Bid Compare footer scalars hoisted out of CA's spill formula so it stays under Excel's
+    // 8,192-char per-formula limit. W1..W5 hold bid total, current total, additions, credits,
+    // and net change; CA's footer rows reference these cells directly. Column W is hidden.
+    private const int WsColBcFooter = 23;     // W — hidden, 5 scalar cells
     // Effective Qty lives inside the hidden helper block (BR) rather than adjacent to the
     // editable columns — keeps the visible worksheet clean and avoids a visually-empty slot
     // between V and the end of the visible data. =IF(V="",D,V) written per-row.
@@ -2037,6 +2041,16 @@ public static class CountsWorkbookService
         string additionsCurrent = $"SUMPRODUCT(({predicate})*({extDelta})*(({extDelta})>0))";
         string creditsCurrent = $"SUMPRODUCT(({predicate})*({extDelta})*(({extDelta})<0))";
 
+        // Stash the 5 footer scalars in hidden Worksheet!W1:W5 so CA2's spill formula stays under
+        // Excel's 8,192-char per-formula limit. Each cell is independently live (Dashboard edits
+        // and snapshot retargets via BidDate flow through INDIRECT just like before).
+        ws.Cell(1, WsColBcFooter).FormulaA1 = bidTotalAll;
+        ws.Cell(2, WsColBcFooter).FormulaA1 = currentTotalAll;
+        ws.Cell(3, WsColBcFooter).FormulaA1 = additionsCurrent;
+        ws.Cell(4, WsColBcFooter).FormulaA1 = creditsCurrent;
+        ws.Cell(5, WsColBcFooter).FormulaA1 = netChange;
+        ws.Column(WsColBcFooter).Hide();
+
         // Decide whether to emit Lutron / Freight rows. Done once at rebuild against current
         // Dashboard values + baseline frozen meta. Once emitted, the formula cells track live
         // edits to B6/B8 (and snapshot V1/V2 stays frozen).
@@ -2143,14 +2157,18 @@ public static class CountsWorkbookService
                     "\"Credits:\"",
                     "\"Net Change vs Bid:\"",
                 },
+                // Hoisted scalars: W1=bidTotalAll, W2=currentTotalAll, W3=additions,
+                // W4=credits, W5=netChange. Inlining these expressions tipped CA2 over
+                // Excel's 8,192-char formula limit, causing the file to load with
+                // "Removed Records: Formula" repairs. See WsColBcFooter.
                 7 => new[]
                 {
                     "\"\"",
-                    bidTotalAll,
-                    currentTotalAll,
-                    additionsCurrent,
-                    creditsCurrent,
-                    netChange,
+                    "$W$1",
+                    "$W$2",
+                    "$W$3",
+                    "$W$4",
+                    "$W$5",
                 },
                 _ => Array.Empty<string>(),
             };
