@@ -309,6 +309,25 @@ public static class CountsWorkbookService
     private const string DashNotesFirstRow = "33";
     private const string DashNotesLastRow = "47";
 
+    // Default quote-footer notes seeded into a freshly built Dashboard. Order is grouped
+    // by theme: pricing & validity → billing → tax → fulfillment → contractor/exclusions.
+    // Bold flag drives the print-sheet conditional format applied by ApplyNotesBoldConditionalFormat.
+    private static readonly (string Text, bool Bold)[] DefaultQuoteNotes =
+    {
+        ("Pricing is firm for 30 days from the quote date.", false),
+        ("CDL reserves the right to apply a 5–10% escalation to unit pricing in response to manufacturer increases.", false),
+        ("This quote is void if the scope, quantities, or specifications change.", false),
+        ("A 50% deposit is required to release the order; the balance is invoiced NET 30 upon shipment.", true),
+        ("Stored material is invoiced upon receipt at CDL.", false),
+        ("Freight charges are estimated and billed at actual cost.", false),
+        ("Sales tax will be added for any manufacturer with tax nexus in the ship-to state.", true),
+        ("The electrical contractor is responsible for determining whether materials in this proposal are subject to state sales tax.", false),
+        ("Accurate lead times are confirmed only after the order is placed.", false),
+        ("Standard manufacturer warranty applies unless otherwise noted.", false),
+        ("The electrical contractor is responsible for verifying all quantities prior to bid; CDL is not liable for quantity errors.", false),
+        ("No spare fixtures or lamps are included.", false),
+    };
+
     // Hidden helper range on Dashboard holding the parsed dates of every Counts sheet
     // currently in the workbook. Drives the Reference Counts dropdown's data-validation
     // list source. Refreshed on every build/update of the workbook.
@@ -417,19 +436,30 @@ public static class CountsWorkbookService
         for (int i = 0; i < 15; i++)
         {
             int r = 33 + i;
-            ws.Cell(r, 1).Value = false; // boolean literal — pass 3 upgrades to native checkbox
+            // Seed the first N rows from DefaultQuoteNotes; remaining rows stay blank for the user.
+            bool boldDefault = i < DefaultQuoteNotes.Length && DefaultQuoteNotes[i].Bold;
+            ws.Cell(r, 1).Value = boldDefault; // boolean literal — pass 3 upgrades to native checkbox
             ws.Cell(r, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             // Notes span B:D — merged so long notes aren't clipped by the narrow B column.
             ws.Range(r, 2, r, 4).Merge();
             ws.Cell(r, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Cell(r, 2).Style.Alignment.WrapText = true;
+            if (i < DefaultQuoteNotes.Length)
+                ws.Cell(r, 2).Value = DefaultQuoteNotes[i].Text;
         }
         StyleInputBlock(ws.Range("A33:D47"), headerRow: ws.Range("A32:D32"));
+
+        // Constrain the BOLD column to TRUE/FALSE so the print-sheet CF
+        // (which compares against the boolean TRUE) always matches what the user picks.
+        var boldDv = ws.Range($"A{DashNotesFirstRow}:A{DashNotesLastRow}").CreateDataValidation();
+        boldDv.List("\"TRUE,FALSE\"", inCellDropdown: true);
+        boldDv.IgnoreBlanks = true;
 
         // Column widths
         ws.Column(1).Width = 24;
         ws.Column(2).Width = 18;
-        ws.Column(3).Width = 42;
-        ws.Column(4).Width = 40;
+        ws.Column(3).Width = 40;
+        ws.Column(4).Width = 70;
 
         // Named ranges
         wb.DefinedNames.Add("RepDirectoryPath", ws.Range("B3:B3"));
@@ -1176,7 +1206,7 @@ public static class CountsWorkbookService
             ws.Cell(row, 2).Value = item.Mfr;
             ws.Cell(row, 3).Value = item.Catalog;
             ws.Cell(row, 4).FormulaA1 =
-                $"SUMIFS(Worksheet!BL:BL,Worksheet!A:A,A{row},Worksheet!C:C,C{row})";
+                $"SUMIFS(Worksheet!BR:BR,Worksheet!A:A,A{row},Worksheet!C:C,C{row})";
 
             // Flag catalogs that exist under multiple rep blocks — typically the fallout of
             // an Mfr Override that moved a fixture's rep but left an older row behind until
@@ -2714,7 +2744,7 @@ public static class CountsWorkbookService
         string firstCell = $"A{spillRow}";
         ws.Range($"{firstCell}:A1000")
             .AddConditionalFormat()
-            .WhenIsTrue($"IFERROR(INDEX(QuoteNotesBold,MATCH({firstCell},QuoteNotes,0))=TRUE,FALSE)")
+            .WhenIsTrue($"SUMPRODUCT((TRIM(QuoteNotes)=TRIM({firstCell}))*((QuoteNotesBold=TRUE)+(QuoteNotesBold=\"TRUE\")))>0")
             .Font.SetBold();
     }
 
@@ -2995,7 +3025,7 @@ public static class CountsWorkbookService
         {
             sub = $"unprotect.clearRange(2..{lastRow})";
             ws.Range(2, 1, lastRow, WsColHelperLast).Clear(
-                XLClearOptions.Contents | XLClearOptions.NormalFormats | XLClearOptions.ConditionalFormats);
+                XLClearOptions.Contents | XLClearOptions.NormalFormats | XLClearOptions.ConditionalFormats | XLClearOptions.Comments);
         }
 
         sub = "sort-new-rows";
