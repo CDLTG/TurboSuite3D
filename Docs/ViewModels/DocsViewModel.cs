@@ -158,7 +158,7 @@ public class DocsViewModel : ViewModelBase
         PanelScheduleVM = new PanelScheduleViewModel(projectName, this);
         NotesVM = new NotesViewModel(projectName, this);
         BomVM = new BomViewModel(projectName, this);
-        CountsVM = new CountsViewModel(projectName, this);
+        CountsVM = new CountsViewModel(projectName, projectNumber, this);
 
         BrowseLogoCommand = new RelayCommand(ExecuteBrowseLogo);
         BrowseCoverVerticalCommand = new RelayCommand(ExecuteBrowseCoverVertical);

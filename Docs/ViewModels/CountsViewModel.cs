@@ -24,6 +24,7 @@ public class CountsViewModel : ViewModelBase
     private string _footerImagePath = string.Empty;
 
     public string ProjectName { get; }
+    public string ProjectNumber { get; }
 
     public int TypeCount => _fixtures.Count;
     public int TotalFixtureCount
@@ -93,10 +94,11 @@ public class CountsViewModel : ViewModelBase
         set => SetProperty(ref _footerImagePath, value);
     }
 
-    public CountsViewModel(string projectName, DocsViewModel parent)
+    public CountsViewModel(string projectName, string projectNumber, DocsViewModel parent)
     {
         _parent = parent;
         ProjectName = projectName;
+        ProjectNumber = projectNumber ?? string.Empty;
         var settings = DocsSettingsService.Load();
         _repDirectoryPath = settings.RepDirectoryPath;
         _notifyEmail = settings.CountsNotifyEmail;
@@ -187,6 +189,7 @@ public class CountsViewModel : ViewModelBase
             bool updateMode = IsUpdateMode;
             var fixtures = _fixtures;
             string projName = ProjectName;
+            string projNumber = ProjectNumber;
             string projLocation = _parent.ProjectLocation;
             string repDirPath = _repDirectoryPath;
             string headerImg = _headerImagePath;
@@ -201,7 +204,7 @@ public class CountsViewModel : ViewModelBase
                 if (updateMode)
                     CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath, headerDate, headerImg, footerImg);
                 else
-                    CountsWorkbookService.GenerateNew(fixtures, projName, projLocation, outputPath, repDirPath, headerDate, headerImg, footerImg);
+                    CountsWorkbookService.GenerateNew(fixtures, projName, projNumber, projLocation, outputPath, repDirPath, headerDate, headerImg, footerImg);
             });
 
             Progress = 100;

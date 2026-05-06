@@ -110,6 +110,7 @@ public static class CountsWorkbookService
     public static void GenerateNew(
         List<CountsFixtureModel> fixtures,
         string projectName,
+        string projectNumber,
         string projectLocation,
         string outputPath,
         string repDirectoryPath,
@@ -124,7 +125,7 @@ public static class CountsWorkbookService
 
         var repDirectory = ReadRepDirectory(repDirectoryPath);
 
-        BuildCoverSheet(wb, projectName, projectLocation, headerDate);
+        BuildCoverSheet(wb, projectName, projectNumber, projectLocation, headerDate);
         BuildDashboardSheet(wb, projectName, repDirectoryPath);
         BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
         BuildRepListsSheet(wb, fixtures, repDirectory);
@@ -183,9 +184,9 @@ public static class CountsWorkbookService
             stage = "ensure-dashboard";
             EnsureDashboardSheet(wb, repDirectoryPath);
 
-            stage = "set-cover-b11";
+            stage = "set-cover-date";
             if (wb.Worksheets.TryGetWorksheet("Cover", out var coverWs))
-                coverWs.Cell("B11").Value = headerDate.ToString("MMM dd, yyyy");
+                coverWs.Cell(CoverDateCell).Value = headerDate.ToString("MMM dd, yyyy");
 
             stage = "read-rep-directory";
             string effectiveRepPath = ReadRepDirectoryPathFromDashboard(wb);
@@ -252,48 +253,102 @@ public static class CountsWorkbookService
 
     #region Cover Sheet
 
-    private static void BuildCoverSheet(IXLWorkbook wb, string projectName, string projectLocation, DateTime headerDate)
+    // Cover sheet anchor cells. Quote/Phase title-block formulas and the Bid Compare
+    // project-name pull read these directly — keep in sync with WritePrintSheetTitle and
+    // BuildBidCompareSheet.
+    private const string CoverProjectNameCell = "A13";
+    private const string CoverProjectLocationCell = "A14";
+    private const string CoverDocTitleCell = "A16";
+    private const string CoverDateCell = "A17";
+    private const string CoverProjectNumberCell = "A19";
+    private const string CoverForCell = "A21";
+    private const string CoverPreparedByCell = "A22";
+    private const string CoverEmailCell = "A23";
+    private const string CoverPhoneCell = "A24";
+
+    private static void BuildCoverSheet(IXLWorkbook wb, string projectName, string projectNumber, string projectLocation, DateTime headerDate)
     {
         var ws = wb.Worksheets.Add("Cover");
 
-        // Branding area (rows 1-4 left blank for user images)
-        ws.Cell("A6").Value = "Project Name:";
-        ws.Cell("B6").Value = projectName;
-        ws.Cell("B6").Style.Font.Bold = true;
-        ws.Cell("B6").Style.Font.FontSize = 14;
+        ws.Style.Font.FontName = "Segoe UI";
+        ws.Style.Font.FontSize = 11;
 
-        ws.Cell("A7").Value = "Project Location:";
-        ws.Cell("B7").Value = projectLocation ?? string.Empty;
+        // Cols A:C width 28.6 — three equal columns merged across each title row to
+        // center content over a wide-but-not-full-page footprint (matches TitleStyling.xlsx).
+        for (int col = 1; col <= 3; col++)
+            ws.Column(col).Width = 28.6;
 
-        ws.Cell("A9").Value = "Lighting Fixture Quotation";
-        ws.Cell("A9").Style.Font.Bold = true;
-        ws.Cell("A9").Style.Font.FontSize = 16;
+        // Rows 1–12 left blank as top margin / branding area.
 
-        ws.Cell("A11").Value = "Release Date:";
-        // Seeded from TurboDocs settings header date. Quote/Phase subtitles read B11 via
-        // formula, so manual edits flow through until the next GenerateUpdate (which
-        // overwrites B11 with the current settings date).
-        ws.Cell("B11").Value = headerDate.ToString("MMM dd, yyyy");
-        ws.Cell("A12").Value = "Project Number:";
-        ws.Cell("A13").Value = "For:";
-        ws.Cell("A14").Value = "Prepared by:";
-        ws.Cell("A15").Value = "Email:";
-        ws.Cell("A16").Value = "Phone:";
+        // Row 13 — Project Name (Segoe UI 22 bold)
+        var nameRange = ws.Range("A13:C13");
+        nameRange.Merge();
+        ws.Cell(CoverProjectNameCell).Value = projectName ?? string.Empty;
+        StyleCenteredTitle(nameRange, fontSize: 22, bold: true);
+        ws.Row(13).Height = 30;
 
-        // Style labels
-        for (int r = 6; r <= 16; r++)
-        {
-            if (r == 8 || r == 10) continue; // skip blank rows
-            ws.Cell(r, 1).Style.Font.Bold = true;
-        }
+        // Row 14 — City / State (Segoe UI 16 regular)
+        var locRange = ws.Range("A14:C14");
+        locRange.Merge();
+        ws.Cell(CoverProjectLocationCell).Value = projectLocation ?? string.Empty;
+        StyleCenteredTitle(locRange, fontSize: 16, bold: false);
+        ws.Row(14).Height = 20;
 
-        // Column widths
-        ws.Column(1).Width = 22;
-        ws.Column(2).Width = 50;
+        // Row 15 blank.
 
-        // Print area
+        // Row 16 — Document title (Segoe UI 16 bold)
+        var docRange = ws.Range("A16:C16");
+        docRange.Merge();
+        ws.Cell(CoverDocTitleCell).Value = "Lighting Fixture Quotation";
+        StyleCenteredTitle(docRange, fontSize: 16, bold: true);
+        ws.Row(16).Height = 25;
+
+        // Row 17 — Date (Segoe UI 12 bold). Seeded from TurboDocs settings header date.
+        // Quote/Phase subtitles read this cell via formula, so manual edits flow through
+        // until the next GenerateUpdate (which overwrites it with the current settings date).
+        var dateRange = ws.Range("A17:C17");
+        dateRange.Merge();
+        ws.Cell(CoverDateCell).Value = headerDate.ToString("MMM dd, yyyy");
+        StyleCenteredTitle(dateRange, fontSize: 12, bold: true);
+        ws.Row(17).Height = 17.5;
+
+        // Row 18 blank.
+
+        // Row 19 — Project Number (Segoe UI 11 bold)
+        var numRange = ws.Range("A19:C19");
+        numRange.Merge();
+        ws.Cell(CoverProjectNumberCell).Value = string.IsNullOrWhiteSpace(projectNumber)
+            ? string.Empty
+            : $"Project #{projectNumber}";
+        StyleCenteredTitle(numRange, fontSize: 11, bold: true);
+
+        // Row 20 blank.
+
+        // Rows 21–24 — manually filled by pricing team (Segoe UI 11 regular).
+        SeedManualCoverRow(ws, 21, "For: ");
+        SeedManualCoverRow(ws, 22, "Prepared by: ");
+        SeedManualCoverRow(ws, 23, "Email: ");
+        SeedManualCoverRow(ws, 24, "Phone: ");
+
         ApplyStandardPageSetup(ws);
-        ws.PageSetup.PrintAreas.Add("A1:B17");
+        ws.PageSetup.PrintAreas.Add("A1:C24");
+    }
+
+    private static void StyleCenteredTitle(IXLRange range, double fontSize, bool bold)
+    {
+        range.Style.Font.FontName = "Segoe UI";
+        range.Style.Font.FontSize = fontSize;
+        range.Style.Font.Bold = bold;
+        range.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        range.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+    }
+
+    private static void SeedManualCoverRow(IXLWorksheet ws, int row, string prefix)
+    {
+        var range = ws.Range(row, 1, row, 3);
+        range.Merge();
+        ws.Cell(row, 1).Value = prefix;
+        StyleCenteredTitle(range, fontSize: 11, bold: false);
     }
 
     #endregion
@@ -492,16 +547,12 @@ public static class CountsWorkbookService
         if (wb.Worksheets.TryGetWorksheet("Cover", out var c))
         {
             cover = c;
-            cover.Cell("A20").Clear();
-            cover.Cell("B20").Clear();
-            cover.Cell("A21").Clear();
-            cover.Cell("B21").Clear();
             var old = wb.DefinedNames.FirstOrDefault(n =>
                 string.Equals(n.Name, "PricingWorkbookPath", StringComparison.OrdinalIgnoreCase));
             old?.Delete();
         }
 
-        string projectName = cover?.Cell("B6").GetString() ?? string.Empty;
+        string projectName = cover?.Cell(CoverProjectNameCell).GetString() ?? string.Empty;
         BuildDashboardSheet(wb, projectName, repDirectoryPath);
     }
 
@@ -942,8 +993,8 @@ public static class CountsWorkbookService
         string projectLocation = string.Empty;
         if (wb.Worksheets.TryGetWorksheet("Cover", out var coverWs))
         {
-            projectName = coverWs.Cell("B6").GetString().Trim();
-            projectLocation = coverWs.Cell("B7").GetString().Trim();
+            projectName = coverWs.Cell(CoverProjectNameCell).GetString().Trim();
+            projectLocation = coverWs.Cell(CoverProjectLocationCell).GetString().Trim();
         }
 
         // Mfr Override snapshot from Worksheet!U. Overrides are emergency substitutions for
@@ -2359,7 +2410,7 @@ public static class CountsWorkbookService
 
         ApplyPrintSheetDefaults(ws);
 
-        WritePrintSheetTitle(ws, 9, "\"PRODUCT PRICING \"&Cover!B11");
+        WritePrintSheetTitle(ws, 9, $"\"PRODUCT PRICING \"&Cover!{CoverDateCell}");
         ws.TabColor = XLColor.FromHtml("#FF8ED973");
 
         int headerRow = 6;
@@ -2644,7 +2695,7 @@ public static class CountsWorkbookService
 
         ApplyPrintSheetDefaults(ws);
 
-        WritePrintSheetTitle(ws, 8, $"\"PHASE {phase} PRODUCT PRICING \"&Cover!B11");
+        WritePrintSheetTitle(ws, 8, $"\"PHASE {phase} PRODUCT PRICING \"&Cover!{CoverDateCell}");
         ws.TabColor = XLColor.FromHtml("#FF8ED973");
 
         int headerRow = 6;
@@ -2762,7 +2813,7 @@ public static class CountsWorkbookService
 
         // Row 1 — project title (no fill, black, Segoe UI 12 bold, centered, no border)
         ws.Range($"A1:{lastCol}1").Merge();
-        ws.Cell("A1").FormulaA1 = "Cover!B6";
+        ws.Cell("A1").FormulaA1 = $"Cover!{CoverProjectNameCell}";
         ws.Cell("A1").Style.Font.Bold = true;
         ws.Cell("A1").Style.Font.FontSize = 12;
         ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
