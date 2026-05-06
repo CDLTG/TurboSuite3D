@@ -197,6 +197,10 @@ namespace TurboSuite.Driver
                     TagSplitFixtures(doc, splitResult);
                 }
 
+                // Re-select the circuit's lighting fixtures so the user can immediately
+                // assign them to switches (e.g., via TurboNumber / Switch ID workflow).
+                ReselectCircuitFixtures(uidoc, circuit.Id);
+
                 return Result.Succeeded;
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
@@ -209,6 +213,28 @@ namespace TurboSuite.Driver
                 TaskDialog.Show("TurboDriver Error", $"An unexpected error occurred:\n{ex.Message}");
                 return Result.Failed;
             }
+        }
+
+        /// <summary>
+        /// Re-selects the lighting fixtures on the given circuit so the user can
+        /// immediately assign them to switches without re-picking.
+        /// </summary>
+        private static void ReselectCircuitFixtures(UIDocument uidoc, ElementId circuitId)
+        {
+            if (uidoc.Document.GetElement(circuitId) is not ElectricalSystem circuit) return;
+
+            var fixtureIds = new List<ElementId>();
+            foreach (Element el in circuit.Elements)
+            {
+                if (el is FamilyInstance fi
+                    && fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingFixtures)
+                {
+                    fixtureIds.Add(fi.Id);
+                }
+            }
+
+            if (fixtureIds.Count > 0)
+                uidoc.Selection.SetElementIds(fixtureIds);
         }
 
         /// <summary>

@@ -15,6 +15,7 @@ Headless command for deploying power supplies on a per-circuit basis.
 5. Deletes any existing power supplies on the circuit (preserving Switch ID).
 6. Prompts: select an existing power supply to stack below, or press Esc to pick a bare point.
 7. Places power supplies in a column (9" apart), connects to circuit, sets suffixed Switch IDs (e.g., X01a, X01b), and tags each with SwitchID and Switchleg tags.
+8. Re-selects the circuit's lighting fixtures on exit so the user can immediately assign them to switches without re-picking.
 
 ## TurboRPS (RPSCommand)
 
