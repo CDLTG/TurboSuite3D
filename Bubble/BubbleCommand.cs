@@ -97,6 +97,7 @@ public class BubbleCommand : IExternalCommand
         var isLineBased = GeometryHelper.IsLineBasedFixture(fixture);
         var isWallSconce = !isLineBased && GeometryHelper.IsWallSconce(fixture);
         var isVerticalFace = !isLineBased && (GeometryHelper.IsOnVerticalFace(fixture) || isWallSconce);
+        var isChandelier = !isLineBased && !isVerticalFace && IsChandelierFamily(fixture);
         var hasRemotePowerSupply = ParameterHelper.HasRemotePowerSupply(fixture);
 
         IPlacementCalculator placement;
@@ -104,6 +105,8 @@ public class BubbleCommand : IExternalCommand
             placement = new LineBasedPlacementCalculator(doc, activeView, fixture, selectedTag);
         else if (isVerticalFace)
             placement = new VerticalFacePlacementCalculator(doc, activeView, fixture, selectedTag);
+        else if (isChandelier)
+            placement = new ChandelierPlacementCalculator(doc, activeView, fixture, selectedTag);
         else
             placement = new HorizontalPlacementCalculator(doc, activeView, fixture, selectedTag, hasRemotePowerSupply);
 
@@ -149,6 +152,10 @@ public class BubbleCommand : IExternalCommand
                     : placement.IsFlipped;
             }
             else if (isVerticalFace)
+            {
+                effectiveFlip = placement.IsFlipped;
+            }
+            else if (isChandelier)
             {
                 effectiveFlip = placement.IsFlipped;
             }
@@ -369,6 +376,15 @@ public class BubbleCommand : IExternalCommand
         }
 
         return Result.Succeeded;
+    }
+
+    /// <summary>
+    /// Checks if the lighting fixture belongs to a chandelier (decorative pendant) family.
+    /// </summary>
+    private static bool IsChandelierFamily(FamilyInstance fixture)
+    {
+        var familyName = fixture.Symbol?.FamilyName;
+        return familyName != null && BubbleConstants.ChandelierFamilies.Contains(familyName);
     }
 
     /// <summary>

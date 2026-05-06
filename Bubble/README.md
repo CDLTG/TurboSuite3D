@@ -44,6 +44,14 @@ These family names trigger special placement behavior (vertical or ceiling-fan o
 - `AL_Electrical Fixture_Ceiling Fan (Hosted)` / `Ceiling Fan`
 - `AL_Decorative_Wall Sconce (Hosted)` (special wire offset)
 
+### Recognized Chandelier (Decorative Pendant) Families
+
+These lighting fixture families use diagonal-corner switchleg placement (one of four corners picked by combining the type tag's side with the user click), with the wire arc curving away from the type tag:
+
+- `AL_Decorative_Pendant (Hosted)`
+- `AL_Decorative_Pendant`
+- `Z_Chandelier`
+
 ### Other Requirements
 
 - At least one **WireType** in the project

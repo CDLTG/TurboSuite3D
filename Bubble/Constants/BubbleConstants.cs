@@ -86,6 +86,19 @@ internal static class BubbleConstants
     // Special family names
     public const string WallSconceFamily = "AL_Decorative_Wall Sconce (Hosted)";
 
+    // Chandelier (decorative pendant) families — diagonal-corner switchleg placement
+    public static readonly HashSet<string> ChandelierFamilies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AL_Decorative_Pendant (Hosted)",
+        "AL_Decorative_Pendant",
+        "Z_Chandelier"
+    };
+    public const double ChandelierBubbleAngleDegrees = 33.0;
+    public const double ChandelierBubbleOffsetExtensionFt = 8.0 * InchesToFeet; // push bubble outward past crosshair tip along the diagonal
+    public const double ChandelierWireV2GapFt = 1.59 * InchesToFeet;            // V2 distance past symbol edge along diagonal
+    public const double ChandelierWireV2PerpKickFt = 3.50 * InchesToFeet;       // V2 perpendicular kick (creates arc curvature)
+    public const double ChandelierWireElbowOffsetFt = 3.56 * InchesToFeet;      // V3 inset from bubble along diagonal (elbow)
+
     // Tag placement offsets (in feet)
     public const double TagOffsetVerticalFt = 5.25 * InchesToFeet;
     public const double TagOffsetHorizontalFt = 8.75 * InchesToFeet;
