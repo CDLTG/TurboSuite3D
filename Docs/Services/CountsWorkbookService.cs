@@ -269,6 +269,7 @@ public static class CountsWorkbookService
     private static void BuildCoverSheet(IXLWorkbook wb, string projectName, string projectNumber, string projectLocation, DateTime headerDate)
     {
         var ws = wb.Worksheets.Add("Cover");
+        ws.TabColor = XLColor.FromHtml("#FFF2F2F2");
 
         ws.Style.Font.FontName = "Segoe UI";
         ws.Style.Font.FontSize = 11;
@@ -400,6 +401,7 @@ public static class CountsWorkbookService
     private static void BuildDashboardSheet(IXLWorkbook wb, string projectName, string repDirectoryPath)
     {
         var ws = wb.Worksheets.Add("Dashboard");
+        ws.TabColor = XLColor.FromHtml("#FF7FC8F8");
         ws.Position = 2; // after Cover
 
         // Sheet defaults — Segoe UI 11 matches the Counts/Changes raw tabs (and stays
@@ -982,7 +984,7 @@ public static class CountsWorkbookService
             existing.Delete();
 
         var ws = wb.Worksheets.Add("Rep Lists");
-        ws.TabColor = XLColor.FromHtml("#FFFACC75");
+        ws.TabColor = XLColor.FromHtml("#FFB4A7D6");
         // Position between Worksheet and Quote
         if (wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet))
             ws.Position = wsSheet.Position + 1;
@@ -1416,6 +1418,7 @@ public static class CountsWorkbookService
     {
         var ws = wb.Worksheets.Add("Worksheet");
         ws.TabColor = XLColor.FromHtml("#FFFACC75");
+        ws.SheetView.FreezeRows(1);
 
         // Headers
         ws.Cell(1, WsColType).Value = "Type";
@@ -1918,27 +1921,29 @@ public static class CountsWorkbookService
 
         // Footer labels live on the Qty column and serve both Buy Ext. and Sell Ext.
         // Lutron row is omitted when Dashboard!LutronSubtotal is blank.
+        // Two leading blank rows — buffer between the last data row and the totals block,
+        // matches the manually-tuned reference layout (Specs/Screenshot_31.png).
         string labelFooter =
             "IF(LutronSubtotal=\"\","
-            + "_xlfn.VSTACK(\"\",\"Fixture Package Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"),"
-            + "_xlfn.VSTACK(\"\",\"Fixture Package Sub-Total:\",\"Lutron Lighting Control Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"))";
+            + "_xlfn.VSTACK(\"\",\"\",\"Fixture Package Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"),"
+            + "_xlfn.VSTACK(\"\",\"\",\"Fixture Package Sub-Total:\",\"Lutron Lighting Control Sub-Total:\",\"Estimated Freight:\",\"LIGHTING PACKAGE TOTAL:\"))";
 
         // Sell Ext. footer values (tariff row carries per-type tariff amount).
         string sellValueFooter =
             "IF(LutronSubtotal=\"\","
-            + $"_xlfn.VSTACK(\"\",{sellSubtotal},FreightSell,{sellSubtotal}+FreightSell),"
-            + $"_xlfn.VSTACK(\"\",{sellSubtotal},LutronSubtotal,FreightSell,{sellSubtotal}+LutronSubtotal+FreightSell))";
+            + $"_xlfn.VSTACK(\"\",\"\",{sellSubtotal},FreightSell,{sellSubtotal}+FreightSell),"
+            + $"_xlfn.VSTACK(\"\",\"\",{sellSubtotal},LutronSubtotal,FreightSell,{sellSubtotal}+LutronSubtotal+FreightSell))";
 
         // Buy Ext. footer values (no tariff on Buy side).
         string buyValueFooter =
             "IF(LutronSubtotal=\"\","
-            + $"_xlfn.VSTACK(\"\",{buySubtotal},FreightBuy,{buySubtotal}+FreightBuy),"
-            + $"_xlfn.VSTACK(\"\",{buySubtotal},LutronSubtotal,FreightBuy,{buySubtotal}+LutronSubtotal+FreightBuy))";
+            + $"_xlfn.VSTACK(\"\",\"\",{buySubtotal},FreightBuy,{buySubtotal}+FreightBuy),"
+            + $"_xlfn.VSTACK(\"\",\"\",{buySubtotal},LutronSubtotal,FreightBuy,{buySubtotal}+LutronSubtotal+FreightBuy))";
 
         int i = 0;
         // Type — blank tariff row, blank note rows, plus quote footer notes appended at the bottom
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\"),\"\",\"\",\"\",\"\",\"\",{notesSpill})";
+            $"_xlfn.VSTACK(IFERROR({Gap(Col("A"), "\"\"", NoteBlank())},\"\"),\"\",\"\",\"\",\"\",\"\",\"\",{notesSpill})";
         // Mfr — tariff row carries the type's Mfr (vals = effMfr per-row, isLast picks the
         // last row of each group); "NOTE:" label on note rows; uses effMfr so override wins per-row
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effMfr, "_xlpm.vals", NoteLabel())},\"\")";
@@ -1985,7 +1990,9 @@ public static class CountsWorkbookService
             +     ")"
             +   ")"
             + $")({typesArg},{pctsArg},{string.Join(",", noteArgs)})";
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({flagLambda},\"\")";
+        // Append a single 1 row — corresponds to the buffer row VSTACKed in front of the
+        // footer block so the print-sheet border CF ($flagCol=1) paints that row too.
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"_xlfn.VSTACK(IFERROR({flagLambda},\"\"),1)";
     }
 
     // Bid Compare formula prefix — resolves the active baseline snapshot's sheet name from
@@ -2950,6 +2957,7 @@ public static class CountsWorkbookService
     private static void BuildChangesSheet(IXLWorkbook wb)
     {
         var ws = wb.Worksheets.Add("Changes");
+        ws.TabColor = XLColor.FromHtml("#FFF28B82");
 
         ws.Cell(1, 1).Value = "Date";
         ws.Cell(1, 2).Value = "Type";
