@@ -121,6 +121,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 - Xceed.Wpf.AvalonDock.dll (ships with Revit 2025) — used by TurboTab for document tab coloring
 - [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation
 - [PdfSharpCore](https://github.com/ststeiger/PdfSharpCore) (NuGet) — PDF generation, reading, stamping, and merging. Used by TurboDocs.
+- [ClosedXML](https://github.com/ClosedXML/ClosedXML) (NuGet) — .xlsx workbook generation. Used by TurboCounts.
 - .NET 8.0-windows / WPF
 
 ## Acknowledgments
