@@ -1323,6 +1323,31 @@ public static class CountsWorkbookService
         for (int s = 0; s < 6; s++)
             ws.Cell(1, CsColSellEa1 + s).Value = $"_SellEa{s + 1}";
 
+        // For per-slot SellEa freeze: resolve catalog Unit Cost via the canonical (master) row
+        // for each catalog. Worksheet stores the literal J on the first occurrence of a catalog
+        // and emits dependent formulas (`=IF(J<canon>="","dependent",J<canon>)`) on later
+        // occurrences. We can't rely on cached formula values — on initial generation ClosedXML
+        // hasn't evaluated formulas yet, and on update they may be stale — so we walk the
+        // dependency graph here in C# instead. Markup (K) and Adder (M) are per-row literals,
+        // so they're still read from the row itself.
+        var wsRowByKey = new Dictionary<(string T, string C), int>();
+        var catalogCanonicalRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (wb.Worksheets.TryGetWorksheet("Worksheet", out var pricingWs))
+        {
+            int wsLast = pricingWs.LastRowUsed()?.RowNumber() ?? 1;
+            for (int r2 = 2; r2 <= wsLast; r2++)
+            {
+                string t = pricingWs.Cell(r2, WsColType).GetString();
+                string c2 = pricingWs.Cell(r2, WsColCatalog).GetString();
+                if (string.IsNullOrWhiteSpace(t) || string.IsNullOrWhiteSpace(c2)) continue;
+                var k = (t.ToUpperInvariant(), c2.ToUpperInvariant());
+                if (!wsRowByKey.ContainsKey(k)) wsRowByKey.Add(k, r2);
+                if (!catalogCanonicalRow.ContainsKey(c2)
+                    && !pricingWs.Cell(r2, WsColUnitCost).HasFormula)
+                    catalogCanonicalRow[c2] = r2;
+            }
+        }
+
         // Data rows
         int row = 2;
         bool anyPriced = false;
@@ -1343,17 +1368,23 @@ public static class CountsWorkbookService
             // Freeze pricing per slot. Each catalog has its own (J,K,M) on Worksheet — even
             // catalogs that share a name across Types are linked by dependent formula, not by
             // single-source. Storing per-slot SellEa keeps Bid Compare's diff accurate when a
-            // Type's primary catalog later changes.
-            if (pricing != null)
+            // Type's primary catalog later changes. Read direct from Worksheet cells so
+            // dependent (formula-bearing) rows resolve to the correct cached value.
+            if (pricingWs != null)
             {
                 for (int c = 0; c < 6; c++)
                 {
                     string cn = f.CatalogNumbers[c] ?? "";
                     if (string.IsNullOrWhiteSpace(cn)) continue;
-                    if (!pricing.TryGetValue((f.TypeMark, cn), out var p)) continue;
-                    double uc = p.UnitCost ?? 0;
-                    double mk = p.Markup ?? 0;
-                    double ad = p.Adder ?? 0;
+                    var key = (f.TypeMark.ToUpperInvariant(), cn.ToUpperInvariant());
+                    if (!wsRowByKey.TryGetValue(key, out int wsRow)) continue;
+
+                    // Unit Cost: read from the catalog's canonical row (literal J), not the
+                    // dependent row's formula cell which has no cached value at write time.
+                    int costRow = catalogCanonicalRow.TryGetValue(cn, out int canon) ? canon : wsRow;
+                    pricingWs.Cell(costRow, WsColUnitCost).TryGetValue(out double uc);
+                    pricingWs.Cell(wsRow, WsColMarkup).TryGetValue(out double mk);
+                    pricingWs.Cell(wsRow, WsColAdder).TryGetValue(out double ad);
                     double sellEa = (uc * (1 + mk)) + ad;
                     if (sellEa != 0)
                     {
@@ -2079,6 +2110,7 @@ public static class CountsWorkbookService
         // (Type, Catalog) → Worksheet row, INCLUDING strikethrough rows so deleted fixtures
         // can still contribute their pre-deletion bid price.
         var wsRowByKey = new Dictionary<(string T, string C), int>();
+        var catalogCanonicalRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int wsLast = wsSheet.LastRowUsed()?.RowNumber() ?? 1;
         for (int r = 2; r <= wsLast; r++)
         {
@@ -2087,6 +2119,8 @@ public static class CountsWorkbookService
             if (string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(cat)) continue;
             var key = (type.ToUpperInvariant(), cat.ToUpperInvariant());
             if (!wsRowByKey.ContainsKey(key)) wsRowByKey.Add(key, r);
+            if (!catalogCanonicalRow.ContainsKey(cat) && !wsSheet.Cell(r, WsColUnitCost).HasFormula)
+                catalogCanonicalRow[cat] = r;
         }
 
         // Refresh per-row Sell Ea. by matching on the snapshot's first non-blank catalog —
@@ -2103,7 +2137,9 @@ public static class CountsWorkbookService
                 var key = (type.ToUpperInvariant(), cn.ToUpperInvariant());
                 if (!wsRowByKey.TryGetValue(key, out int wsRow)) continue;
 
-                wsSheet.Cell(wsRow, WsColUnitCost).TryGetValue(out double uc);
+                // Unit Cost from canonical row; markup / adder are per-row literals.
+                int costRow = catalogCanonicalRow.TryGetValue(cn, out int canon) ? canon : wsRow;
+                wsSheet.Cell(costRow, WsColUnitCost).TryGetValue(out double uc);
                 wsSheet.Cell(wsRow, WsColMarkup).TryGetValue(out double mk);
                 wsSheet.Cell(wsRow, WsColAdder).TryGetValue(out double ad);
                 double sellEa = (uc * (1 + mk)) + ad;
@@ -2305,10 +2341,12 @@ public static class CountsWorkbookService
     }
 
     /// <summary>
-    /// Builds the Bid Compare sheet as a static per-(Type, Catalog) diff against the
-    /// snapshot referenced by Dashboard!B12. Baseline values are written as static literals;
-    /// current-side cells are direct =Worksheet!… references that stay live as pricing edits.
-    /// Skipped entirely when B12 is empty or its snapshot is missing.
+    /// Builds the Bid Compare sheet as a full mirror of the Worksheet's per-(Type, Catalog)
+    /// rows (union of baseline ∪ current keys), with live current-side formulas and
+    /// conditional formatting that re-tints rows as Worksheet pricing edits propagate.
+    /// Slim 9-col layout (A-I) with two hidden support cols (J=Old Qty, K=Old Sell Ea)
+    /// the Δ formulas and CF rules reference. Skipped entirely when B12 is empty or its
+    /// snapshot is missing.
     /// </summary>
     private static void BuildBidCompareSheet(
         IXLWorkbook wb,
@@ -2344,7 +2382,6 @@ public static class CountsWorkbookService
             }
         }
 
-        // Frozen meta — V1=Lutron, V2=Freight Sell, V3=Sales Tax rate. Missing = 0.
         baseline.Cell(1, CsColFrozenMeta).TryGetValue(out double bidLutron);
         baseline.Cell(2, CsColFrozenMeta).TryGetValue(out double bidFreight);
         baseline.Cell(3, CsColFrozenMeta).TryGetValue(out double bidTaxRate);
@@ -2374,7 +2411,6 @@ public static class CountsWorkbookService
             }
         }
 
-        // Worksheet (Type, Catalog) → row index. Skip strikethrough (removed) rows.
         var wsRowByKey = new Dictionary<(string T, string C), int>();
         int wsLast = wsSheet.LastRowUsed()?.RowNumber() ?? 1;
         for (int r = 2; r <= wsLast; r++)
@@ -2387,78 +2423,42 @@ public static class CountsWorkbookService
             if (!wsRowByKey.ContainsKey(key)) wsRowByKey.Add(key, r);
         }
 
-        // 3. Compute diffs.
+        // 3. Build the full union row list (every baseline + current key — no skip).
         var allKeys = new HashSet<(string, string)>(baselineRows.Keys);
         foreach (var k in currentRows.Keys) allKeys.Add(k);
 
-        var diffs = new List<BcDiff>();
+        var rows = new List<BcDiff>();
         foreach (var key in allKeys)
         {
             baselineRows.TryGetValue(key, out var bRow);
             currentRows.TryGetValue(key, out var cRow);
+            wsRowByKey.TryGetValue(key, out int wsRow);
 
-            if (bRow != null && cRow != null)
-            {
-                bool mfrDiffers = !string.Equals(bRow.Mfr, cRow.Mfr, StringComparison.OrdinalIgnoreCase);
-                bool qtyDiffers = bRow.Qty != cRow.Qty;
-                bool priceDiffers = Math.Abs(bRow.SellEa - cRow.SellEa) > 0.005;
-                if (!mfrDiffers && !qtyDiffers && !priceDiffers) continue;
+            string change;
+            if (bRow == null) change = "Added";
+            else if (cRow == null) change = "Removed";
+            else if (!string.Equals(bRow.Mfr, cRow.Mfr, StringComparison.OrdinalIgnoreCase)) change = "Spec Δ";
+            else change = ""; // unchanged at export; live deltas may still surface via CF
 
-                string change = mfrDiffers ? "Spec Δ"
-                    : (qtyDiffers && priceDiffers) ? "Qty + Price Δ"
-                    : qtyDiffers ? "Qty Δ"
-                    : "Price Δ";
-                wsRowByKey.TryGetValue(key, out int wsRow);
-                diffs.Add(new BcDiff
-                {
-                    Type = cRow.Type,
-                    OldMfr = bRow.Mfr, NewMfr = cRow.Mfr,
-                    OldCatalog = bRow.Catalog, NewCatalog = cRow.Catalog,
-                    Change = change, Slot = cRow.Slot,
-                    OldQty = bRow.Qty, NewQty = cRow.Qty,
-                    OldSellEa = bRow.SellEa,
-                    CurrentWsRow = wsRow == 0 ? null : wsRow,
-                });
-            }
-            else if (bRow != null)
+            rows.Add(new BcDiff
             {
-                diffs.Add(new BcDiff
-                {
-                    Type = bRow.Type,
-                    OldMfr = bRow.Mfr, NewMfr = "",
-                    OldCatalog = bRow.Catalog, NewCatalog = "",
-                    Change = "Removed", Slot = bRow.Slot,
-                    OldQty = bRow.Qty, NewQty = null,
-                    OldSellEa = bRow.SellEa,
-                    CurrentWsRow = null,
-                });
-            }
-            else if (cRow != null)
-            {
-                wsRowByKey.TryGetValue(key, out int wsRow);
-                diffs.Add(new BcDiff
-                {
-                    Type = cRow.Type,
-                    OldMfr = "", NewMfr = cRow.Mfr,
-                    OldCatalog = "", NewCatalog = cRow.Catalog,
-                    Change = "Added", Slot = cRow.Slot,
-                    OldQty = null, NewQty = cRow.Qty,
-                    OldSellEa = null,
-                    CurrentWsRow = wsRow == 0 ? null : wsRow,
-                });
-            }
+                Type = (cRow ?? bRow!).Type,
+                OldMfr = bRow?.Mfr ?? "", NewMfr = cRow?.Mfr ?? "",
+                OldCatalog = bRow?.Catalog ?? "", NewCatalog = cRow?.Catalog ?? "",
+                Change = change, Slot = (cRow ?? bRow!).Slot,
+                OldQty = bRow?.Qty, NewQty = cRow?.Qty,
+                OldSellEa = bRow?.SellEa,
+                CurrentWsRow = wsRow == 0 ? null : wsRow,
+            });
         }
 
-        diffs.Sort((a, b) =>
+        rows.Sort((a, b) =>
         {
             int cmp = NaturalStringComparer.OrdinalIgnoreCase.Compare(a.Type, b.Type);
             return cmp != 0 ? cmp : a.Slot.CompareTo(b.Slot);
         });
 
-        // 4. Compute static Bid Total (tax-inclusive). Snapshot is one row per Type with one
-        // frozen Sell Ea — sum (Type Sell Ea × Type Count) once per snapshot row.
-        // Bid pre-adj total: per-fixture cost = sum across populated catalog slots; multiply
-        // by Type qty. Mirrors how Worksheet's CurrentTotal sums per-catalog rows.
+        // 4. Bid Total static (per-slot SellEa × Type qty, summed over snapshot rows).
         double bidPreAdj = 0;
         for (int r = 2; r <= blLast; r++)
         {
@@ -2481,7 +2481,6 @@ public static class CountsWorkbookService
         ws.Style.Font.FontName = "Segoe UI";
         ws.Style.Font.FontSize = 11;
 
-        // Summary block — col A labels, col B values.
         ws.Cell("A1").Value = "Bid Date:";
         if (bidDate.HasValue) ws.Cell("B1").Value = bidDate.Value;
         ws.Cell("B1").Style.NumberFormat.Format = "yyyy-mm-dd";
@@ -2499,8 +2498,6 @@ public static class CountsWorkbookService
         ws.Cell("B5").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
         for (int r = 1; r <= 5; r++) ws.Cell(r, 1).Style.Font.Bold = true;
 
-        // Live current-side: pre-adjustment subtotal computed via SUMPRODUCT over Worksheet
-        // (filtered by Active=1 to skip strikethrough/removed rows). Single bounded formula.
         string preAdjFormula =
             $"SUMPRODUCT((Worksheet!AG2:AG{wsLast}=1)"
             + $"*IFERROR((Worksheet!J2:J{wsLast}*(1+Worksheet!K2:K{wsLast}))+Worksheet!M2:M{wsLast},0)"
@@ -2530,7 +2527,6 @@ public static class CountsWorkbookService
         ws.Cell("A11").Style.Font.Bold = true;
         ws.Cell("B11").Style.Font.Bold = true;
 
-        // Compared-against marker.
         ws.Cell("C14").Value = bidDate.HasValue
             ? $"Compared against: Counts {bidDate:yyyy.MM.dd}"
             : "Compared against: (no baseline)";
@@ -2539,13 +2535,14 @@ public static class CountsWorkbookService
         ws.Cell("C15").Style.Font.Italic = true;
         ws.Cell("C15").Style.Font.FontColor = XLColor.FromHtml("#808080");
 
-        // Header row.
+        // Header row — slim 9-col + 2 hidden support cols.
         int headerRow = 17;
         string[] headers = {
-            "Type", "Mfr", "Catalog", "Change",
-            "Old Qty", "New Qty", "ΔQty",
-            "Old Sell Ea.", "New Sell Ea.", "ΔSell Ea.",
-            "Old Ext.", "New Ext.", "ΔExt.",
+            "Type", "Mfr", "Catalog",
+            "Qty", "ΔQty",
+            "Sell Ea.", "ΔSell Ea.",
+            "Ext.", "ΔExt.",
+            "Old Qty", "Old Sell Ea.",
         };
         for (int i = 0; i < headers.Length; i++)
         {
@@ -2557,129 +2554,147 @@ public static class CountsWorkbookService
             c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         }
 
-        // Diff rows.
-        int row = headerRow + 1;
-        foreach (var d in diffs)
+        // Data rows.
+        int firstDataRow = headerRow + 1;
+        int row = firstDataRow;
+        foreach (var d in rows)
         {
             int wsRow = d.CurrentWsRow ?? 0;
-            // Type / Mfr / Catalog (handle Spec Δ stacked old/new in Mfr or Catalog cell).
+
             ws.Cell(row, 1).Value = d.Type;
+
+            // Mfr — same UPPER + Environmental Lights → LUMEN SPEC normalization Quote uses,
+            // since Bid Compare may be shown to a contractor. Stacked old\nnew on Spec Δ;
+            // static for Removed/Added; live formula for matched.
             if (d.Change == "Spec Δ" && !string.Equals(d.OldMfr, d.NewMfr, StringComparison.OrdinalIgnoreCase))
             {
-                ws.Cell(row, 2).Value = $"{d.OldMfr}\n{d.NewMfr}";
+                ws.Cell(row, 2).Value = $"{NormalizeMfrDisplay(d.OldMfr)}\n{NormalizeMfrDisplay(d.NewMfr)}";
                 ws.Cell(row, 2).Style.Alignment.WrapText = true;
             }
-            else
+            else if (d.Change == "Removed")
             {
-                ws.Cell(row, 2).Value = d.Change == "Removed" ? d.OldMfr
-                    : d.Change == "Added" ? d.NewMfr : d.NewMfr;
+                ws.Cell(row, 2).Value = NormalizeMfrDisplay(d.OldMfr);
             }
-            if (d.Change == "Spec Δ" && !string.Equals(d.OldCatalog, d.NewCatalog, StringComparison.OrdinalIgnoreCase))
-            {
-                ws.Cell(row, 3).Value = $"{d.OldCatalog}\n{d.NewCatalog}";
-                ws.Cell(row, 3).Style.Alignment.WrapText = true;
-            }
-            else
-            {
-                ws.Cell(row, 3).Value = d.Change == "Removed" ? d.OldCatalog
-                    : d.Change == "Added" ? d.NewCatalog : d.NewCatalog;
-            }
-            ws.Cell(row, 4).Value = d.Change;
-
-            // Old Qty / New Qty / ΔQty
-            if (d.OldQty.HasValue) ws.Cell(row, 5).Value = d.OldQty.Value;
-            if (wsRow > 0)
-                ws.Cell(row, 6).FormulaA1 = $"Worksheet!BR{wsRow}";
-            else if (d.NewQty.HasValue)
-                ws.Cell(row, 6).Value = d.NewQty.Value;
-            // ΔQty = NewQty - OldQty (formula if either side live; static when both static).
-            if (wsRow > 0 && d.OldQty.HasValue)
-                ws.Cell(row, 7).FormulaA1 = $"F{row}-E{row}";
-            else if (wsRow > 0 && !d.OldQty.HasValue)
-                ws.Cell(row, 7).FormulaA1 = $"F{row}";
-            else if (!d.NewQty.HasValue && d.OldQty.HasValue)
-                ws.Cell(row, 7).Value = -d.OldQty.Value;
-
-            // Old Sell Ea / New Sell Ea / ΔSell Ea
-            if (d.OldSellEa.HasValue) ws.Cell(row, 8).Value = d.OldSellEa.Value;
-            if (wsRow > 0)
-                ws.Cell(row, 9).FormulaA1 =
-                    $"IFERROR((Worksheet!J{wsRow}*(1+Worksheet!K{wsRow}))+Worksheet!M{wsRow},0)";
-            if (wsRow > 0 && d.OldSellEa.HasValue)
-                ws.Cell(row, 10).FormulaA1 = $"I{row}-H{row}";
             else if (wsRow > 0)
-                ws.Cell(row, 10).FormulaA1 = $"I{row}";
-            else if (d.OldSellEa.HasValue)
-                ws.Cell(row, 10).Value = -d.OldSellEa.Value;
-
-            // Old Ext / New Ext / ΔExt
-            if (d.OldQty.HasValue && d.OldSellEa.HasValue)
-                ws.Cell(row, 11).Value = d.OldQty.Value * d.OldSellEa.Value;
-            if (wsRow > 0)
-                ws.Cell(row, 12).FormulaA1 = $"F{row}*I{row}";
-            ws.Cell(row, 13).FormulaA1 = wsRow > 0 && d.OldQty.HasValue && d.OldSellEa.HasValue
-                ? $"L{row}-K{row}"
-                : wsRow > 0
-                    ? $"L{row}"
-                    : (d.OldQty.HasValue && d.OldSellEa.HasValue
-                        ? (-(d.OldQty.Value * d.OldSellEa.Value)).ToString(System.Globalization.CultureInfo.InvariantCulture)
-                        : "0");
-
-            // Row tints.
-            XLColor? tint = d.Change switch
             {
-                "Added" => BcAddedTint,
-                "Qty Δ" => BcQtyTint,
-                "Price Δ" => null, // up/down decided per-row below
-                "Qty + Price Δ" => null,
-                _ => null,
-            };
-            if (d.Change == "Price Δ" || d.Change == "Qty + Price Δ")
-            {
-                double cur = d.OldSellEa ?? 0;
-                if (currentRows.TryGetValue(
-                    (d.Type.ToUpperInvariant(), d.NewCatalog.ToUpperInvariant()), out var cr))
-                {
-                    tint = cr.SellEa > cur ? BcPriceUpTint : BcPriceDownTint;
-                }
+                string anchor = $"(IF(Worksheet!U{wsRow}=\"\",Worksheet!B{wsRow},Worksheet!U{wsRow}))";
+                ws.Cell(row, 2).FormulaA1 = BuildMfrDisplayFormula(anchor);
             }
-            if (tint != null)
-                ws.Range(row, 1, row, 13).Style.Fill.BackgroundColor = tint;
+            else
+            {
+                ws.Cell(row, 2).Value = NormalizeMfrDisplay(d.NewMfr);
+            }
+
+            // Catalog — live for matched/added rows; static for Removed.
+            if (wsRow > 0)
+                ws.Cell(row, 3).FormulaA1 = $"Worksheet!C{wsRow}";
+            else
+                ws.Cell(row, 3).Value = d.Change == "Removed" ? d.OldCatalog : d.NewCatalog;
+
+            // Qty (D) — live for matched/added; static old for Removed.
+            if (wsRow > 0)
+                ws.Cell(row, 4).FormulaA1 = $"Worksheet!BR{wsRow}";
+            else if (d.Change == "Removed" && d.OldQty.HasValue)
+                ws.Cell(row, 4).Value = d.OldQty.Value;
+            else if (d.NewQty.HasValue)
+                ws.Cell(row, 4).Value = d.NewQty.Value;
+
+            // ΔQty (E).
+            ws.Cell(row, 5).FormulaA1 = $"IF(ISNUMBER(D{row}),D{row},0)-IF(ISNUMBER(J{row}),J{row},0)";
+
+            // Sell Ea (F).
+            if (wsRow > 0)
+                ws.Cell(row, 6).FormulaA1 =
+                    $"IFERROR((Worksheet!J{wsRow}*(1+Worksheet!K{wsRow}))+Worksheet!M{wsRow},0)";
+            else if (d.Change == "Removed" && d.OldSellEa.HasValue)
+                ws.Cell(row, 6).Value = d.OldSellEa.Value;
+
+            // ΔSell (G).
+            ws.Cell(row, 7).FormulaA1 = $"IF(ISNUMBER(F{row}),F{row},0)-IF(ISNUMBER(K{row}),K{row},0)";
+
+            // Ext (H).
+            ws.Cell(row, 8).FormulaA1 = $"IFERROR(D{row}*F{row},0)";
+
+            // ΔExt (I).
+            ws.Cell(row, 9).FormulaA1 =
+                $"H{row}-IF(AND(ISNUMBER(J{row}),ISNUMBER(K{row})),J{row}*K{row},0)";
+
+            // Hidden support cols.
+            if (d.OldQty.HasValue) ws.Cell(row, 10).Value = d.OldQty.Value;
+            if (d.OldSellEa.HasValue) ws.Cell(row, 11).Value = d.OldSellEa.Value;
+
             if (d.Change == "Removed")
             {
-                ws.Range(row, 1, row, 13).Style.Font.Strikethrough = true;
-                ws.Range(row, 1, row, 13).Style.Font.FontColor = XLColor.FromHtml("#808080");
+                ws.Range(row, 1, row, 9).Style.Font.Strikethrough = true;
+                ws.Range(row, 1, row, 9).Style.Font.FontColor = XLColor.FromHtml("#808080");
             }
 
             row++;
         }
+        int lastDataRow = row - 1;
 
-        // Number formats and alignment.
+        // 6. Conditional formatting — re-evaluates as Worksheet edits propagate.
+        // J/K (hidden) hold baseline qty/sell. Empty J & K → no baseline (Added). Strikethrough
+        // (Removed) rows already have a baked gray font; CF won't repaint them.
+        if (lastDataRow >= firstDataRow)
+        {
+            var dataRange = ws.Range(firstDataRow, 1, lastDataRow, 9);
+
+            // Added (no baseline at all).
+            dataRange.AddConditionalFormat()
+                .WhenIsTrue($"AND($J{firstDataRow}=\"\",$K{firstDataRow}=\"\")")
+                .Fill.SetBackgroundColor(BcAddedTint);
+
+            // Price up.
+            dataRange.AddConditionalFormat()
+                .WhenIsTrue($"AND(ISNUMBER($K{firstDataRow}),ISNUMBER($F{firstDataRow}),$F{firstDataRow}-$K{firstDataRow}>0.005)")
+                .Fill.SetBackgroundColor(BcPriceUpTint);
+
+            // Price down.
+            dataRange.AddConditionalFormat()
+                .WhenIsTrue($"AND(ISNUMBER($K{firstDataRow}),ISNUMBER($F{firstDataRow}),$K{firstDataRow}-$F{firstDataRow}>0.005)")
+                .Fill.SetBackgroundColor(BcPriceDownTint);
+
+            // Qty Δ (lower priority — only paints when no price tint above matched).
+            dataRange.AddConditionalFormat()
+                .WhenIsTrue($"AND(ISNUMBER($J{firstDataRow}),ISNUMBER($D{firstDataRow}),$D{firstDataRow}<>$J{firstDataRow})")
+                .Fill.SetBackgroundColor(BcQtyTint);
+        }
+
+        // Number formats / alignment.
         ws.Column(2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        for (int c = 5; c <= 7; c++)
+        for (int c = 4; c <= 9; c++)
             ws.Column(c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-        for (int c = 8; c <= 13; c++)
-            ws.Column(c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-        ws.Column(7).Style.NumberFormat.Format = "+0;-0;;@";
-        for (int c = 8; c <= 9; c++)
-            ws.Column(c).Style.NumberFormat.Format = "$#,##0.00";
-        ws.Column(10).Style.NumberFormat.Format = "+$#,##0.00;-$#,##0.00;;@";
-        for (int c = 11; c <= 12; c++)
-            ws.Column(c).Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
-        ws.Column(13).Style.NumberFormat.Format = "+$#,##0.00;-$#,##0.00;;@";
+        ws.Column(5).Style.NumberFormat.Format = "+0;-0;;@";
+        ws.Column(6).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(7).Style.NumberFormat.Format = "+$#,##0.00;-$#,##0.00;;@";
+        ws.Column(8).Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
+        ws.Column(9).Style.NumberFormat.Format = "+$#,##0.00;-$#,##0.00;;@";
 
         // Column widths.
         ws.Column(1).Width = Math.Max(7, wsSheet.Column(WsColType).Width);
         ws.Column(2).Width = 14;
-        ws.Column(3).Width = 24;
-        ws.Column(3).Style.Alignment.WrapText = true;
-        ws.Column(4).Width = 14;
-        for (int c = 5; c <= 7; c++) ws.Column(c).Width = 8;
-        for (int c = 8; c <= 10; c++) ws.Column(c).Width = 12;
-        for (int c = 11; c <= 13; c++) ws.Column(c).Width = 13;
+        ws.Column(3).Width = 28;
+        for (int c = 4; c <= 5; c++) ws.Column(c).Width = 8;
+        for (int c = 6; c <= 9; c++) ws.Column(c).Width = 13;
         ws.Column("A").Width = Math.Max(ws.Column("A").Width, 22);
         ws.Column("B").Width = Math.Max(ws.Column("B").Width, 14);
+
+        ws.Column(10).Hide();
+        ws.Column(11).Hide();
+
+        // Type-group dividers — matches Worksheet style (thin #262626 bottom border).
+        var divColor = XLColor.FromHtml("#262626");
+        for (int r = firstDataRow; r < lastDataRow; r++)
+        {
+            string thisType = ws.Cell(r, 1).GetString();
+            string nextType = ws.Cell(r + 1, 1).GetString();
+            if (string.Equals(thisType, nextType, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var rng = ws.Range(r, 1, r, 9);
+            rng.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+            rng.Style.Border.BottomBorderColor = divColor;
+        }
 
         ApplyStandardPageSetup(ws);
         ws.PageSetup.SetRowsToRepeatAtTop(headerRow, headerRow);
@@ -2794,6 +2809,17 @@ public static class CountsWorkbookService
     {
         string upper = $"UPPER({anchor})";
         return $"IF({upper}=\"ENVIRONMENTAL LIGHTS\",\"LUMEN SPEC\",{upper})";
+    }
+
+    /// <summary>C# mirror of <see cref="BuildMfrDisplayFormula"/> for static Mfr values
+    /// (Removed/Added/Spec Δ rows on Bid Compare). Also applies <see cref="TrimMfrForDisplay"/>
+    /// so static rows match the trimmed form Worksheet col B holds for live rows.</summary>
+    private static string NormalizeMfrDisplay(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return raw;
+        string trimmed = TrimMfrForDisplay(raw);
+        string upper = trimmed.ToUpperInvariant();
+        return upper == "ENVIRONMENTAL LIGHTS" ? "LUMEN SPEC" : upper;
     }
 
     /// <summary>Prepends a single space to each spilled value for visual left-padding on a
