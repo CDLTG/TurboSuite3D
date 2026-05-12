@@ -7,5 +7,6 @@ public enum TagDirection
     Down,
     Left,
     Right,
-    Combined
+    Combined,
+    CombinedForced
 }

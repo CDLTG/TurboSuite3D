@@ -10,7 +10,8 @@ Batch-places lighting fixture type tags on selected fixtures with configurable d
 |---|---|---|
 | Point-based (ceiling/floor) | `AL_Tag_Lighting Fixture (Type)` | Up, Down, Left, or Right (user choice) |
 | Line-based (linear) | `AL_Tag_Lighting Fixture (Linear Length)` | Up or Down (user choice) |
-| Line-based (linear, Combined) | `AL_Tag_Lighting Fixture (Run Length)` | One tag per continuous run, placed on the middle fixture, displaying the summed run length |
+| Line-based (linear, Combined) | `AL_Tag_Lighting Fixture (Run Length)` | One tag per continuous run (end-to-end adjacency), placed on the middle fixture, displaying the summed run length |
+| Line-based (linear, Combined Forced) | `AL_Tag_Lighting Fixture (Run Length)` | Treats all selected linear fixtures as a single run regardless of adjacency — use when curved end-caps or other geometry break end-to-end detection |
 | Face-based (wall sconce) | `AL_Tag_Lighting Fixture (Type)` | Automatic — offset along wall normal |
 
 ## Usage

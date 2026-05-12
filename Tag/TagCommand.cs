@@ -68,9 +68,10 @@ public class TagCommand : IExternalCommand
                     return Result.Cancelled;
                 }
 
-                if (linearChoice == TagDirection.Combined)
+                if (linearChoice == TagDirection.Combined || linearChoice == TagDirection.CombinedForced)
                 {
-                    Result combinedResult = HandleCombinedLinear(doc, lineBasedFixtures, ref totalTagged);
+                    bool forced = linearChoice == TagDirection.CombinedForced;
+                    Result combinedResult = HandleCombinedLinear(doc, lineBasedFixtures, forced, ref totalTagged);
                     if (combinedResult != Result.Succeeded)
                         return combinedResult;
                 }
@@ -552,9 +553,18 @@ public class TagCommand : IExternalCommand
         }
     }
 
-    private Result HandleCombinedLinear(Document doc, List<FamilyInstance> lineBasedFixtures, ref int totalTagged)
+    private static List<LinearRun> BuildForcedSingleRun(List<FamilyInstance> lineBasedFixtures)
     {
-        List<LinearRun> runs = LinearRunService.BuildRuns(lineBasedFixtures);
+        if (lineBasedFixtures.Count == 0)
+            return new List<LinearRun>();
+        return new List<LinearRun> { new LinearRun(new List<FamilyInstance>(lineBasedFixtures)) };
+    }
+
+    private Result HandleCombinedLinear(Document doc, List<FamilyInstance> lineBasedFixtures, bool forced, ref int totalTagged)
+    {
+        List<LinearRun> runs = forced
+            ? BuildForcedSingleRun(lineBasedFixtures)
+            : LinearRunService.BuildRuns(lineBasedFixtures);
         var multiRuns = runs.Where(r => r.Members.Count > 1).ToList();
         var singleRuns = runs.Where(r => r.Members.Count == 1).ToList();
 

@@ -60,6 +60,7 @@ public partial class TagDirectionDialog : Window
         if (!includeCombined)
         {
             CombinedButton.Visibility = Visibility.Collapsed;
+            CombinedForcedButton.Visibility = Visibility.Collapsed;
         }
 
         Loaded += OnLoaded;
@@ -149,6 +150,12 @@ public partial class TagDirectionDialog : Window
     private void Combined_Click(object sender, RoutedEventArgs e)
     {
         SelectedDirection = TagDirection.Combined;
+        DialogResult = true;
+    }
+
+    private void CombinedForced_Click(object sender, RoutedEventArgs e)
+    {
+        SelectedDirection = TagDirection.CombinedForced;
         DialogResult = true;
     }
 
