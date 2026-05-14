@@ -96,6 +96,12 @@ public static class CountsWorkbookService
     // mirror that — a single Type-level SellEa loses non-primary catalogs' bid prices and
     // would falsely diff in Bid Compare whenever a Type's primary catalog changes.
     private const int CsColSellEa1 = 23;    // W
+    // Per-Type tariff % captured at snapshot write time, broadcast to every row of the Type
+    // (every row of Type X holds the same value). Mirrors the SellEa pattern — every snapshot
+    // row is self-contained for Bid Compare's static B5 calculation, no canonical-row lookup
+    // needed at read time. Source is Worksheet col L, which is canonical-per-Type (literal only
+    // on the Type's first row; other rows mirror via formula).
+    private const int CsColTariffPct = 29;  // AC
 
     // Highlight colors
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
@@ -208,7 +214,7 @@ public static class CountsWorkbookService
             }
 
             stage = "build-counts-sheet";
-            BuildCountsSheet(wb, fixtures, countsSheetName, pricingForSnapshot);
+            BuildCountsSheet(wb, fixtures, countsSheetName);
 
             stage = "refresh-reference-dropdown";
             RefreshReferenceCountsDropdown(wb);
@@ -1299,8 +1305,7 @@ public static class CountsWorkbookService
     private static void BuildCountsSheet(
         IXLWorkbook wb,
         List<CountsFixtureModel> fixtures,
-        string sheetName,
-        Dictionary<(string Type, string Catalog), WorksheetRowData>? pricing = null)
+        string sheetName)
     {
         var ws = wb.Worksheets.Add(sheetName);
 
@@ -1322,6 +1327,7 @@ public static class CountsWorkbookService
         ws.Cell(1, CsColCatCombo).Value = "_CatCombo";
         for (int s = 0; s < 6; s++)
             ws.Cell(1, CsColSellEa1 + s).Value = $"_SellEa{s + 1}";
+        ws.Cell(1, CsColTariffPct).Value = "_TariffPct";
 
         // For per-slot SellEa freeze: resolve catalog Unit Cost via the canonical (master) row
         // for each catalog. Worksheet stores the literal J on the first occurrence of a catalog
@@ -1332,6 +1338,11 @@ public static class CountsWorkbookService
         // so they're still read from the row itself.
         var wsRowByKey = new Dictionary<(string T, string C), int>();
         var catalogCanonicalRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Per-Type first row — used for tariff % lookup. Worksheet col L holds the literal only
+        // on each Type's first row (others mirror via formula), so we resolve from the first row
+        // seen for each Type. Don't skip strikethrough rows: a deleted Type's canonical L value
+        // is still preserved in the cell and is what live XLOOKUP would also resolve.
+        var typeFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         if (wb.Worksheets.TryGetWorksheet("Worksheet", out var pricingWs))
         {
             int wsLast = pricingWs.LastRowUsed()?.RowNumber() ?? 1;
@@ -1345,6 +1356,7 @@ public static class CountsWorkbookService
                 if (!catalogCanonicalRow.ContainsKey(c2)
                     && !pricingWs.Cell(r2, WsColUnitCost).HasFormula)
                     catalogCanonicalRow[c2] = r2;
+                if (!typeFirstRow.ContainsKey(t)) typeFirstRow[t] = r2;
             }
         }
 
@@ -1393,6 +1405,15 @@ public static class CountsWorkbookService
                         anyPriced = true;
                     }
                 }
+
+                // Freeze the Type's tariff % from Worksheet col L (canonical row). Broadcast to
+                // every snapshot row of this Type so Bid Compare's static B5 can read tariff
+                // per-row without re-running a canonical lookup at compare time.
+                double tariff = 0;
+                if (typeFirstRow.TryGetValue(f.TypeMark, out int tRow))
+                    pricingWs.Cell(tRow, WsColTariff).TryGetValue(out tariff);
+                ws.Cell(row, CsColTariffPct).Value = tariff;
+                ws.Cell(row, CsColTariffPct).Style.NumberFormat.Format = "0.00%";
             }
 
             row++;
@@ -1401,6 +1422,7 @@ public static class CountsWorkbookService
         ws.Column(CsColCatCombo).Hide();
         for (int s = 0; s < 6; s++)
             ws.Column(CsColSellEa1 + s).Hide();
+        ws.Column(CsColTariffPct).Hide();
 
         // Frozen Dashboard meta on column V (hidden). Sheet-scoped names so Bid Compare can
         // resolve the snapshot's bid-time Lutron / Freight Sell / Sales Tax rate from any sheet.
@@ -2111,6 +2133,7 @@ public static class CountsWorkbookService
         // can still contribute their pre-deletion bid price.
         var wsRowByKey = new Dictionary<(string T, string C), int>();
         var catalogCanonicalRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var typeFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int wsLast = wsSheet.LastRowUsed()?.RowNumber() ?? 1;
         for (int r = 2; r <= wsLast; r++)
         {
@@ -2121,6 +2144,7 @@ public static class CountsWorkbookService
             if (!wsRowByKey.ContainsKey(key)) wsRowByKey.Add(key, r);
             if (!catalogCanonicalRow.ContainsKey(cat) && !wsSheet.Cell(r, WsColUnitCost).HasFormula)
                 catalogCanonicalRow[cat] = r;
+            if (!typeFirstRow.ContainsKey(type)) typeFirstRow[type] = r;
         }
 
         // Refresh per-row Sell Ea. by matching on the snapshot's first non-blank catalog —
@@ -2149,6 +2173,14 @@ public static class CountsWorkbookService
                     baseline.Cell(r, CsColSellEa1 + c).Style.NumberFormat.Format = "$#,##0.00";
                 }
             }
+
+            // Refresh per-Type tariff % from Worksheet col L (canonical row). Broadcast to every
+            // snapshot row of this Type so Bid Compare's static B5 can read it per-row.
+            double tariff = 0;
+            if (typeFirstRow.TryGetValue(type, out int tRow))
+                wsSheet.Cell(tRow, WsColTariff).TryGetValue(out tariff);
+            baseline.Cell(r, CsColTariffPct).Value = tariff;
+            baseline.Cell(r, CsColTariffPct).Style.NumberFormat.Format = "0.00%";
         }
 
         // Refresh frozen Dashboard meta (V1/V2/V3) from current Dashboard values.
@@ -2357,8 +2389,6 @@ public static class CountsWorkbookService
         if (baseline == null) return;
         if (!wb.Worksheets.TryGetWorksheet("Worksheet", out var wsSheet)) return;
 
-        var bidDate = ReadBidDate(wb);
-
         // 1. Read baseline → per-(TypeUpper, CatalogUpper) BcRow.
         var baselineRows = new Dictionary<(string T, string C), BcRow>();
         int blLast = baseline.LastRowUsed()?.RowNumber() ?? 1;
@@ -2458,8 +2488,12 @@ public static class CountsWorkbookService
             return cmp != 0 ? cmp : a.Slot.CompareTo(b.Slot);
         });
 
-        // 4. Bid Total static (per-slot SellEa × Type qty, summed over snapshot rows).
+        // 4. Bid Total static. Subtotal = line items + per-Type tariff allocation; Lutron and
+        //    Freight are added AFTER tax (matches Quote's LIGHTING PACKAGE TOTAL formula —
+        //    sub × (1+tax) + Lutron + N(Freight)). Tariff % is read from the snapshot's AC
+        //    column (broadcast per-row at snapshot time).
         double bidPreAdj = 0;
+        double bidTariff = 0;
         for (int r = 2; r <= blLast; r++)
         {
             string type = baseline.Cell(r, CsColType).GetString();
@@ -2471,9 +2505,13 @@ public static class CountsWorkbookService
                 baseline.Cell(r, CsColSellEa1 + c).TryGetValue(out double slot);
                 rowSellSum += slot;
             }
-            bidPreAdj += q * rowSellSum;
+            double rowSellExt = q * rowSellSum;
+            bidPreAdj += rowSellExt;
+            baseline.Cell(r, CsColTariffPct).TryGetValue(out double rowTariff);
+            bidTariff += rowSellExt * rowTariff;
         }
-        double bidTotalIncl = (bidPreAdj + bidLutron + bidFreight) * (1.0 + bidTaxRate);
+        double bidSubtotal = bidPreAdj + bidTariff;
+        double bidTotalIncl = bidSubtotal * (1.0 + bidTaxRate) + bidLutron + bidFreight;
 
         // 5. Emit sheet.
         var ws = wb.Worksheets.Add("Bid Compare");
@@ -2481,62 +2519,67 @@ public static class CountsWorkbookService
         ws.Style.Font.FontName = "Segoe UI";
         ws.Style.Font.FontSize = 11;
 
-        ws.Cell("A1").Value = "Bid Date:";
-        if (bidDate.HasValue) ws.Cell("B1").Value = bidDate.Value;
-        ws.Cell("B1").Style.NumberFormat.Format = "yyyy-mm-dd";
-        ws.Cell("A2").Value = "Bid Lutron:";
-        ws.Cell("B2").Value = bidLutron;
-        ws.Cell("B2").Style.NumberFormat.Format = "$#,##0.00";
-        ws.Cell("A3").Value = "Bid Freight:";
-        ws.Cell("B3").Value = bidFreight;
-        ws.Cell("B3").Style.NumberFormat.Format = "$#,##0.00";
-        ws.Cell("A4").Value = "Bid Sales Tax:";
-        ws.Cell("B4").Value = bidTaxRate;
-        ws.Cell("B4").Style.NumberFormat.Format = "0.00%";
-        ws.Cell("A5").Value = "Bid Total (incl tax):";
-        ws.Cell("B5").Value = bidTotalIncl;
-        ws.Cell("B5").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
-        for (int r = 1; r <= 5; r++) ws.Cell(r, 1).Style.Font.Bold = true;
-
-        string preAdjFormula =
-            $"SUMPRODUCT((Worksheet!AG2:AG{wsLast}=1)"
-            + $"*IFERROR((Worksheet!J2:J{wsLast}*(1+Worksheet!K2:K{wsLast}))+Worksheet!M2:M{wsLast},0)"
-            + $"*Worksheet!BR2:BR{wsLast})";
+        // Match Quote's sellSubtotal: Σ(line items) + Σ(sellExt × per-row tariff%). Per-row
+        // tariff is broadcast from each Type's canonical L row via XLOOKUP, mirroring Quote.
+        string activeFlag = $"(Worksheet!AG2:AG{wsLast}=1)";
+        string sellEaPerRow = $"IFERROR((Worksheet!J2:J{wsLast}*(1+Worksheet!K2:K{wsLast}))+Worksheet!M2:M{wsLast},0)";
+        string effQty = $"Worksheet!BR2:BR{wsLast}";
+        string tariffPerRow = $"IFERROR(_xlfn.XLOOKUP(Worksheet!A2:A{wsLast},Worksheet!A2:A{wsLast},Worksheet!L2:L{wsLast}),0)";
+        string subFormula =
+            $"SUMPRODUCT({activeFlag}*{sellEaPerRow}*{effQty})"
+            + $"+SUMPRODUCT({activeFlag}*{sellEaPerRow}*{effQty}*{tariffPerRow})";
         string lutronExpr = "IF(LutronSubtotal=\"\",0,LutronSubtotal)";
         string freightExpr = "IF(FreightSell=\"\",0,FreightSell)";
         string taxExpr = $"IF(Dashboard!{DashSalesTaxCell}=\"\",0,Dashboard!{DashSalesTaxCell})";
 
-        ws.Cell("A7").Value = "Current Lutron:";
-        ws.Cell("B7").FormulaA1 = lutronExpr;
-        ws.Cell("B7").Style.NumberFormat.Format = "$#,##0.00";
-        ws.Cell("A8").Value = "Current Freight:";
-        ws.Cell("B8").FormulaA1 = freightExpr;
-        ws.Cell("B8").Style.NumberFormat.Format = "$#,##0.00";
-        ws.Cell("A9").Value = "Current Sales Tax:";
-        ws.Cell("B9").FormulaA1 = taxExpr;
-        ws.Cell("B9").Style.NumberFormat.Format = "0.00%";
-        ws.Cell("A10").Value = "Current Total (incl tax):";
-        ws.Cell("B10").FormulaA1 =
-            $"(({preAdjFormula})+({lutronExpr})+({freightExpr}))*(1+({taxExpr}))";
-        ws.Cell("B10").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
-        for (int r = 7; r <= 10; r++) ws.Cell(r, 1).Style.Font.Bold = true;
+        // Metadata block lives on rows 1–5 in two halves: Bid side in cols E/F, Current side
+        // in cols H/I. Bid date is shown via the "Compared against:" footer below (no dedicated
+        // row). Col I also carries ΔExt data starting at row 8 (column-level format applied
+        // later is +$/-$); the metadata cells in rows 1–4 override per-cell to plain currency /
+        // percent, and only Net Change (I5) inherits the +/- column default.
+        void WriteLabel(string addr, string text)
+        {
+            var c = ws.Cell(addr);
+            c.Value = text;
+            c.Style.Font.Bold = true;
+            c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+        }
 
-        ws.Cell("A11").Value = "Net Change:";
-        ws.Cell("B11").FormulaA1 = "B10-B5";
-        ws.Cell("B11").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
-        ws.Cell("A11").Style.Font.Bold = true;
-        ws.Cell("B11").Style.Font.Bold = true;
+        WriteLabel("E1", "Bid Lutron:");
+        ws.Cell("F1").Value = bidLutron;
+        ws.Cell("F1").Style.NumberFormat.Format = "$#,##0.00";
+        WriteLabel("E2", "Bid Freight:");
+        ws.Cell("F2").Value = bidFreight;
+        ws.Cell("F2").Style.NumberFormat.Format = "$#,##0.00";
+        WriteLabel("E3", "Bid Sales Tax:");
+        ws.Cell("F3").Value = bidTaxRate;
+        ws.Cell("F3").Style.NumberFormat.Format = "0.00%";
+        WriteLabel("E4", "Bid Total (incl tax):");
+        ws.Cell("F4").Value = bidTotalIncl;
+        ws.Cell("F4").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
 
-        ws.Cell("C14").Value = bidDate.HasValue
-            ? $"Compared against: Counts {bidDate:yyyy.MM.dd}"
-            : "Compared against: (no baseline)";
-        ws.Cell("C14").Style.Font.Italic = true;
-        ws.Cell("C15").Value = "Edit Dashboard B12 and re-export from Revit to retarget.";
-        ws.Cell("C15").Style.Font.Italic = true;
-        ws.Cell("C15").Style.Font.FontColor = XLColor.FromHtml("#808080");
+        WriteLabel("H1", "Current Lutron:");
+        ws.Cell("I1").FormulaA1 = lutronExpr;
+        ws.Cell("I1").Style.NumberFormat.Format = "$#,##0.00";
+        WriteLabel("H2", "Current Freight:");
+        ws.Cell("I2").FormulaA1 = freightExpr;
+        ws.Cell("I2").Style.NumberFormat.Format = "$#,##0.00";
+        WriteLabel("H3", "Current Sales Tax:");
+        ws.Cell("I3").FormulaA1 = taxExpr;
+        ws.Cell("I3").Style.NumberFormat.Format = "0.00%";
+        WriteLabel("H4", "Current Total (incl tax):");
+        // sub × (1+tax) + Lutron + Freight — Lutron / Freight are NOT taxed, matching Quote.
+        ws.Cell("I4").FormulaA1 =
+            $"({subFormula})*(1+({taxExpr}))+({lutronExpr})+({freightExpr})";
+        ws.Cell("I4").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
+
+        WriteLabel("H5", "Net Change:");
+        ws.Cell("I5").FormulaA1 = "I4-F4";
+        ws.Cell("I5").Style.NumberFormat.Format = "+$#,##0.00;-$#,##0.00;;@";
+        ws.Cell("I5").Style.Font.Bold = true;
 
         // Header row — slim 9-col + 2 hidden support cols.
-        int headerRow = 17;
+        int headerRow = 7;
         string[] headers = {
             "Type", "Mfr", "Catalog",
             "Qty", "ΔQty",
@@ -2671,14 +2714,29 @@ public static class CountsWorkbookService
         ws.Column(8).Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
         ws.Column(9).Style.NumberFormat.Format = "+$#,##0.00;-$#,##0.00;;@";
 
-        // Column widths.
+        // Re-apply per-cell formats on the metadata block — column-level format above propagates
+        // through to all existing cells in the column, including rows 1–5. F (col 6) gets plain
+        // currency; I (col 9) gets +$/-$ for ΔExt data, which is wrong for the Lutron/Freight/Tax/
+        // Total metadata in rows 1–4 (only Net Change in I5 should inherit the +/- default).
+        ws.Cell("F3").Style.NumberFormat.Format = "0.00%";
+        ws.Cell("F4").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
+        ws.Cell("I1").Style.NumberFormat.Format = "$#,##0.00";
+        ws.Cell("I2").Style.NumberFormat.Format = "$#,##0.00";
+        ws.Cell("I3").Style.NumberFormat.Format = "0.00%";
+        ws.Cell("I4").Style.NumberFormat.Format = "$#,##0.00;($#,##0.00)";
+
+        // Column widths. Col A (Type) mirrors Worksheet's already-measured Type width.
+        // Mfr/Catalog get a measurement pass via AdjustToContents, with a small additive
+        // buffer to compensate for ClosedXML's known under-measurement on non-Calibri fonts
+        // (Segoe UI 11 here). Without the buffer, long Mfr names and catalog numbers clip.
+        // Metadata labels in cols E and H overflow left into empty cols D / G.
         ws.Column(1).Width = Math.Max(7, wsSheet.Column(WsColType).Width);
-        ws.Column(2).Width = 14;
-        ws.Column(3).Width = 28;
+        ws.Column(2).AdjustToContents();
+        ws.Column(3).AdjustToContents();
+        ws.Column(2).Width += 3;
+        ws.Column(3).Width += 3;
         for (int c = 4; c <= 5; c++) ws.Column(c).Width = 8;
         for (int c = 6; c <= 9; c++) ws.Column(c).Width = 13;
-        ws.Column("A").Width = Math.Max(ws.Column("A").Width, 22);
-        ws.Column("B").Width = Math.Max(ws.Column("B").Width, 14);
 
         ws.Column(10).Hide();
         ws.Column(11).Hide();
