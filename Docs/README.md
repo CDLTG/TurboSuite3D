@@ -120,7 +120,7 @@ Same visual format as the fixture schedule but with two spec sections: **Capacit
 
 ### Lookup Table
 
-Compact table with columns **Switch ID | Type Mark | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware). Letter size only. Dark header row with alternating row shading.
+Compact table with columns **Number | Type | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware). Letter size only. Dark header row with alternating row shading.
 
 ### Data Source
 

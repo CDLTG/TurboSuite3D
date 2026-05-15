@@ -81,8 +81,8 @@ public static class RPSLookupPdfService
         // Column definitions: (Header, DataSelector, ProportionalWidth)
         var columns = new (string Header, Func<RPSInstanceModel, string> Selector, double Weight)[]
         {
-            ("Switch ID",      r => r.SwitchID,       1.0),
-            ("Type Mark",      r => r.TypeMark,        1.0),
+            ("Number",         r => r.SwitchID,       1.0),
+            ("Type",            r => r.TypeMark,        1.0),
             ("Catalog Number", r => r.CatalogNumber,   2.5),
             ("Load Name",      r => r.LoadName,        2.0),
             ("Circuit",        r => r.CircuitNumber,   1.0),
