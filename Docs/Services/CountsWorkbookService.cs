@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ClosedXML.Excel;
 using TurboSuite.Docs.Models;
@@ -107,6 +108,12 @@ public static class CountsWorkbookService
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
     private static readonly XLColor RedFill = XLColor.FromHtml("#FFC7CE");
     private static readonly XLColor YellowFill = XLColor.FromHtml("#FFEB9C");
+
+    // Flags catalog numbers that look like Environmental Lights parts (EL- prefix followed
+    // by an alphanumeric). Used on Rep Lists to surface EL- parts riding under another
+    // vendor's type — a side effect of Revit's one-mfr-per-type limit. See feedback memory.
+    private static readonly Regex EnvironmentalLightsCatalogPattern =
+        new(@"^EL-[A-Z0-9]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     #endregion
 
@@ -1279,11 +1286,22 @@ public static class CountsWorkbookService
             // Flag catalogs that exist under multiple rep blocks — typically the fallout of
             // an Mfr Override that moved a fixture's rep but left an older row behind until
             // the next Revit update regenerates the Rep List.
-            if (crossRepCatalogs.Contains(item.Catalog))
+            // Two signals point to the same fix (set Mfr. Override + re-run from Revit), so
+            // they share one yellow fill and one comment:
+            //   1. Catalog appears under more than one rep block — usually fallout from an
+            //      Mfr Override that moved a fixture but left an older row behind.
+            //   2. Catalog has the EL- prefix but the row isn't in the Environmental Lights
+            //      block — an EL part riding under another vendor's type because of Revit's
+            //      one-mfr-per-type limit.
+            bool crossRep = crossRepCatalogs.Contains(item.Catalog);
+            bool elMismatch = !string.IsNullOrEmpty(item.Catalog)
+                              && EnvironmentalLightsCatalogPattern.IsMatch(item.Catalog)
+                              && repName.IndexOf("Environmental Lights", StringComparison.OrdinalIgnoreCase) < 0;
+            if (crossRep || elMismatch)
             {
                 ws.Cell(row, 3).Style.Fill.BackgroundColor = YellowFill;
                 ws.Cell(row, 3).GetComment().AddText(
-                    "Catalog number appears under another rep block. Set Mfr. Override and re-run from Revit to rebuild rep blocks.");
+                    "Possible rep mismatch — set Mfr. Override on this Type and re-run from Revit.");
             }
 
             if (item.Type.Length    > colMax[0]) colMax[0] = item.Type.Length;
