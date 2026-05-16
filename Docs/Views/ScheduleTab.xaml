@@ -17,6 +17,12 @@
                     <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#E0E4EC"/>
                     <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
                 </Style.Resources>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsDuplicateTypeMark}" Value="True">
+                        <Setter Property="Background" Value="#FFF6DD"/>
+                        <Setter Property="ToolTip" Value="Multiple families share this Type Mark with differing spec fields. Reconcile in Revit or both rows will appear in the schedule."/>
+                    </DataTrigger>
+                </Style.Triggers>
             </Style>
 
             <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">

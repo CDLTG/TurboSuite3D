@@ -42,4 +42,10 @@ public class ScheduleFixtureModel : ViewModelBase
     /// Non-empty schedule notes (from Schedule Note1–6 parameters).
     /// </summary>
     public string[] ScheduleNotes { get; set; } = [];
+
+    /// <summary>
+    /// True when this row shares a Type Mark with at least one other row whose
+    /// spec fields differ. Drives a subtle row tint + tooltip in the grid.
+    /// </summary>
+    public bool IsDuplicateTypeMark { get; set; }
 }

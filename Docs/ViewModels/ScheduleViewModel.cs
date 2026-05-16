@@ -83,7 +83,7 @@ public class ScheduleViewModel : ViewModelBase
     public void LoadFixtures(System.Collections.Generic.List<ScheduleFixtureModel> fixtures)
     {
         Fixtures.Clear();
-        foreach (var f in fixtures)
+        foreach (var f in CollapseIdenticalVariants(fixtures))
             Fixtures.Add(f);
 
         var settings = DocsSettingsService.Load();
@@ -109,10 +109,52 @@ public class ScheduleViewModel : ViewModelBase
         settings.ScheduleSelectedTypeMarks = Fixtures
             .Where(f => f.IsSelected)
             .Select(f => f.TypeMark)
+            .Distinct()
             .ToList();
         settings.SpecificationNotes = [SpecNote1, SpecNote2, SpecNote3, SpecNote4, SpecNote5, SpecNote6];
         DocsSettingsService.Save(settings);
     }
+
+    // Collapse multiple families that share a Type Mark into one row, but only
+    // when every spec field matches across the group. Variants that disagree
+    // stay as separate rows so the discrepancy is visible to the user.
+    private static System.Collections.Generic.IEnumerable<ScheduleFixtureModel> CollapseIdenticalVariants(
+        System.Collections.Generic.List<ScheduleFixtureModel> fixtures)
+    {
+        foreach (var group in fixtures.GroupBy(f => f.TypeMark))
+        {
+            var rows = group.ToList();
+            if (rows.Count == 1 || rows.Skip(1).All(r => SpecFieldsMatch(rows[0], r)))
+            {
+                yield return rows[0];
+            }
+            else
+            {
+                foreach (var r in rows)
+                {
+                    r.IsDuplicateTypeMark = true;
+                    yield return r;
+                }
+            }
+        }
+    }
+
+    private static bool SpecFieldsMatch(ScheduleFixtureModel a, ScheduleFixtureModel b) =>
+        a.Classification == b.Classification &&
+        a.CatalogNumber == b.CatalogNumber &&
+        a.Manufacturer == b.Manufacturer &&
+        a.Description1 == b.Description1 &&
+        a.Description2 == b.Description2 &&
+        a.Finish == b.Finish &&
+        a.Listings == b.Listings &&
+        a.Mounting == b.Mounting &&
+        a.Dimming == b.Dimming &&
+        a.Watts == b.Watts &&
+        a.Volts == b.Volts &&
+        a.Lumens == b.Lumens &&
+        a.CCT == b.CCT &&
+        a.CRI == b.CRI &&
+        a.ScheduleNotes.SequenceEqual(b.ScheduleNotes);
 
     private void SetAllSelected(bool selected)
     {

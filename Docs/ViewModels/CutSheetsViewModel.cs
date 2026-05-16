@@ -56,14 +56,25 @@ public class CutSheetsViewModel : ViewModelBase
     {
         _parent = parent;
         ProjectName = projectName;
-        Fixtures = new ObservableCollection<FixtureSpecModel>(fixtures);
+
+        // Collapse families that share a Type Mark to one row. Tie-break order:
+        //   1. Populated DataSheetUrl / CatalogNumber (don't lose data to a blank sibling).
+        //   2. "Base name" — variant whose tokens are a subset of every sibling's
+        //      (e.g. "Tape" beats "Tape (Hook)", "Tape - Hook", "Bar Tape", "Circular Tape").
+        //   3. Shortest family name, then alphabetical.
+        var deduped = fixtures
+            .GroupBy(f => f.TypeMark)
+            .Select(PickPrimary);
+        Fixtures = new ObservableCollection<FixtureSpecModel>(deduped);
 
         var settings = DocsSettingsService.Load();
 
         foreach (var fixture in Fixtures)
         {
+            var key = SettingsKey(fixture);
+
             // Priority: per-project local path > global default by catalog number
-            if (settings.LocalPdfPaths.TryGetValue(fixture.TypeMark, out var path) && File.Exists(path))
+            if (settings.LocalPdfPaths.TryGetValue(key, out var path) && File.Exists(path))
             {
                 fixture.LocalPdfPath = path;
             }
@@ -83,7 +94,7 @@ public class CutSheetsViewModel : ViewModelBase
             }
 
             if (settings.SelectedTypeMarks.Count > 0)
-                fixture.IsSelected = settings.SelectedTypeMarks.Contains(fixture.TypeMark);
+                fixture.IsSelected = settings.SelectedTypeMarks.Contains(key);
         }
 
         BrowseLocalPdfCommand = new RelayCommand<FixtureSpecModel>(ExecuteBrowseLocalPdf);
@@ -100,13 +111,43 @@ public class CutSheetsViewModel : ViewModelBase
         var settings = DocsSettingsService.Load();
         settings.LocalPdfPaths = Fixtures
             .Where(f => f.HasLocalPdf)
-            .ToDictionary(f => f.TypeMark, f => f.LocalPdfPath);
+            .GroupBy(SettingsKey)
+            .ToDictionary(g => g.Key, g => g.First().LocalPdfPath);
         settings.SelectedTypeMarks = Fixtures
             .Where(f => f.IsSelected)
-            .Select(f => f.TypeMark)
+            .Select(SettingsKey)
+            .Distinct()
             .ToList();
         DocsSettingsService.Save(settings);
     }
+
+    // Composite key keeps multiple families that share a Type Mark
+    // (e.g. "Tape" / "Tape (Arc)" / "Tape (Hook)") from sharing settings rows.
+    private static string SettingsKey(FixtureSpecModel f) => $"{f.FamilyName}|{f.TypeMark}";
+
+    private static FixtureSpecModel PickPrimary(IEnumerable<FixtureSpecModel> group)
+    {
+        var rows = group.ToList();
+        var tokens = rows.ToDictionary(r => r, r => Tokenize(r.FamilyName));
+
+        // A row is a "base name" if its tokens appear in every sibling's tokens.
+        bool IsBase(FixtureSpecModel r) =>
+            tokens[r].Count > 0 && rows.All(s => s == r || tokens[r].IsSubsetOf(tokens[s]));
+
+        return rows
+            .OrderByDescending(f => !string.IsNullOrWhiteSpace(f.DataSheetUrl))
+            .ThenByDescending(f => !string.IsNullOrWhiteSpace(f.CatalogNumber))
+            .ThenByDescending(IsBase)
+            .ThenBy(f => f.FamilyName.Length)
+            .ThenBy(f => f.FamilyName, StringComparer.OrdinalIgnoreCase)
+            .First();
+    }
+
+    private static readonly char[] NameSeparators = [' ', '\t', '(', ')', '-', '/', '_', ','];
+
+    private static HashSet<string> Tokenize(string name) =>
+        new(name.Split(NameSeparators, StringSplitOptions.RemoveEmptyEntries),
+            StringComparer.OrdinalIgnoreCase);
 
     private void ExecuteBrowseLocalPdf(FixtureSpecModel fixture)
     {

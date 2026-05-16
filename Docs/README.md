@@ -22,6 +22,10 @@ Spec sections are dynamically positioned — column gaps adapt to the widest con
 
 Entries are grouped by **Classification** (alphabetically, empty classification at bottom) with a header and rule line per group.
 
+### Variant Collapsing
+
+Multiple families that share a Type Mark (e.g. `Tape` / `Tape (Arc)` / `Tape (Hook)` for different geometric variants of the same spec) are collapsed to one row when every spec field matches. If any field differs, all variants stay as separate rows and are tinted amber in the grid with a tooltip — a hint to reconcile the parameters in Revit before generating the schedule.
+
 A **Specification Notes** block is appended after all fixture entries — up to 6 numbered notes (e.g., contractor instructions, approval requirements). Notes are editable in the UI with sensible defaults and persist across sessions. Empty notes are omitted and the remaining notes renumber sequentially.
 
 ### Page Formats
@@ -132,7 +136,7 @@ Downloads spec sheet PDFs from lighting fixture and power supply types, stamps a
 
 ### What It Does
 
-1. **Collects fixture and RPS types** — Scans placed `OST_LightingFixtures` and valid `OST_LightingDevices` for unique types with a "Data Sheet URL" parameter.
+1. **Collects fixture and RPS types** — Scans placed `OST_LightingFixtures` and valid `OST_LightingDevices` for unique types with a "Data Sheet URL" parameter. Multiple families sharing a Type Mark collapse to one row; the "primary" variant is chosen by populated URL/CatalogNumber, then by base name (token-subset of all siblings — e.g. `Tape` is preferred over `Tape (Hook)` or `Bar Tape`).
 2. **Downloads or loads spec sheets** — Fetches each PDF from the URL via HTTP, or uses a local PDF file if one has been browsed to. Users can set a **default local PDF** per catalog number (gold star) that persists across projects.
 3. **Stamps header/footer** — Adds a company header (logo, project name, date, Type Mark) and footer (address, phone, website) to every page.
 4. **Merges into one PDF** — Combines all spec sheets into a single output file with PDF bookmarks at each type's first page. Password-protected PDFs render a placeholder page with the source URL.
