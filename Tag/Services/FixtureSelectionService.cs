@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
+using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Tag.Services;
 
@@ -38,7 +39,7 @@ internal static class FixtureSelectionService
         {
             if (doc.GetElement(id) is FamilyInstance fi &&
                 fi.Category?.Id == lightingDeviceCategoryId &&
-                fi.Symbol?.LookupParameter("Sub-Driver Power") != null)
+                fi.Symbol?.LookupParameter(ParameterNames.SubDriverPower) != null)
             {
                 powerSupplies.Add(fi);
             }

@@ -7,6 +7,10 @@ using Autodesk.Revit.UI;
 
 namespace TurboSuite.Compact;
 
+/// <summary>
+/// TurboCompact — removes unused materials and compact-saves the active family document.
+/// Precondition: active document must be a Family (.rfa), not a project (.rvt).
+/// </summary>
 [Transaction(TransactionMode.Manual)]
 public class CompactCommand : IExternalCommand
 {

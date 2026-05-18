@@ -2,6 +2,7 @@ using System;
 using Autodesk.Revit.DB;
 using TurboSuite.Bubble.Constants;
 using TurboSuite.Bubble.Models;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Bubble.Placement;
@@ -77,7 +78,7 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
 
     private static bool DetermineRotationMode(IndependentTag tag)
     {
-        var param = tag.LookupParameter("Orientation");
+        var param = tag.LookupParameter(ParameterNames.Orientation);
         if (param == null) return false;
 
         var value = param.AsValueString();

@@ -56,7 +56,7 @@ namespace TurboSuite.Driver.Services
                 catch (Exception ex)
                 {
                     trans.RollBack();
-                    TaskDialog.Show("Error Changing Type",
+                    TaskDialog.Show("TurboSuite Error",
                         $"Failed to change device type:\n{ex.Message}");
                     return false;
                 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Shared.Helpers
 {
@@ -21,7 +22,7 @@ namespace TurboSuite.Shared.Helpers
         {
             if (element == null) return string.Empty;
 
-            Parameter param = element.LookupParameter("Switch ID");
+            Parameter param = element.LookupParameter(ParameterNames.SwitchId);
             if (param != null && param.HasValue)
             {
                 string value = param.AsString();
@@ -52,7 +53,7 @@ namespace TurboSuite.Shared.Helpers
                 }
 
                 // Fallback: try by name on the type
-                param = familyInstance.Symbol.LookupParameter("Type Mark");
+                param = familyInstance.Symbol.LookupParameter(ParameterNames.TypeMark);
                 if (param != null && param.HasValue)
                 {
                     return param.AsString() ?? string.Empty;
@@ -92,7 +93,7 @@ namespace TurboSuite.Shared.Helpers
         {
             if (element == null) return 0.0;
 
-            Parameter param = element.LookupParameter("Linear Length");
+            Parameter param = element.LookupParameter(ParameterNames.LinearLength);
             return param?.AsDouble() ?? 0.0;
         }
 
@@ -103,7 +104,7 @@ namespace TurboSuite.Shared.Helpers
         {
             if (element == null) return 0.0;
 
-            Parameter param = element.LookupParameter("Linear Power");
+            Parameter param = element.LookupParameter(ParameterNames.LinearPower);
             if (param != null && param.HasValue)
             {
                 double internalValue = param.AsDouble();
@@ -152,7 +153,7 @@ namespace TurboSuite.Shared.Helpers
         public static string GetDimmingProtocol(FamilySymbol symbol)
         {
             if (symbol == null) return string.Empty;
-            Parameter param = symbol.LookupParameter("Dimming Protocol");
+            Parameter param = symbol.LookupParameter(ParameterNames.DimmingProtocol);
             if (param != null && param.HasValue)
             {
                 return param.AsString() ?? string.Empty;
@@ -175,7 +176,7 @@ namespace TurboSuite.Shared.Helpers
         public static string GetVoltage(FamilySymbol symbol)
         {
             if (symbol == null) return string.Empty;
-            Parameter param = symbol.LookupParameter("Voltage");
+            Parameter param = symbol.LookupParameter(ParameterNames.Voltage);
             if (param != null && param.HasValue)
             {
                 if (param.StorageType == StorageType.String)
@@ -222,7 +223,7 @@ namespace TurboSuite.Shared.Helpers
         public static int GetMaximumFixtures(FamilySymbol symbol)
         {
             if (symbol == null) return 0;
-            Parameter param = symbol.LookupParameter("Maximum Fixtures");
+            Parameter param = symbol.LookupParameter(ParameterNames.MaximumFixtures);
             if (param != null && param.HasValue)
             {
                 return param.AsInteger();
@@ -237,7 +238,7 @@ namespace TurboSuite.Shared.Helpers
         {
             if (symbol == null) return 0.0;
 
-            Parameter param = symbol.LookupParameter("Power");
+            Parameter param = symbol.LookupParameter(ParameterNames.Power);
             if (param != null && param.HasValue)
             {
                 double internalValue = param.AsDouble();
@@ -262,7 +263,7 @@ namespace TurboSuite.Shared.Helpers
         {
             if (symbol == null) return 0.0;
 
-            Parameter param = symbol.LookupParameter("Sub-Driver Power");
+            Parameter param = symbol.LookupParameter(ParameterNames.SubDriverPower);
             if (param != null && param.HasValue)
             {
                 double internalValue = param.AsDouble();
@@ -315,7 +316,7 @@ namespace TurboSuite.Shared.Helpers
 
             // Only get the "Load Classification Abbreviation" parameter directly
             // Do NOT extract from "Load Classification" as they are independent
-            Parameter param = circuit.LookupParameter("Load Classification Abbreviation");
+            Parameter param = circuit.LookupParameter(ParameterNames.LoadClassificationAbbreviation);
             if (param != null && param.HasValue)
             {
                 return param.AsString() ?? string.Empty;
@@ -381,7 +382,7 @@ namespace TurboSuite.Shared.Helpers
         public static string GetLoadClassificationName(ElectricalSystem circuit)
         {
             if (circuit == null) return string.Empty;
-            Parameter param = circuit.LookupParameter("Load Classification");
+            Parameter param = circuit.LookupParameter(ParameterNames.LoadClassification);
             if (param != null && param.HasValue)
                 return param.AsString() ?? string.Empty;
             return string.Empty;
@@ -391,6 +392,7 @@ namespace TurboSuite.Shared.Helpers
 
         #region Panel Parameters
 
+        /// <summary>Returns the electrical equipment panel instance with the given name, or null if not found.</summary>
         public static Element GetPanelElement(Document doc, string panelName)
         {
             if (doc == null || string.IsNullOrEmpty(panelName)) return null;
@@ -401,13 +403,17 @@ namespace TurboSuite.Shared.Helpers
                 .FirstOrDefault(e => e.Name == panelName);
         }
 
+        /// <summary>
+        /// Returns the "Circuit Naming" parameter on a panel. Falls back to a manual ordered-parameter
+        /// scan because <c>LookupParameter</c> doesn't always find built-in enum parameters by display name.
+        /// </summary>
         public static Parameter FindCircuitNamingParameter(Element panel)
         {
             if (panel == null) return null;
 
             // LookupParameter may not find built-in enum parameters by display name.
             // Fall back to iterating all parameters for an exact name match.
-            Parameter param = panel.LookupParameter("Circuit Naming");
+            Parameter param = panel.LookupParameter(ParameterNames.CircuitNaming);
             if (param != null) return param;
 
             foreach (Parameter p in panel.GetOrderedParameters())
@@ -418,6 +424,7 @@ namespace TurboSuite.Shared.Helpers
             return null;
         }
 
+        /// <summary>Returns the panel's Circuit Naming option as its display string (e.g. "Standard", "Prefixed"), or "" if unset.</summary>
         public static string GetCircuitNaming(Element panel)
         {
             Parameter param = FindCircuitNamingParameter(panel);
@@ -443,24 +450,31 @@ namespace TurboSuite.Shared.Helpers
             "(None)", "Prefixed", "Standard", "Panel Name", "By Phase", "By Project"
         };
 
+        /// <summary>Returns the panel's Circuit Prefix string, or empty if unset.</summary>
         public static string GetCircuitPrefix(Element panel)
         {
             if (panel == null) return string.Empty;
-            Parameter param = panel.LookupParameter("Circuit Prefix");
+            Parameter param = panel.LookupParameter(ParameterNames.CircuitPrefix);
             if (param != null && param.HasValue)
                 return param.AsString() ?? string.Empty;
             return string.Empty;
         }
 
+        /// <summary>Returns the panel's Circuit Prefix Separator string, or empty if unset.</summary>
         public static string GetCircuitPrefixSeparator(Element panel)
         {
             if (panel == null) return string.Empty;
-            Parameter param = panel.LookupParameter("Circuit Prefix Separator");
+            Parameter param = panel.LookupParameter(ParameterNames.CircuitPrefixSeparator);
             if (param != null && param.HasValue)
                 return param.AsString() ?? string.Empty;
             return string.Empty;
         }
 
+        /// <summary>
+        /// Sets the panel's Circuit Naming option from its display string (e.g. "Standard"). "(None)" or empty
+        /// clears the parameter. Caller must run inside a Transaction. No-op if the parameter is read-only or
+        /// the value is not one of <see cref="CircuitNamingOptions"/>.
+        /// </summary>
         public static void SetCircuitNaming(Element panel, string value)
         {
             if (panel == null) return;
@@ -478,18 +492,20 @@ namespace TurboSuite.Shared.Helpers
                 param.Set(eid);
         }
 
+        /// <summary>Sets the panel's Circuit Prefix. Caller must run inside a Transaction.</summary>
         public static void SetCircuitPrefix(Element panel, string value)
         {
             if (panel == null) return;
-            Parameter param = panel.LookupParameter("Circuit Prefix");
+            Parameter param = panel.LookupParameter(ParameterNames.CircuitPrefix);
             if (param != null && !param.IsReadOnly)
                 param.Set(value ?? "");
         }
 
+        /// <summary>Sets the panel's Circuit Prefix Separator. Caller must run inside a Transaction.</summary>
         public static void SetCircuitPrefixSeparator(Element panel, string value)
         {
             if (panel == null) return;
-            Parameter param = panel.LookupParameter("Circuit Prefix Separator");
+            Parameter param = panel.LookupParameter(ParameterNames.CircuitPrefixSeparator);
             if (param != null && !param.IsReadOnly)
                 param.Set(value ?? "");
         }
@@ -513,7 +529,7 @@ namespace TurboSuite.Shared.Helpers
         public static bool HasRemotePowerSupply(FamilyInstance element)
         {
             if (element?.Symbol == null) return false;
-            Parameter param = element.Symbol.LookupParameter("Remote Power Supply");
+            Parameter param = element.Symbol.LookupParameter(ParameterNames.RemotePowerSupply);
             return param != null && param.HasValue && param.AsInteger() == 1;
         }
 

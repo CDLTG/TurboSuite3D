@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit 2025 add-in for electrical and lighting automation. Ten commands plus a Settings dialog consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
+A unified Autodesk Revit 2025 add-in for electrical and lighting automation, built for electrical/lighting designers working on luxury architectural lighting projects. Eleven commands plus a Settings dialog consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
 
 ## Installation
 
@@ -121,8 +121,19 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 - Xceed.Wpf.AvalonDock.dll (ships with Revit 2025) — used by TurboTab for document tab coloring
 - [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation
 - [PdfSharpCore](https://github.com/ststeiger/PdfSharpCore) (NuGet) — PDF generation, reading, stamping, and merging. Used by TurboDocs.
-- [ClosedXML](https://github.com/ClosedXML/ClosedXML) (NuGet) — .xlsx workbook generation. Used by TurboCounts.
 - .NET 8.0-windows / WPF
+
+## Building from Source
+
+```bash
+dotnet build TurboSuite.sln -c Release
+```
+
+Platform target is **x64**. Requires .NET 8.0 SDK and a local Revit 2025 install (for `RevitAPI.dll` / `RevitAPIUI.dll` references). Post-build copies the add-in into `%APPDATA%\Autodesk\Revit\Addins\2025\` for local testing.
+
+## License
+
+Released under the [GNU General Public License v3.0](LICENSE). Contributions welcome — please open an issue or pull request on [GitHub](https://github.com/CDLTG/TurboSuite3D).
 
 ## Acknowledgments
 

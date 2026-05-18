@@ -10,11 +10,7 @@ internal static class TagPlacementService
 {
     public static XYZ TransformToGlobal(FamilyInstance fixture, XYZ localOffset)
     {
-        // Use only BasisX angle to derive fixture rotation in the horizontal plane.
-        // This avoids BasisY/BasisZ sign differences between ceiling-hosted, floor,
-        // and unhosted fixtures (BasisY is inverted for ceiling-hosted families).
-        Transform transform = fixture.GetTransform();
-        double angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+        double angle = GeometryHelper.GetTransformAngle(fixture.GetTransform());
 
         double cos = Math.Cos(angle);
         double sin = Math.Sin(angle);

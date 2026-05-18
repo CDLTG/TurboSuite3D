@@ -7,6 +7,10 @@ using TurboSuite.Shared.Models;
 
 namespace TurboSuite.Shared.Services;
 
+/// <summary>
+/// Reads/writes <see cref="FamilyNameSettings"/> to ExtensibleStorage in the project document.
+/// Schema GUID is versioned — change it on any field add/remove (see CLAUDE.md "ExtensibleStorage Schema Changes").
+/// </summary>
 public static class FamilyNameSettingsStorageService
 {
     private static readonly Guid SchemaGuid = new("a1b2c3d4-e5f6-7890-abcd-ef1234567890");

@@ -17,6 +17,10 @@ using TurboSuite.Wire.Views;
 
 namespace TurboSuite.Wire;
 
+/// <summary>
+/// TurboWire — creates electrical circuits and routes arc/spline wires between selected
+/// lighting/electrical fixtures. Precondition: at least one WireType must exist in the project.
+/// </summary>
 [Transaction(TransactionMode.Manual)]
 public class WireCommand : IExternalCommand
 {
@@ -533,7 +537,7 @@ public class WireCommand : IExternalCommand
 
     private static XYZ GetSwitchOffset(FamilyInstance fixture)
     {
-        if (fixture.Host != null)
+        if (fixture.HostFace != null)
         {
             // 3D wall-hosted: connector at origin, offset 9" away from wall
             XYZ wallNormal = GeometryHelper.GetWallFaceNormal(fixture);

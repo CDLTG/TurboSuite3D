@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates thirteen commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs, TurboSpike, TurboPurge) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register four ribbon panels (Settings, Commands, Utilities, Debug) with fourteen `IExternalCommand` buttons.
+TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates eleven commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with twelve `IExternalCommand` buttons.
 
 ## Build Commands
 
@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\Sha
 ## Git Repository
 
 - **Remote:** GitHub (CDLTG/TurboSuite3D), default branch `main`, **public repo** (GPL v3)
-- **Ignored:** `Specs/`, `Spike/`, `Purge/` (local-only), `Installer/publish/` (build output), `bin/`, `obj/`, `.vs/`, `.idea/`
+- **Ignored:** `Specs/` (local-only), `Spike/`, `Purge/` (reserved for temporary local dev probes — removed from v1.0.0 shipping build), `Installer/publish/` (build output), `bin/`, `obj/`, `.vs/`, `.idea/`
 - Do NOT commit files from `Specs/` — they are historical reference documents kept locally only.
 - Always commit and push `.gitignore` changes so they take effect on GitHub.
 
@@ -88,10 +88,13 @@ When adding or removing fields in any storage service (`FamilyNameSettingsStorag
 1. Close Revit
 2. Build with the new code
 3. Open Revit
-4. Run **TurboPurge** (Debug panel) to delete all DataStorage elements
+4. Delete the stale `DataStorage` elements — see recovery procedure below
 5. Open Settings, re-enter values, and save
 
-TurboPurge (`Purge/PurgeCommand.cs`) is a local-only debug command (gitignored) that deletes every `DataStorage` element in the document and invalidates all caches. It exists specifically for this workflow.
+**Recovery procedure (post-v1.0.0):** TurboPurge was removed from the shipping build. To clear DataStorage during dev:
+- Add a temporary local-only `Purge/PurgeCommand.cs` (gitignored path is still reserved) that runs a `FilteredElementCollector(doc).OfClass(typeof(DataStorage))` delete inside a transaction.
+- Or use a one-shot RevitPythonShell / pyRevit script against the open document.
+- After deletion, restart Revit so cached `Schema.Lookup` results clear.
 
 ### Specification Documents
 Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NOT use them unless the user explicitly asks.
@@ -107,10 +110,13 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | Namespace | Purpose |
 |-----------|---------|
 | `TurboSuite.App` | Entry point, `SettingsCommand`, ViewModels, Views |
-| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `NaturalStringComparer` |
+| `TurboSuite.Shared.Constants` | `ParameterNames` — centralized custom Revit parameter name strings |
+| `TurboSuite.Shared.Converters` | WPF value converters shared across windowed commands |
 | `TurboSuite.Shared.Filters` | `FixtureSelectionFilter`, `LightingFixtureTagFilter` |
-| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings` |
+| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `NaturalStringComparer` |
+| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings`, `GeneralSettings` |
 | `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `UpdateService`, settings storage/cache services |
+| `TurboSuite.Shared.Styles` | Shared WPF ResourceDictionary styles |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` |
 | `TurboSuite.Name` | TurboName — room name assignment from linked DWG files (MVVM) |
 | `TurboSuite.Driver` | TurboDriver + TurboRPS — power supply deployment and review (MVVM) |
@@ -122,8 +128,6 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
 | `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, control BOM PDF, load schedule PDF, panel schedule PDF, and cover/notes PDF (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
-| `TurboSuite.Spike` | TurboSpike — diagnostic/debug command (swap Execute body per investigation) |
-| `TurboSuite.Purge` | TurboPurge — scorched-earth settings reset (deletes all DataStorage elements) |
 | `Guide/` | `Guide.md` — user-facing documentation |
 | `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
 | `Installer/` | TurboSuiteInstaller — standalone WPF installer for network share deployment |
@@ -139,7 +143,7 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 - All model modifications must occur inside a `Transaction`.
 - Element queries use `FilteredElementCollector` with category filters (e.g., `OST_LightingDevices`, `OST_LightingFixtures`, `OST_ElectricalFixtures`).
 - Key built-in parameters: `RBS_ELEC_CIRCUIT_NUMBER`, `RBS_ELEC_CIRCUIT_NAME`, `RBS_ELEC_APPARENT_LOAD`, `RBS_ELEC_CIRCUIT_PANEL_PARAM`, `ALL_MODEL_TYPE_MARK`, `ALL_MODEL_MANUFACTURER`, `ALL_MODEL_INSTANCE_COMMENTS`, `ALL_MODEL_MODEL`, `ALL_MODEL_MARK`, `ROOM_NAME`, `ROOM_NUMBER`.
-- Custom parameters by name: "Switch ID", "Scale Factor", "Linear Length", "Linear Power", "Power", "Sub-Driver Power", "Dimming Protocol", "Voltage", "Maximum Fixtures", "Remote Power Supply", "Load Classification Abbreviation", "Load Classification", "Circuit Naming", "Circuit Prefix", "Circuit Prefix Separator", "Orientation", "Angle", "Two Gang", "Catalog Number1"–"Catalog Number6", "Data Sheet URL", "Manufacturer".
+- Custom parameters by name: "Switch ID", "Scale Factor", "Linear Length", "Linear Power", "Channel Length", "Reel Length", "Power", "Sub-Driver Power", "Dimming Protocol", "Voltage", "Maximum Fixtures", "Remote Power Supply", "Load Classification Abbreviation", "Load Classification", "Circuit Naming", "Circuit Prefix", "Circuit Prefix Separator", "Orientation", "Angle", "Two Gang", "Catalog Number1"–"Catalog Number6", "Data Sheet URL", "Manufacturer". **Access via `TurboSuite.Shared.Constants.ParameterNames` — do NOT pass string literals to `LookupParameter`.**
 - **IMPORTANT**: Room name must be read via `room.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString()` — `room.Name` returns "Number Name" format.
 
 ### API Limitations

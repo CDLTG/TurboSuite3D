@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TurboSuite.Driver.Models;
+using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Driver.Services
 {
@@ -115,7 +116,7 @@ namespace TurboSuite.Driver.Services
                 }
             }
 
-            string catalogNumber = best.Candidate.FamilySymbol?.LookupParameter("Catalog Number1")?.AsString() ?? "";
+            string catalogNumber = best.Candidate.FamilySymbol?.LookupParameter(ParameterNames.CatalogNumber1)?.AsString() ?? "";
             string manufacturer = best.Candidate.Manufacturer ?? "";
             string displayBase = $"{catalogNumber} | {manufacturer}";
             string displayText = best.DriversNeeded > 1

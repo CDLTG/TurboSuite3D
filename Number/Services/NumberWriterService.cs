@@ -4,6 +4,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.ViewModels;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Number.Services
@@ -50,7 +51,7 @@ namespace TurboSuite.Number.Services
                     Element el = doc.GetElement(row.ElementId);
                     if (el == null) { skipped++; continue; }
 
-                    Parameter param = el.LookupParameter("Switch ID");
+                    Parameter param = el.LookupParameter(ParameterNames.SwitchId);
                     if (param == null || param.IsReadOnly)
                     {
                         skipped++;

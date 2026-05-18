@@ -6,6 +6,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using TurboSuite.Driver.Models;
 using TurboSuite.Driver.ViewModels;
+using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Driver.Views
 {
@@ -90,10 +91,10 @@ namespace TurboSuite.Driver.Views
 
                 try
                 {
-                    var catParam = symbol.LookupParameter("Catalog Number1");
+                    var catParam = symbol.LookupParameter(ParameterNames.CatalogNumber1);
                     catalogNumber = catParam?.AsString() ?? "";
 
-                    var mfgParam = symbol.LookupParameter("Manufacturer");
+                    var mfgParam = symbol.LookupParameter(ParameterNames.Manufacturer);
                     manufacturer = mfgParam?.AsString() ?? "";
                 }
                 catch { }

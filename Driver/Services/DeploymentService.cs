@@ -5,6 +5,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Structure;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
 
@@ -67,7 +68,7 @@ namespace TurboSuite.Driver.Services
             if (string.IsNullOrEmpty(switchId))
                 return false;
 
-            Parameter param = instance.LookupParameter("Switch ID");
+            Parameter param = instance.LookupParameter(ParameterNames.SwitchId);
             if (param == null || param.IsReadOnly)
                 return false;
 

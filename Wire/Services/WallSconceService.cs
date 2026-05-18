@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Models;
 using TurboSuite.Wire.Constants;
@@ -26,7 +27,7 @@ internal static class WallSconceService
 
     public static double GetFamilyScaleFactor(FamilyInstance fixture)
     {
-        Parameter? scaleParam = fixture.LookupParameter("Scale Factor");
+        Parameter? scaleParam = fixture.LookupParameter(ParameterNames.ScaleFactor);
         if (scaleParam != null && scaleParam.HasValue)
         {
             return scaleParam.AsDouble();

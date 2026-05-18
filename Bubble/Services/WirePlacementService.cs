@@ -4,6 +4,7 @@ using Autodesk.Revit.DB.Electrical;
 using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
 using TurboSuite.Bubble.Constants;
 using TurboSuite.Bubble.Placement;
+using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Bubble.Services;
 
@@ -59,7 +60,7 @@ internal static class WirePlacementService
         var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
         var wire = ElectricalWire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
 
-        var scaleFactor = fixture.LookupParameter("Scale Factor")?.AsDouble() ?? 1.0;
+        var scaleFactor = fixture.LookupParameter(ParameterNames.ScaleFactor)?.AsDouble() ?? 1.0;
         var offsetDistance = BubbleConstants.WireOffsetEndWallSconceFt * scaleFactor;
 
         var connectorOrigin = fixtureConnector.Origin;

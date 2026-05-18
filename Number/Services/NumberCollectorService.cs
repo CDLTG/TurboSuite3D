@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Number.Models;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
 
@@ -72,7 +73,7 @@ namespace TurboSuite.Number.Services
                 .OfCategory(BuiltInCategory.OST_LightingDevices)
                 .OfClass(typeof(FamilyInstance))
                 .Cast<FamilyInstance>()
-                .Where(fi => fi.Symbol?.LookupParameter("Sub-Driver Power") != null)
+                .Where(fi => fi.Symbol?.LookupParameter(ParameterNames.SubDriverPower) != null)
                 .Select(fi =>
                 {
                     var circuit = fi.MEPModel?.GetElectricalSystems()?.FirstOrDefault();

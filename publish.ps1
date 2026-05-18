@@ -1,22 +1,36 @@
 <#
 .SYNOPSIS
-    Builds TurboSuite and publishes all deployment files to a network share.
+    Builds TurboSuite and publishes all deployment files to a network share,
+    or rolls back the share to a previously published version.
 
 .PARAMETER ServerPath
     The UNC path to the server share (e.g., \\SERVER\TurboSuite).
 
 .PARAMETER Version
     The version string to write to version.txt (e.g., 1.1.0). If omitted, you will be prompted.
+    Ignored when -Rollback is used.
+
+.PARAMETER Rollback
+    If specified, skips the build/publish and restores the share from an archived version.
+    The value is the version string to restore (must exist under <ServerPath>\Archive\).
 
 .EXAMPLE
     .\publish.ps1 -ServerPath "\\SERVER\TurboSuite" -Version "1.1.0"
+    Publish 1.1.0. The currently-deployed version is archived to <ServerPath>\Archive\<prior-version>\.
+
+.EXAMPLE
+    .\publish.ps1 -ServerPath "\\SERVER\TurboSuite" -Rollback "1.0.0"
+    Restore the share to the archived 1.0.0 build. Current files are first archived under
+    <ServerPath>\Archive\<current-version>-rolledback-<timestamp>\ so the rollback is itself reversible.
 #>
 
 param(
     [Parameter(Mandatory = $true)]
     [string]$ServerPath,
 
-    [string]$Version
+    [string]$Version,
+
+    [string]$Rollback
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +40,74 @@ $sln = Join-Path $projectRoot "TurboSuite.sln"
 $mainCsproj = Join-Path $projectRoot "TurboSuite.csproj"
 $installerCsproj = Join-Path $projectRoot "Installer\TurboSuiteInstaller.csproj"
 $addinFile = Join-Path $projectRoot "TurboSuite.addin"
+$archiveRoot = Join-Path $ServerPath "Archive"
+
+function Get-DeployedVersion {
+    $versionFile = Join-Path $ServerPath "version.txt"
+    if (Test-Path $versionFile) {
+        return (Get-Content $versionFile -Raw).Trim()
+    }
+    return $null
+}
+
+function Copy-ShareToArchive {
+    param([string]$ArchiveName)
+    $dest = Join-Path $archiveRoot $ArchiveName
+    if (Test-Path $dest) {
+        Write-Error "Archive folder already exists: $dest. Aborting to avoid overwrite."
+        exit 1
+    }
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    Get-ChildItem -Path $ServerPath -File | ForEach-Object {
+        Copy-Item $_.FullName -Destination $dest -Force
+    }
+    Write-Host "  Archived prior deployment to $dest"
+}
+
+# === Rollback path ===
+if ($Rollback) {
+    Write-Host ""
+    Write-Host "=== TurboSuite Rollback ===" -ForegroundColor Cyan
+    Write-Host "  Target version: $Rollback"
+    Write-Host "  Share:          $ServerPath"
+    Write-Host ""
+
+    $archiveDir = Join-Path $archiveRoot $Rollback
+    if (-not (Test-Path $archiveDir)) {
+        Write-Error "No archive found at $archiveDir. Available archives:"
+        if (Test-Path $archiveRoot) {
+            Get-ChildItem -Path $archiveRoot -Directory | ForEach-Object { Write-Host "  $($_.Name)" }
+        } else {
+            Write-Host "  (none)"
+        }
+        exit 1
+    }
+
+    # Snapshot current state before rollback so the rollback is reversible.
+    $current = Get-DeployedVersion
+    if ($current) {
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $snapshotName = "$current-rolledback-$timestamp"
+        Write-Host "[1/2] Snapshotting current $current deployment..." -ForegroundColor Yellow
+        Copy-ShareToArchive -ArchiveName $snapshotName
+    } else {
+        Write-Host "[1/2] No version.txt present — skipping snapshot." -ForegroundColor Yellow
+    }
+
+    Write-Host "[2/2] Restoring $Rollback from archive..." -ForegroundColor Yellow
+    Get-ChildItem -Path $ServerPath -File | ForEach-Object { Remove-Item $_.FullName -Force }
+    Get-ChildItem -Path $archiveDir -File | ForEach-Object {
+        Copy-Item $_.FullName -Destination $ServerPath -Force
+        Write-Host "  Restored $($_.Name)"
+    }
+
+    Write-Host ""
+    Write-Host "=== Rollback Complete ===" -ForegroundColor Green
+    Write-Host "  Share restored to $Rollback. Users will see this on their next Revit launch." -ForegroundColor Cyan
+    exit 0
+}
+
+# === Publish path ===
 
 # Prompt for version if not provided
 if (-not $Version) {
@@ -43,7 +125,7 @@ Write-Host "  Destination: $ServerPath"
 Write-Host ""
 
 # Step 1: Build solution in Release
-Write-Host "[1/5] Building solution in Release mode..." -ForegroundColor Yellow
+Write-Host "[1/6] Building solution in Release mode..." -ForegroundColor Yellow
 dotnet build $sln -c Release
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed."
@@ -51,7 +133,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Step 2: Publish installer as single-file
-Write-Host "[2/5] Publishing installer..." -ForegroundColor Yellow
+Write-Host "[2/6] Publishing installer..." -ForegroundColor Yellow
 $installerPublishDir = Join-Path $projectRoot "Installer\publish"
 dotnet publish $installerCsproj -c Release -o $installerPublishDir
 if ($LASTEXITCODE -ne 0) {
@@ -60,13 +142,29 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Step 3: Ensure server directory exists
-Write-Host "[3/5] Preparing server directory..." -ForegroundColor Yellow
+Write-Host "[3/6] Preparing server directory..." -ForegroundColor Yellow
 if (-not (Test-Path $ServerPath)) {
     New-Item -ItemType Directory -Path $ServerPath -Force | Out-Null
 }
+if (-not (Test-Path $archiveRoot)) {
+    New-Item -ItemType Directory -Path $archiveRoot -Force | Out-Null
+}
 
-# Step 4: Copy files to server share
-Write-Host "[4/5] Copying files to server..." -ForegroundColor Yellow
+# Step 4: Archive currently-deployed version (if any) before overwriting
+Write-Host "[4/6] Archiving prior deployment..." -ForegroundColor Yellow
+$priorVersion = Get-DeployedVersion
+if ($priorVersion) {
+    if ($priorVersion -eq $Version) {
+        Write-Error "Prior deployment is already version $Version. Bump the version before republishing."
+        exit 1
+    }
+    Copy-ShareToArchive -ArchiveName $priorVersion
+} else {
+    Write-Host "  No prior version.txt found — nothing to archive (first publish)."
+}
+
+# Step 5: Copy files to server share
+Write-Host "[5/6] Copying files to server..." -ForegroundColor Yellow
 
 $mainBinDir = Join-Path $projectRoot "bin\Release\net8.0-windows"
 $updaterBinDir = Join-Path $projectRoot "Updater\bin\Release\net8.0-windows"
@@ -114,8 +212,8 @@ if (Test-Path $installerPublishDir) {
     exit 1
 }
 
-# Step 5: Write version.txt
-Write-Host "[5/5] Writing version.txt..." -ForegroundColor Yellow
+# Step 6: Write version.txt
+Write-Host "[6/6] Writing version.txt..." -ForegroundColor Yellow
 Set-Content -Path (Join-Path $ServerPath "version.txt") -Value $Version -NoNewline
 Write-Host "  Version set to $Version"
 
@@ -124,5 +222,9 @@ Write-Host ""
 Write-Host "=== Publish Complete ===" -ForegroundColor Green
 Write-Host "  Files deployed to: $ServerPath"
 Write-Host "  Version: $Version"
+if ($priorVersion) {
+    Write-Host "  Prior version $priorVersion archived to: $archiveRoot\$priorVersion"
+    Write-Host "  To roll back: .\publish.ps1 -ServerPath `"$ServerPath`" -Rollback `"$priorVersion`"" -ForegroundColor DarkGray
+}
 Write-Host ""
 Write-Host "Users can now run TurboSuiteInstaller.exe from the share to install." -ForegroundColor Cyan

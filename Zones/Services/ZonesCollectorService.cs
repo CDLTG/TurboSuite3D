@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
@@ -173,8 +174,8 @@ namespace TurboSuite.Zones.Services
 
             foreach (var fi in keypads)
             {
-                Parameter twoGangParam = fi.LookupParameter("Two Gang")
-                    ?? fi.Symbol?.LookupParameter("Two Gang");
+                Parameter twoGangParam = fi.LookupParameter(ParameterNames.TwoGang)
+                    ?? fi.Symbol?.LookupParameter(ParameterNames.TwoGang);
                 if (twoGangParam != null && twoGangParam.AsInteger() == 1)
                     twoGang++;
                 else
@@ -197,7 +198,7 @@ namespace TurboSuite.Zones.Services
             if (repeaters.Count == 0)
                 return (0, null);
 
-            string partNumber = repeaters[0].Symbol?.LookupParameter("Catalog Number1")?.AsString();
+            string partNumber = repeaters[0].Symbol?.LookupParameter(ParameterNames.CatalogNumber1)?.AsString();
             return (repeaters.Count, partNumber);
         }
 
@@ -216,7 +217,7 @@ namespace TurboSuite.Zones.Services
                 if (string.IsNullOrWhiteSpace(name) || result.ContainsKey(name))
                     continue;
 
-                string catalogNumber = panel.Symbol?.LookupParameter("Catalog Number1")?.AsString();
+                string catalogNumber = panel.Symbol?.LookupParameter(ParameterNames.CatalogNumber1)?.AsString();
                 if (!string.IsNullOrEmpty(catalogNumber))
                     result[name] = catalogNumber;
             }

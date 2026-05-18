@@ -326,8 +326,7 @@ namespace TurboSuite.Driver
         /// </summary>
         private static XYZ TransformToGlobal(FamilyInstance fixture, XYZ localOffset)
         {
-            Transform transform = fixture.GetTransform();
-            double angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+            double angle = GeometryHelper.GetTransformAngle(fixture.GetTransform());
             double cos = Math.Cos(angle);
             double sin = Math.Sin(angle);
             return new XYZ(

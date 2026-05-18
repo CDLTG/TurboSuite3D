@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using TurboSuite.Docs.Models;
+using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Docs.Services;
 
@@ -47,7 +48,7 @@ public static class CountsCollectorService
                 model.Count++;
 
                 // Sum Linear Length from instances
-                var llParam = fi.LookupParameter("Linear Length");
+                var llParam = fi.LookupParameter(ParameterNames.LinearLength);
                 if (llParam is { HasValue: true, StorageType: StorageType.Double })
                     model.LinearLength += llParam.AsDouble();
 
@@ -65,11 +66,11 @@ public static class CountsCollectorService
                         model.CatalogNumbers[c] = catParam.AsString()?.Trim() ?? string.Empty;
                 }
 
-                var rlParam = symbol.LookupParameter("Reel Length");
+                var rlParam = symbol.LookupParameter(ParameterNames.ReelLength);
                 if (rlParam is { HasValue: true, StorageType: StorageType.Double })
                     model.ReelLength = rlParam.AsDouble();
 
-                var clParam = symbol.LookupParameter("Channel Length");
+                var clParam = symbol.LookupParameter(ParameterNames.ChannelLength);
                 if (clParam is { HasValue: true, StorageType: StorageType.Double })
                     model.ChannelLength = clParam.AsDouble();
 

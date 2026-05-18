@@ -5,6 +5,10 @@ using Autodesk.Revit.DB.ExtensibleStorage;
 
 namespace TurboSuite.Shared.Services
 {
+    /// <summary>
+    /// Helpers for locating a project's <see cref="DataStorage"/> element by schema.
+    /// Used by every storage service to read/write ExtensibleStorage entities.
+    /// </summary>
     public static class DataStorageHelper
     {
         public static DataStorage FindDataStorage(Document doc, Schema schema)

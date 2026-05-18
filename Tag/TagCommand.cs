@@ -4,6 +4,7 @@ using System.Linq;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Tag.Constants;
 using TurboSuite.Tag.Helpers;
@@ -13,6 +14,11 @@ using TurboSuite.Tag.Views;
 
 namespace TurboSuite.Tag;
 
+/// <summary>
+/// TurboTag — batch-places type tags on selected lighting fixtures, devices, and electrical
+/// fixtures. Preconditions: tag families per CLAUDE.md must be loaded; selection must contain
+/// at least one supported instance. Works in both 3D-hosted and 2D-drafting workflows.
+/// </summary>
 [Transaction(TransactionMode.Manual)]
 public class TagCommand : IExternalCommand
 {
@@ -409,8 +415,7 @@ public class TagCommand : IExternalCommand
                 XYZ localOffset = new XYZ(0, TagConstants.KeypadOffsetFeet, 0);
                 globalOffset = TagPlacementService.TransformToGlobal(keypad, localOffset);
 
-                Transform transform = keypad.GetTransform();
-                angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+                angle = GeometryHelper.GetTransformAngle(keypad.GetTransform());
             }
 
             if (!globalOffset.IsZeroLength())
@@ -642,7 +647,7 @@ public class TagCommand : IExternalCommand
                 double total = 0.0;
                 foreach (var member in run.Members)
                 {
-                    Parameter? ll = member.LookupParameter("Linear Length");
+                    Parameter? ll = member.LookupParameter(ParameterNames.LinearLength);
                     if (ll != null && ll.StorageType == StorageType.Double)
                         total += ll.AsDouble();
                 }

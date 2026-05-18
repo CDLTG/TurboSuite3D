@@ -8,15 +8,23 @@ using TurboSuite.Docs.Models;
 using TurboSuite.Docs.Services;
 using TurboSuite.Docs.ViewModels;
 using TurboSuite.Docs.Views;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Docs;
 
+/// <summary>
+/// TurboDocs — opens the tabbed document-generation window (fixture schedule, cut sheets,
+/// control BOM, load/panel schedules, cover/notes). Writes PDFs to user-chosen paths;
+/// does not modify the Revit model.
+/// </summary>
 [Transaction(TransactionMode.Manual)]
 public class DocsCommand : IExternalCommand
 {
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
+        try
+        {
         UIDocument uidoc = commandData.Application.ActiveUIDocument;
         Document? doc = uidoc?.Document;
 
@@ -44,7 +52,7 @@ public class DocsCommand : IExternalCommand
             string typeMark = (tmParam is { HasValue: true }) ? tmParam.AsString() ?? "" : "";
             if (string.IsNullOrWhiteSpace(typeMark)) continue;
 
-            var urlParam = symbol.LookupParameter("Data Sheet URL");
+            var urlParam = symbol.LookupParameter(ParameterNames.DataSheetUrl);
             string url = (urlParam is { HasValue: true }) ? urlParam.AsString() ?? "" : "";
 
             var catParts = new List<string>();
@@ -122,5 +130,11 @@ public class DocsCommand : IExternalCommand
         window.ShowDialog();
 
         return Result.Succeeded;
+        }
+        catch (System.Exception ex)
+        {
+            TaskDialog.Show("TurboDocs Error", $"An unexpected error occurred:\n{ex.Message}");
+            return Result.Failed;
+        }
     }
 }

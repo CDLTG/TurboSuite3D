@@ -2,6 +2,7 @@ using System;
 using Autodesk.Revit.DB;
 using TurboSuite.Bubble.Constants;
 using TurboSuite.Bubble.Placement;
+using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Bubble.Services;
 
@@ -54,8 +55,8 @@ internal static class TagPlacementService
 
     private static void CopyOrientationParameter(IndependentTag source, IndependentTag target)
     {
-        var srcParam = source.LookupParameter("Orientation");
-        var dstParam = target.LookupParameter("Orientation");
+        var srcParam = source.LookupParameter(ParameterNames.Orientation);
+        var dstParam = target.LookupParameter(ParameterNames.Orientation);
 
         if (srcParam != null && dstParam != null && !dstParam.IsReadOnly)
             dstParam.Set(srcParam.AsInteger());
@@ -74,11 +75,11 @@ internal static class TagPlacementService
 
     private static void SetTagToModelOrientation(IndependentTag tag, double rotation)
     {
-        var orientationParam = tag.LookupParameter("Orientation");
+        var orientationParam = tag.LookupParameter(ParameterNames.Orientation);
         if (orientationParam != null && !orientationParam.IsReadOnly)
             orientationParam.Set(2); // Model orientation
 
-        var angleParam = tag.LookupParameter("Angle");
+        var angleParam = tag.LookupParameter(ParameterNames.Angle);
         if (angleParam != null && !angleParam.IsReadOnly)
             angleParam.Set(rotation);
     }

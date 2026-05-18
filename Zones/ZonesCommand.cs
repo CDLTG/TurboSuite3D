@@ -10,6 +10,10 @@ using TurboSuite.Zones.Views;
 
 namespace TurboSuite.Zones
 {
+    /// <summary>
+    /// TurboZones — opens a windowed UI for managing circuit load names and visualizing dimmer-panel
+    /// load distribution. Writes are scoped to circuit <c>Load Name</c> parameters via a single transaction.
+    /// </summary>
     [Transaction(TransactionMode.Manual)]
     public class ZonesCommand : IExternalCommand
     {

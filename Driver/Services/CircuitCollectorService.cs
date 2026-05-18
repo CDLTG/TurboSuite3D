@@ -160,7 +160,7 @@ namespace TurboSuite.Driver.Services
             }
             catch (Exception ex)
             {
-                Autodesk.Revit.UI.TaskDialog.Show("Error",
+                Autodesk.Revit.UI.TaskDialog.Show("TurboSuite Error",
                     $"Error collecting circuits:\n{ex.Message}");
             }
 

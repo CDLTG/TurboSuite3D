@@ -17,6 +17,18 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVERNAME
 
 3. Users will be prompted to update on their next Revit launch
 
+## Rollback
+
+Each publish snapshots the currently-deployed share contents to `<ServerPath>\Archive\<prior-version>\` before overwriting. To roll the share back to a prior version:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVERNAME\ShareName\path\to\TurboSuite" -Rollback "1.0.0"
+```
+
+This restores all files from `<ServerPath>\Archive\1.0.0\` and updates `version.txt`. The current deployment is snapshotted to `<ServerPath>\Archive\<current>-rolledback-<timestamp>\` first, so the rollback itself is reversible.
+
+Users will see the restored version on their next Revit launch and be prompted to "update" (downgrade) to it.
+
 ## Notes
 
 - Run from a **non-admin** PowerShell (admin sessions cannot see mapped network drives)

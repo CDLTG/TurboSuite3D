@@ -4,6 +4,10 @@ using System.Text.Json;
 
 namespace TurboSuite.Shared.Services;
 
+/// <summary>
+/// Auto-update configuration loaded from <c>%LOCALAPPDATA%\TurboSuite\config.json</c>.
+/// <see cref="ServerPath"/> is the network share scanned by <see cref="UpdateService"/> on Revit launch.
+/// </summary>
 public static class UpdateConstants
 {
     public const int CheckTimeoutMs = 3000;

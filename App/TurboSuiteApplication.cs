@@ -25,7 +25,6 @@ public class TurboSuiteApplication : IExternalApplication
             RibbonPanel settingsPanel = application.CreateRibbonPanel("TurboSuite", "Settings");
             RibbonPanel commandsPanel = application.CreateRibbonPanel("TurboSuite", "Commands");
             RibbonPanel utilitiesPanel = application.CreateRibbonPanel("TurboSuite", "Utilities");
-            RibbonPanel debugPanel = application.CreateRibbonPanel("TurboSuite", "Debug");
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
             // ── Settings panel ──
@@ -132,21 +131,6 @@ public class TurboSuiteApplication : IExternalApplication
                 "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
                 "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.",
                 "TurboDriver");
-
-            // ── Debug panel ──
-            CreateButtonNoIcon(debugPanel, assemblyPath,
-                "TurboSpike",
-                "    Turbo    \n    Spike    ",
-                "TurboSuite.Spike.SpikeCommand",
-                "Diagnostic command for troubleshooting",
-                "Runs diagnostic probes against the Revit API. Swap out the Execute body as needed for each investigation.");
-
-            CreateButtonNoIcon(debugPanel, assemblyPath,
-                "TurboPurge",
-                "    Turbo    \n    Purge    ",
-                "TurboSuite.Purge.PurgeCommand",
-                "Delete all TurboSuite settings",
-                "Scorched earth: deletes ALL DataStorage elements from the document. Restart Revit afterward and re-enter settings.");
 
             // Auto-update check (two handlers: one checks/stages, one shows the dialog on next idle)
             application.Idling += OnIdlingCheckForUpdate;
@@ -262,15 +246,6 @@ public class TurboSuiteApplication : IExternalApplication
     }
 
     #endregion
-
-    private static void CreateButtonNoIcon(RibbonPanel panel, string assemblyPath,
-        string name, string text, string className, string tooltip, string longDescription)
-    {
-        PushButtonData buttonData = new PushButtonData(name, text, assemblyPath, className);
-        PushButton button = (PushButton)panel.AddItem(buttonData);
-        button.ToolTip = tooltip;
-        button.LongDescription = longDescription;
-    }
 
     private static void CreateButton(RibbonPanel panel, string assemblyPath,
         string name, string text, string className, string tooltip, string longDescription,

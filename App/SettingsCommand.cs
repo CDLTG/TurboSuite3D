@@ -9,6 +9,10 @@ using TurboSuite.Shared.Services;
 
 namespace TurboSuite.App;
 
+/// <summary>
+/// Opens the TurboSuite Settings dialog. Edits family-name/CAD-source/general settings stored
+/// in project ExtensibleStorage. No model elements are modified directly.
+/// </summary>
 [Transaction(TransactionMode.Manual)]
 public class SettingsCommand : IExternalCommand
 {

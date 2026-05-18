@@ -7,6 +7,11 @@ using System.Threading.Tasks;
 
 namespace TurboSuite.Shared.Services;
 
+/// <summary>
+/// Checks the configured server share for a newer <c>version.txt</c> on Revit launch, stages new files
+/// to <c>%LOCALAPPDATA%\TurboSuite\Staging\</c>, and prompts the user. Accepted updates are applied
+/// by <c>TurboSuiteUpdater.exe</c> after Revit exits.
+/// </summary>
 public static class UpdateService
 {
     private static readonly string LocalAppData = Path.Combine(
@@ -24,7 +29,11 @@ public static class UpdateService
     /// </summary>
     public static async Task<string?> CheckForUpdateAsync(CancellationToken ct)
     {
-        return await Task.Run(() =>
+        // Why: File.Exists / File.ReadAllText on a half-responsive SMB share can block
+        // for the full Windows SMB timeout (~30-60s) regardless of CancellationToken.
+        // Race the work against a Delay so the caller returns predictably on timeout.
+        // The inner Task may still be alive in the background, but we stop waiting on it.
+        var workTask = Task.Run(() =>
         {
             try
             {
@@ -43,7 +52,11 @@ public static class UpdateService
             {
                 return null;
             }
-        }, ct);
+        });
+
+        var timeoutTask = Task.Delay(Timeout.Infinite, ct);
+        var winner = await Task.WhenAny(workTask, timeoutTask);
+        return winner == workTask ? await workTask : null;
     }
 
     /// <summary>

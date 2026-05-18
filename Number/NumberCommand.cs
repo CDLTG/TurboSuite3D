@@ -10,6 +10,11 @@ using TurboSuite.Number.Views;
 
 namespace TurboSuite.Number
 {
+    /// <summary>
+    /// TurboNumber — modeless window for managing circuit numbers, keypad Switch IDs, and
+    /// power-supply Switch IDs. All Revit writes go through <see cref="IExternalEventHandler"/>;
+    /// see CLAUDE.md "Modeless pattern" for the request-queue + completion-callback model.
+    /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     public class NumberCommand : IExternalCommand

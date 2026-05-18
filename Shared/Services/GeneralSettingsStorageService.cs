@@ -5,6 +5,11 @@ using TurboSuite.Shared.Models;
 
 namespace TurboSuite.Shared.Services;
 
+/// <summary>
+/// Reads/writes <see cref="GeneralSettings"/> (workflow toggles like comments dialog, auto-split fixtures,
+/// dynamic driver tags) to ExtensibleStorage in the project document.
+/// Schema GUID is versioned — change it on any field add/remove (see CLAUDE.md "ExtensibleStorage Schema Changes").
+/// </summary>
 public static class GeneralSettingsStorageService
 {
     private static readonly Guid SchemaGuid = new("c3d4e5f6-a7b8-9012-cdef-234567890abe");

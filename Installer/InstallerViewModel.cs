@@ -71,6 +71,24 @@ public class InstallerViewModel : INotifyPropertyChanged
 
     private async Task RunInstallAsync()
     {
+        // Pre-flight: warn if Revit 2025 doesn't appear to be installed
+        var revitExe = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "Autodesk", "Revit 2025", "Revit.exe");
+        if (!File.Exists(revitExe))
+        {
+            var proceed = MessageBox.Show(
+                "Revit 2025 was not found in the default install location.\n\n" +
+                "TurboSuite targets Revit 2025 specifically. If you have a non-standard " +
+                "install path or are installing ahead of Revit, you can continue — but " +
+                "the add-in will not load until Revit 2025 is present.\n\n" +
+                "Continue with installation?",
+                "Revit 2025 not detected",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (proceed != MessageBoxResult.Yes) return;
+        }
+
         _isInstalling = true;
         CommandManager.InvalidateRequerySuggested();
 

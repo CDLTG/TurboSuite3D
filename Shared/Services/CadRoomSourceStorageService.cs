@@ -7,10 +7,15 @@ using TurboSuite.Shared.Models;
 
 namespace TurboSuite.Shared.Services;
 
+/// <summary>
+/// Reads/writes <see cref="CadRoomSourceSettings"/> (TurboName CAD layer/block configuration) to
+/// ExtensibleStorage in the project document.
+/// Schema GUID is versioned — change it on any field add/remove (see CLAUDE.md "ExtensibleStorage Schema Changes").
+/// </summary>
 public static class CadRoomSourceStorageService
 {
     // V3: new GUID to add CeilingHeightBlockName/CeilingHeightBlockTag fields.
-    // Old schemas are purged via TurboSpike, but Schema.Lookup caches persist in memory.
+    // Old schemas live on in document storage until Revit restart clears the Schema.Lookup cache.
     private static readonly Guid SchemaGuid = new("b2c3d4e5-f6a7-8901-bcde-f12345678903");
     private const string SchemaName = "TurboSuiteCadRoomSource";
     private const string ModeField = "Mode";

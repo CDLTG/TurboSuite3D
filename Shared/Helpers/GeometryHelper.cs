@@ -170,6 +170,14 @@ public static class GeometryHelper
     }
 
     /// <summary>
+    /// Returns the 2D rotation angle (radians) of a transform's BasisX axis.
+    /// Why: per CLAUDE.md, only BasisX should be used for direction math —
+    /// BasisY/BasisZ are inverted for ceiling-hosted fixtures and cause flips.
+    /// </summary>
+    public static double GetTransformAngle(Transform transform)
+        => Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+
+    /// <summary>
     /// Gets the rotation of a fixture from its Location property.
     /// For LocationPoint, returns the Rotation property.
     /// For LocationCurve, returns the angle of the curve direction.
@@ -281,8 +289,7 @@ public static class GeometryHelper
 
     private static (double length, double width) GlobalToLocalExtents(FamilyInstance fixture, double globalDx, double globalDy, double defaultSize)
     {
-        Transform transform = fixture.GetTransform();
-        double angle = Math.Atan2(transform.BasisX.Y, transform.BasisX.X);
+        double angle = GetTransformAngle(fixture.GetTransform());
 
         double absC = Math.Abs(Math.Cos(angle));
         double absS = Math.Abs(Math.Sin(angle));

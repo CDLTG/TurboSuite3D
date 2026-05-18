@@ -2,6 +2,7 @@ using System;
 using Autodesk.Revit.DB;
 using TurboSuite.Bubble.Constants;
 using TurboSuite.Bubble.Models;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Bubble.Placement;
@@ -55,7 +56,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
 
     internal static bool DetermineRotationMode(IndependentTag tag)
     {
-        var param = tag.LookupParameter("Orientation");
+        var param = tag.LookupParameter(ParameterNames.Orientation);
         if (param == null) return false;
 
         var value = param.AsValueString();
@@ -67,7 +68,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
         if (rotatesWithComponent)
             return GetFixtureRotation(fixture);
 
-        return tag.LookupParameter("Angle")?.AsDouble() ?? 0.0;
+        return tag.LookupParameter(ParameterNames.Angle)?.AsDouble() ?? 0.0;
     }
 
     protected static double GetFixtureRotation(FamilyInstance fixture)

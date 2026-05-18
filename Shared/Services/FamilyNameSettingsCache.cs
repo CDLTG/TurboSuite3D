@@ -3,6 +3,10 @@ using TurboSuite.Shared.Models;
 
 namespace TurboSuite.Shared.Services;
 
+/// <summary>
+/// Per-document in-memory cache for <see cref="FamilyNameSettingsStorageService"/> reads.
+/// Invalidates when the document hash changes. Call <see cref="Invalidate"/> after a save.
+/// </summary>
 public static class FamilyNameSettingsCache
 {
     private static FamilyNameSettings? _cached;
