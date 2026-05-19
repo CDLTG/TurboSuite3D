@@ -52,8 +52,6 @@ public class TagCommand : IExternalCommand
             var lineBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f) && GeometryHelper.IsLineBasedFixture(f)).ToList();
             var pointBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f) && !GeometryHelper.IsLineBasedFixture(f)).ToList();
 
-            int totalTagged = 0;
-
             if (faceBasedFixtures.Count > 0)
             {
                 FamilySymbol? tagType = TagTypeService.GetTagType(doc);
@@ -63,7 +61,7 @@ public class TagCommand : IExternalCommand
                     return Result.Cancelled;
                 }
 
-                totalTagged += PlaceTagsFaceBased(doc, faceBasedFixtures, tagType);
+                PlaceTagsFaceBased(doc, faceBasedFixtures, tagType);
             }
 
             if (lineBasedFixtures.Count > 0)
@@ -77,7 +75,7 @@ public class TagCommand : IExternalCommand
                 if (linearChoice == TagDirection.Combined || linearChoice == TagDirection.CombinedForced)
                 {
                     bool forced = linearChoice == TagDirection.CombinedForced;
-                    Result combinedResult = HandleCombinedLinear(doc, lineBasedFixtures, forced, ref totalTagged);
+                    Result combinedResult = HandleCombinedLinear(doc, lineBasedFixtures, forced);
                     if (combinedResult != Result.Succeeded)
                         return combinedResult;
                 }
@@ -91,7 +89,7 @@ public class TagCommand : IExternalCommand
                         return Result.Cancelled;
                     }
 
-                    totalTagged += PlaceTags(doc, lineBasedFixtures, linearTagType, linearChoice, true);
+                    PlaceTags(doc, lineBasedFixtures, linearTagType, linearChoice, true);
                 }
             }
 
@@ -110,7 +108,7 @@ public class TagCommand : IExternalCommand
                     return Result.Cancelled;
                 }
 
-                totalTagged += PlaceTags(doc, pointBasedFixtures, tagType, direction);
+                PlaceTags(doc, pointBasedFixtures, tagType, direction);
             }
 
             if (selectedPowerSupplies.Count > 0)
@@ -122,7 +120,7 @@ public class TagCommand : IExternalCommand
                     return Result.Cancelled;
                 }
 
-                totalTagged += PlacePowerSupplyTags(doc, selectedPowerSupplies, switchIdTagType);
+                PlacePowerSupplyTags(doc, selectedPowerSupplies, switchIdTagType);
             }
 
             if (selectedKeypads.Count > 0)
@@ -136,13 +134,7 @@ public class TagCommand : IExternalCommand
 
                 FamilySymbol? keypadTwoGangTagType = TagTypeService.GetKeypadTagType(doc, TagConstants.KeypadTwoGangTypeName);
 
-                totalTagged += PlaceKeypadTags(doc, selectedKeypads, keypadTagType, keypadTwoGangTagType);
-            }
-
-            int totalSelected = selectedFixtures.Count + selectedPowerSupplies.Count + selectedKeypads.Count;
-            if (totalSelected > 10)
-            {
-                TaskDialog.Show("TurboTag", $"Successfully tagged {totalTagged} of {totalSelected} fixtures.");
+                PlaceKeypadTags(doc, selectedKeypads, keypadTagType, keypadTwoGangTagType);
             }
 
             return Result.Succeeded;
@@ -565,7 +557,7 @@ public class TagCommand : IExternalCommand
         return new List<LinearRun> { new LinearRun(new List<FamilyInstance>(lineBasedFixtures)) };
     }
 
-    private Result HandleCombinedLinear(Document doc, List<FamilyInstance> lineBasedFixtures, bool forced, ref int totalTagged)
+    private Result HandleCombinedLinear(Document doc, List<FamilyInstance> lineBasedFixtures, bool forced)
     {
         List<LinearRun> runs = forced
             ? BuildForcedSingleRun(lineBasedFixtures)
@@ -666,8 +658,7 @@ public class TagCommand : IExternalCommand
                     DeleteExistingTags(doc, member.Id, viewId, TagConstants.CombinedLinearTagFamilyName);
                 }
 
-                if (TryPlaceTag(doc, run.Lead, combinedTagType.Id, viewId, direction, isLineBased: true))
-                    totalTagged++;
+                TryPlaceTag(doc, run.Lead, combinedTagType.Id, viewId, direction, isLineBased: true);
             }
 
             // Run-of-one falls back to the standard linear tag.
@@ -679,8 +670,7 @@ public class TagCommand : IExternalCommand
                     DeleteExistingTags(doc, fixture.Id, viewId, TagConstants.LinearTagFamilyName);
                     DeleteExistingTags(doc, fixture.Id, viewId, TagConstants.CombinedLinearTagFamilyName);
 
-                    if (TryPlaceTag(doc, fixture, singleTagType.Id, viewId, direction, isLineBased: true))
-                        totalTagged++;
+                    TryPlaceTag(doc, fixture, singleTagType.Id, viewId, direction, isLineBased: true);
                 }
             }
 
