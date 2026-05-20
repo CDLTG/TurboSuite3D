@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\Sha
 ## Git Repository
 
 - **Remote:** GitHub (CDLTG/TurboSuite3D), default branch `main`, **public repo** (GPL v3)
-- **Ignored:** `Specs/` (local-only), `Spike/`, `Purge/` (reserved for temporary local dev probes — removed from v1.0.0 shipping build), `Installer/publish/` (build output), `bin/`, `obj/`, `.vs/`, `.idea/`
+- **Ignored:** `Specs/` (local-only), `Installer/publish/` (build output), `bin/`, `obj/`, `.vs/`, `.idea/`
 - Do NOT commit files from `Specs/` — they are historical reference documents kept locally only.
 - Always commit and push `.gitignore` changes so they take effect on GitHub.
 
@@ -91,10 +91,7 @@ When adding or removing fields in any storage service (`FamilyNameSettingsStorag
 4. Delete the stale `DataStorage` elements — see recovery procedure below
 5. Open Settings, re-enter values, and save
 
-**Recovery procedure (post-v1.0.0):** TurboPurge was removed from the shipping build. To clear DataStorage during dev:
-- Add a temporary local-only `Purge/PurgeCommand.cs` (gitignored path is still reserved) that runs a `FilteredElementCollector(doc).OfClass(typeof(DataStorage))` delete inside a transaction.
-- Or use a one-shot RevitPythonShell / pyRevit script against the open document.
-- After deletion, restart Revit so cached `Schema.Lookup` results clear.
+**Recovery procedure:** To clear stale DataStorage during dev, use a one-shot RevitPythonShell / pyRevit script against the open document to run `FilteredElementCollector(doc).OfClass(typeof(DataStorage))` and delete the results inside a transaction. After deletion, restart Revit so cached `Schema.Lookup` results clear.
 
 ### Specification Documents
 Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NOT use them unless the user explicitly asks.
