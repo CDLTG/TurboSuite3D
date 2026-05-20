@@ -319,7 +319,17 @@ namespace TurboSuite.Shared.Helpers
             Parameter param = circuit.LookupParameter(ParameterNames.LoadClassificationAbbreviation);
             if (param != null && param.HasValue)
             {
-                return param.AsString() ?? string.Empty;
+                string raw = param.AsString() ?? string.Empty;
+                if (string.IsNullOrEmpty(raw) || !raw.Contains(';')) return raw;
+
+                // When connectors on circuit elements have differing abbreviations,
+                // Revit returns a "; "-joined list (e.g. "ELV; ELV"). Collapse exact duplicates.
+                var parts = raw.Split(';')
+                    .Select(p => p.Trim())
+                    .Where(p => p.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                return string.Join("; ", parts);
             }
 
             return string.Empty;
