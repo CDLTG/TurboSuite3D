@@ -125,6 +125,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
 | `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, control BOM PDF, load schedule PDF, panel schedule PDF, and cover/notes PDF (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
+| `TurboSuite.Mask` | TurboMask — masking region + per-fixture annotation stamps (gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`) |
 | `Guide/` | `Guide.md` — user-facing documentation |
 | `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
 | `Installer/` | TurboSuiteInstaller — standalone WPF installer for network share deployment |

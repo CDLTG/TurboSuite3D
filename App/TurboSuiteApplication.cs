@@ -15,6 +15,10 @@ namespace TurboSuite.App;
 /// </summary>
 public class TurboSuiteApplication : IExternalApplication
 {
+    // Gates experimental commands (e.g., TurboMask) so they ship compiled but unreachable
+    // until post-v1.0.0. Flip to true after the v1.0.0 release ships.
+    private const bool ExperimentalCommandsEnabled = false;
+
     private static bool _updateAccepted;
 
     public Result OnStartup(UIControlledApplication application)
@@ -131,6 +135,17 @@ public class TurboSuiteApplication : IExternalApplication
                 "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
                 "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.",
                 "TurboDriver");
+
+            if (ExperimentalCommandsEnabled)
+            {
+                CreateButton(commandsPanel, assemblyPath,
+                    "TurboMask",
+                    "    Turbo    \n    Mask     ",
+                    "TurboSuite.Mask.MaskCommand",
+                    "Mask selected elements while preserving fixture graphics",
+                    "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
+                    "Blank");
+            }
 
             // Auto-update check (two handlers: one checks/stages, one shows the dialog on next idle)
             application.Idling += OnIdlingCheckForUpdate;
@@ -260,10 +275,7 @@ public class TurboSuiteApplication : IExternalApplication
         string largeUri = $"pack://application:,,,/{assembly};component/Icons/{iconBaseName}_32.png";
         string smallUri = $"pack://application:,,,/{assembly};component/Icons/{iconBaseName}_16.png";
 
-        button.LargeImage = new BitmapImage(new Uri(largeUri));
-
-        var smallInfo = System.Windows.Application.GetResourceStream(new Uri(smallUri));
-        if (smallInfo != null)
-            button.Image = new BitmapImage(new Uri(smallUri));
+        try { button.LargeImage = new BitmapImage(new Uri(largeUri)); } catch { }
+        try { button.Image = new BitmapImage(new Uri(smallUri)); } catch { }
     }
 }
