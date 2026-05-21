@@ -898,6 +898,20 @@ public static class CountsWorkbookService
             "industries", "ltd", "group", "usa",
         };
 
+    // Special-case mfr collapses applied before generic suffix-stripping in both
+    // NormalizeMfr (matching) and TrimMfrForDisplay (cosmetic). "Architectural" is kept
+    // as a generic word, but the specific phrase "Extant Architectural" collapses to
+    // "Extant" so the brand isn't split across two keys on Rep Lists.
+    private static string ApplyMfrSpecialCases(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return raw ?? string.Empty;
+        return System.Text.RegularExpressions.Regex.Replace(
+            raw,
+            @"\bExtant\s+Architectural\b",
+            "Extant",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
     /// <summary>
     /// Space-saving display trim for the Worksheet Mfr column. Strips trailing legal
     /// suffixes (Inc, LLC, Corp, Co, Company, Ltd, Industries, Group, USA) and lighting
@@ -909,6 +923,8 @@ public static class CountsWorkbookService
     private static string TrimMfrForDisplay(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return raw ?? string.Empty;
+
+        raw = ApplyMfrSpecialCases(raw);
 
         var tokens = raw.Trim()
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
@@ -970,6 +986,8 @@ public static class CountsWorkbookService
     private static string NormalizeMfr(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+        raw = ApplyMfrSpecialCases(raw);
 
         var sb = new System.Text.StringBuilder(raw.Length);
         foreach (char ch in raw)
