@@ -29,6 +29,7 @@ public static class ParameterNames
     public const string DataSheetUrl = "Data Sheet URL";
     public const string Manufacturer = "Manufacturer";
     public const string CatalogNumber1 = "Catalog Number1";
+    public const string CatalogQty1 = "Catalog Qty1";
 
     // Circuit parameters
     public const string LoadClassification = "Load Classification";

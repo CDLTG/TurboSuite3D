@@ -47,10 +47,20 @@ public static class CountsCollectorService
                 // Count every instance
                 model.Count++;
 
-                // Sum Linear Length from instances
+                // Sum Linear Length from instances. Bucket per-instance rounded inches for
+                // Catalog NumberX {L:in} token expansion (zero-length instances skipped).
                 var llParam = fi.LookupParameter(ParameterNames.LinearLength);
                 if (llParam is { HasValue: true, StorageType: StorageType.Double })
-                    model.LinearLength += llParam.AsDouble();
+                {
+                    double llFeet = llParam.AsDouble();
+                    model.LinearLength += llFeet;
+                    int inches = (int)Math.Round(llFeet * 12.0);
+                    if (inches > 0)
+                    {
+                        model.LinearLengthBuckets.TryGetValue(inches, out var n);
+                        model.LinearLengthBuckets[inches] = n + 1;
+                    }
+                }
 
                 // Read type-level parameters once per symbol
                 if (!seenSymbols.Add(symbol.Id)) continue;
@@ -64,6 +74,10 @@ public static class CountsCollectorService
                     var catParam = symbol.LookupParameter($"Catalog Number{c + 1}");
                     if (catParam is { HasValue: true })
                         model.CatalogNumbers[c] = catParam.AsString()?.Trim() ?? string.Empty;
+
+                    var qtyParam = symbol.LookupParameter($"Catalog Qty{c + 1}");
+                    if (qtyParam is { HasValue: true })
+                        model.CatalogQtys[c] = qtyParam.AsString()?.Trim() ?? string.Empty;
                 }
 
                 var rlParam = symbol.LookupParameter(ParameterNames.ReelLength);

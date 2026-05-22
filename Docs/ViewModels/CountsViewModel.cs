@@ -227,6 +227,24 @@ public class CountsViewModel : ViewModelBase
         {
             StatusText = "Error: File is open in another application. Please close it and try again.";
         }
+        catch (CatalogQtyValidationException ex)
+        {
+            StatusText = "Export blocked: Catalog Qty validation failed.";
+            System.Windows.MessageBox.Show(
+                ex.Message,
+                "TurboDocs — Catalog Qty validation",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+        }
+        catch (CatalogLengthTokenValidationException ex)
+        {
+            StatusText = "Export blocked: Catalog Number length-token validation failed.";
+            System.Windows.MessageBox.Show(
+                ex.Message,
+                "TurboDocs — Catalog Number length-token validation",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+        }
         catch (Exception ex)
         {
             StatusText = $"Error: {ex.Message}";

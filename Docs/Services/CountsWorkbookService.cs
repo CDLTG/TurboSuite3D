@@ -133,6 +133,9 @@ public static class CountsWorkbookService
         string headerImagePath = "",
         string footerImagePath = "")
     {
+        CatalogQtyValidator.ValidateOrThrow(fixtures);
+        CatalogLengthTokenValidator.ValidateOrThrow(fixtures);
+
         using var wb = new XLWorkbook();
 
         string dateString = headerDate.ToString("yyyy.MM.dd");
@@ -182,6 +185,9 @@ public static class CountsWorkbookService
         string headerImagePath = "",
         string footerImagePath = "")
     {
+        CatalogQtyValidator.ValidateOrThrow(fixtures);
+        CatalogLengthTokenValidator.ValidateOrThrow(fixtures);
+
         string stage = "open-workbook";
         try
         {
@@ -1059,18 +1065,22 @@ public static class CountsWorkbookService
         }
 
         // Flatten fixtures to (Type, Mfr, Catalog, Qty) rows, substituting effective Mfr.
+        // Length-token templates expand to one row per cut length so the Worksheet SUMIFS
+        // can match resolved SKUs; the Mfr Override lookup also resolves per-length, so a
+        // designer can route different cuts to different reps.
         var rows = new List<(string Type, string Mfr, string Catalog, int Qty)>();
         foreach (var f in fixtures)
         {
             for (int c = 0; c < 6; c++)
             {
-                string cat = f.CatalogNumbers[c] ?? "";
-                if (string.IsNullOrWhiteSpace(cat)) continue;
-                string effMfr = mfrOverrideByKey.TryGetValue(
-                    (f.TypeMark.ToUpperInvariant(), cat.ToUpperInvariant()), out var ovr)
-                        ? ovr
-                        : f.Manufacturer;
-                rows.Add((f.TypeMark, effMfr, cat, f.Count));
+                foreach (var (resolvedSku, qty) in CatalogLengthTokenResolver.ExpandSlot(f, c))
+                {
+                    string effMfr = mfrOverrideByKey.TryGetValue(
+                        (f.TypeMark.ToUpperInvariant(), resolvedSku.ToUpperInvariant()), out var ovr)
+                            ? ovr
+                            : f.Manufacturer;
+                    rows.Add((f.TypeMark, effMfr, resolvedSku, qty));
+                }
             }
         }
 
@@ -1554,16 +1564,18 @@ public static class CountsWorkbookService
         var catalogFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var typeFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        // Pre-pass: count catalog occurrences — used to mark the canonical row bold only when
-        // the catalog appears on multiple rows (single-row catalogs aren't visually distinguished).
+        // Pre-pass: count occurrences keyed by *resolved* SKU. Length-token templates explode
+        // into one row per unique cut length — counting templates would mis-classify those
+        // rows as singletons and skip the canonical-row bold treatment.
         var catalogCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in fixtures)
         {
             for (int c = 0; c < 6; c++)
             {
-                string cn = f.CatalogNumbers[c] ?? "";
-                if (string.IsNullOrWhiteSpace(cn)) continue;
-                catalogCounts[cn] = catalogCounts.GetValueOrDefault(cn) + 1;
+                // Count one increment per emitted row (not per fixture-instance qty) — the
+                // canonical-row comment fires when a catalog appears on multiple rows.
+                foreach (var (sku, _) in CatalogLengthTokenResolver.ExpandSlot(f, c))
+                    catalogCounts[sku] = catalogCounts.GetValueOrDefault(sku) + 1;
             }
         }
 
@@ -1572,80 +1584,95 @@ public static class CountsWorkbookService
         {
             for (int c = 0; c < 6; c++)
             {
-                string catNum = f.CatalogNumbers[c] ?? "";
-                if (string.IsNullOrWhiteSpace(catNum)) continue;
+                string template = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(template)) continue;
 
-                // Type, Mfr, Catalog Number
-                ws.Cell(row, WsColType).Value = f.TypeMark;
-                ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(f.Manufacturer);
-                ws.Cell(row, WsColCatalog).Value = catNum;
-                ws.Cell(row, WsColTypeRepeat).Value = f.TypeMark;
+                // Per-slot context shared across the expansion loop. QtyX is parsed once;
+                // ValidateOrThrow guarantees Parse succeeds, and rules out the
+                // token + non-blank QtyX combination, so isExpanded short-circuits QtyX.
+                var qtyRule = CatalogQtyParser.Parse(f.CatalogQtys[c]);
+                bool isExpanded = CatalogLengthTokenResolver.HasToken(template);
 
-                // Qty formula
-                string qtyFormula = BuildQtyFormula(row, csRef);
-                ws.Cell(row, WsColQty).FormulaA1 = qtyFormula;
-
-                // Prev Qty — blank on first export
-                // Delta formula
-                ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
-
-                // Calc dropdown
-                ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
-
-                // Catalog-canonical fields (Description, Calc, Unit Cost): subsequent occurrences
-                // reference the first. Markup % and Adder have NO canonical — users drag-fill.
-                if (catalogFirstRow.TryGetValue(catNum, out int firstRow))
+                // ExpandSlot yields one (sku, qty) pair for plain templates, or one pair
+                // per unique cut length for {L:...} tokens. catalogFirstRow is keyed by the
+                // resolved SKU so each cut length owns its own pricing canonical row.
+                foreach (var (resolvedSku, expandedQty) in CatalogLengthTokenResolver.ExpandSlot(f, c))
                 {
-                    // Desc / Unit Cost: empty canonical → "dependent" placeholder so the link
-                    // is visible. Calc: plain ref (no wrap) — dropdown cell stays usable.
-                    ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("H", firstRow);
-                    ws.Cell(row, WsColCalc).FormulaA1 = $"IF(I{firstRow}=\"\",\"\",I{firstRow})";
-                    ws.Cell(row, WsColUnitCost).FormulaA1 = DependentFormula("J", firstRow);
-                    StyleAutoFilledCell(ws.Cell(row, WsColDesc));
-                    StyleAutoFilledCell(ws.Cell(row, WsColCalc));
-                    StyleAutoFilledCell(ws.Cell(row, WsColUnitCost));
+                    ws.Cell(row, WsColType).Value = f.TypeMark;
+                    ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(f.Manufacturer);
+                    ws.Cell(row, WsColCatalog).Value = resolvedSku;
+                    ws.Cell(row, WsColTypeRepeat).Value = f.TypeMark;
+
+                    // Qty precedence: length-token literal > QtyX rule literal > Calc-driven formula.
+                    if (isExpanded)
+                        ws.Cell(row, WsColQty).Value = expandedQty;
+                    else if (qtyRule.Mode == CatalogQtyMode.Default)
+                        ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
+                    else
+                        ws.Cell(row, WsColQty).Value = qtyRule.Evaluate(f.Count);
+
+                    // Prev Qty — blank on first export. Delta picks up once it's populated.
+                    ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
+                    ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
+
+                    // Catalog-canonical fields (Description, Calc, Unit Cost): subsequent
+                    // occurrences reference the first. Markup % and Adder have NO canonical —
+                    // users drag-fill.
+                    if (catalogFirstRow.TryGetValue(resolvedSku, out int firstRow))
+                    {
+                        // Desc / Unit Cost: empty canonical → "dependent" placeholder so the
+                        // link is visible. Calc: plain ref (no wrap) — dropdown stays usable.
+                        ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("H", firstRow);
+                        ws.Cell(row, WsColCalc).FormulaA1 = $"IF(I{firstRow}=\"\",\"\",I{firstRow})";
+                        ws.Cell(row, WsColUnitCost).FormulaA1 = DependentFormula("J", firstRow);
+                        StyleAutoFilledCell(ws.Cell(row, WsColDesc));
+                        StyleAutoFilledCell(ws.Cell(row, WsColCalc));
+                        StyleAutoFilledCell(ws.Cell(row, WsColUnitCost));
+                    }
+                    else
+                    {
+                        catalogFirstRow[resolvedSku] = row;
+                        // Description + Unit Cost start blank — pricing team enters manually.
+                        // Mark canonical only when this SKU has siblings (single-row SKUs
+                        // aren't visually distinguished, so the comment would be noise).
+                        if (catalogCounts.GetValueOrDefault(resolvedSku) > 1)
+                            MarkCanonicalRow(ws, row, resolvedSku);
+                    }
+
+                    // Tariff % (K) is per-Type canonical: only the first row of each Type
+                    // holds a literal; subsequent rows mirror it via a gray-italic formula
+                    // (WriteTariffCell) so users see the tariff on every row while the
+                    // canonical cell remains the only editable one. Helper pipeline resolves
+                    // the Type's tariff % via XLOOKUP against the full K column (first match
+                    // = canonical).
+                    //
+                    // Schedule Notes (N–S) follow the same per-Type pattern: canonical row
+                    // seeds from Revit on first creation; subsequent rows show "---" in
+                    // gray italic.
+                    if (!typeFirstRow.ContainsKey(f.TypeMark))
+                    {
+                        typeFirstRow[f.TypeMark] = row;
+                        for (int n = 0; n < 6; n++)
+                            WriteNoteCell(ws, row, row, n, f.Notes[n]);
+                    }
+                    else
+                    {
+                        WriteTariffCell(ws, row, typeFirstRow[f.TypeMark], existingTariff: null, isNewRow: true);
+                        for (int n = 0; n < 6; n++)
+                            WriteNoteCell(ws, row, typeFirstRow[f.TypeMark], n, null);
+                    }
+
+                    // EffQty (BQ) = QtyOverride (U) if present, else Revit Qty (D). Single
+                    // source of truth for effective qty — Rep Lists SUMIFS and the helper
+                    // pipeline read this column instead of duplicating the override fallback.
+                    ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
+                    ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
+
+                    // Active flag: initial export has no removed rows — always 1.
+                    ws.Cell(row, WsColActive).Value = 1;
+
+                    row++;
                 }
-                else
-                {
-                    catalogFirstRow[catNum] = row;
-                    // Description + Unit Cost start blank — pricing team enters manually.
-
-                    // Mark canonical only when the catalog has siblings (otherwise every row would be bolded)
-                    if (catalogCounts.GetValueOrDefault(catNum) > 1)
-                        MarkCanonicalRow(ws, row, catNum);
-                }
-
-                // Tariff % (K) is per-Type canonical: only the first row of each Type holds a
-                // literal; subsequent rows mirror it via a gray-italic formula (WriteTariffCell)
-                // so users see the tariff on every row while the canonical cell remains the
-                // only editable one. Helper pipeline resolves the Type's tariff % via XLOOKUP
-                // against the full K column (first match = canonical).
-                //
-                // Schedule Notes (N–S) follow the same per-Type pattern: canonical row seeds
-                // from Revit on first creation; subsequent rows show "---" in gray italic.
-                if (!typeFirstRow.ContainsKey(f.TypeMark))
-                {
-                    typeFirstRow[f.TypeMark] = row;
-                    for (int n = 0; n < 6; n++)
-                        WriteNoteCell(ws, row, row, n, f.Notes[n]);
-                }
-                else
-                {
-                    WriteTariffCell(ws, row, typeFirstRow[f.TypeMark], existingTariff: null, isNewRow: true);
-                    for (int n = 0; n < 6; n++)
-                        WriteNoteCell(ws, row, typeFirstRow[f.TypeMark], n, null);
-                }
-
-                // EffQty (BQ) = QtyOverride (U) if present, else Revit Qty (D). Single source
-                // of truth for effective qty — Rep Lists SUMIFS and the helper pipeline read
-                // this column instead of duplicating the override fallback.
-                ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
-                ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
-
-                // Active flag: initial export has no removed rows — always 1.
-                ws.Cell(row, WsColActive).Value = 1;
-
-                row++;
             }
         }
 
@@ -3154,10 +3181,14 @@ public static class CountsWorkbookService
         string csRef = $"'{countsSheetName}'";
 
         sub = "build-new-keys";
-        // Build set of new (Type, Catalog) pairs
+        // Build set of new (Type, Catalog) pairs. Length-token templates expand here so each
+        // resolved SKU gets its own row entry; the (Type, ResolvedSku) cache key gives every
+        // cut its own pricing/PrevQty without leaking across lengths.
+        // SortLength is the cut-inches when the slot expanded (used for stable ascending sort
+        // within a slot), or int.MinValue for plain templates (single row per slot).
         var newTypeMarks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var newKeys = new HashSet<(string, string)>();
-        var newRowEntries = new List<(string Type, string Mfr, string Catalog, int CatPosition)>();
+        var newRowEntries = new List<(string Type, string Mfr, string Catalog, int CatPosition, int SortLength, int Qty, bool IsExpanded)>();
         var fixtureByType = new Dictionary<string, CountsFixtureModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in fixtures)
         {
@@ -3165,11 +3196,35 @@ public static class CountsWorkbookService
             fixtureByType.TryAdd(f.TypeMark, f);
             for (int c = 0; c < 6; c++)
             {
-                string catNum = f.CatalogNumbers[c] ?? "";
-                if (string.IsNullOrWhiteSpace(catNum)) continue;
-                var key = (f.TypeMark.ToUpperInvariant(), catNum.ToUpperInvariant());
-                newKeys.Add(key);
-                newRowEntries.Add((f.TypeMark, f.Manufacturer, catNum, c));
+                string template = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(template)) continue;
+                bool isExpanded = CatalogLengthTokenResolver.HasToken(template);
+                int? maxInches = isExpanded ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
+
+                if (isExpanded)
+                {
+                    // Re-derive (sku, qty, cutInches) so we can drive the in-slot sort by cut length.
+                    var pooled = new Dictionary<int, int>();
+                    foreach (var kv in f.LinearLengthBuckets)
+                        foreach (int cut in CatalogLengthTokenResolver.SplitInstance(kv.Key, maxInches))
+                        {
+                            pooled.TryGetValue(cut, out var n);
+                            pooled[cut] = n + kv.Value;
+                        }
+                    foreach (var kv in pooled.OrderBy(p => p.Key))
+                    {
+                        string sku = CatalogLengthTokenResolver.Resolve(template, kv.Key);
+                        var key = (f.TypeMark.ToUpperInvariant(), sku.ToUpperInvariant());
+                        newKeys.Add(key);
+                        newRowEntries.Add((f.TypeMark, f.Manufacturer, sku, c, kv.Key, kv.Value, true));
+                    }
+                }
+                else
+                {
+                    var key = (f.TypeMark.ToUpperInvariant(), template.ToUpperInvariant());
+                    newKeys.Add(key);
+                    newRowEntries.Add((f.TypeMark, f.Manufacturer, template, c, int.MinValue, 0, false));
+                }
             }
         }
 
@@ -3224,11 +3279,16 @@ public static class CountsWorkbookService
         }
 
         sub = "sort-new-rows";
-        // Step 3: Write all rows sorted by Type Mark then catalog position
+        // Step 3: Write all rows sorted by Type Mark, then catalog position, then by SortLength
+        // (cut inches ascending within a length-token slot; plain slots use int.MinValue so
+        // their single row sorts before any exploded sibling — which doesn't happen since
+        // expansion is per-slot, but keeps the order deterministic).
         newRowEntries.Sort((a, b) =>
         {
             int cmp = string.Compare(a.Type, b.Type, StringComparison.OrdinalIgnoreCase);
-            return cmp != 0 ? cmp : a.CatPosition.CompareTo(b.CatPosition);
+            if (cmp != 0) return cmp;
+            cmp = a.CatPosition.CompareTo(b.CatPosition);
+            return cmp != 0 ? cmp : a.SortLength.CompareTo(b.SortLength);
         });
 
         // Also include removed rows (in existing but not in new)
@@ -3240,7 +3300,8 @@ public static class CountsWorkbookService
                 removedEntries.Add((er.Type, er.Mfr, er.Catalog));
         }
 
-        // Count how many rows each catalog appears on — only mark canonical when siblings exist
+        // Count how many rows each catalog appears on — only mark canonical when siblings exist.
+        // Keyed by resolved SKU so two Types whose templates collapse to the same SKU still bold.
         var catalogCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in newRowEntries)
             catalogCounts[entry.Catalog] = catalogCounts.GetValueOrDefault(entry.Catalog) + 1;
@@ -3253,20 +3314,20 @@ public static class CountsWorkbookService
         for (int i = 0; i < newRowEntries.Count; i++)
         {
             int sheetRow = 2 + i;
-            var (type, _, catalog, _) = newRowEntries[i];
-            var key = (type.ToUpperInvariant(), catalog.ToUpperInvariant());
+            var entry = newRowEntries[i];
+            var key = (entry.Type.ToUpperInvariant(), entry.Catalog.ToUpperInvariant());
             var existing = existingByKey.GetValueOrDefault(key);
             bool hasLiteralCost = existing != null && existing.UnitCost.HasValue && !existing.CostIsFormula;
-            if (hasLiteralCost && !canonicalSheetRowByCatalog.ContainsKey(catalog))
-                canonicalSheetRowByCatalog[catalog] = sheetRow;
+            if (hasLiteralCost && !canonicalSheetRowByCatalog.ContainsKey(entry.Catalog))
+                canonicalSheetRowByCatalog[entry.Catalog] = sheetRow;
         }
         // Fallback: for catalogs with no literal-cost row, use first occurrence
         for (int i = 0; i < newRowEntries.Count; i++)
         {
             int sheetRow = 2 + i;
-            var (_, _, catalog, _) = newRowEntries[i];
-            if (!canonicalSheetRowByCatalog.ContainsKey(catalog))
-                canonicalSheetRowByCatalog[catalog] = sheetRow;
+            var entry = newRowEntries[i];
+            if (!canonicalSheetRowByCatalog.ContainsKey(entry.Catalog))
+                canonicalSheetRowByCatalog[entry.Catalog] = sheetRow;
         }
 
         // Type-canonical sheet row: first emitted row of each Type in sort order (tariff source).
@@ -3274,8 +3335,8 @@ public static class CountsWorkbookService
         for (int i = 0; i < newRowEntries.Count; i++)
         {
             int sheetRow = 2 + i;
-            var (type, _, _, _) = newRowEntries[i];
-            typeCanonicalSheetRow.TryAdd(type, sheetRow);
+            var entry = newRowEntries[i];
+            typeCanonicalSheetRow.TryAdd(entry.Type, sheetRow);
         }
 
         // Catalog → canonical Calc literal from the prior pass. Used to recompute PrevQty
@@ -3323,8 +3384,13 @@ public static class CountsWorkbookService
         int row = 2;
 
         // Write new/matched rows
-        foreach (var (type, mfr, catalog, _) in newRowEntries)
+        foreach (var entry in newRowEntries)
         {
+            string type = entry.Type;
+            string mfr = entry.Mfr;
+            string catalog = entry.Catalog;
+            int slot = entry.CatPosition;
+
             var key = (type.ToUpperInvariant(), catalog.ToUpperInvariant());
             var existing = existingByKey.GetValueOrDefault(key);
             bool isNewType = !prevTypeMarks.Contains(type);
@@ -3335,7 +3401,19 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColMfr).Value = TrimMfrForDisplay(mfr);
             ws.Cell(row, WsColCatalog).Value = catalog;
             ws.Cell(row, WsColTypeRepeat).Value = type;
-            ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
+
+            // Qty: length-token rows hold a literal cut count, QtyX rule overrides the
+            // Calc-driven formula, else fall through to the formula path. Mirrors BuildWorksheetSheet.
+            var fixtureForRow = fixtureByType.GetValueOrDefault(type);
+            var qtyRule = fixtureForRow != null
+                ? CatalogQtyParser.Parse(fixtureForRow.CatalogQtys[slot])
+                : CatalogQtyRule.DefaultRule;
+            if (entry.IsExpanded)
+                ws.Cell(row, WsColQty).Value = entry.Qty;
+            else if (qtyRule.Mode == CatalogQtyMode.Default)
+                ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
+            else
+                ws.Cell(row, WsColQty).Value = qtyRule.Evaluate(fixtureForRow!.Count);
             ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
             ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
 
@@ -3359,8 +3437,11 @@ public static class CountsWorkbookService
             {
                 ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
             }
-            else if (prevData != null && prevData.TryGetValue(type, out var prevFixture))
+            else if (!entry.IsExpanded && prevData != null && prevData.TryGetValue(type, out var prevFixture))
             {
+                // Skipped for length-token rows: ComputeQtyForCalc reads the prior fixture's
+                // total LinearLength/Count, which doesn't represent a single cut. Brand-new
+                // length-rows leave PrevQty blank (Δ stays blank too — correct behavior).
                 prevCalcByCatalog.TryGetValue(catalog, out string? prevCalc);
                 ws.Cell(row, WsColPrevQty).Value = ComputeQtyForCalc(prevCalc, prevFixture);
             }
@@ -3440,12 +3521,21 @@ public static class CountsWorkbookService
             //     happens to match a stale row but wasn't in prevData
             // Skipped for isNewType (whole row is green) and when prevData is unavailable.
             if (!isNewType && prevData != null
-                && prevData.TryGetValue(type, out var prevFix)
-                && !prevFix.CatalogNumbers.Any(c => !string.IsNullOrEmpty(c)
-                    && string.Equals(c, catalog, StringComparison.OrdinalIgnoreCase)))
+                && prevData.TryGetValue(type, out var prevFix))
             {
-                for (int col = 1; col <= WsColCatalog; col++)
-                    ws.Cell(row, col).Style.Fill.BackgroundColor = YellowFill;
+                // Length-token rows: prevData only stores raw templates, so compare against
+                // existingRows (prior Worksheet contents, keyed by resolved SKU). A brand-new
+                // cut length introduced this pass has no existing row → flags yellow.
+                // Plain rows: compare resolved catalog against the prior fixture's catalog list.
+                bool prevHasIt = entry.IsExpanded
+                    ? existing != null
+                    : prevFix.CatalogNumbers.Any(c => !string.IsNullOrEmpty(c)
+                        && string.Equals(c, catalog, StringComparison.OrdinalIgnoreCase));
+                if (!prevHasIt)
+                {
+                    for (int col = 1; col <= WsColCatalog; col++)
+                        ws.Cell(row, col).Style.Fill.BackgroundColor = YellowFill;
+                }
             }
 
             // Yellow delta cell when qty changed (non-blank, non-zero). Skipped on new-type
