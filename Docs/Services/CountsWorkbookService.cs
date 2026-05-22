@@ -147,6 +147,7 @@ public static class CountsWorkbookService
         BuildDashboardSheet(wb, projectName, repDirectoryPath);
         BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
         BuildRepListsSheet(wb, fixtures, repDirectory);
+        BuildWasteSheet(wb, fixtures);
         BuildQuoteSheet(wb);
         for (int p = 1; p <= 3; p++)
             BuildPhaseQuoteSheet(wb, p);
@@ -237,6 +238,9 @@ public static class CountsWorkbookService
 
             stage = "build-rep-lists";
             BuildRepListsSheet(wb, fixtures, repDirectory);
+
+            stage = "build-waste";
+            BuildWasteSheet(wb, fixtures);
 
             stage = "rebuild-contractor-sheets";
             RebuildContractorSheets(wb, fixtures, pricingForSnapshot);
@@ -3138,6 +3142,60 @@ public static class CountsWorkbookService
         ws.Column(ChangesBatchMarkerCol).Hide();
 
         ApplyStandardPageSetup(ws);
+    }
+
+    #endregion
+
+    #region Waste Report Sheet
+
+    // Hidden audit sheet listing every Catalog slot that uses a length token, with the
+    // material totals the cover algorithm produced. Only sizes= mode can produce waste > 0;
+    // max= and plain tokens emit rows with 0 waste so the sheet doubles as a "what's
+    // length-driven on this job" audit.
+    private static void BuildWasteSheet(IXLWorkbook wb, List<CountsFixtureModel> fixtures)
+    {
+        if (wb.Worksheets.TryGetWorksheet("Waste", out var existing))
+            existing.Delete();
+
+        var ws = wb.Worksheets.Add("Waste");
+        ws.Visibility = XLWorksheetVisibility.Hidden;
+
+        ws.Cell(1, 1).Value = "Type Mark";
+        ws.Cell(1, 2).Value = "Slot";
+        ws.Cell(1, 3).Value = "Catalog Template";
+        ws.Cell(1, 4).Value = "Mode";
+        ws.Cell(1, 5).Value = "Instances";
+        ws.Cell(1, 6).Value = "Used (LF)";
+        ws.Cell(1, 7).Value = "Supplied (LF)";
+        ws.Cell(1, 8).Value = "Waste (LF)";
+        ws.Cell(1, 9).Value = "Waste %";
+        ws.Range(1, 1, 1, 9).Style.Font.SetBold();
+
+        int row = 2;
+        foreach (var f in fixtures.OrderBy(f => f.TypeMark, NaturalStringComparer.OrdinalIgnoreCase))
+        {
+            for (int c = 0; c < 6; c++)
+            {
+                var stats = CatalogWasteAnalyzer.ComputeSlotWaste(f, c);
+                if (stats.Mode.Length == 0) continue;
+
+                ws.Cell(row, 1).Value = f.TypeMark;
+                ws.Cell(row, 2).Value = c + 1;
+                ws.Cell(row, 3).Value = f.CatalogNumbers[c] ?? string.Empty;
+                ws.Cell(row, 4).Value = stats.Mode;
+                ws.Cell(row, 5).Value = stats.InstanceCount;
+                ws.Cell(row, 6).Value = Math.Round(stats.UsedInches / 12.0, 2);
+                ws.Cell(row, 7).Value = Math.Round(stats.SuppliedInches / 12.0, 2);
+                ws.Cell(row, 8).Value = Math.Round(stats.WasteInches / 12.0, 2);
+                ws.Cell(row, 9).Value = stats.UsedInches > 0
+                    ? Math.Round(100.0 * stats.WasteInches / stats.UsedInches, 2)
+                    : 0.0;
+                ws.Cell(row, 9).Style.NumberFormat.Format = "0.00\"%\"";
+                row++;
+            }
+        }
+
+        ws.Columns(1, 9).AdjustToContents();
     }
 
     #endregion

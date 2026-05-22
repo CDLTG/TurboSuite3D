@@ -9,23 +9,31 @@ using TurboSuite.Docs.Models;
 namespace TurboSuite.Docs.Services;
 
 /// <summary>
-/// Grammar (v1): <c>{L:&lt;format&gt;[,max=&lt;int&gt;]}</c>.
-/// Formats: <c>in</c> → <c>{inches}"</c>; <c>ft-in</c> → <c>{feet}'-{inches}"</c>.
-/// <c>max=N</c> (positive integer inches) greedy-splits each instance length into N-sized cuts
-/// plus one remainder. Unknown formats / option keys / non-integer max fail validation.
+/// Grammar: <c>{L:&lt;format&gt;[,&lt;option&gt;]}</c>.
+/// Formats (case-sensitive): <c>in</c> → <c>{inches}"</c>; <c>IN</c> → <c>{inches}IN</c>;
+/// <c>ft-in</c> → <c>{feet}'-{inches}"</c>; <c>FT-IN</c> → <c>{feet}FT-{inches}IN</c>.
+/// Options (mutually exclusive):
+///   <c>max=N</c> — made-to-length: greedy-splits each instance into N-sized cuts plus one remainder.
+///   <c>sizes=N1|N2|...</c> — discrete stock sizes (e.g. 96|48): covers each instance with the
+///     fewest sticks whose sum ≥ instance length, tie-breaking on least overage.
+/// Unknown formats / option keys / non-integer values / combined max+sizes fail validation.
 /// </summary>
 public static class CatalogLengthTokenResolver
 {
-    // {L:<format>[,max=<int>]} — captures format ("in"/"ft-in") and optional max integer.
+    // {L:<format>[,max=<int>]} — captures format and optional max integer. Format is
+    // case-sensitive: "in"/"ft-in" emit ASCII unit marks (", '-"); "IN"/"FT-IN" emit
+    // literal letters (IN, FT-IN) for vendors whose ordering grids reject quote marks.
     // The token grammar is intentionally narrow; anything not matching this fails Validate.
     private static readonly Regex TokenRegex = new(
         @"\{L:(?<fmt>[A-Za-z][A-Za-z\-]*)(?:,(?<opts>[^}]*))?\}",
         RegexOptions.Compiled);
 
-    private static readonly HashSet<string> KnownFormats = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> KnownFormats = new(StringComparer.Ordinal)
     {
         "in",
+        "IN",
         "ft-in",
+        "FT-IN",
     };
 
     public sealed record ParsedToken(string Format, int? MaxInches, string Raw, int Index, int Length);
@@ -55,7 +63,7 @@ public static class CatalogLengthTokenResolver
             if (idx < 0) break;
             var m = TokenRegex.Match(catalogNumber, idx);
             if (!m.Success || m.Index != idx)
-                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected '{L:in}', '{L:ft-in}', or with ',max=<int>')");
+                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected '{L:in}', '{L:IN}', '{L:ft-in}', '{L:FT-IN}', or with ',max=<int>')");
             ValidateToken(catalogNumber, m);
             cursor = m.Index + m.Length;
         }
@@ -65,26 +73,52 @@ public static class CatalogLengthTokenResolver
     {
         string fmt = m.Groups["fmt"].Value;
         if (!KnownFormats.Contains(fmt))
-            throw new CatalogLengthTokenParseException(raw, $"Unknown length format '{fmt}' (supported: in, ft-in)");
+            throw new CatalogLengthTokenParseException(raw, $"Unknown length format '{fmt}' (supported: in, IN, ft-in, FT-IN — case-sensitive)");
 
         if (!m.Groups["opts"].Success) return;
 
         string opts = m.Groups["opts"].Value;
-        // Single-option v1: only "max=<int>". Anything else fails.
+        bool sawMax = false, sawSizes = false;
         foreach (var part in opts.Split(','))
         {
             var kv = part.Split('=', 2);
             if (kv.Length != 2)
-                throw new CatalogLengthTokenParseException(raw, $"Malformed option '{part}' (expected 'max=<int>')");
+                throw new CatalogLengthTokenParseException(raw, $"Malformed option '{part}' (expected 'max=<int>' or 'sizes=N|N|...')");
             string key = kv[0].Trim();
             string val = kv[1].Trim();
-            if (!string.Equals(key, "max", StringComparison.OrdinalIgnoreCase))
-                throw new CatalogLengthTokenParseException(raw, $"Unknown option '{key}' (only 'max' is supported)");
-            if (!int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
-                throw new CatalogLengthTokenParseException(raw, $"max='{val}' must be a bare positive integer (inches)");
-            if (n <= 0)
-                throw new CatalogLengthTokenParseException(raw, "max must be greater than zero");
+
+            if (string.Equals(key, "max", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
+                    throw new CatalogLengthTokenParseException(raw, $"max='{val}' must be a bare positive integer (inches)");
+                if (n <= 0)
+                    throw new CatalogLengthTokenParseException(raw, "max must be greater than zero");
+                sawMax = true;
+            }
+            else if (string.Equals(key, "sizes", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(val))
+                    throw new CatalogLengthTokenParseException(raw, "sizes must list at least one positive integer (e.g. sizes=96|48)");
+                var seen = new HashSet<int>();
+                foreach (var s in val.Split('|'))
+                {
+                    if (!int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sn))
+                        throw new CatalogLengthTokenParseException(raw, $"sizes entry '{s.Trim()}' must be a positive integer (inches)");
+                    if (sn <= 0)
+                        throw new CatalogLengthTokenParseException(raw, "sizes entries must be greater than zero");
+                    if (!seen.Add(sn))
+                        throw new CatalogLengthTokenParseException(raw, $"sizes entry '{sn}' is duplicated");
+                }
+                sawSizes = true;
+            }
+            else
+            {
+                throw new CatalogLengthTokenParseException(raw, $"Unknown option '{key}' (supported: max, sizes)");
+            }
         }
+
+        if (sawMax && sawSizes)
+            throw new CatalogLengthTokenParseException(raw, "max and sizes cannot both be set on the same token (made-to-length vs. discrete stock are different modes)");
     }
 
     /// <summary>
@@ -109,6 +143,33 @@ public static class CatalogLengthTokenResolver
     }
 
     /// <summary>
+    /// Reads the first token's sizes= list (descending), or null if absent. Caller must have
+    /// already validated the template.
+    /// </summary>
+    public static IReadOnlyList<int>? ParseSizes(string? template)
+    {
+        if (string.IsNullOrEmpty(template)) return null;
+        var m = TokenRegex.Match(template);
+        if (!m.Success || !m.Groups["opts"].Success) return null;
+        foreach (var part in m.Groups["opts"].Value.Split(','))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length != 2) continue;
+            if (!string.Equals(kv[0].Trim(), "sizes", StringComparison.OrdinalIgnoreCase)) continue;
+            var list = new List<int>();
+            foreach (var s in kv[1].Split('|'))
+            {
+                if (int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sn) && sn > 0)
+                    list.Add(sn);
+            }
+            if (list.Count == 0) return null;
+            list.Sort((a, b) => b.CompareTo(a));
+            return list;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Replaces every <c>{L:...}</c> token in <paramref name="template"/> with the rendered
     /// length for <paramref name="inches"/>. All token instances share the same length —
     /// the cut size, not the original instance size.
@@ -124,16 +185,30 @@ public static class CatalogLengthTokenResolver
 
     private static string Render(string format, int inches)
     {
-        if (string.Equals(format, "in", StringComparison.OrdinalIgnoreCase))
-            return $"{inches}\"";
-        if (string.Equals(format, "ft-in", StringComparison.OrdinalIgnoreCase))
+        // Case-sensitive: lowercase forms emit ASCII unit marks; uppercase forms emit
+        // literal letters (vendor ordering grids that reject quotes).
+        switch (format)
         {
-            int feet = inches / 12;
-            int rem = inches % 12;
-            return $"{feet}'-{rem}\"";
+            case "in":
+                return $"{inches}\"";
+            case "IN":
+                return $"{inches}IN";
+            case "ft-in":
+            {
+                int feet = inches / 12;
+                int rem = inches % 12;
+                return $"{feet}'-{rem}\"";
+            }
+            case "FT-IN":
+            {
+                int feet = inches / 12;
+                int rem = inches % 12;
+                return $"{feet}FT-{rem}IN";
+            }
+            default:
+                // Validate guards against this branch.
+                return inches.ToString(CultureInfo.InvariantCulture);
         }
-        // Validate guards against this branch.
-        return inches.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -156,6 +231,76 @@ public static class CatalogLengthTokenResolver
     }
 
     /// <summary>
+    /// Cover an instance length with discrete stock sticks. Priority:
+    ///   (1) zero-waste exact fit if reachable;
+    ///   (2) else fewest pieces among covering sums (s ≥ L);
+    ///   (3) tie-break on least overage (smallest s).
+    /// L=192, sizes=[94,48] → [48,48,48,48] (exact, beats 1×48 + 2×94 = 236 even though that's 3 pcs).
+    /// L=264, sizes=[94,48] → [94,94,94] (3 pcs, +24); 264 unreachable exactly.
+    /// L=200, sizes=[94,48] → [94,48,48,48]? No — 1×48+2×94 = 236 (3 pcs, +36) beats 5×48 = 240 (5 pcs).
+    /// </summary>
+    public static IEnumerable<int> CoverInstance(int instanceInches, IReadOnlyList<int> sizes)
+    {
+        if (instanceInches <= 0 || sizes.Count == 0) yield break;
+
+        // Unbounded-knapsack DP over [0, L + maxSize]: best[s] = min pieces to reach EXACTLY s
+        // using sizes (multiset). Then apply the three-tier priority below.
+        int maxSize = sizes[0]; // ParseSizes sorts desc
+        int cap = instanceInches + maxSize;
+        const int INF = int.MaxValue / 2;
+        var best = new int[cap + 1];
+        var pickFrom = new int[cap + 1]; // index into sizes for backtrace
+        for (int i = 1; i <= cap; i++) best[i] = INF;
+        for (int s = 1; s <= cap; s++)
+        {
+            for (int i = 0; i < sizes.Count; i++)
+            {
+                int sz = sizes[i];
+                if (sz > s) continue;
+                int prev = best[s - sz];
+                if (prev == INF) continue;
+                if (prev + 1 < best[s])
+                {
+                    best[s] = prev + 1;
+                    pickFrom[s] = i;
+                }
+            }
+        }
+
+        int chosen;
+        if (best[instanceInches] < INF)
+        {
+            // Tier 1: zero-waste exact fit. Always preferred even when it costs more pieces
+            // than a non-exact cover (designers care about material when an exact option exists).
+            chosen = instanceInches;
+        }
+        else
+        {
+            // Tiers 2 & 3: fewest pieces; tie-break on smallest s (least overage).
+            chosen = -1;
+            int chosenPieces = INF;
+            for (int s = instanceInches; s <= cap; s++)
+            {
+                if (best[s] < chosenPieces)
+                {
+                    chosenPieces = best[s];
+                    chosen = s;
+                }
+            }
+            if (chosen < 0) yield break; // unreachable when sizes is non-empty
+        }
+
+        // Walk back and emit. Order doesn't matter for the caller (pooled into a dict).
+        int cur = chosen;
+        while (cur > 0)
+        {
+            int sz = sizes[pickFrom[cur]];
+            yield return sz;
+            cur -= sz;
+        }
+    }
+
+    /// <summary>
     /// Single source of truth for slot expansion. Yields (ResolvedSku, Qty) pairs sorted
     /// by length ascending for token templates, or one (template, fixture.Count) pair for
     /// untokenized templates. Blank templates yield nothing.
@@ -171,13 +316,17 @@ public static class CatalogLengthTokenResolver
             yield break;
         }
 
-        int? max = ParseMaxInches(template);
+        var sizes = ParseSizes(template);
+        int? max = sizes is null ? ParseMaxInches(template) : null;
         var pooled = new Dictionary<int, int>();
         foreach (var kv in fixture.LinearLengthBuckets)
         {
             int instanceInches = kv.Key;
             int instanceCount = kv.Value;
-            foreach (int cut in SplitInstance(instanceInches, max))
+            var pieces = sizes is null
+                ? SplitInstance(instanceInches, max)
+                : CoverInstance(instanceInches, sizes);
+            foreach (int cut in pieces)
             {
                 pooled.TryGetValue(cut, out var n);
                 pooled[cut] = n + instanceCount;
@@ -186,6 +335,45 @@ public static class CatalogLengthTokenResolver
 
         foreach (var kv in pooled.OrderBy(p => p.Key))
             yield return (Resolve(template, kv.Key), kv.Value);
+    }
+}
+
+/// <summary>
+/// Per-slot length math summary used by the hidden Waste sheet. Mode is "" when the slot has
+/// no length token; "sizes"/"max"/"plain" otherwise. Only the sizes mode can produce waste &gt; 0.
+/// </summary>
+public sealed record SlotWasteStats(string Mode, int InstanceCount, int UsedInches, int SuppliedInches)
+{
+    public int WasteInches => SuppliedInches - UsedInches;
+}
+
+public static class CatalogWasteAnalyzer
+{
+    public static SlotWasteStats ComputeSlotWaste(CountsFixtureModel fixture, int slotIndex)
+    {
+        string template = fixture.CatalogNumbers[slotIndex] ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(template) || !CatalogLengthTokenResolver.HasToken(template))
+            return new SlotWasteStats(string.Empty, 0, 0, 0);
+
+        var sizes = CatalogLengthTokenResolver.ParseSizes(template);
+        int? max = sizes is null ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
+        string mode = sizes is not null ? "sizes" : (max.HasValue ? "max" : "plain");
+
+        int instCount = 0, used = 0, supplied = 0;
+        foreach (var kv in fixture.LinearLengthBuckets)
+        {
+            int L = kv.Key, N = kv.Value;
+            if (L <= 0) continue;
+            instCount += N;
+            used += L * N;
+            int suppliedForThis = 0;
+            var pieces = sizes is null
+                ? CatalogLengthTokenResolver.SplitInstance(L, max)
+                : CatalogLengthTokenResolver.CoverInstance(L, sizes);
+            foreach (int p in pieces) suppliedForThis += p;
+            supplied += suppliedForThis * N;
+        }
+        return new SlotWasteStats(mode, instCount, used, supplied);
     }
 }
 
