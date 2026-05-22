@@ -88,14 +88,29 @@ public class LoadsViewModel : ViewModelBase
 
     private List<LoadsCircuitModel> GetSortedCircuits()
     {
-        IEnumerable<LoadsCircuitModel> ordered = SelectedSortColumn switch
+        // Pin <...> placeholders to the bottom regardless of direction, matching the XAML grid.
+        var primary = Circuits.OrderBy(c => c.CircuitNumber == "<...>" ? 1 : 0);
+
+        IOrderedEnumerable<LoadsCircuitModel> ordered = SelectedSortColumn switch
         {
-            "LoadName" when SortDescending => Circuits.OrderByDescending(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
-            "LoadName" => Circuits.OrderBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
-            "TotalWatts" when SortDescending => Circuits.OrderByDescending(c => c.ApparentLoadVA),
-            "TotalWatts" => Circuits.OrderBy(c => c.ApparentLoadVA),
-            _ when SortDescending => Circuits.OrderByDescending(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
-            _ => Circuits.OrderBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
+            "LoadName" when SortDescending => primary
+                .ThenByDescending(c => c.LoadName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
+            "LoadName" => primary
+                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
+            "TotalWatts" when SortDescending => primary
+                .ThenByDescending(c => c.ApparentLoadVA)
+                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
+            "TotalWatts" => primary
+                .ThenBy(c => c.ApparentLoadVA)
+                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
+            _ when SortDescending => primary
+                .ThenByDescending(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
+            _ => primary
+                .ThenBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
         };
         return ordered.ToList();
     }
