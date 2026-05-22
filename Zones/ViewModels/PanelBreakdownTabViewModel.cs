@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Threading;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
 using TurboSuite.Shared.ViewModels;
@@ -27,14 +28,25 @@ namespace TurboSuite.Zones.ViewModels
         private readonly int _hybridRepeaterCount;
         private readonly string _hybridRepeaterPartNumber;
         private readonly Document _doc;
+        private readonly ExternalEvent _externalEvent;
+        private readonly RevitApiRequestHandler _handler;
         private BrandConfig _currentBrand;
         private ObservableCollection<ZonesCircuitData> _unassignedCircuits;
 
+        // Coalesce concurrent SaveSettings raises so we never lose user changes to a dropped event.
+        // _savePending = a SavePanelSettingsRequest is in flight on the Revit side.
+        // _saveDirty   = additional changes arrived during that flight; re-raise on completion.
+        private bool _savePending;
+        private bool _saveDirty;
+
         public PanelBreakdownTabViewModel(Document doc, List<ZonesCircuitData> circuits,
-            int keypadCount = 0, int twoGangKeypadCount = 0,
-            int hybridRepeaterCount = 0, string hybridRepeaterPartNumber = null)
+            int keypadCount, int twoGangKeypadCount,
+            int hybridRepeaterCount, string hybridRepeaterPartNumber,
+            ExternalEvent externalEvent, RevitApiRequestHandler handler)
         {
             _doc = doc;
+            _externalEvent = externalEvent;
+            _handler = handler;
             _keypadCount = keypadCount;
             _twoGangKeypadCount = twoGangKeypadCount;
             _hybridRepeaterCount = hybridRepeaterCount;
@@ -184,7 +196,7 @@ namespace TurboSuite.Zones.ViewModels
             BuildPanelBreakdown();
         }
 
-        private void SaveSettings()
+        private PanelSettings BuildSettingsSnapshot()
         {
             var settings = new PanelSettings
             {
@@ -216,7 +228,46 @@ namespace TurboSuite.Zones.ViewModels
             foreach (var kvp in _panelSizeOverrides)
                 settings.PanelSizeOverrides[kvp.Key] = kvp.Value;
 
-            ZonesPanelSettingsStorageService.Save(_doc, settings);
+            return settings;
+        }
+
+        private void SaveSettings()
+        {
+            // Coalesce: if a save is already in flight, mark dirty and let the completion
+            // callback re-raise with a fresh snapshot. Without this, ExternalEvent.Raise()
+            // silently drops the second raise per CLAUDE.md, losing user changes (e.g. rapid
+            // ComboBox toggles).
+            if (_savePending)
+            {
+                _saveDirty = true;
+                return;
+            }
+
+            RaiseSaveSettings();
+        }
+
+        private void RaiseSaveSettings()
+        {
+            _savePending = true;
+            _saveDirty = false;
+
+            _handler.CurrentRequest = new SavePanelSettingsRequest
+            {
+                Settings = BuildSettingsSnapshot(),
+                OnComplete = _ =>
+                {
+                    if (_saveDirty)
+                    {
+                        // User changed something while the save was in flight — chain another.
+                        RaiseSaveSettings();
+                    }
+                    else
+                    {
+                        _savePending = false;
+                    }
+                }
+            };
+            _externalEvent.Raise();
         }
 
         private void AttachPanelHandlers()

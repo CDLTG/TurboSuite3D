@@ -7,6 +7,7 @@ using System.Windows.Data;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using TurboSuite.Zones.ViewModels;
 
 namespace TurboSuite.Zones.Views
 {
@@ -30,8 +31,18 @@ namespace TurboSuite.Zones.Views
 
         private void LoadNamesGrid_CurrentCellChanged(object sender, EventArgs e)
         {
-            if (sender is DataGrid grid)
-                grid.BeginEdit();
+            if (sender is not DataGrid grid) return;
+
+            grid.BeginEdit();
+
+            // Mirror the current cell's row into the VM so "Select in Project" knows which
+            // circuit to target. Cell-selection mode lets us preserve in-cell editing on the
+            // other columns, so we sync from CurrentCell rather than binding SelectedItem.
+            if (DataContext is ZonesMainViewModel vm
+                && grid.CurrentCell.Item is ZonesCircuitViewModel row)
+            {
+                vm.LoadNameTab.SelectedRow = row;
+            }
         }
 
         private void LoadNamesGrid_PreviewKeyDown(object sender, KeyEventArgs e)

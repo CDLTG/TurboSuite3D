@@ -1,6 +1,6 @@
 # TurboZones
 
-Two-tab utility for managing circuit load names and visualizing dimmer panel allocation.
+Two-tab modeless utility for managing circuit load names and visualizing dimmer panel allocation. The window stays open while you work in Revit — pan, zoom, select, and run other commands without closing it. All Revit writes go through an `IExternalEventHandler` (see CLAUDE.md "Modeless pattern").
 
 ## Tab 1 — Load Names
 
@@ -10,7 +10,7 @@ Scans every circuit connected to Lighting or Electrical Fixtures and resolves a 
 2. Fixture Comments (joined, deduplicated)
 3. Load Classification full name (fallback)
 
-The resolved label is combined with the room name of the first fixture: `ROOM NAME - label`. Review the proposed updates in the table, then click **Apply** to write all changes in a single transaction.
+The resolved label is combined with the room name of the first fixture: `ROOM NAME - label`. Review the proposed updates in the table, then click **Apply Load Names** to write all changes in a single transaction. Click any row to mark it active (blue left-edge stripe), then click **Select in Project** to highlight and zoom to that circuit in Revit's active view without closing the window.
 
 ## Tab 2 — Panel Breakdown
 

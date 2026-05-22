@@ -11,16 +11,25 @@ using TurboSuite.Zones.Views;
 namespace TurboSuite.Zones
 {
     /// <summary>
-    /// TurboZones — opens a windowed UI for managing circuit load names and visualizing dimmer-panel
-    /// load distribution. Writes are scoped to circuit <c>Load Name</c> parameters via a single transaction.
+    /// TurboZones — modeless window for managing circuit load names and visualizing dimmer-panel
+    /// load distribution. All Revit writes go through <see cref="IExternalEventHandler"/>; see
+    /// CLAUDE.md "Modeless pattern".
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     public class ZonesCommand : IExternalCommand
     {
+        private static TurboZonesWindow _activeWindow;
+
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             try
             {
+                if (_activeWindow != null)
+                {
+                    _activeWindow.Activate();
+                    return Result.Succeeded;
+                }
+
                 UIDocument uidoc = commandData.Application.ActiveUIDocument;
                 Document doc = uidoc?.Document;
 
@@ -49,8 +58,13 @@ namespace TurboSuite.Zones
 
                 var (keypadCount, twoGangKeypadCount) = collectorService.GetKeypadCounts(doc);
                 var (hybridRepeaterCount, hybridRepeaterPartNumber) = collectorService.GetHybridRepeaterInfo(doc);
+
+                var handler = new RevitApiRequestHandler(doc, uidoc, new LoadNameService());
+                var externalEvent = ExternalEvent.Create(handler);
+
                 var viewModel = new ZonesMainViewModel(doc, circuits,
-                    keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber);
+                    keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
+                    externalEvent, handler);
 
                 var window = new TurboZonesWindow
                 {
@@ -58,9 +72,16 @@ namespace TurboSuite.Zones
                 };
 
                 var revitHandle = commandData.Application.MainWindowHandle;
-                var helper = new WindowInteropHelper(window) { Owner = revitHandle };
+                new WindowInteropHelper(window) { Owner = revitHandle };
 
-                window.ShowDialog();
+                window.Closed += (s, e) =>
+                {
+                    _activeWindow = null;
+                    externalEvent.Dispose();
+                };
+
+                _activeWindow = window;
+                window.Show();
 
                 return Result.Succeeded;
             }

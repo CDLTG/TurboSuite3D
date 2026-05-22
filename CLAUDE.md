@@ -120,7 +120,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Bubble` | TurboBubble — switchleg tags and wires |
 | `TurboSuite.Tag` | TurboTag — auto-places lighting fixture type tags |
 | `TurboSuite.Wire` | TurboWire — circuit creation and wire routing |
-| `TurboSuite.Zones` | TurboZones — load names and panel breakdown (MVVM) |
+| `TurboSuite.Zones` | TurboZones — load names and panel breakdown (MVVM, modeless) |
 | `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless) |
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
 | `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, control BOM PDF, load schedule PDF, panel schedule PDF, and cover/notes PDF (MVVM) |
@@ -154,7 +154,7 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 ### WPF Patterns
 
 - Modal `ShowDialog()` blocks Revit UI. Pattern: store target view on ViewModel, close dialog, call `uidoc.RequestViewChange(view)` after return.
-- **Modeless pattern** (TurboNumber): `window.Show()` with `IExternalEventHandler` for all Revit API calls. ViewModels queue typed `RevitApiRequest` objects, call `ExternalEvent.Raise()`, and receive results via completion callbacks dispatched to the WPF thread. Chain sequential requests in callbacks — never raise two events simultaneously (second is silently dropped).
+- **Modeless pattern** (TurboNumber, TurboZones): `window.Show()` with `IExternalEventHandler` for all Revit API calls. ViewModels queue typed `RevitApiRequest` objects, call `ExternalEvent.Raise()`, and receive results via completion callbacks dispatched to the WPF thread. Chain sequential requests in callbacks — never raise two events simultaneously (second is silently dropped). For auto-save sites that fire on many UI events (e.g. TurboZones panel breakdown), coalesce raises via a `_savePending`/`_saveDirty` pair and re-raise from the completion callback when dirty, so the latest snapshot always lands.
 - `DataGrid.SelectedItems` cannot be bound in XAML. Use code-behind `SelectionChanged` handler. Do not set `SelectedRow` from within `SetSelectedRows` — causes feedback loop clearing multi-selection.
 - **TurboTab**: Walks Revit's AvalonDock visual tree via `MainWindowHandle` to color document tabs. Caches original `TabItem.Style` before modification and restores on toggle-off — never use `ClearValue(StyleProperty)`.
 

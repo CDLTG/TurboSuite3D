@@ -121,6 +121,22 @@
                               CurrentCellChanged="LoadNamesGrid_CurrentCellChanged"
                               PreviewKeyDown="LoadNamesGrid_PreviewKeyDown"
                               Margin="4,6,4,4">
+                        <DataGrid.RowStyle>
+                            <!-- Active-row accent: 4px left stripe so the user can see which
+                                 circuit "Select in Project" will target without breaking
+                                 cell-level selection used for in-place editing. The border
+                                 is always present (transparent) so toggling the color does
+                                 not resize rows and trigger a horizontal scrollbar. -->
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="BorderThickness" Value="4,0,0,0"/>
+                                <Setter Property="BorderBrush" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsActiveRow}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource HeaderBlueBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
                         <DataGrid.Columns>
                             <!-- Source zone: read-only reference data -->
                             <DataGridTextColumn Header="Room" Binding="{Binding RoomName}" Width="90" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
@@ -143,6 +159,11 @@
                             <Button Content="Apply Load Names"
                                     Command="{Binding LoadNameTab.ApplyCommand}"
                                     Style="{StaticResource RevitButtonStyle}" Height="28"
+                                    DockPanel.Dock="Right"/>
+                            <Button Content="Select in Project"
+                                    Command="{Binding LoadNameTab.SelectInProjectCommand}"
+                                    Style="{StaticResource RevitButtonStyle}" Height="28"
+                                    Margin="0,0,6,0"
                                     DockPanel.Dock="Right"/>
                             <TextBlock VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}">

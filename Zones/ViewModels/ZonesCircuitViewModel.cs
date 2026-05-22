@@ -9,6 +9,7 @@ namespace TurboSuite.Zones.ViewModels
     {
         private readonly ZonesCircuitData _data;
         private string _currentLoadName;
+        private bool _isActiveRow;
 
         public ZonesCircuitViewModel(ZonesCircuitData data)
         {
@@ -30,6 +31,12 @@ namespace TurboSuite.Zones.ViewModels
         {
             get => _currentLoadName;
             set => SetProperty(ref _currentLoadName, value);
+        }
+
+        public bool IsActiveRow
+        {
+            get => _isActiveRow;
+            set => SetProperty(ref _isActiveRow, value);
         }
 
         public string RoomOverride
