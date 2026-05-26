@@ -387,11 +387,15 @@ public static class SchedulePdfService
         gfx?.Dispose();
         gfx = null;
 
-        // Footer + page numbers on every page
-        for (int i = 0; i < pdf.PageCount; i++)
+        // Footer + page numbers on every page. Suppressed for the 8.5x28.5 construction
+        // strip — the strip is a field reference, not a deliverable, so it gets no footer.
+        if (!useLargeFormat)
         {
-            using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
-            DrawFooter(g, pageWidth, pageHeight, settings, fontPageNum, i + 1, pdf.PageCount);
+            for (int i = 0; i < pdf.PageCount; i++)
+            {
+                using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
+                DrawFooter(g, pageWidth, pageHeight, settings, fontPageNum, i + 1, pdf.PageCount);
+            }
         }
 
         pdf.Save(outputPath);

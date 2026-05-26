@@ -104,22 +104,10 @@ public static class RPSCollectorService
             }
         }
 
-        // Sort schedule items by TypeMark
-        scheduleItems.Sort((a, b) => string.Compare(a.TypeMark, b.TypeMark, StringComparison.OrdinalIgnoreCase));
-
-        // Sort instances by SwitchID (numeric-aware)
-        instances.Sort((a, b) =>
-        {
-            bool aNum = int.TryParse(a.SwitchID, out int aVal);
-            bool bNum = int.TryParse(b.SwitchID, out int bVal);
-            if (aNum && bNum) return aVal.CompareTo(bVal);
-            if (aNum) return -1;
-            if (bNum) return 1;
-            return string.Compare(a.SwitchID, b.SwitchID, StringComparison.OrdinalIgnoreCase);
-        });
-
-        // Sort cut sheets by TypeMark
-        cutSheetItems.Sort((a, b) => string.Compare(a.TypeMark, b.TypeMark, StringComparison.OrdinalIgnoreCase));
+        // Natural sort so RPS-2 sorts before RPS-10 and X09 sorts before X100.
+        scheduleItems.Sort((a, b) => NaturalStringComparer.OrdinalIgnoreCase.Compare(a.TypeMark, b.TypeMark));
+        instances.Sort((a, b) => NaturalStringComparer.OrdinalIgnoreCase.Compare(a.SwitchID, b.SwitchID));
+        cutSheetItems.Sort((a, b) => NaturalStringComparer.OrdinalIgnoreCase.Compare(a.TypeMark, b.TypeMark));
 
         return (scheduleItems, instances, cutSheetItems);
     }

@@ -1379,6 +1379,9 @@ public static class CountsWorkbookService
             ws.Cell(1, CsColSellEa1 + s).Value = $"_SellEa{s + 1}";
         ws.Cell(1, CsColTariffPct).Value = "_TariffPct";
 
+        ws.SheetView.FreezeRows(1);
+        ws.SheetView.FreezeColumns(1);
+
         // For per-slot SellEa freeze: resolve catalog Unit Cost via the canonical (master) row
         // for each catalog. Worksheet stores the literal J on the first occurrence of a catalog
         // and emits dependent formulas (`=IF(J<canon>="","dependent",J<canon>)`) on later
@@ -3140,6 +3143,9 @@ public static class CountsWorkbookService
         ws.Column(4).Width = 30;
         ws.Column(5).Width = 30;
         ws.Column(ChangesBatchMarkerCol).Hide();
+
+        ws.SheetView.FreezeRows(1);
+        ws.SheetView.FreezeColumns(1);
 
         ApplyStandardPageSetup(ws);
     }
