@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Release Status
+
+**v1.0.0 deployed 2026-05-26** to ~5 users at CDLTG. Future work ships via the network-share auto-update channel — assume every change reaches production users on their next Revit launch. Breaking changes to ExtensibleStorage schemas, parameter names, or settings shapes require a coordinated rollout (see "ExtensibleStorage Schema Changes" below).
+
 ## Project Overview
 
 TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. It consolidates eleven shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog into a single `TurboSuite.dll` targeting .NET 8.0-windows. The add-in implements `IExternalApplication` to register three ribbon panels (Settings, Commands, Utilities) with twelve `IExternalCommand` buttons. A twelfth command (TurboMask) is compiled into the assembly but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs` — enabling the flag exposes a thirteenth button.

@@ -16,8 +16,9 @@ namespace TurboSuite.App;
 public class TurboSuiteApplication : IExternalApplication
 {
     // Gates experimental commands (e.g., TurboMask) so they ship compiled but unreachable
-    // until post-v1.0.0. Flip to true after the v1.0.0 release ships.
-    private const bool ExperimentalCommandsEnabled = false;
+    // until they're ready. `static readonly` (not `const`) so the compiler doesn't flag the
+    // gated branch as unreachable (CS0162).
+    private static readonly bool ExperimentalCommandsEnabled = false;
 
     private static bool _updateAccepted;
 
