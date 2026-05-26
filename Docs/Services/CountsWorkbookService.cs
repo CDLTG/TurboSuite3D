@@ -1601,7 +1601,7 @@ public static class CountsWorkbookService
                 bool isExpanded = CatalogLengthTokenResolver.HasToken(template);
 
                 // ExpandSlot yields one (sku, qty) pair for plain templates, or one pair
-                // per unique cut length for {L:...} tokens. catalogFirstRow is keyed by the
+                // per unique cut length for length tokens. catalogFirstRow is keyed by the
                 // resolved SKU so each cut length owns its own pricing canonical row.
                 foreach (var (resolvedSku, expandedQty) in CatalogLengthTokenResolver.ExpandSlot(f, c))
                 {

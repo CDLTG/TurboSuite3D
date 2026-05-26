@@ -9,9 +9,9 @@ using TurboSuite.Docs.Models;
 namespace TurboSuite.Docs.Services;
 
 /// <summary>
-/// Grammar: <c>{L:&lt;format&gt;[,&lt;option&gt;]}</c>.
-/// Formats (case-sensitive): <c>in</c> → <c>{inches}"</c>; <c>IN</c> → <c>{inches}IN</c>;
-/// <c>ft-in</c> → <c>{feet}'-{inches}"</c>; <c>FT-IN</c> → <c>{feet}FT-{inches}IN</c>.
+/// Grammar: <c>{&lt;format&gt;[,&lt;option&gt;]}</c>.
+/// Formats (case-sensitive): <c>xx</c> → <c>{inches}"</c>; <c>XX</c> → <c>{inches}IN</c>;
+/// <c>x-x</c> → <c>{feet}'-{inches}"</c>; <c>X-X</c> → <c>{feet}FT-{inches}IN</c>.
 /// Options (mutually exclusive):
 ///   <c>max=N</c> — made-to-length: greedy-splits each instance into N-sized cuts plus one remainder.
 ///   <c>sizes=N1|N2|...</c> — discrete stock sizes (e.g. 96|48): covers each instance with the
@@ -20,20 +20,18 @@ namespace TurboSuite.Docs.Services;
 /// </summary>
 public static class CatalogLengthTokenResolver
 {
-    // {L:<format>[,max=<int>]} — captures format and optional max integer. Format is
-    // case-sensitive: "in"/"ft-in" emit ASCII unit marks (", '-"); "IN"/"FT-IN" emit
-    // literal letters (IN, FT-IN) for vendors whose ordering grids reject quote marks.
-    // The token grammar is intentionally narrow; anything not matching this fails Validate.
+    // {xx}, {XX}, {x-x}, {X-X} with optional comma-separated options.
+    // Lowercase tokens emit ASCII unit marks (", '-"); uppercase emit literal letters (IN, FT-IN).
     private static readonly Regex TokenRegex = new(
-        @"\{L:(?<fmt>[A-Za-z][A-Za-z\-]*)(?:,(?<opts>[^}]*))?\}",
+        @"\{(?<fmt>xx|XX|x-x|X-X)(?:,(?<opts>[^}]*))?\}",
         RegexOptions.Compiled);
 
     private static readonly HashSet<string> KnownFormats = new(StringComparer.Ordinal)
     {
-        "in",
-        "IN",
-        "ft-in",
-        "FT-IN",
+        "xx",
+        "XX",
+        "x-x",
+        "X-X",
     };
 
     public sealed record ParsedToken(string Format, int? MaxInches, string Raw, int Index, int Length);
@@ -41,29 +39,32 @@ public static class CatalogLengthTokenResolver
     public static bool HasToken(string? catalogNumber)
     {
         if (string.IsNullOrEmpty(catalogNumber)) return false;
-        // Cheap pre-filter — only invoke the regex when "{L:" is present.
-        return catalogNumber.Contains("{L:", StringComparison.Ordinal)
-            && TokenRegex.IsMatch(catalogNumber);
+        return catalogNumber.Contains("{x", StringComparison.Ordinal)
+            || catalogNumber.Contains("{X", StringComparison.Ordinal)
+            ? TokenRegex.IsMatch(catalogNumber)
+            : false;
     }
 
     /// <summary>
-    /// Validates every <c>{L:...}</c> token in <paramref name="catalogNumber"/>.
+    /// Validates every length token in <paramref name="catalogNumber"/>.
     /// Throws <see cref="CatalogLengthTokenParseException"/> on the first failure.
     /// </summary>
     public static void Validate(string? catalogNumber)
     {
         if (string.IsNullOrEmpty(catalogNumber)) return;
 
-        // Bare "{L" without a recognized token shape — catches "{L}" / "{Length}" /
-        // "{L:in" (missing close) before the regex silently ignores them.
         int cursor = 0;
         while (true)
         {
-            int idx = catalogNumber.IndexOf("{L", cursor, StringComparison.Ordinal);
+            int idx = -1;
+            int ix = catalogNumber.IndexOf("{x", cursor, StringComparison.Ordinal);
+            int iX = catalogNumber.IndexOf("{X", cursor, StringComparison.Ordinal);
+            if (ix >= 0 && (iX < 0 || ix <= iX)) idx = ix;
+            else if (iX >= 0) idx = iX;
             if (idx < 0) break;
             var m = TokenRegex.Match(catalogNumber, idx);
             if (!m.Success || m.Index != idx)
-                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected '{L:in}', '{L:IN}', '{L:ft-in}', '{L:FT-IN}', or with ',max=<int>')");
+                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected '{xx}', '{XX}', '{x-x}', '{X-X}', or with ',max=N' / ',sizes=N|N|...')");
             ValidateToken(catalogNumber, m);
             cursor = m.Index + m.Length;
         }
@@ -73,7 +74,7 @@ public static class CatalogLengthTokenResolver
     {
         string fmt = m.Groups["fmt"].Value;
         if (!KnownFormats.Contains(fmt))
-            throw new CatalogLengthTokenParseException(raw, $"Unknown length format '{fmt}' (supported: in, IN, ft-in, FT-IN — case-sensitive)");
+            throw new CatalogLengthTokenParseException(raw, $"Unknown length format '{fmt}' (supported: xx, XX, x-x, X-X — case-sensitive)");
 
         if (!m.Groups["opts"].Success) return;
 
@@ -170,7 +171,7 @@ public static class CatalogLengthTokenResolver
     }
 
     /// <summary>
-    /// Replaces every <c>{L:...}</c> token in <paramref name="template"/> with the rendered
+    /// Replaces every length token in <paramref name="template"/> with the rendered
     /// length for <paramref name="inches"/>. All token instances share the same length —
     /// the cut size, not the original instance size.
     /// </summary>
@@ -185,28 +186,25 @@ public static class CatalogLengthTokenResolver
 
     private static string Render(string format, int inches)
     {
-        // Case-sensitive: lowercase forms emit ASCII unit marks; uppercase forms emit
-        // literal letters (vendor ordering grids that reject quotes).
         switch (format)
         {
-            case "in":
+            case "xx":
                 return $"{inches}\"";
-            case "IN":
+            case "XX":
                 return $"{inches}IN";
-            case "ft-in":
+            case "x-x":
             {
                 int feet = inches / 12;
                 int rem = inches % 12;
                 return $"{feet}'-{rem}\"";
             }
-            case "FT-IN":
+            case "X-X":
             {
                 int feet = inches / 12;
                 int rem = inches % 12;
                 return $"{feet}FT-{rem}IN";
             }
             default:
-                // Validate guards against this branch.
                 return inches.ToString(CultureInfo.InvariantCulture);
         }
     }
@@ -416,7 +414,7 @@ public class CatalogLengthTokenValidationException : Exception
 public static class CatalogLengthTokenValidator
 {
     /// <summary>
-    /// Validates {L:...} tokens in every CatalogNumberX across all fixtures, plus the cross-checks:
+    /// Validates length tokens in every CatalogNumberX across all fixtures, plus the cross-checks:
     ///   - token present but the Type has no positive-Linear-Length instances → reject;
     ///   - token present in the same slot as a non-blank CatalogQtyX → reject (incoherent).
     /// </summary>

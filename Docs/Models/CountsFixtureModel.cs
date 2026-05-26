@@ -15,7 +15,7 @@ public class CountsFixtureModel
     public string[] Notes { get; set; } = new string[6];
 
     // Per-instance Linear Length pooled to rounded inches. Keyed inches → instance count.
-    // Used by Catalog NumberX {L:in} token expansion; LinearLength sum stays for the
+    // Used by Catalog NumberX {xx} token expansion; LinearLength sum stays for the
     // reel/channel Calc path.
     public Dictionary<int, int> LinearLengthBuckets { get; } = new();
 }
