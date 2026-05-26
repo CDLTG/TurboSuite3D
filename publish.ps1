@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds TurboSuite and publishes all deployment files to a network share,
     or rolls back the share to a previously published version.
