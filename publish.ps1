@@ -124,6 +124,25 @@ Write-Host "  Version:     $Version"
 Write-Host "  Destination: $ServerPath"
 Write-Host ""
 
+# Pre-flight: Verify CHANGELOG.md has an entry for this version
+$changelogPath = Join-Path $projectRoot "CHANGELOG.md"
+if (Test-Path $changelogPath) {
+    $changelogContent = Get-Content $changelogPath -Raw
+    if ($changelogContent -notmatch "\[$([regex]::Escape($Version))\]") {
+        Write-Host "WARNING: CHANGELOG.md has no entry for version $Version." -ForegroundColor Red
+        Write-Host "  Add a '## [$Version]' section before publishing." -ForegroundColor Red
+        $proceed = Read-Host "  Continue anyway? (y/N)"
+        if ($proceed -ne "y") {
+            Write-Host "Aborted. Update CHANGELOG.md and try again."
+            exit 1
+        }
+    } else {
+        Write-Host "  CHANGELOG.md entry found for $Version." -ForegroundColor DarkGray
+    }
+} else {
+    Write-Warning "CHANGELOG.md not found at $changelogPath — skipping changelog check."
+}
+
 # Step 1: Build solution in Release
 Write-Host "[1/7] Building solution in Release mode..." -ForegroundColor Yellow
 dotnet build $sln -c Release
