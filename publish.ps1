@@ -54,8 +54,8 @@ function Copy-ShareToArchive {
     param([string]$ArchiveName)
     $dest = Join-Path $archiveRoot $ArchiveName
     if (Test-Path $dest) {
-        Write-Error "Archive folder already exists: $dest. Aborting to avoid overwrite."
-        exit 1
+        Write-Host "  Archive already exists at $dest — skipping."
+        return
     }
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     Get-ChildItem -Path $ServerPath -File | ForEach-Object {
@@ -214,15 +214,23 @@ if (Test-Path $installerPublishDir) {
 
 # Step 6: Tag the git commit
 Write-Host "[6/7] Tagging git commit with v$Version..." -ForegroundColor Yellow
-git tag "v$Version"
-if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Git tag failed (tag may already exist). Skipping tag push."
+$gitExe = Get-Command git -ErrorAction SilentlyContinue
+if (-not $gitExe) {
+    $gitExe = Get-Command "C:\Program Files\Git\bin\git.exe" -ErrorAction SilentlyContinue
+}
+if (-not $gitExe) {
+    Write-Warning "git not found on PATH. Tag manually: git tag v$Version && git push origin v$Version"
 } else {
-    git push origin "v$Version"
+    & $gitExe.Source tag "v$Version"
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Failed to push tag to remote. You can push manually: git push origin v$Version"
+        Write-Warning "Git tag failed (tag may already exist). Skipping tag push."
     } else {
-        Write-Host "  Tagged and pushed v$Version"
+        & $gitExe.Source push origin "v$Version"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to push tag to remote. You can push manually: git push origin v$Version"
+        } else {
+            Write-Host "  Tagged and pushed v$Version"
+        }
     }
 }
 

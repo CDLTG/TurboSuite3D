@@ -3263,18 +3263,24 @@ public static class CountsWorkbookService
                 string template = f.CatalogNumbers[c] ?? "";
                 if (string.IsNullOrWhiteSpace(template)) continue;
                 bool isExpanded = CatalogLengthTokenResolver.HasToken(template);
-                int? maxInches = isExpanded ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
+                var stockSizes = isExpanded ? CatalogLengthTokenResolver.ParseSizes(template) : null;
+                int? maxInches = isExpanded && stockSizes is null ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
 
                 if (isExpanded)
                 {
                     // Re-derive (sku, qty, cutInches) so we can drive the in-slot sort by cut length.
                     var pooled = new Dictionary<int, int>();
                     foreach (var kv in f.LinearLengthBuckets)
-                        foreach (int cut in CatalogLengthTokenResolver.SplitInstance(kv.Key, maxInches))
+                    {
+                        var pieces = stockSizes is not null
+                            ? CatalogLengthTokenResolver.CoverInstance(kv.Key, stockSizes)
+                            : CatalogLengthTokenResolver.SplitInstance(kv.Key, maxInches);
+                        foreach (int cut in pieces)
                         {
                             pooled.TryGetValue(cut, out var n);
                             pooled[cut] = n + kv.Value;
                         }
+                    }
                     foreach (var kv in pooled.OrderBy(p => p.Key))
                     {
                         string sku = CatalogLengthTokenResolver.Resolve(template, kv.Key);

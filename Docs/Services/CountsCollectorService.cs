@@ -48,7 +48,7 @@ public static class CountsCollectorService
                 model.Count++;
 
                 // Sum Linear Length from instances. Bucket per-instance rounded inches for
-                // Catalog NumberX {xx} token expansion (zero-length instances skipped).
+                // Catalog NumberX length token expansion (zero-length instances skipped).
                 var llParam = fi.LookupParameter(ParameterNames.LinearLength);
                 if (llParam is { HasValue: true, StorageType: StorageType.Double })
                 {

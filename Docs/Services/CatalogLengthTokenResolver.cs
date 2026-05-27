@@ -10,8 +10,10 @@ namespace TurboSuite.Docs.Services;
 
 /// <summary>
 /// Grammar: <c>{&lt;format&gt;[,&lt;option&gt;]}</c>.
-/// Formats (case-sensitive): <c>xx</c> → <c>{inches}"</c>; <c>XX</c> → <c>{inches}IN</c>;
-/// <c>x-x</c> → <c>{feet}'-{inches}"</c>; <c>X-X</c> → <c>{feet}FT-{inches}IN</c>.
+/// Formats: <c>xx</c> → <c>48</c> (unitless inches); <c>xx"</c> → <c>48"</c>; <c>xxIN</c> → <c>48IN</c>;
+/// <c>ft</c> → <c>4</c> (unitless feet); <c>xx'</c> → <c>4'</c>; <c>xxFT</c> → <c>4FT</c>;
+/// <c>xx'-xx"</c> → <c>4'-0"</c>; <c>xxFT-xxIN</c> → <c>4FT-0IN</c>.
+/// Feet formats truncate (integer divide by 12).
 /// Options (mutually exclusive):
 ///   <c>max=N</c> — made-to-length: greedy-splits each instance into N-sized cuts plus one remainder.
 ///   <c>sizes=N1|N2|...</c> — discrete stock sizes (e.g. 96|48): covers each instance with the
@@ -20,18 +22,21 @@ namespace TurboSuite.Docs.Services;
 /// </summary>
 public static class CatalogLengthTokenResolver
 {
-    // {xx}, {XX}, {x-x}, {X-X} with optional comma-separated options.
-    // Lowercase tokens emit ASCII unit marks (", '-"); uppercase emit literal letters (IN, FT-IN).
+    // {xx}, {xx"}, {xxIN}, {ft}, {xx'}, {xxFT}, {xx'-xx"}, {xxFT-xxIN} with optional comma-separated options.
     private static readonly Regex TokenRegex = new(
-        @"\{(?<fmt>xx|XX|x-x|X-X)(?:,(?<opts>[^}]*))?\}",
+        @"\{(?<fmt>xx'-xx""|xxFT-xxIN|xx""|xxIN|xx'|xxFT|xx|ft)(?:,(?<opts>[^}]*))?\}",
         RegexOptions.Compiled);
 
     private static readonly HashSet<string> KnownFormats = new(StringComparer.Ordinal)
     {
         "xx",
-        "XX",
-        "x-x",
-        "X-X",
+        "xx\"",
+        "xxIN",
+        "ft",
+        "xx'",
+        "xxFT",
+        "xx'-xx\"",
+        "xxFT-xxIN",
     };
 
     public sealed record ParsedToken(string Format, int? MaxInches, string Raw, int Index, int Length);
@@ -39,10 +44,9 @@ public static class CatalogLengthTokenResolver
     public static bool HasToken(string? catalogNumber)
     {
         if (string.IsNullOrEmpty(catalogNumber)) return false;
-        return catalogNumber.Contains("{x", StringComparison.Ordinal)
-            || catalogNumber.Contains("{X", StringComparison.Ordinal)
-            ? TokenRegex.IsMatch(catalogNumber)
-            : false;
+        return (catalogNumber.Contains("{xx", StringComparison.Ordinal)
+            || catalogNumber.Contains("{ft", StringComparison.Ordinal))
+            && TokenRegex.IsMatch(catalogNumber);
     }
 
     /// <summary>
@@ -56,15 +60,15 @@ public static class CatalogLengthTokenResolver
         int cursor = 0;
         while (true)
         {
-            int idx = -1;
-            int ix = catalogNumber.IndexOf("{x", cursor, StringComparison.Ordinal);
-            int iX = catalogNumber.IndexOf("{X", cursor, StringComparison.Ordinal);
-            if (ix >= 0 && (iX < 0 || ix <= iX)) idx = ix;
-            else if (iX >= 0) idx = iX;
-            if (idx < 0) break;
+            int iXx = catalogNumber.IndexOf("{xx", cursor, StringComparison.Ordinal);
+            int iFt = catalogNumber.IndexOf("{ft", cursor, StringComparison.Ordinal);
+            int idx;
+            if (iXx >= 0 && (iFt < 0 || iXx <= iFt)) idx = iXx;
+            else if (iFt >= 0) idx = iFt;
+            else break;
             var m = TokenRegex.Match(catalogNumber, idx);
             if (!m.Success || m.Index != idx)
-                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected '{xx}', '{XX}', '{x-x}', '{X-X}', or with ',max=N' / ',sizes=N|N|...')");
+                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected {xx}, {xx\"}, {xxIN}, {ft}, {xx'}, {xxFT}, {xx'-xx\"}, {xxFT-xxIN}, optionally with ',max=N' / ',sizes=N|N|...')");
             ValidateToken(catalogNumber, m);
             cursor = m.Index + m.Length;
         }
@@ -74,7 +78,7 @@ public static class CatalogLengthTokenResolver
     {
         string fmt = m.Groups["fmt"].Value;
         if (!KnownFormats.Contains(fmt))
-            throw new CatalogLengthTokenParseException(raw, $"Unknown length format '{fmt}' (supported: xx, XX, x-x, X-X — case-sensitive)");
+            throw new CatalogLengthTokenParseException(raw, $"Unknown length format '{fmt}' (supported: xx, xx\", xxIN, ft, xx', xxFT, xx'-xx\", xxFT-xxIN)");
 
         if (!m.Groups["opts"].Success) return;
 
@@ -189,16 +193,24 @@ public static class CatalogLengthTokenResolver
         switch (format)
         {
             case "xx":
+                return inches.ToString(CultureInfo.InvariantCulture);
+            case "xx\"":
                 return $"{inches}\"";
-            case "XX":
+            case "xxIN":
                 return $"{inches}IN";
-            case "x-x":
+            case "ft":
+                return (inches / 12).ToString(CultureInfo.InvariantCulture);
+            case "xx'":
+                return $"{inches / 12}'";
+            case "xxFT":
+                return $"{inches / 12}FT";
+            case "xx'-xx\"":
             {
                 int feet = inches / 12;
                 int rem = inches % 12;
                 return $"{feet}'-{rem}\"";
             }
-            case "X-X":
+            case "xxFT-xxIN":
             {
                 int feet = inches / 12;
                 int rem = inches % 12;
