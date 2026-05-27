@@ -1540,6 +1540,7 @@ public static class CountsWorkbookService
         var ws = wb.Worksheets.Add("Worksheet");
         ws.TabColor = XLColor.FromHtml("#FFFACC75");
         ws.SheetView.FreezeRows(1);
+        ws.SheetView.FreezeColumns(1);
 
         // Headers
         ws.Cell(1, WsColType).Value = "Type";
@@ -4032,6 +4033,8 @@ public static class CountsWorkbookService
 
         if (batch.Count == 0)
             return;
+
+        batch.Sort((a, b) => NaturalStringComparer.OrdinalIgnoreCase.Compare(a.Type, b.Type));
 
         // Sheet is created on demand so it never appears with zero recorded changes.
         if (!wb.Worksheets.TryGetWorksheet("Changes", out var ws))
