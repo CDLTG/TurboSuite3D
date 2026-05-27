@@ -43,7 +43,7 @@ public class MaskCommand : IExternalCommand
                 .Where(e => e != null)
                 .ToList();
 
-            var fixtures = CollectLightingFixtures(selectedElements);
+            var fixtures = CollectFixtures(selectedElements);
 
             // EditFamily must run OUTSIDE any transaction — resolve stamps first.
             var stampService = new StampFamilyService(doc);
@@ -60,7 +60,11 @@ public class MaskCommand : IExternalCommand
                     fixtureToSymbol[fixture.Id] = symbol;
             }
 
-            var outerLoop = SelectionBoundsService.BuildOuterLoop(selectedElements, activeView);
+            var boundsElements = selectedElements
+                .Where(e => !IsOldStamp(e) && !IsOldMaskingRegion(e) && !IsTurboMaskGroup(e))
+                .ToList();
+
+            var outerLoop = SelectionBoundsService.BuildOuterLoop(boundsElements, activeView);
             if (outerLoop == null)
             {
                 TaskDialog.Show("TurboMask", "Selected elements have no usable bounds in this view.");
@@ -71,6 +75,8 @@ public class MaskCommand : IExternalCommand
             {
                 tx.Start();
 
+                UngroupSelectedTurboMaskGroups(doc, selectedElements);
+
                 var maskingRegionType = FindOrCreateMaskingRegionType(doc);
                 if (maskingRegionType == null)
                 {
@@ -80,12 +86,17 @@ public class MaskCommand : IExternalCommand
                     return Result.Cancelled;
                 }
 
+                DeleteExistingStamps(doc, activeView, fixtures);
+                DeleteExistingMaskingRegions(doc, activeView, fixtures, maskingRegionType.Id);
+
                 var region = FilledRegion.Create(doc, maskingRegionType.Id, activeView.Id,
                     new List<CurveLoop> { outerLoop });
 
                 var boundaryStyle = FindLightingFixturesLineStyle(doc);
                 if (boundaryStyle != null)
                     ApplyBoundaryLineStyle(doc, region, boundaryStyle);
+
+                var groupMemberIds = new List<ElementId> { region.Id };
 
                 foreach (var fixture in fixtures)
                 {
@@ -99,6 +110,7 @@ public class MaskCommand : IExternalCommand
                     if (insertPoint == null) continue;
 
                     var stampInstance = doc.Create.NewFamilyInstance(insertPoint, stampSymbol, activeView);
+                    groupMemberIds.Add(stampInstance.Id);
 
                     double angle = GeometryHelper.GetTransformAngle(fixture.GetTotalTransform());
                     if (Math.Abs(angle) > 1e-9)
@@ -106,6 +118,14 @@ public class MaskCommand : IExternalCommand
                         var axis = Line.CreateBound(insertPoint, insertPoint + XYZ.BasisZ * 10);
                         ElementTransformUtils.RotateElement(doc, stampInstance.Id, axis, angle);
                     }
+                }
+
+                RaiseTagsAboveStamps(doc, activeView, fixtures);
+
+                if (groupMemberIds.Count > 1)
+                {
+                    var group = doc.Create.NewGroup(groupMemberIds);
+                    group.GroupType.Name = NextTurboMaskGroupName(doc);
                 }
 
                 tx.Commit();
@@ -133,13 +153,74 @@ public class MaskCommand : IExternalCommand
         view.ViewType == ViewType.CeilingPlan ||
         view.ViewType == ViewType.DraftingView;
 
-    private static List<FamilyInstance> CollectLightingFixtures(IEnumerable<Element> elements)
+    private static readonly HashSet<ElementId> SupportedCategoryIds = new()
     {
-        var categoryId = new ElementId(BuiltInCategory.OST_LightingFixtures);
+        new ElementId(BuiltInCategory.OST_LightingFixtures),
+        new ElementId(BuiltInCategory.OST_LightingDevices),
+        new ElementId(BuiltInCategory.OST_ElectricalFixtures),
+        new ElementId(BuiltInCategory.OST_ElectricalEquipment),
+    };
+
+    private const string TurboMaskGroupPrefix = "TurboMask";
+
+    private static bool IsOldStamp(Element e) =>
+        e is FamilyInstance fi && fi.Symbol?.Family?.Name?.StartsWith("Stamp_") == true;
+
+    private static bool IsOldMaskingRegion(Element e) =>
+        e is FilledRegion fr &&
+        (e.Document.GetElement(fr.GetTypeId()) as FilledRegionType)?.Name == MaskRegionTypeName;
+
+    private static bool IsTurboMaskGroup(Element e) =>
+        e is Group g && g.GroupType?.Name?.StartsWith(TurboMaskGroupPrefix) == true;
+
+    private static void UngroupSelectedTurboMaskGroups(Document doc, List<Element> selectedElements)
+    {
+        var typeIdsToDelete = new List<ElementId>();
+        var memberStampIds = new List<ElementId>();
+
+        foreach (var element in selectedElements)
+        {
+            if (element is Group group && group.GroupType?.Name?.StartsWith(TurboMaskGroupPrefix) == true)
+            {
+                typeIdsToDelete.Add(group.GroupType.Id);
+                var memberIds = group.UngroupMembers();
+                foreach (var id in memberIds)
+                {
+                    if (doc.GetElement(id) is FamilyInstance fi
+                        && fi.Symbol?.Family?.Name?.StartsWith("Stamp_") == true)
+                        memberStampIds.Add(id);
+                }
+            }
+        }
+
+        if (memberStampIds.Count > 0)
+            doc.Delete(memberStampIds);
+        if (typeIdsToDelete.Count > 0)
+            doc.Delete(typeIdsToDelete);
+    }
+
+    private static string NextTurboMaskGroupName(Document doc)
+    {
+        var existingNames = new FilteredElementCollector(doc)
+            .OfClass(typeof(GroupType))
+            .Cast<GroupType>()
+            .Where(gt => gt.Name.StartsWith(TurboMaskGroupPrefix))
+            .Select(gt => gt.Name)
+            .ToHashSet();
+
+        int n = 1;
+        while (existingNames.Contains($"{TurboMaskGroupPrefix} {n}"))
+            n++;
+        return $"{TurboMaskGroupPrefix} {n}";
+    }
+
+    private static List<FamilyInstance> CollectFixtures(IEnumerable<Element> elements)
+    {
         var result = new List<FamilyInstance>();
         foreach (var element in elements)
         {
-            if (element is FamilyInstance fi && fi.Category?.Id == categoryId)
+            if (element is FamilyInstance fi && fi.Category?.Id is ElementId catId
+                && SupportedCategoryIds.Contains(catId))
                 result.Add(fi);
         }
         return result;
@@ -228,5 +309,80 @@ public class MaskCommand : IExternalCommand
         if (fixture.Location is LocationCurve lc && lc.Curve != null)
             return lc.Curve.Evaluate(0.5, true);
         return null;
+    }
+
+    private static void DeleteExistingMaskingRegions(
+        Document doc, View view, List<FamilyInstance> fixtures, ElementId maskingRegionTypeId)
+    {
+        var fixturePoints = new HashSet<XYZ>();
+        foreach (var fi in fixtures)
+        {
+            var pt = GetFixturePoint(fi);
+            if (pt != null)
+                fixturePoints.Add(pt);
+        }
+
+        var regionIds = new FilteredElementCollector(doc, view.Id)
+            .OfClass(typeof(FilledRegion))
+            .Cast<FilledRegion>()
+            .Where(r => r.GetTypeId() == maskingRegionTypeId)
+            .Where(r =>
+            {
+                var bbox = r.get_BoundingBox(view);
+                if (bbox == null) return false;
+                return fixturePoints.Any(pt =>
+                    pt.X >= bbox.Min.X && pt.X <= bbox.Max.X &&
+                    pt.Y >= bbox.Min.Y && pt.Y <= bbox.Max.Y);
+            })
+            .Select(r => r.Id)
+            .ToList();
+
+        if (regionIds.Count > 0)
+            doc.Delete(regionIds);
+    }
+
+    private static void DeleteExistingStamps(Document doc, View view, List<FamilyInstance> fixtures)
+    {
+        var fixturePoints = new Dictionary<XYZ, ElementId>();
+        foreach (var fi in fixtures)
+        {
+            var pt = GetFixturePoint(fi);
+            if (pt != null)
+                fixturePoints[pt] = fi.Id;
+        }
+
+        var stampIds = new FilteredElementCollector(doc, view.Id)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>()
+            .Where(fi => fi.Symbol?.Family?.Name?.StartsWith("Stamp_") == true
+                         && fi.Location is LocationPoint lp
+                         && fixturePoints.Keys.Any(fp => fp.DistanceTo(lp.Point) < 0.01))
+            .Select(fi => fi.Id)
+            .ToList();
+
+        if (stampIds.Count > 0)
+            doc.Delete(stampIds);
+    }
+
+    /// <summary>
+    /// Copy-in-place then delete originals — the copy lands at the top of the view's draw order,
+    /// preventing stamps from hiding existing tags on the masked fixtures.
+    /// </summary>
+    private static void RaiseTagsAboveStamps(Document doc, View view, List<FamilyInstance> fixtures)
+    {
+        var fixtureIds = new HashSet<ElementId>(fixtures.Select(f => f.Id));
+
+        var tagIds = new FilteredElementCollector(doc, view.Id)
+            .OfClass(typeof(IndependentTag))
+            .Cast<IndependentTag>()
+            .Where(tag => tag.GetTaggedLocalElementIds().Any(id => fixtureIds.Contains(id)))
+            .Select(tag => tag.Id)
+            .ToList();
+
+        if (tagIds.Count == 0) return;
+
+        var copyOpts = new CopyPasteOptions();
+        ElementTransformUtils.CopyElements(view, tagIds, view, Transform.Identity, copyOpts);
+        doc.Delete(tagIds);
     }
 }
