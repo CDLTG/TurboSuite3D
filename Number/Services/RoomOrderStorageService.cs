@@ -66,18 +66,27 @@ namespace TurboSuite.Number.Services
         private static DataStorage FindDataStorage(Document doc, Schema schema)
             => DataStorageHelper.FindDataStorage(doc, schema);
 
-        public static List<string> Load(Document doc)
+        public static List<(string Name, int ClickOrder)> Load(Document doc)
         {
             var schema = Schema.Lookup(SchemaGuid);
-            if (schema == null) return new List<string>();
+            if (schema == null) return new List<(string, int)>();
 
             var storage = FindDataStorage(doc, schema);
-            if (storage == null) return new List<string>();
+            if (storage == null) return new List<(string, int)>();
 
             var entity = storage.GetEntity(schema);
-            if (!entity.IsValid()) return new List<string>();
+            if (!entity.IsValid()) return new List<(string, int)>();
 
-            return entity.Get<IList<string>>(FieldName)?.ToList() ?? new List<string>();
+            var raw = entity.Get<IList<string>>(FieldName)?.ToList() ?? new List<string>();
+            return raw.Select(ParseEntry).ToList();
+        }
+
+        private static (string Name, int ClickOrder) ParseEntry(string entry)
+        {
+            int sep = entry.LastIndexOf('|');
+            if (sep >= 0 && int.TryParse(entry.Substring(sep + 1), out int order))
+                return (entry.Substring(0, sep), order);
+            return (entry, 0);
         }
 
         public static bool LoadSidebarVisible(Document doc)
@@ -94,9 +103,13 @@ namespace TurboSuite.Number.Services
             return entity.Get<bool>(SidebarFieldName);
         }
 
-        public static void Save(Document doc, List<string> roomOrder)
+        public static void Save(Document doc, List<(string Name, int ClickOrder)> roomOrder)
         {
             var schema = GetOrCreateSchema();
+
+            var encoded = roomOrder
+                .Select(r => r.ClickOrder > 0 ? $"{r.Name}|{r.ClickOrder}" : r.Name)
+                .ToList();
 
             using (var tx = new Transaction(doc, "TurboNumber - Save Room Order"))
             {
@@ -104,7 +117,7 @@ namespace TurboSuite.Number.Services
 
                 var storage = FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
                 var entity = new Entity(schema);
-                entity.Set(FieldName, (IList<string>)roomOrder);
+                entity.Set(FieldName, (IList<string>)encoded);
                 storage.SetEntity(entity);
 
                 tx.Commit();

@@ -126,6 +126,16 @@ namespace TurboSuite.Number.Views
             if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex)
                 return;
 
+            // ObservableCollection.Move removes at fromIndex first (shifting items up),
+            // then inserts at toIndex. When dragging down, the target item's index is
+            // one higher than where the item will actually land after the remove, so
+            // subtract 1 to match the visual "insert above this item" indicator.
+            if (fromIndex < toIndex)
+                toIndex--;
+
+            if (fromIndex == toIndex)
+                return;
+
             var vm = (NumberMainViewModel)DataContext;
             vm.KeypadTab.MoveRoom(fromIndex, toIndex);
         }

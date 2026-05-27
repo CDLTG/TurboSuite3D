@@ -62,7 +62,7 @@ namespace TurboSuite.Number.Services
 
     public class SaveRoomOrderRequest : RevitApiRequest
     {
-        public List<string> RoomOrder { get; set; }
+        public List<(string Name, int ClickOrder)> RoomOrder { get; set; }
     }
 
     public class SaveSidebarVisibleRequest : RevitApiRequest

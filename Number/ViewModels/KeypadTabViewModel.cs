@@ -122,7 +122,11 @@ namespace TurboSuite.Number.ViewModels
 
             var savedOrder = RoomOrderStorageService.Load(doc);
             for (int i = 0; i < savedOrder.Count; i++)
-                RoomOrder.Add(new RoomOrderItem(savedOrder[i], i + 1));
+            {
+                var item = new RoomOrderItem(savedOrder[i].Name, i + 1);
+                item.ClickOrder = savedOrder[i].ClickOrder;
+                RoomOrder.Add(item);
+            }
 
             var sidebarWasOpen = RoomOrderStorageService.LoadSidebarVisible(doc);
             if (sidebarWasOpen && RoomOrder.Count > 0)
@@ -311,7 +315,7 @@ namespace TurboSuite.Number.ViewModels
         {
             RaiseRequest(new SaveRoomOrderRequest
             {
-                RoomOrder = RoomOrder.Select(r => r.Name).ToList()
+                RoomOrder = RoomOrder.Select(r => (r.Name, r.ClickOrder)).ToList()
             });
         }
 
