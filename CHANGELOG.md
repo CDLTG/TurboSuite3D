@@ -5,6 +5,29 @@ All notable changes to TurboSuite are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-05-29
+
+### Added
+- TurboZones: amp-aware module allocation with overload flagging — per-part-number limits (`LQSE-4A5`, `LQSE-4T5`, `LQSE-4S8`), slot-1 promotion, FFD bin-packing fallback when sequential order overloads, red overload rendering in Panel Breakdown and Panel Schedule PDF.
+- TurboNumber: persist Room Order click-order badges across sessions.
+- Counts: `pool=` length-token modifier for cross-instance offcut reuse (18" min reusable offcut).
+
+### Changed
+- TurboZones: default Relay loads to the `LQSE-4T5` 0-10V module; toggle for dedicated `LQSE-4S8`.
+- TurboMask: extend supported categories, re-run safety, tag draw order, grouping (still gated behind `ExperimentalCommandsEnabled`).
+- Counts: widen EL rep-mismatch flag to include CS-channel SKUs.
+- Counts: preserve pricer cell highlights across Worksheet regeneration.
+
+### Removed
+- Counts: drop Slot column from the hidden Waste audit sheet.
+
+### Fixed
+- Counts: Worksheet freeze-column pane and Changes-sheet Type Mark sort.
+- TurboNumber: drag-down index bug in Room Order.
+
+### Infrastructure
+- `publish.ps1`: pre-flight check that CHANGELOG.md has an entry for the publishing version.
+
 ## [1.0.3] — 2026-05-27
 
 ### Changed
@@ -71,6 +94,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.1.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.1.0
 [1.0.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.0.3
 [1.0.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.0.2
 [1.0.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.0.1
