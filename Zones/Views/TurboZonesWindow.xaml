@@ -191,6 +191,10 @@
                             <ComboBox ItemsSource="{Binding PanelTab.BrandNames}"
                                       SelectedItem="{Binding PanelTab.SelectedBrandName}"
                                       MinWidth="100" Height="24" Margin="0,0,12,0"/>
+                            <CheckBox Content="Dedicated relay module (LQSE-4S8)"
+                                      IsChecked="{Binding PanelTab.UseDedicatedRelayModule}"
+                                      VerticalAlignment="Center"
+                                      Visibility="{Binding PanelTab.IsLutronSelected, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                     </DockPanel>
 
@@ -390,7 +394,7 @@
                                                                                               Margin="3,0,3,0">
                                                                                     <ItemsControl.ItemTemplate>
                                                                                         <DataTemplate>
-                                                                                            <Border Background="{Binding DimmingType, Converter={StaticResource DimmingTypeToColor}}"
+                                                                                            <Border Background="{Binding PartNumber, Converter={StaticResource DimmingTypeToColor}}"
                                                                                                     CornerRadius="2" Margin="0,0,0,2"
                                                                                                     Height="30" Cursor="Hand">
                                                                                                 <Border.ToolTip>

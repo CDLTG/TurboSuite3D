@@ -344,6 +344,30 @@ namespace TurboSuite.Zones.Services
             return modules;
         }
 
+        internal static IEnumerable<(string PartNumber, int Count)> GroupModulesByPartNumber(
+            IEnumerable<ModuleResult> modules)
+        {
+            int RankOf(string t)
+            {
+                for (int i = 0; i < ModuleTypeOrder.Length; i++)
+                    if (string.Equals(ModuleTypeOrder[i], t, StringComparison.OrdinalIgnoreCase))
+                        return i;
+                return ModuleTypeOrder.Length;
+            }
+
+            return modules
+                .GroupBy(m => m.PartNumber ?? "", StringComparer.OrdinalIgnoreCase)
+                .Select(g => new
+                {
+                    PartNumber = g.Key,
+                    Count = g.Count(),
+                    Rank = g.Min(m => RankOf(m.DimmingType))
+                })
+                .OrderBy(g => g.Rank)
+                .ThenBy(g => g.PartNumber, StringComparer.OrdinalIgnoreCase)
+                .Select(g => (g.PartNumber, g.Count));
+        }
+
         internal static IEnumerable<string> GetOrderedTypes(IEnumerable<string> types)
         {
             var typeSet = new HashSet<string>(types, StringComparer.OrdinalIgnoreCase);

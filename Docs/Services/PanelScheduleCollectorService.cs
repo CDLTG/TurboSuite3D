@@ -19,7 +19,7 @@ public static class PanelScheduleCollectorService
         string brandName = panelSettings?.Brand ?? "Lutron";
         var brand = string.Equals(brandName, "Crestron", StringComparison.OrdinalIgnoreCase)
             ? BrandConfig.Crestron
-            : BrandConfig.Lutron;
+            : BrandConfig.CreateLutron(panelSettings?.UseDedicatedRelayModule ?? false);
 
         var overrides = panelSettings?.PanelSizeOverrides;
 

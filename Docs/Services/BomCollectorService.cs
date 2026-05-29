@@ -25,7 +25,7 @@ public static class BomCollectorService
         string brandName = panelSettings?.Brand ?? "Lutron";
         var brand = string.Equals(brandName, "Crestron", StringComparison.OrdinalIgnoreCase)
             ? BrandConfig.Crestron
-            : BrandConfig.Lutron;
+            : BrandConfig.CreateLutron(panelSettings?.UseDedicatedRelayModule ?? false);
 
         var overrides = panelSettings?.PanelSizeOverrides;
         var specialSelections = panelSettings?.SpecialDeviceSelections
@@ -129,41 +129,17 @@ public static class BomCollectorService
         {
             bom.Add(new BomLineItem { IsHeader = true, Category = "Modules", Description = "Modules" });
 
-            var modulesByType = allModules.GroupBy(m => m.DimmingType).ToList();
-            foreach (var typeGroup in PanelAllocationService.ModuleTypeOrder)
+            // Group by resolved part number so a single module type carrying multiple
+            // dimming roles (e.g. LQSE-4T5 for both 0-10V and Relay) collapses to one line.
+            foreach (var group in PanelAllocationService.GroupModulesByPartNumber(allModules))
             {
-                var group = modulesByType.FirstOrDefault(g =>
-                    string.Equals(g.Key, typeGroup, StringComparison.OrdinalIgnoreCase));
-                if (group == null) continue;
-                string modulePn = brand.GetModulePartNumber(group.Key);
                 bom.Add(new BomLineItem
                 {
-                    Quantity = group.Count(),
-                    PartNumber = modulePn,
-                    Description = brand.GetPartDescription(modulePn),
+                    Quantity = group.Count,
+                    PartNumber = group.PartNumber,
+                    Description = brand.GetPartDescription(group.PartNumber),
                     Category = "Modules"
                 });
-            }
-            // Non-standard dimming types
-            foreach (var group in modulesByType)
-            {
-                bool isStandard = false;
-                foreach (var t in PanelAllocationService.ModuleTypeOrder)
-                {
-                    if (string.Equals(group.Key, t, StringComparison.OrdinalIgnoreCase))
-                    { isStandard = true; break; }
-                }
-                if (!isStandard)
-                {
-                    string modulePn = brand.GetModulePartNumber(group.Key);
-                    bom.Add(new BomLineItem
-                    {
-                        Quantity = group.Count(),
-                        PartNumber = modulePn,
-                        Description = brand.GetPartDescription(modulePn),
-                        Category = "Modules"
-                    });
-                }
             }
         }
 
@@ -332,4 +308,5 @@ public static class BomCollectorService
         int totalLinksNeeded = qsLinksNeeded + ccaLinksNeeded;
         return Math.Max(1, (int)Math.Ceiling((double)totalLinksNeeded / 2));
     }
+
 }

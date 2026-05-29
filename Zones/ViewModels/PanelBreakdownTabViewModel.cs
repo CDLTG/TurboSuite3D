@@ -18,6 +18,7 @@ namespace TurboSuite.Zones.ViewModels
         private static string[] ModuleTypeOrder => PanelAllocationService.ModuleTypeOrder;
 
         private string _selectedBrandName;
+        private bool _useDedicatedRelayModule;
         private PanelAllocationResult _allocationResult;
         private ObservableCollection<LocationDisplayViewModel> _locationDisplays;
         private ObservableCollection<BomLineItem> _bomItems;
@@ -84,6 +85,16 @@ namespace TurboSuite.Zones.ViewModels
 
         public bool IsLutronSelected => string.Equals(_selectedBrandName, "Lutron", StringComparison.OrdinalIgnoreCase);
 
+        public bool UseDedicatedRelayModule
+        {
+            get => _useDedicatedRelayModule;
+            set
+            {
+                if (SetProperty(ref _useDedicatedRelayModule, value))
+                    BuildPanelBreakdown();
+            }
+        }
+
         public PanelAllocationResult AllocationResult
         {
             get => _allocationResult;
@@ -143,7 +154,7 @@ namespace TurboSuite.Zones.ViewModels
 
             _currentBrand = _selectedBrandName == "Crestron"
                 ? BrandConfig.Crestron
-                : BrandConfig.Lutron;
+                : BrandConfig.CreateLutron(_useDedicatedRelayModule);
 
             var circuitData = Circuits.Select(c => c.Data).ToList();
 
@@ -180,8 +191,10 @@ namespace TurboSuite.Zones.ViewModels
             if (settings != null)
             {
                 _selectedBrandName = settings.Brand ?? "Lutron";
+                _useDedicatedRelayModule = settings.UseDedicatedRelayModule;
                 OnPropertyChanged(nameof(SelectedBrandName));
                 OnPropertyChanged(nameof(IsLutronSelected));
+                OnPropertyChanged(nameof(UseDedicatedRelayModule));
 
                 // Restore special device selections
                 foreach (var kvp in settings.SpecialDeviceSelections)
@@ -200,7 +213,8 @@ namespace TurboSuite.Zones.ViewModels
         {
             var settings = new PanelSettings
             {
-                Brand = _selectedBrandName
+                Brand = _selectedBrandName,
+                UseDedicatedRelayModule = _useDedicatedRelayModule
             };
 
             // Save current special device selections
@@ -385,41 +399,18 @@ namespace TurboSuite.Zones.ViewModels
             {
                 bom.Add(new BomLineItem { IsHeader = true, Category = "Modules", Description = "Modules" });
 
-                var modulesByType = allModules.GroupBy(m => m.DimmingType).ToList();
-                foreach (var typeGroup in ModuleTypeOrder)
+                // Collapse modules by resolved part number — a single module type
+                // carrying multiple dimming roles (e.g. LQSE-4T5 for both 0-10V and Relay)
+                // should appear as one line, not duplicated.
+                foreach (var group in PanelAllocationService.GroupModulesByPartNumber(allModules))
                 {
-                    var group = modulesByType.FirstOrDefault(g =>
-                        string.Equals(g.Key, typeGroup, StringComparison.OrdinalIgnoreCase));
-                    if (group == null) continue;
-                    string modulePn = _currentBrand.GetModulePartNumber(group.Key);
                     bom.Add(new BomLineItem
                     {
-                        Quantity = group.Count(),
-                        PartNumber = modulePn,
-                        Description = _currentBrand.GetPartDescription(modulePn),
+                        Quantity = group.Count,
+                        PartNumber = group.PartNumber,
+                        Description = _currentBrand.GetPartDescription(group.PartNumber),
                         Category = "Modules"
                     });
-                }
-                // Any non-standard dimming types
-                foreach (var group in modulesByType)
-                {
-                    bool isStandard = false;
-                    foreach (var t in ModuleTypeOrder)
-                    {
-                        if (string.Equals(group.Key, t, StringComparison.OrdinalIgnoreCase))
-                        { isStandard = true; break; }
-                    }
-                    if (!isStandard)
-                    {
-                        string modulePn = _currentBrand.GetModulePartNumber(group.Key);
-                        bom.Add(new BomLineItem
-                        {
-                            Quantity = group.Count(),
-                            PartNumber = modulePn,
-                            Description = _currentBrand.GetPartDescription(modulePn),
-                            Category = "Modules"
-                        });
-                    }
                 }
             }
 

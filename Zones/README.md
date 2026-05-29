@@ -17,10 +17,11 @@ The resolved label is combined with the room name of the first fixture: `ROOM NA
 Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selected brand.
 
 - **Brands:** Lutron or Crestron (persisted per-document)
+- **Lutron relay module (default):** Relay loads share the `LQSE-4T5-120-D` 0-10V/switching module with 0-10V loads. Toggle "Dedicated relay module (LQSE-4S8)" in the top bar to allocate the switching-only `LQSE-4S8-120-D` for Relay loads instead.
 - **Panel allocation:** Circuits grouped by zone (ZONE N panels); recommends minimum panels per zone and distributes modules across them. Each panel supports a compartment slot for Processor, Digital I/O, or DMX. LV21 panels (dual-compartment, no modules) are supported.
 - **Panel size overrides:** Users can force any panel to a different size; modules auto-redistribute to accommodate.
 - **Processor links** (Lutron): QS links auto-assigned across processors (99 devices, 512 loads per link). Clear Connect Type A links reserved for hybrid repeaters when present.
-- **BOM:** Categorized bill-of-materials with part numbers.
+- **BOM:** Categorized bill-of-materials with part numbers. Modules collapse to one line per resolved part number, so a single module type carrying multiple dimming roles (e.g. LQSE-4T5 for both 0-10V and Relay) appears as one combined quantity.
 - **Unassigned circuits:** Circuits without a recognized zone panel name are flagged. Switch-wired circuits are excluded from this warning.
 
 ## Dependencies

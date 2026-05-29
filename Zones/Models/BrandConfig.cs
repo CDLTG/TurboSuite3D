@@ -100,12 +100,15 @@ namespace TurboSuite.Zones.Models
             return PanelSizes.Min();
         }
 
-        public static BrandConfig Lutron { get; } = new BrandConfig("Lutron", 4, new[] { 0, 2, 4, 5, 8, 9 },
+        public static BrandConfig Lutron { get; } = CreateLutron(useDedicatedRelayModule: false);
+
+        public static BrandConfig CreateLutron(bool useDedicatedRelayModule)
+            => new BrandConfig("Lutron", 4, new[] { 0, 2, 4, 5, 8, 9 },
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "ELV", "LQSE-4A5-120-D" },
                 { "0-10V", "LQSE-4T5-120-D" },
-                { "Relay", "LQSE-4S8-120-D" }
+                { "Relay", useDedicatedRelayModule ? "LQSE-4S8-120-D" : "LQSE-4T5-120-D" }
             },
             new Dictionary<int, string>
             {

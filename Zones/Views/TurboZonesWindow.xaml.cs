@@ -77,16 +77,25 @@ namespace TurboSuite.Zones.Views
         private static readonly SolidColorBrush RelayBrush = new SolidColorBrush(Color.FromRgb(0x7C, 0xC4, 0xA0));
         private static readonly SolidColorBrush UnknownBrush = new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99));
 
+        // Color is keyed off the actual module part number so a 0-10V module used for Relay
+        // (LQSE-4T5) still reads as orange, while a dedicated switching module (LQSE-4S8) is green.
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            string type = (value as string)?.ToUpperInvariant();
-            switch (type)
-            {
-                case "ELV": return ELVBrush;
-                case "0-10V": return ZeroTenBrush;
-                case "RELAY": return RelayBrush;
-                default: return UnknownBrush;
-            }
+            string pn = (value as string)?.ToUpperInvariant() ?? "";
+
+            // 0-10V / universal-dimming modules
+            if (pn.Contains("4T5") || pn.Contains("DIMFLV") || pn.Contains("0-10V"))
+                return ZeroTenBrush;
+
+            // Switching / relay modules
+            if (pn.Contains("4S8") || pn.Contains("HSW") || pn.Equals("RELAY"))
+                return RelayBrush;
+
+            // ELV / adaptive modules
+            if (pn.Contains("4A5") || pn.Contains("DIMU") || pn.Equals("ELV"))
+                return ELVBrush;
+
+            return UnknownBrush;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
