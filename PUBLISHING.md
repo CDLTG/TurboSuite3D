@@ -34,4 +34,4 @@ Users will see the restored version on their next Revit launch and be prompted t
 - Run from a **non-admin** PowerShell (admin sessions cannot see mapped network drives)
 - Run from the project root directory
 - Bump the version number each release (SemVer: `MAJOR.MINOR.PATCH` — e.g., `1.0.0` → `1.0.1` for a bugfix, `1.1.0` for a new feature, `2.0.0` for a breaking change)
-- The script builds the solution, publishes the installer, copies everything to the share, and tags the git commit with `v{Version}` (pushed to GitHub automatically)
+- The script builds the solution, publishes the installer, and copies everything to the share. Git tagging and GitHub Release creation are handled separately by the `/release` skill.

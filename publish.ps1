@@ -144,7 +144,7 @@ if (Test-Path $changelogPath) {
 }
 
 # Step 1: Build solution in Release
-Write-Host "[1/7] Building solution in Release mode..." -ForegroundColor Yellow
+Write-Host "[1/6] Building solution in Release mode..." -ForegroundColor Yellow
 dotnet build $sln -c Release
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed."
@@ -152,7 +152,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Step 2: Publish installer as single-file
-Write-Host "[2/7] Publishing installer..." -ForegroundColor Yellow
+Write-Host "[2/6] Publishing installer..." -ForegroundColor Yellow
 $installerPublishDir = Join-Path $projectRoot "Installer\publish"
 dotnet publish $installerCsproj -c Release -o $installerPublishDir
 if ($LASTEXITCODE -ne 0) {
@@ -161,7 +161,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Step 3: Ensure server directory exists
-Write-Host "[3/7] Preparing server directory..." -ForegroundColor Yellow
+Write-Host "[3/6] Preparing server directory..." -ForegroundColor Yellow
 if (-not (Test-Path $ServerPath)) {
     New-Item -ItemType Directory -Path $ServerPath -Force | Out-Null
 }
@@ -170,7 +170,7 @@ if (-not (Test-Path $archiveRoot)) {
 }
 
 # Step 4: Archive currently-deployed version (if any) before overwriting
-Write-Host "[4/7] Archiving prior deployment..." -ForegroundColor Yellow
+Write-Host "[4/6] Archiving prior deployment..." -ForegroundColor Yellow
 $priorVersion = Get-DeployedVersion
 if ($priorVersion) {
     if ($priorVersion -eq $Version) {
@@ -183,7 +183,7 @@ if ($priorVersion) {
 }
 
 # Step 5: Copy files to server share
-Write-Host "[5/7] Copying files to server..." -ForegroundColor Yellow
+Write-Host "[5/6] Copying files to server..." -ForegroundColor Yellow
 
 $mainBinDir = Join-Path $projectRoot "bin\Release\net8.0-windows"
 $updaterBinDir = Join-Path $projectRoot "Updater\bin\Release\net8.0-windows"
@@ -231,30 +231,8 @@ if (Test-Path $installerPublishDir) {
     exit 1
 }
 
-# Step 6: Tag the git commit
-Write-Host "[6/7] Tagging git commit with v$Version..." -ForegroundColor Yellow
-$gitExe = Get-Command git -ErrorAction SilentlyContinue
-if (-not $gitExe) {
-    $gitExe = Get-Command "C:\Program Files\Git\bin\git.exe" -ErrorAction SilentlyContinue
-}
-if (-not $gitExe) {
-    Write-Warning "git not found on PATH. Tag manually: git tag v$Version && git push origin v$Version"
-} else {
-    & $gitExe.Source tag "v$Version"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Git tag failed (tag may already exist). Skipping tag push."
-    } else {
-        & $gitExe.Source push origin "v$Version"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Failed to push tag to remote. You can push manually: git push origin v$Version"
-        } else {
-            Write-Host "  Tagged and pushed v$Version"
-        }
-    }
-}
-
-# Step 7: Write version.txt
-Write-Host "[7/7] Writing version.txt..." -ForegroundColor Yellow
+# Step 6: Write version.txt
+Write-Host "[6/6] Writing version.txt..." -ForegroundColor Yellow
 Set-Content -Path (Join-Path $ServerPath "version.txt") -Value $Version -NoNewline
 Write-Host "  Version set to $Version"
 
