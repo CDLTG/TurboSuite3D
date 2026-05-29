@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -67,7 +68,14 @@ namespace TurboSuite.Zones.Services
                 var moduleCountByType = new Dictionary<string, int>();
                 foreach (var kvp in circuitsByType)
                 {
-                    int modules = CalculateModuleCount(kvp.Value.Count, brand.GetModuleCapacity(kvp.Key));
+                    int moduleCap = brand.GetModuleCapacity(kvp.Key);
+                    int modules = CalculateModuleCount(kvp.Value.Count, moduleCap);
+                    var ampLimits = brand.GetAmpLimitsForDimmingType(kvp.Key);
+                    if (ampLimits != null)
+                    {
+                        int ampBased = SimulateFfdModuleCount(kvp.Value, moduleCap, ampLimits);
+                        modules = Math.Max(modules, ampBased);
+                    }
                     moduleCountByType[kvp.Key] = modules;
                 }
 
@@ -315,6 +323,20 @@ namespace TurboSuite.Zones.Services
             int moduleCapacity,
             BrandConfig brand)
         {
+            var limits = brand.GetAmpLimitsForDimmingType(dimmingType);
+            if (limits != null)
+                return BuildModulesAmpAware(dimmingType, circuits, moduleCount, moduleCapacity, brand, limits);
+
+            return BuildModulesCountBased(dimmingType, circuits, moduleCount, moduleCapacity, brand);
+        }
+
+        private static List<ModuleResult> BuildModulesCountBased(
+            string dimmingType,
+            List<ZonesCircuitData> circuits,
+            int moduleCount,
+            int moduleCapacity,
+            BrandConfig brand)
+        {
             var modules = new List<ModuleResult>();
             int circuitIdx = 0;
 
@@ -342,6 +364,204 @@ namespace TurboSuite.Zones.Services
             }
 
             return modules;
+        }
+
+        /// <summary>
+        /// Amp-aware allocation. Tries circuit-number-order packing first so the natural
+        /// reading order is preserved; only falls back to FFD bin-packing when the simple
+        /// path produces overloaded modules AND FFD gives a better result (fewer modules,
+        /// or fewer overloads). Each bin gets slot-1 promotion for any over-default circuit.
+        /// </summary>
+        private static List<ModuleResult> BuildModulesAmpAware(
+            string dimmingType,
+            List<ZonesCircuitData> circuits,
+            int moduleCount,
+            int moduleCapacity,
+            BrandConfig brand,
+            ModuleAmpLimits limits)
+        {
+            string partNumber = brand.GetModulePartNumber(dimmingType);
+            double voltage = limits.Voltage <= 0 ? 120.0 : limits.Voltage;
+
+            var withAmps = circuits
+                .Select(c => (Circuit: c, Amps: c.ApparentLoadVA / voltage))
+                .ToList();
+
+            var sequentialBins = PackSequentialBins(withAmps, moduleCapacity);
+            var sequentialModules = BinsToModules(sequentialBins, dimmingType, partNumber, moduleCapacity, limits);
+            int sequentialOverloads = sequentialModules.Count(m => m.IsOverloaded);
+
+            List<ModuleResult> chosen = sequentialModules;
+            if (sequentialOverloads > 0)
+            {
+                var ffdBins = PackFfdBins(withAmps, moduleCapacity, limits);
+                var ffdModules = BinsToModules(ffdBins, dimmingType, partNumber, moduleCapacity, limits);
+                int ffdOverloads = ffdModules.Count(m => m.IsOverloaded);
+
+                // Prefer FFD only when it actually helps — fewer modules, or same module
+                // count with fewer overloads. Otherwise keep the readable sequential layout.
+                bool ffdBetter = ffdModules.Count < sequentialModules.Count
+                    || (ffdModules.Count == sequentialModules.Count && ffdOverloads < sequentialOverloads);
+                if (ffdBetter)
+                    chosen = ffdModules;
+            }
+
+            // Pad with empty modules if the allocator reserved extra capacity (spare %).
+            while (chosen.Count < moduleCount)
+            {
+                chosen.Add(new ModuleResult
+                {
+                    DimmingType = dimmingType,
+                    PartNumber = partNumber,
+                    ModuleCapacity = moduleCapacity
+                });
+            }
+
+            return chosen;
+        }
+
+        /// <summary>
+        /// Packs circuits in their incoming (circuit-number) order, capping each bin at
+        /// the module slot count. Does NOT enforce amp limits — overflows are flagged later.
+        /// </summary>
+        private static List<List<(ZonesCircuitData Circuit, double Amps)>> PackSequentialBins(
+            List<(ZonesCircuitData Circuit, double Amps)> items, int moduleCapacity)
+        {
+            var bins = new List<List<(ZonesCircuitData Circuit, double Amps)>>();
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (bins.Count == 0 || bins[^1].Count >= moduleCapacity)
+                    bins.Add(new List<(ZonesCircuitData Circuit, double Amps)>());
+                bins[^1].Add(items[i]);
+            }
+            return bins;
+        }
+
+        /// <summary>
+        /// First-fit-decreasing: sort by amps desc, place each in the first bin with both
+        /// slot room and amp room. Minimizes module count when wattage is binding.
+        /// </summary>
+        private static List<List<(ZonesCircuitData Circuit, double Amps)>> PackFfdBins(
+            List<(ZonesCircuitData Circuit, double Amps)> items,
+            int moduleCapacity, ModuleAmpLimits limits)
+        {
+            const double Eps = 1e-9;
+            var sorted = items.OrderByDescending(x => x.Amps).ToList();
+            var bins = new List<List<(ZonesCircuitData Circuit, double Amps)>>();
+            foreach (var item in sorted)
+            {
+                bool placed = false;
+                foreach (var bin in bins)
+                {
+                    double binAmps = 0;
+                    for (int i = 0; i < bin.Count; i++) binAmps += bin[i].Amps;
+                    if (bin.Count < moduleCapacity
+                        && binAmps + item.Amps <= limits.ModuleTotalAmpLimit + Eps)
+                    {
+                        bin.Add(item);
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed)
+                    bins.Add(new List<(ZonesCircuitData Circuit, double Amps)> { item });
+            }
+            return bins;
+        }
+
+        /// <summary>
+        /// Converts bins to <see cref="ModuleResult"/>s with circuit-number order within
+        /// each module, slot-1 promotion for any over-default circuit, and overload flag.
+        /// </summary>
+        private static List<ModuleResult> BinsToModules(
+            List<List<(ZonesCircuitData Circuit, double Amps)>> bins,
+            string dimmingType, string partNumber, int moduleCapacity, ModuleAmpLimits limits)
+        {
+            const double Eps = 1e-9;
+            var modules = new List<ModuleResult>();
+            foreach (var bin in bins)
+            {
+                var ordered = bin
+                    .OrderBy(b => b.Circuit.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                int slot1Idx = -1;
+                double slot1Amps = limits.DefaultSlotAmpLimit;
+                for (int i = 0; i < ordered.Count; i++)
+                {
+                    if (ordered[i].Amps > slot1Amps + Eps)
+                    {
+                        slot1Amps = ordered[i].Amps;
+                        slot1Idx = i;
+                    }
+                }
+                if (slot1Idx > 0)
+                {
+                    var promoted = ordered[slot1Idx];
+                    ordered.RemoveAt(slot1Idx);
+                    ordered.Insert(0, promoted);
+                }
+
+                var module = new ModuleResult
+                {
+                    DimmingType = dimmingType,
+                    PartNumber = partNumber,
+                    ModuleCapacity = moduleCapacity
+                };
+
+                bool overloaded = false;
+                double moduleTotal = 0;
+                for (int i = 0; i < ordered.Count; i++)
+                {
+                    module.CircuitNumbers.Add(ordered[i].Circuit.CircuitNumber);
+                    module.SlotAmps.Add(ordered[i].Amps);
+                    moduleTotal += ordered[i].Amps;
+                    if (ordered[i].Amps > limits.GetSlotLimit(i) + Eps)
+                        overloaded = true;
+                }
+                if (moduleTotal > limits.ModuleTotalAmpLimit + Eps)
+                    overloaded = true;
+
+                module.IsOverloaded = overloaded;
+                modules.Add(module);
+            }
+            return modules;
+        }
+
+        /// <summary>
+        /// Simulates FFD bin-packing to count how many modules amps actually require.
+        /// Combined via Math.Max with the count-based result so we never go below today's
+        /// module count when amps fit comfortably.
+        /// </summary>
+        private static int SimulateFfdModuleCount(
+            List<ZonesCircuitData> circuits, int moduleCapacity, ModuleAmpLimits limits)
+        {
+            if (circuits.Count == 0) return 0;
+            double voltage = limits.Voltage <= 0 ? 120.0 : limits.Voltage;
+            const double Eps = 1e-9;
+
+            var sorted = circuits
+                .Select(c => c.ApparentLoadVA / voltage)
+                .OrderByDescending(a => a)
+                .ToList();
+
+            var bins = new List<(int Count, double Amps)>();
+            foreach (double a in sorted)
+            {
+                bool placed = false;
+                for (int i = 0; i < bins.Count; i++)
+                {
+                    if (bins[i].Count < moduleCapacity
+                        && bins[i].Amps + a <= limits.ModuleTotalAmpLimit + Eps)
+                    {
+                        bins[i] = (bins[i].Count + 1, bins[i].Amps + a);
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) bins.Add((1, a));
+            }
+            return bins.Count;
         }
 
         internal static IEnumerable<(string PartNumber, int Count)> GroupModulesByPartNumber(

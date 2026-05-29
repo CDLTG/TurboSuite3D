@@ -5,6 +5,24 @@ using System.Linq;
 
 namespace TurboSuite.Zones.Models
 {
+    public class ModuleAmpLimits
+    {
+        public double Slot1AmpLimit { get; }
+        public double DefaultSlotAmpLimit { get; }
+        public double ModuleTotalAmpLimit { get; }
+        public double Voltage { get; }
+
+        public ModuleAmpLimits(double slot1, double defaultSlot, double moduleTotal, double voltage = 120.0)
+        {
+            Slot1AmpLimit = slot1;
+            DefaultSlotAmpLimit = defaultSlot;
+            ModuleTotalAmpLimit = moduleTotal;
+            Voltage = voltage;
+        }
+
+        public double GetSlotLimit(int slotIndex) => slotIndex == 0 ? Slot1AmpLimit : DefaultSlotAmpLimit;
+    }
+
     public class BrandConfig
     {
         public string Name { get; }
@@ -23,7 +41,8 @@ namespace TurboSuite.Zones.Models
             Dictionary<int, string> wireHarnessPartNumbers = null,
             string powerSupplyPartNumber = null,
             Dictionary<string, int> moduleCapacityOverrides = null,
-            Dictionary<string, string> partDescriptions = null)
+            Dictionary<string, string> partDescriptions = null,
+            Dictionary<string, ModuleAmpLimits> ampLimits = null)
         {
             Name = name;
             ModuleCapacity = moduleCapacity;
@@ -38,6 +57,7 @@ namespace TurboSuite.Zones.Models
             PowerSupplyPartNumber = powerSupplyPartNumber;
             ModuleCapacityOverrides = moduleCapacityOverrides;
             PartDescriptions = partDescriptions;
+            AmpLimits = ampLimits;
         }
 
         public Dictionary<string, string> SpecialDevices { get; }
@@ -48,6 +68,20 @@ namespace TurboSuite.Zones.Models
         public string PowerSupplyPartNumber { get; }
         public Dictionary<string, int> ModuleCapacityOverrides { get; }
         public Dictionary<string, string> PartDescriptions { get; }
+        public Dictionary<string, ModuleAmpLimits> AmpLimits { get; }
+
+        /// <summary>
+        /// Amp limits are keyed by module part number so that a dimming type sharing
+        /// another module (e.g. Lutron Relay loads riding on LQSE-4T5) inherits the
+        /// limits of the actual physical module.
+        /// </summary>
+        public ModuleAmpLimits GetAmpLimits(string partNumber)
+            => AmpLimits != null
+               && !string.IsNullOrEmpty(partNumber)
+               && AmpLimits.TryGetValue(partNumber, out var limits) ? limits : null;
+
+        public ModuleAmpLimits GetAmpLimitsForDimmingType(string dimmingType)
+            => GetAmpLimits(GetModulePartNumber(dimmingType));
 
         public int DefaultPanelSize => SpecialCompartmentPanelSizes?.Max() ?? PanelSizes.Max();
 
@@ -156,6 +190,12 @@ namespace TurboSuite.Zones.Models
                 { "PDW-QS-9", "QS Wire Harness (9-Module)" },
                 { "QSE-IO", "QS Contact Closure Input/Output Interface" },
                 { "QSE-CI-DMX", "QS DMX Output Control Interface" }
+            },
+            ampLimits: new Dictionary<string, ModuleAmpLimits>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "LQSE-4A5-120-D", new ModuleAmpLimits(slot1: 6.6, defaultSlot: 4.2, moduleTotal: 16.0) },
+                { "LQSE-4T5-120-D", new ModuleAmpLimits(slot1: 5.0, defaultSlot: 5.0, moduleTotal: 20.0) },
+                { "LQSE-4S8-120-D", new ModuleAmpLimits(slot1: 8.0, defaultSlot: 8.0, moduleTotal: 16.0) }
             });
 
         public static BrandConfig Crestron { get; } = new BrandConfig("Crestron", 8, new[] { 7 },

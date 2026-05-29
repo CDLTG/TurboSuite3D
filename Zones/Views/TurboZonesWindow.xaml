@@ -394,9 +394,18 @@
                                                                                               Margin="3,0,3,0">
                                                                                     <ItemsControl.ItemTemplate>
                                                                                         <DataTemplate>
-                                                                                            <Border Background="{Binding PartNumber, Converter={StaticResource DimmingTypeToColor}}"
-                                                                                                    CornerRadius="2" Margin="0,0,0,2"
+                                                                                            <Border CornerRadius="2" Margin="0,0,0,2"
                                                                                                     Height="30" Cursor="Hand">
+                                                                                                <Border.Style>
+                                                                                                    <Style TargetType="Border">
+                                                                                                        <Setter Property="Background" Value="{Binding PartNumber, Converter={StaticResource DimmingTypeToColor}}"/>
+                                                                                                        <Style.Triggers>
+                                                                                                            <DataTrigger Binding="{Binding IsOverloaded}" Value="True">
+                                                                                                                <Setter Property="Background" Value="#CC0000"/>
+                                                                                                            </DataTrigger>
+                                                                                                        </Style.Triggers>
+                                                                                                    </Style>
+                                                                                                </Border.Style>
                                                                                                 <Border.ToolTip>
                                                                                                     <TextBlock>
                                                                                                         <Run Text="{Binding PartNumber, Mode=OneWay}"/>
@@ -411,6 +420,9 @@
                                                                                                         <Run Text="/"/>
                                                                                                         <Run Text="{Binding ModuleCapacity, Mode=OneWay}"/>
                                                                                                         <Run Text=" slots used"/>
+                                                                                                        <LineBreak/>
+                                                                                                        <Run Text="Total: "/>
+                                                                                                        <Run Text="{Binding TotalAmps, Mode=OneWay, StringFormat={}{0:0.0} A}"/>
                                                                                                     </TextBlock>
                                                                                                 </Border.ToolTip>
                                                                                                 <StackPanel HorizontalAlignment="Center"

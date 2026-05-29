@@ -67,6 +67,7 @@ public static class PanelSchedulePdfService
         var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
 
         var fontRow            = new XFont("Segoe UI", RowFontSize);
+        var fontRowBold        = new XFont("Segoe UI", RowFontSize, XFontStyle.Bold);
         var fontColHeader      = new XFont("Segoe UI", HeaderFontSize, XFontStyle.Bold);
         var fontPanelHeader    = new XFont("Segoe UI", 10, XFontStyle.Bold);
         var fontModuleHeader   = new XFont("Segoe UI", 9, XFontStyle.Bold);
@@ -313,8 +314,25 @@ public static class PanelSchedulePdfService
 
                     double baseline = y + BaselineOffset;
 
+                    // Highlight the whole row when this slot is over its amp limit
+                    double rowWatts = circuit?.ApparentLoadVA ?? 0;
+                    var rowLimits = data.Brand.GetAmpLimits(module.PartNumber);
+                    bool rowOverloaded = false;
+                    if (rowLimits != null)
+                    {
+                        double rowAmps = rowWatts / (rowLimits.Voltage <= 0 ? 120.0 : rowLimits.Voltage);
+                        rowOverloaded = rowAmps > rowLimits.GetSlotLimit(slotNumber - 1) + 1e-9;
+                    }
+                    if (rowOverloaded)
+                    {
+                        var overloadFill = new XSolidBrush(XColor.FromArgb(255, 250, 210, 210));
+                        gfx.DrawRectangle(overloadFill, MarginLeft, y, ContentWidth, LineHeight);
+                    }
+                    var rowBrush = rowOverloaded ? XBrushes.Red : XBrushes.Black;
+                    var rowFont = rowOverloaded ? fontRowBold : fontRow;
+
                     // Slot #
-                    gfx.DrawString(slotNumber.ToString(), fontRow, XBrushes.Black,
+                    gfx.DrawString(slotNumber.ToString(), rowFont, rowBrush,
                         new XPoint(colX[0] + colW[0] / 2, baseline), slotCenterAlign);
 
                     // Load (truncate if needed)
@@ -324,26 +342,25 @@ public static class PanelSchedulePdfService
                             : circuit.CurrentLoadName)
                         : "";
                     double loadMaxWidth = colW[1] - ColumnPadding * 2;
-                    if (gfx.MeasureString(loadName, fontRow).Width > loadMaxWidth && loadName.Length > 0)
+                    if (gfx.MeasureString(loadName, rowFont).Width > loadMaxWidth && loadName.Length > 0)
                     {
-                        while (loadName.Length > 1 && gfx.MeasureString(loadName + "\u2026", fontRow).Width > loadMaxWidth)
+                        while (loadName.Length > 1 && gfx.MeasureString(loadName + "\u2026", rowFont).Width > loadMaxWidth)
                             loadName = loadName[..^1];
                         loadName += "\u2026";
                     }
-                    gfx.DrawString(loadName, fontRow, XBrushes.Black,
+                    gfx.DrawString(loadName, rowFont, rowBrush,
                         new XPoint(colX[1] + ColumnPadding, baseline));
 
                     // Ckt
-                    gfx.DrawString(cktNum, fontRow, XBrushes.Black,
+                    gfx.DrawString(cktNum, rowFont, rowBrush,
                         new XPoint(colX[2] + ColumnPadding, baseline));
 
                     // Dimming
-                    gfx.DrawString(module.DimmingType, fontRow, XBrushes.Black,
+                    gfx.DrawString(module.DimmingType, rowFont, rowBrush,
                         new XPoint(colX[3] + ColumnPadding, baseline));
 
                     // Watts
-                    double watts = circuit?.ApparentLoadVA ?? 0;
-                    gfx.DrawString(FormatWatts(watts), fontRow, XBrushes.Black,
+                    gfx.DrawString(FormatWatts(rowWatts), rowFont, rowBrush,
                         new XPoint(colX[4] + ColumnPadding, baseline));
 
                     y += LineHeight;

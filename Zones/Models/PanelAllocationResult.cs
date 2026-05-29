@@ -132,6 +132,14 @@ namespace TurboSuite.Zones.Models
         public List<string> CircuitNumbers { get; set; } = new List<string>();
         public int UsedSlots => CircuitNumbers.Count;
         public string CircuitNumbersDisplay => string.Join(", ", CircuitNumbers);
+
+        /// <summary>Per-slot amp values, parallel to <see cref="CircuitNumbers"/>.</summary>
+        public List<double> SlotAmps { get; set; } = new List<double>();
+
+        /// <summary>True if any slot or the module total exceeds amp limits.</summary>
+        public bool IsOverloaded { get; set; }
+
+        public double TotalAmps => SlotAmps.Sum();
     }
 
     public class PanelSizeOption
