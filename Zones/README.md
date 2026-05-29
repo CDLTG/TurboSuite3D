@@ -22,7 +22,7 @@ Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selec
 - **Panel size overrides:** Users can force any panel to a different size; modules auto-redistribute to accommodate.
 - **Processor links** (Lutron): QS links auto-assigned across processors (99 devices, 512 loads per link). Clear Connect Type A links reserved for hybrid repeaters when present.
 - **Amp-aware allocation** (Lutron): Module limits enforced per part number — ELV `LQSE-4A5` 6.6/4.2/16 A (slot 1 / slots 2-4 / module total), 0-10V `LQSE-4T5` 5.0/5.0/20 A, switching `LQSE-4S8` 8.0/8.0/16 A. Circuits over the slot-2-4 limit auto-promote to slot 1. When sequential circuit-number order produces an overloaded module, the allocator falls back to first-fit-decreasing bin-packing only when it would reduce module count or overload count. Overloaded modules render with a red background in Panel Breakdown and overloaded rows render in bold red on a pale red highlight in the Panel Schedule PDF.
-- **BOM:** Categorized bill-of-materials with part numbers. Modules collapse to one line per resolved part number, so a single module type carrying multiple dimming roles (e.g. LQSE-4T5 for both 0-10V and Relay) appears as one combined quantity.
+- **BOM:** Categorized bill-of-materials with part numbers.
 - **Unassigned circuits:** Circuits without a recognized zone panel name are flagged. Switch-wired circuits are excluded from this warning.
 
 ## Dependencies
