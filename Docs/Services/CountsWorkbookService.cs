@@ -3196,15 +3196,14 @@ public static class CountsWorkbookService
         ws.Visibility = XLWorksheetVisibility.Hidden;
 
         ws.Cell(1, 1).Value = "Type Mark";
-        ws.Cell(1, 2).Value = "Slot";
-        ws.Cell(1, 3).Value = "Catalog Template";
-        ws.Cell(1, 4).Value = "Mode";
-        ws.Cell(1, 5).Value = "Instances";
-        ws.Cell(1, 6).Value = "Used (LF)";
-        ws.Cell(1, 7).Value = "Supplied (LF)";
-        ws.Cell(1, 8).Value = "Waste (LF)";
-        ws.Cell(1, 9).Value = "Waste %";
-        ws.Range(1, 1, 1, 9).Style.Font.SetBold();
+        ws.Cell(1, 2).Value = "Catalog Template";
+        ws.Cell(1, 3).Value = "Mode";
+        ws.Cell(1, 4).Value = "Instances";
+        ws.Cell(1, 5).Value = "Used (LF)";
+        ws.Cell(1, 6).Value = "Supplied (LF)";
+        ws.Cell(1, 7).Value = "Waste (LF)";
+        ws.Cell(1, 8).Value = "Waste %";
+        ws.Range(1, 1, 1, 8).Style.Font.SetBold();
 
         int row = 2;
         foreach (var f in fixtures.OrderBy(f => f.TypeMark, NaturalStringComparer.OrdinalIgnoreCase))
@@ -3215,22 +3214,21 @@ public static class CountsWorkbookService
                 if (stats.Mode.Length == 0) continue;
 
                 ws.Cell(row, 1).Value = f.TypeMark;
-                ws.Cell(row, 2).Value = c + 1;
-                ws.Cell(row, 3).Value = f.CatalogNumbers[c] ?? string.Empty;
-                ws.Cell(row, 4).Value = stats.Mode;
-                ws.Cell(row, 5).Value = stats.InstanceCount;
-                ws.Cell(row, 6).Value = Math.Round(stats.UsedInches / 12.0, 2);
-                ws.Cell(row, 7).Value = Math.Round(stats.SuppliedInches / 12.0, 2);
-                ws.Cell(row, 8).Value = Math.Round(stats.WasteInches / 12.0, 2);
-                ws.Cell(row, 9).Value = stats.UsedInches > 0
+                ws.Cell(row, 2).Value = f.CatalogNumbers[c] ?? string.Empty;
+                ws.Cell(row, 3).Value = stats.Mode;
+                ws.Cell(row, 4).Value = stats.InstanceCount;
+                ws.Cell(row, 5).Value = Math.Round(stats.UsedInches / 12.0, 2);
+                ws.Cell(row, 6).Value = Math.Round(stats.SuppliedInches / 12.0, 2);
+                ws.Cell(row, 7).Value = Math.Round(stats.WasteInches / 12.0, 2);
+                ws.Cell(row, 8).Value = stats.UsedInches > 0
                     ? Math.Round(100.0 * stats.WasteInches / stats.UsedInches, 2)
                     : 0.0;
-                ws.Cell(row, 9).Style.NumberFormat.Format = "0.00\"%\"";
+                ws.Cell(row, 8).Style.NumberFormat.Format = "0.00\"%\"";
                 row++;
             }
         }
 
-        ws.Columns(1, 9).AdjustToContents();
+        ws.Columns(1, 8).AdjustToContents();
     }
 
     #endregion
