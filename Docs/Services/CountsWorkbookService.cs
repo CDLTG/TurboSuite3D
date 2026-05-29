@@ -109,11 +109,14 @@ public static class CountsWorkbookService
     private static readonly XLColor RedFill = XLColor.FromHtml("#FFC7CE");
     private static readonly XLColor YellowFill = XLColor.FromHtml("#FFEB9C");
 
-    // Flags catalog numbers that look like Environmental Lights parts (EL- prefix followed
-    // by an alphanumeric). Used on Rep Lists to surface EL- parts riding under another
-    // vendor's type — a side effect of Revit's one-mfr-per-type limit. See feedback memory.
+    // Flags catalog numbers that look like Environmental Lights parts. Two known patterns:
+    //   - EL- prefix followed by an alphanumeric (standard EL SKU)
+    //   - CS channels: "CS" + 3 digits + "-" + length (2M or 2.5M), used across tape jobs
+    //     regardless of fixture mfr
+    // Used on Rep Lists to surface EL parts riding under another vendor's type — a side
+    // effect of Revit's one-mfr-per-type limit.
     private static readonly Regex EnvironmentalLightsCatalogPattern =
-        new(@"^EL-[A-Z0-9]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"^(EL-[A-Z0-9]|CS\d{3}-\d(\.\d)?M$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     #endregion
 
