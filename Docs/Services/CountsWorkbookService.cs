@@ -109,6 +109,29 @@ public static class CountsWorkbookService
     private static readonly XLColor RedFill = XLColor.FromHtml("#FFC7CE");
     private static readonly XLColor YellowFill = XLColor.FromHtml("#FFEB9C");
 
+    // Worksheet generator-owned fills. Pricers may highlight cells as personal reminders
+    // (sheet protection allows FormatCells); on regen we snapshot user fills and re-apply
+    // them to the row that still maps to the same (Type, Catalog). Semantic-tier fills are
+    // signal — generator always wins. Decorative-tier fills are cosmetic — user wins.
+    // Hex compare via uint ARGB to avoid XLColor reference-equality pitfalls.
+    private static readonly uint SemanticGreenArgb = 0xFFC6EFCEu;
+    private static readonly uint SemanticYellowArgb = 0xFFFFEB9Cu;
+    private static readonly uint SemanticRedArgb = 0xFFFFC7CEu;
+    private static readonly uint DecorativeBandingArgb = 0xFFF2F2F2u;
+    private static readonly uint DecorativeHeaderArgb = 0xFF262626u;
+
+    private static uint CellFillArgb(IXLCell cell)
+    {
+        var fill = cell.Style.Fill.BackgroundColor;
+        return fill.ColorType == XLColorType.Color ? (uint)fill.Color.ToArgb() : 0u;
+    }
+
+    private static bool IsSemanticFill(uint argb) =>
+        argb == SemanticGreenArgb || argb == SemanticYellowArgb || argb == SemanticRedArgb;
+
+    private static bool IsOwnedFill(uint argb) =>
+        IsSemanticFill(argb) || argb == DecorativeBandingArgb || argb == DecorativeHeaderArgb;
+
     // Flags catalog numbers that look like Environmental Lights parts. Two known patterns:
     //   - EL- prefix followed by an alphanumeric (standard EL SKU)
     //   - CS channels: "CS" + 3 digits + "-" + length (2M or 2.5M), used across tape jobs
@@ -1768,7 +1791,9 @@ public static class CountsWorkbookService
                     ws.Cell(r, WsColNote1 + n).Style.Protection.SetLocked(true);
             }
         }
-        ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
+        ws.Protect()
+            .AllowElement(XLSheetProtectionElements.FormatColumns)
+            .AllowElement(XLSheetProtectionElements.FormatCells);
     }
 
     // Currency/percent number formats for the pricing columns. Applied from both build and
@@ -3324,6 +3349,27 @@ public static class CountsWorkbookService
         var prevTypeMarks = prevData?.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
                             ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        sub = "snapshot-user-highlights";
+        // Capture pricer-applied cell fills keyed by (Type, Catalog, col) so they survive
+        // row reshuffling on regen. Bounds: rows 2..lastRowUsed, cols A..V. Cells whose
+        // current fill matches any generator-owned hex are skipped — the generator owns
+        // those, and re-applying them post-regen would either be a no-op or stomp the
+        // generator's intended paint. See restore pass before reapply-protection.
+        var userFillSnapshot = new Dictionary<(string Type, string Catalog, int Col), uint>();
+        int snapLastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+        for (int r = 2; r <= snapLastRow; r++)
+        {
+            string snapType = ws.Cell(r, WsColType).GetString() ?? "";
+            string snapCat = ws.Cell(r, WsColCatalog).GetString() ?? "";
+            if (string.IsNullOrEmpty(snapType) || string.IsNullOrEmpty(snapCat)) continue;
+            for (int col = WsColType; col <= WsColQtyOverride; col++)
+            {
+                uint argb = CellFillArgb(ws.Cell(r, col));
+                if (argb == 0u || IsOwnedFill(argb)) continue;
+                userFillSnapshot[(snapType.ToUpperInvariant(), snapCat.ToUpperInvariant(), col)] = argb;
+            }
+        }
+
         sub = "unprotect.call";
         ws.Unprotect();
 
@@ -3732,6 +3778,30 @@ public static class CountsWorkbookService
         for (int col = WsColActive; col <= WsColHelperLast; col++)
             ws.Column(col).Hide();
 
+        sub = "restore-user-highlights";
+        // Re-apply snapshot. Build a (Type, Catalog) -> row map from the freshly-written
+        // body, then for each captured user fill: skip if the new cell now carries a
+        // semantic-tier generator fill (green/yellow/red), else paint. Decorative-tier
+        // fills (banding/header) lose to the user — that's the design.
+        if (userFillSnapshot.Count > 0)
+        {
+            var rowByKey = new Dictionary<(string, string), int>();
+            for (int r = 2; r < row; r++)
+            {
+                string t = ws.Cell(r, WsColType).GetString() ?? "";
+                string c = ws.Cell(r, WsColCatalog).GetString() ?? "";
+                if (string.IsNullOrEmpty(t) || string.IsNullOrEmpty(c)) continue;
+                rowByKey.TryAdd((t.ToUpperInvariant(), c.ToUpperInvariant()), r);
+            }
+            foreach (var kv in userFillSnapshot)
+            {
+                if (!rowByKey.TryGetValue((kv.Key.Type, kv.Key.Catalog), out int newRow)) continue;
+                var cell = ws.Cell(newRow, kv.Key.Col);
+                if (IsSemanticFill(CellFillArgb(cell))) continue;
+                cell.Style.Fill.BackgroundColor = XLColor.FromArgb((int)kv.Value);
+            }
+        }
+
         sub = "reapply-protection";
         // Re-apply protection. Per-Type canonical fields — Tariff % (K) and Notes (N–S) —
         // are only editable on each Type's canonical (first) row.
@@ -3747,7 +3817,9 @@ public static class CountsWorkbookService
                     ws.Cell(r, WsColNote1 + n).Style.Protection.SetLocked(true);
             }
         }
-        ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
+        ws.Protect()
+            .AllowElement(XLSheetProtectionElements.FormatColumns)
+            .AllowElement(XLSheetProtectionElements.FormatCells);
     }
 
     private static readonly XLColor AutoFilledFontColor = XLColor.FromHtml("#B0B0B0");
