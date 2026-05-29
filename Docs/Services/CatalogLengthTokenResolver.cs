@@ -18,7 +18,10 @@ namespace TurboSuite.Docs.Services;
 ///   <c>max=N</c> — made-to-length: greedy-splits each instance into N-sized cuts plus one remainder.
 ///   <c>sizes=N1|N2|...</c> — discrete stock sizes (e.g. 96|48): covers each instance with the
 ///     fewest sticks whose sum ≥ instance length, tie-breaking on least overage.
-/// Unknown formats / option keys / non-integer values / combined max+sizes fail validation.
+///   <c>pool=N1|N2|...</c> — same stock sizes as sizes=, but reuses offcuts across instances.
+///     Use when offcuts are physically fungible with fresh-stick cut ends (raw aluminum channel,
+///     raw track without factory-finished ends). Hardcoded 18" minimum reusable offcut.
+/// Unknown formats / option keys / non-integer values / any combination of max, sizes, pool fail validation.
 /// </summary>
 public static class CatalogLengthTokenResolver
 {
@@ -68,7 +71,7 @@ public static class CatalogLengthTokenResolver
             else break;
             var m = TokenRegex.Match(catalogNumber, idx);
             if (!m.Success || m.Index != idx)
-                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected {xx}, {xx\"}, {xxIN}, {ft}, {xx'}, {xxFT}, {xx'-xx\"}, {xxFT-xxIN}, optionally with ',max=N' / ',sizes=N|N|...')");
+                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected {xx}, {xx\"}, {xxIN}, {ft}, {xx'}, {xxFT}, {xx'-xx\"}, {xxFT-xxIN}, optionally with ',max=N' / ',sizes=N|N|...' / ',pool=N|N|...')");
             ValidateToken(catalogNumber, m);
             cursor = m.Index + m.Length;
         }
@@ -83,12 +86,12 @@ public static class CatalogLengthTokenResolver
         if (!m.Groups["opts"].Success) return;
 
         string opts = m.Groups["opts"].Value;
-        bool sawMax = false, sawSizes = false;
+        bool sawMax = false, sawSizes = false, sawPool = false;
         foreach (var part in opts.Split(','))
         {
             var kv = part.Split('=', 2);
             if (kv.Length != 2)
-                throw new CatalogLengthTokenParseException(raw, $"Malformed option '{part}' (expected 'max=<int>' or 'sizes=N|N|...')");
+                throw new CatalogLengthTokenParseException(raw, $"Malformed option '{part}' (expected 'max=<int>' or 'sizes=N|N|...' or 'pool=N|N|...')");
             string key = kv[0].Trim();
             string val = kv[1].Trim();
 
@@ -100,30 +103,34 @@ public static class CatalogLengthTokenResolver
                     throw new CatalogLengthTokenParseException(raw, "max must be greater than zero");
                 sawMax = true;
             }
-            else if (string.Equals(key, "sizes", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(key, "sizes", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(key, "pool", StringComparison.OrdinalIgnoreCase))
             {
+                bool isPool = string.Equals(key, "pool", StringComparison.OrdinalIgnoreCase);
+                string kind = isPool ? "pool" : "sizes";
                 if (string.IsNullOrWhiteSpace(val))
-                    throw new CatalogLengthTokenParseException(raw, "sizes must list at least one positive integer (e.g. sizes=96|48)");
+                    throw new CatalogLengthTokenParseException(raw, $"{kind} must list at least one positive integer (e.g. {kind}=96|48)");
                 var seen = new HashSet<int>();
                 foreach (var s in val.Split('|'))
                 {
                     if (!int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sn))
-                        throw new CatalogLengthTokenParseException(raw, $"sizes entry '{s.Trim()}' must be a positive integer (inches)");
+                        throw new CatalogLengthTokenParseException(raw, $"{kind} entry '{s.Trim()}' must be a positive integer (inches)");
                     if (sn <= 0)
-                        throw new CatalogLengthTokenParseException(raw, "sizes entries must be greater than zero");
+                        throw new CatalogLengthTokenParseException(raw, $"{kind} entries must be greater than zero");
                     if (!seen.Add(sn))
-                        throw new CatalogLengthTokenParseException(raw, $"sizes entry '{sn}' is duplicated");
+                        throw new CatalogLengthTokenParseException(raw, $"{kind} entry '{sn}' is duplicated");
                 }
-                sawSizes = true;
+                if (isPool) sawPool = true; else sawSizes = true;
             }
             else
             {
-                throw new CatalogLengthTokenParseException(raw, $"Unknown option '{key}' (supported: max, sizes)");
+                throw new CatalogLengthTokenParseException(raw, $"Unknown option '{key}' (supported: max, sizes, pool)");
             }
         }
 
-        if (sawMax && sawSizes)
-            throw new CatalogLengthTokenParseException(raw, "max and sizes cannot both be set on the same token (made-to-length vs. discrete stock are different modes)");
+        int modes = (sawMax ? 1 : 0) + (sawSizes ? 1 : 0) + (sawPool ? 1 : 0);
+        if (modes > 1)
+            throw new CatalogLengthTokenParseException(raw, "max, sizes, and pool are mutually exclusive on the same token");
     }
 
     /// <summary>
@@ -151,7 +158,15 @@ public static class CatalogLengthTokenResolver
     /// Reads the first token's sizes= list (descending), or null if absent. Caller must have
     /// already validated the template.
     /// </summary>
-    public static IReadOnlyList<int>? ParseSizes(string? template)
+    public static IReadOnlyList<int>? ParseSizes(string? template) => ParseSizeList(template, "sizes");
+
+    /// <summary>
+    /// Reads the first token's pool= list (descending), or null if absent. Caller must have
+    /// already validated the template.
+    /// </summary>
+    public static IReadOnlyList<int>? ParsePool(string? template) => ParseSizeList(template, "pool");
+
+    private static IReadOnlyList<int>? ParseSizeList(string? template, string keyName)
     {
         if (string.IsNullOrEmpty(template)) return null;
         var m = TokenRegex.Match(template);
@@ -160,7 +175,7 @@ public static class CatalogLengthTokenResolver
         {
             var kv = part.Split('=', 2);
             if (kv.Length != 2) continue;
-            if (!string.Equals(kv[0].Trim(), "sizes", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(kv[0].Trim(), keyName, StringComparison.OrdinalIgnoreCase)) continue;
             var list = new List<int>();
             foreach (var s in kv[1].Split('|'))
             {
@@ -311,6 +326,79 @@ public static class CatalogLengthTokenResolver
     }
 
     /// <summary>
+    /// Minimum reusable offcut length for pool= mode. Offcuts shorter than this become scrap
+    /// instead of going back to the pool. Tuned empirically against representative jobs
+    /// (see Specs/TCList.xlsx) — below 18" the savings curve is mostly flat, above 24" it
+    /// degrades fast as common short-instance lengths can no longer be served from offcuts.
+    /// </summary>
+    public const int PoolMinOffcutInches = 18;
+
+    /// <summary>
+    /// Pool covering across all instances of a slot. Each instance L is shaped per
+    /// <see cref="CoverInstance"/> (interior pieces consume full sticks; the trailing piece is
+    /// partial). The partial piece is sourced from the smallest fitting offcut in a shared pool;
+    /// if none fits, a fresh stick of the trailing piece's size is opened. Tails ≥
+    /// <see cref="PoolMinOffcutInches"/> go back to the pool. Instances are processed by length
+    /// descending so large trailing pieces produce big reusable tails before short residuals
+    /// claim them.
+    /// </summary>
+    /// <returns>Dictionary of stock size (inches) → sticks purchased.</returns>
+    public static Dictionary<int, int> PoolCoverSlot(
+        IReadOnlyDictionary<int, int> instanceBuckets,
+        IReadOnlyList<int> sizes)
+    {
+        var sticks = new Dictionary<int, int>();
+        foreach (var sz in sizes) sticks[sz] = 0;
+        if (instanceBuckets.Count == 0 || sizes.Count == 0) return sticks;
+
+        var instances = new List<int>();
+        foreach (var kv in instanceBuckets)
+        {
+            if (kv.Key <= 0) continue;
+            for (int i = 0; i < kv.Value; i++) instances.Add(kv.Key);
+        }
+        instances.Sort((a, b) => b.CompareTo(a));
+
+        var offcuts = new List<int>();
+        foreach (int L in instances)
+        {
+            var pieces = CoverInstance(L, sizes).ToList();
+            if (pieces.Count == 0) continue;
+            int sumInterior = 0;
+            for (int i = 0; i < pieces.Count - 1; i++)
+            {
+                sticks[pieces[i]]++;
+                sumInterior += pieces[i];
+            }
+            int last = pieces[pieces.Count - 1];
+            int c = L - sumInterior;
+            if (c <= 0) continue;
+
+            // smallest fitting offcut
+            int bestIdx = -1, bestSize = int.MaxValue;
+            for (int i = 0; i < offcuts.Count; i++)
+            {
+                int o = offcuts[i];
+                if (o >= c && o < bestSize) { bestIdx = i; bestSize = o; }
+            }
+            int tail;
+            if (bestIdx >= 0)
+            {
+                int o = offcuts[bestIdx];
+                offcuts.RemoveAt(bestIdx);
+                tail = o - c;
+            }
+            else
+            {
+                sticks[last]++;
+                tail = last - c;
+            }
+            if (tail >= PoolMinOffcutInches) offcuts.Add(tail);
+        }
+        return sticks;
+    }
+
+    /// <summary>
     /// Single source of truth for slot expansion. Yields (ResolvedSku, Qty) pairs sorted
     /// by length ascending for token templates, or one (template, fixture.Count) pair for
     /// untokenized templates. Blank templates yield nothing.
@@ -323,6 +411,15 @@ public static class CatalogLengthTokenResolver
         if (!HasToken(template))
         {
             yield return (template, fixture.Count);
+            yield break;
+        }
+
+        var pool = ParsePool(template);
+        if (pool is not null)
+        {
+            var sticks = PoolCoverSlot(fixture.LinearLengthBuckets, pool);
+            foreach (var kv in sticks.Where(p => p.Value > 0).OrderBy(p => p.Key))
+                yield return (Resolve(template, kv.Key), kv.Value);
             yield break;
         }
 
@@ -365,23 +462,42 @@ public static class CatalogWasteAnalyzer
         if (string.IsNullOrWhiteSpace(template) || !CatalogLengthTokenResolver.HasToken(template))
             return new SlotWasteStats(string.Empty, 0, 0, 0);
 
-        var sizes = CatalogLengthTokenResolver.ParseSizes(template);
-        int? max = sizes is null ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
-        string mode = sizes is not null ? "sizes" : (max.HasValue ? "max" : "plain");
+        var pool = CatalogLengthTokenResolver.ParsePool(template);
+        var sizes = pool is null ? CatalogLengthTokenResolver.ParseSizes(template) : null;
+        int? max = (pool is null && sizes is null) ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
+        string mode = pool is not null ? "pool"
+                    : sizes is not null ? "sizes"
+                    : max.HasValue ? "max" : "plain";
 
-        int instCount = 0, used = 0, supplied = 0;
+        int instCount = 0, used = 0;
         foreach (var kv in fixture.LinearLengthBuckets)
         {
             int L = kv.Key, N = kv.Value;
             if (L <= 0) continue;
             instCount += N;
             used += L * N;
-            int suppliedForThis = 0;
-            var pieces = sizes is null
-                ? CatalogLengthTokenResolver.SplitInstance(L, max)
-                : CatalogLengthTokenResolver.CoverInstance(L, sizes);
-            foreach (int p in pieces) suppliedForThis += p;
-            supplied += suppliedForThis * N;
+        }
+
+        int supplied;
+        if (pool is not null)
+        {
+            var sticks = CatalogLengthTokenResolver.PoolCoverSlot(fixture.LinearLengthBuckets, pool);
+            supplied = sticks.Sum(kv => kv.Key * kv.Value);
+        }
+        else
+        {
+            supplied = 0;
+            foreach (var kv in fixture.LinearLengthBuckets)
+            {
+                int L = kv.Key, N = kv.Value;
+                if (L <= 0) continue;
+                int suppliedForThis = 0;
+                var pieces = sizes is null
+                    ? CatalogLengthTokenResolver.SplitInstance(L, max)
+                    : CatalogLengthTokenResolver.CoverInstance(L, sizes);
+                foreach (int p in pieces) suppliedForThis += p;
+                supplied += suppliedForThis * N;
+            }
         }
         return new SlotWasteStats(mode, instCount, used, supplied);
     }
