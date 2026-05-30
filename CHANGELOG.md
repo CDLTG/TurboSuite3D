@@ -5,6 +5,11 @@ All notable changes to TurboSuite are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Counts: Reel/Channel Qty under-counted when stock length was fractional (e.g. 5m reels = 16.404 ft). Removed inner `CEILING` on stock length so the user-entered value is trusted as the actual usable length.
+
 ## [1.1.0] — 2026-05-29
 
 ### Added

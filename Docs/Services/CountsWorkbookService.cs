@@ -1928,8 +1928,8 @@ public static class CountsWorkbookService
         double linearPadded = Math.Ceiling(f.LinearLength * 1.05);
         return calc switch
         {
-            "Reel"    => f.ReelLength > 0    ? Math.Ceiling(linearPadded / Math.Ceiling(f.ReelLength)) : f.Count,
-            "Channel" => f.ChannelLength > 0 ? Math.Ceiling(linearPadded / Math.Ceiling(f.ChannelLength)) : f.Count,
+            "Reel"    => f.ReelLength > 0    ? Math.Ceiling(linearPadded / f.ReelLength) : f.Count,
+            "Channel" => f.ChannelLength > 0 ? Math.Ceiling(linearPadded / f.ChannelLength) : f.Count,
             "Clip"    => Math.Ceiling(linearPadded / 1.75),
             "End Cap" => f.Count,
             _         => f.Count,
@@ -1940,9 +1940,9 @@ public static class CountsWorkbookService
     {
         // VLOOKUP indices: Col 9=Count, Col 10=LinearLength, Col 11=ReelLength, Col 12=ChannelLength
         return $"IF(I{row}=\"Reel\"," +
-               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,11,FALSE),1),1)," +
+               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/VLOOKUP(A{row},{csRef}!A:L,11,FALSE),1)," +
                $"IF(I{row}=\"Channel\"," +
-               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/CEILING(VLOOKUP(A{row},{csRef}!A:L,12,FALSE),1),1)," +
+               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/VLOOKUP(A{row},{csRef}!A:L,12,FALSE),1)," +
                $"IF(I{row}=\"End Cap\"," +
                $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)," +
                $"IF(I{row}=\"Clip\"," +
