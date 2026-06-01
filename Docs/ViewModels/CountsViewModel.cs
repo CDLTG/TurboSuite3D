@@ -157,6 +157,8 @@ public class CountsViewModel : ViewModelBase
     {
         if (_fixtures.Count == 0) return;
 
+        if (!ConfirmUnspecifiedTypes()) return;
+
         string? outputPath;
 
         if (IsUpdateMode)
@@ -253,5 +255,49 @@ public class CountsViewModel : ViewModelBase
         {
             IsGenerating = false;
         }
+    }
+
+    // Warn when any Type Mark has all six Catalog Number slots blank. Such types are
+    // collected and counted but emit zero rows on the Worksheet — pricers see nothing,
+    // design sees nothing, and the omission is silent. Surface them as a soft prompt
+    // so the user can either cancel and finish the spec, or proceed knowing those
+    // types won't appear on the quote.
+    private bool ConfirmUnspecifiedTypes()
+    {
+        var offenders = new List<(string TypeMark, int InstanceCount)>();
+        foreach (var f in _fixtures)
+        {
+            bool anySpec = false;
+            for (int c = 0; c < 6; c++)
+            {
+                if (!string.IsNullOrWhiteSpace(f.CatalogNumbers[c])) { anySpec = true; break; }
+            }
+            if (!anySpec) offenders.Add((f.TypeMark, f.Count));
+        }
+        if (offenders.Count == 0) return true;
+
+        offenders.Sort((a, b) => string.Compare(a.TypeMark, b.TypeMark, StringComparison.OrdinalIgnoreCase));
+
+        const int maxListed = 20;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"{offenders.Count} type(s) have no Catalog Numbers filled in and will be omitted from the Worksheet:");
+        sb.AppendLine();
+        int shown = Math.Min(offenders.Count, maxListed);
+        for (int i = 0; i < shown; i++)
+            sb.AppendLine($"  • {offenders[i].TypeMark}  ({offenders[i].InstanceCount} instance{(offenders[i].InstanceCount == 1 ? "" : "s")})");
+        if (offenders.Count > maxListed)
+            sb.AppendLine($"  … and {offenders.Count - maxListed} more");
+        sb.AppendLine();
+        sb.AppendLine("To include a type with no Catalog Numbers on the quote, enter a placeholder (e.g. \"TBD\") in Catalog Number1.");
+        sb.AppendLine();
+        sb.AppendLine("Generate anyway?");
+
+        var result = System.Windows.MessageBox.Show(
+            sb.ToString(),
+            "TurboDocs — Unspecified types",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning,
+            System.Windows.MessageBoxResult.No);
+        return result == System.Windows.MessageBoxResult.Yes;
     }
 }
