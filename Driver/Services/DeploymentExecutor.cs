@@ -28,11 +28,11 @@ namespace TurboSuite.Driver.Services
 
     /// <summary>
     /// Orchestrates TurboDriver deployment.
-    /// User picks ONE point or selects an existing power supply; all new power supplies are placed in a column, 9" apart.
+    /// User picks ONE point or selects an existing power supply; all new power supplies are placed in a column, 9.5" apart.
     /// </summary>
     public class DeploymentExecutor
     {
-        private const double SpacingFt = 9.0 / 12.0; // 9 inches in feet
+        private const double SpacingFt = 9.5 / 12.0; // 9.5 inches in feet
 
         /// <summary>
         /// Execute the Warp deployment: pick one point, place all power supplies in a column.
@@ -43,7 +43,7 @@ namespace TurboSuite.Driver.Services
             var service = new DeploymentService(doc);
             var result = new DeploymentResult();
 
-            // Pick origin: select an existing power supply (new ones placed 9" below)
+            // Pick origin: select an existing power supply (new ones placed 9.5" below)
             // or press Escape to pick a bare point instead
             XYZ origin;
             try
@@ -92,7 +92,7 @@ namespace TurboSuite.Driver.Services
 
                         for (int i = 0; i < circuit.QuantityToPlace; i++)
                         {
-                            // Column layout: each instance offset downward (-Y) by 9"
+                            // Column layout: each instance offset downward (-Y) by 9.5"
                             XYZ point = new XYZ(origin.X, origin.Y - (globalIndex * SpacingFt), origin.Z);
 
                             var instance = service.PlacePowerSupply(point, circuit.DriverSymbol);
