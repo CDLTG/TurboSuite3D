@@ -75,6 +75,10 @@ namespace TurboSuite.Driver.Services
             // Place all power supplies in a single transaction
             int globalIndex = 0;
 
+            // Consecutive device pairs to wire AFTER placement commits (see note below).
+            var wirePairs = new List<(FamilyInstance First, FamilyInstance Second)>();
+            bool placementCommitted = false;
+
             using (Transaction trans = new Transaction(doc, "TurboDriver — Place Power Supplies"))
             {
                 trans.Start();
@@ -150,23 +154,44 @@ namespace TurboSuite.Driver.Services
                             globalIndex++;
                         }
 
-                        // Wire consecutive power supplies in this circuit
+                        // Collect consecutive pairs; wire them AFTER this transaction commits.
                         for (int w = 1; w < circuitInstances.Count; w++)
-                        {
-                            bool wired = service.CreateWireBetween(
-                                circuitInstances[w - 1], circuitInstances[w], doc.ActiveView);
-                            if (wired)
-                                result.TotalWiresPlaced++;
-                        }
+                            wirePairs.Add((circuitInstances[w - 1], circuitInstances[w]));
                     }
 
                     trans.Commit();
+                    placementCommitted = true;
                 }
                 catch (Exception ex)
                 {
                     result.Warnings.Add($"Transaction failed: {ex.Message}");
                     if (trans.HasStarted())
                         trans.RollBack();
+                }
+            }
+
+            // Wire each pair in its OWN transaction. Committing each wire separately gives Revit the
+            // post-commit regeneration that clips the terminal wire end to the family boundary.
+            // Wiring the whole chain inside the shared placement transaction above leaves the last
+            // driver's wire drawn to its connector center — a stray "tail" into the final driver.
+            if (placementCommitted)
+            {
+                foreach (var (d1, d2) in wirePairs)
+                {
+                    try
+                    {
+                        using Transaction wireTx = new Transaction(doc, "TurboDriver — Wire Power Supplies");
+                        wireTx.Start();
+                        bool wired = service.CreateWireBetween(d1, d2, doc.ActiveView);
+                        wireTx.Commit();
+                        if (wired)
+                            result.TotalWiresPlaced++;
+                    }
+                    catch (Exception ex)
+                    {
+                        // One failed wire shouldn't abort the rest or surface a generic crash dialog.
+                        result.Warnings.Add($"Could not wire a power-supply pair: {ex.Message}");
+                    }
                 }
             }
 

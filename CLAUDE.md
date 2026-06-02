@@ -150,7 +150,8 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 
 ### API Limitations
 
-- **Switch Systems** (`OST_SwitchSystem`) cannot be created or modified via the public API. Workaround: TurboDriver sets "Switch ID" parameter; users create switch systems manually.
+- **Wire end display**: An `ElectricalWire` end vertex is pinned to the connector center (Revit re-inserts it there if moved); whether Revit visually clips the wire at the family boundary vs. draws it to center (a "tail") is a display-only decision made during **post-commit regeneration**, not controllable via the points passed to `ElectricalWire.Create`. Wire each connection in its **own committed transaction** (like the manual workflow) — batching wires in one shared transaction leaves the *last* wire's terminal end unclipped, drawn into the final element. See `DeploymentExecutor` wiring loop and the `WireCreationService` switch/sconce nudge.
+- **Switch Systems** (`OST_SwitchSystem`) cannot be created or modified via the public API. Workaround: TurboDriver sets "Switch ID" parameter; users create switch systems manually. A device on a switch system reports an extra logical (`DomainUndefined`, no-origin) connector — so `ConnectorManager` count > the family's defined connectors; copies don't carry switch-system membership.
 - **`PanelScheduleView.IsSlotGrouped`** is read-only — no `GroupCircuits`/`UngroupCircuits` API exists.
 - **Light Group** writes require a `Transaction` — calling outside one crashes Revit (hard crash, not exception). Groups are not elements and cannot be found via `FilteredElementCollector`.
 - **TextNote rotation**: `TextNote.Create` auto-orients text to be readable in the active view at orthogonal Project North angles (0°, ±90°, 180°). Manually rotating by `-ProjectPosition.Angle` at these angles doubles the rotation. Only apply rotation correction for non-orthogonal angles.
