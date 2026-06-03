@@ -446,7 +446,8 @@ public static class CatalogLengthTokenResolver
 }
 
 /// <summary>
-/// Per-slot length math summary used by the hidden Waste sheet. Mode is "" when the slot has
+/// Per-slot length math summary used by the Length section of the hidden Calculations sheet.
+/// Mode is "" when the slot has
 /// no length token; "sizes"/"max"/"plain" otherwise. Only the sizes mode can produce waste &gt; 0.
 /// </summary>
 public sealed record SlotWasteStats(string Mode, int InstanceCount, int UsedInches, int SuppliedInches)

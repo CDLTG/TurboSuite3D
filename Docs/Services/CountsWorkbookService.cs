@@ -173,7 +173,7 @@ public static class CountsWorkbookService
         BuildDashboardSheet(wb, projectName, repDirectoryPath);
         BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
         BuildRepListsSheet(wb, fixtures, repDirectory);
-        BuildWasteSheet(wb, fixtures);
+        BuildCalculationsSheet(wb, fixtures, countsSheetName);
         BuildQuoteSheet(wb);
         for (int p = 1; p <= 3; p++)
             BuildPhaseQuoteSheet(wb, p);
@@ -265,8 +265,8 @@ public static class CountsWorkbookService
             stage = "build-rep-lists";
             BuildRepListsSheet(wb, fixtures, repDirectory);
 
-            stage = "build-waste";
-            BuildWasteSheet(wb, fixtures);
+            stage = "build-calculations";
+            BuildCalculationsSheet(wb, fixtures, countsSheetName);
 
             stage = "rebuild-contractor-sheets";
             RebuildContractorSheets(wb, fixtures, pricingForSnapshot);
@@ -3181,31 +3181,104 @@ public static class CountsWorkbookService
 
     #endregion
 
-    #region Waste Report Sheet
+    #region Calculations Audit Sheet
 
-    // Hidden audit sheet listing every Catalog slot that uses a length token, with the
-    // material totals the cover algorithm produced. Only sizes= mode can produce waste > 0;
-    // max= and plain tokens emit rows with 0 waste so the sheet doubles as a "what's
-    // length-driven on this job" audit.
-    private static void BuildWasteSheet(IXLWorkbook wb, List<CountsFixtureModel> fixtures)
+    // Hidden audit sheet that shows the work behind every computed Qty so the pricing team can
+    // sanity-check large jobs. Four sections stacked vertically:
+    //   1. Constants  — the magic numbers buried in the Qty formulas (overage, clip spacing, ...)
+    //   2. Calc       — live decomposition of the Calc-dropdown Qty formula (BuildQtyFormula),
+    //                    keyed by resolved SKU so each reel/channel/end-cap slot is its own row.
+    //   3. Length     — the former Waste table: cover-algorithm totals for length-token slots.
+    //                    Static snapshot (greedy bin-packing isn't a spreadsheet formula).
+    //   4. CatalogQty — live decomposition of the N / 1/N / N @type CatalogQtyEvaluator rules.
+    // Each catalog slot lands in exactly one section, matching the live Qty precedence in
+    // BuildWorksheetSheet: length-token > non-blank CatalogQty > Calc/default.
+    private static void BuildCalculationsSheet(IXLWorkbook wb, List<CountsFixtureModel> fixtures, string countsSheetName)
     {
-        if (wb.Worksheets.TryGetWorksheet("Waste", out var existing))
-            existing.Delete();
+        // Migration: drop a stale sheet under either name before rebuilding.
+        if (wb.Worksheets.TryGetWorksheet("Waste", out var oldWaste)) oldWaste.Delete();
+        if (wb.Worksheets.TryGetWorksheet("Calculations", out var existing)) existing.Delete();
 
-        var ws = wb.Worksheets.Add("Waste");
+        var ws = wb.Worksheets.Add("Calculations");
         ws.Visibility = XLWorksheetVisibility.Hidden;
 
-        ws.Cell(1, 1).Value = "Type Mark";
-        ws.Cell(1, 2).Value = "Catalog Template";
-        ws.Cell(1, 3).Value = "Mode";
-        ws.Cell(1, 4).Value = "Instances";
-        ws.Cell(1, 5).Value = "Used (LF)";
-        ws.Cell(1, 6).Value = "Supplied (LF)";
-        ws.Cell(1, 7).Value = "Waste (LF)";
-        ws.Cell(1, 8).Value = "Waste %";
-        ws.Range(1, 1, 1, 8).Style.Font.SetBold();
+        string cs = $"'{countsSheetName}'";  // Counts sheet ref (col 9=Count, 10=Linear, 11=Reel, 12=Channel)
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
 
-        int row = 2;
+        int row = 1;
+        ws.Cell(row, 1).Value = "Calculations";
+        ws.Cell(row, 1).Style.Font.SetBold().Font.SetFontSize(13);
+        row += 2;
+
+        // ── Section 1: Constants ──────────────────────────────────────────────
+        ws.Cell(row, 1).Value = "Constants";
+        ws.Cell(row, 1).Style.Font.SetBold();
+        row++;
+        void Constant(string label, string value)
+        {
+            ws.Cell(row, 1).Value = label;
+            ws.Cell(row, 2).Value = value;
+            row++;
+        }
+        Constant("Overage", "5% (applied as ×1.05 before the ceiling)");
+        Constant("Clip spacing", "1.75 ft (one clip per 1.75 ft of padded length)");
+        Constant("Pool min offcut",
+            $"{CatalogLengthTokenResolver.PoolMinOffcutInches}\" (shortest offcut reused across instances in pool= mode)");
+        row++;
+
+        // ── Section 2: Calc-driven quantities (live decomposition) ────────────
+        ws.Cell(row, 1).Value = "Calc-driven quantities";
+        ws.Cell(row, 1).Style.Font.SetBold();
+        row++;
+        string[] calcHeaders = { "Type", "Catalog SKU", "Calc Mode", "Linear (LF)", "×1.05", "Round Up", "Stock (LF)", "Pieces (raw)", "Qty" };
+        for (int i = 0; i < calcHeaders.Length; i++) ws.Cell(row, i + 1).Value = calcHeaders[i];
+        ws.Range(row, 1, row, calcHeaders.Length).Style.Font.SetBold();
+        row++;
+        foreach (var f in fixtures.OrderBy(f => f.TypeMark, NaturalStringComparer.OrdinalIgnoreCase))
+        {
+            // Only stock-length parts are worth decomposing here. A type with no Reel or Channel
+            // length defined can only resolve to Clip/End-Cap/Count, which don't use this chain.
+            if (f.ReelLength <= 0 && f.ChannelLength <= 0) continue;
+
+            for (int c = 0; c < 6; c++)
+            {
+                string template = f.CatalogNumbers[c] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(template)) continue;
+                if (CatalogLengthTokenResolver.HasToken(template)) continue;           // → Length section
+                if (CatalogQtyParser.Parse(f.CatalogQtys[c]).Mode != CatalogQtyMode.Default) continue; // → CatalogQty section
+
+                int r = row;
+                ws.Cell(r, 1).Value = f.TypeMark;
+                ws.Cell(r, 2).Value = template;
+                // Calc mode lives on the Worksheet (col I), canonical per SKU — look it up by SKU (col C, idx 7
+                // of C:I). An empty Calc cell makes VLOOKUP return 0; show "None" for both 0 and "".
+                ws.Cell(r, 3).FormulaA1 =
+                    $"IFERROR(IF(OR(VLOOKUP(B{r},Worksheet!C:I,7,FALSE)=0,VLOOKUP(B{r},Worksheet!C:I,7,FALSE)=\"\")," +
+                    $"\"None\",VLOOKUP(B{r},Worksheet!C:I,7,FALSE)),\"None\")";
+                ws.Cell(r, 4).FormulaA1 = $"VLOOKUP(A{r},{cs}!A:L,10,FALSE)";            // Linear
+                ws.Cell(r, 5).FormulaA1 = $"D{r}*1.05";                                  // padded
+                ws.Cell(r, 6).FormulaA1 = $"CEILING(E{r},1)";                            // ceil(padded)
+                ws.Cell(r, 7).FormulaA1 =                                                // stock length per mode
+                    $"IF(C{r}=\"Reel\",VLOOKUP(A{r},{cs}!A:L,11,FALSE)," +
+                    $"IF(C{r}=\"Channel\",VLOOKUP(A{r},{cs}!A:L,12,FALSE)," +
+                    $"IF(C{r}=\"Clip\",1.75,\"\")))";
+                ws.Cell(r, 8).FormulaA1 = $"IF(G{r}=\"\",\"\",F{r}/G{r})";               // raw pieces (pre-ceiling)
+                ws.Cell(r, 8).Style.NumberFormat.Format = "0.00";
+                ws.Cell(r, 9).FormulaA1 =                                                // Qty: ceil(raw), Count fallback
+                    $"IF(H{r}=\"\",VLOOKUP(A{r},{cs}!A:L,9,FALSE),CEILING(H{r},1))";
+                row++;
+            }
+        }
+        row++;
+
+        // ── Section 3: Length-token quantities (snapshot of the cover algorithm) ──
+        ws.Cell(row, 1).Value = "Length-token quantities";
+        ws.Cell(row, 1).Style.Font.SetBold();
+        row++;
+        string[] lenHeaders = { "Type", "Catalog Template", "Mode", "Instances", "Used (LF)", "Supplied (LF)", "Waste (LF)", "Waste %" };
+        for (int i = 0; i < lenHeaders.Length; i++) ws.Cell(row, i + 1).Value = lenHeaders[i];
+        ws.Range(row, 1, row, lenHeaders.Length).Style.Font.SetBold();
+        row++;
         foreach (var f in fixtures.OrderBy(f => f.TypeMark, NaturalStringComparer.OrdinalIgnoreCase))
         {
             for (int c = 0; c < 6; c++)
@@ -3227,8 +3300,54 @@ public static class CountsWorkbookService
                 row++;
             }
         }
+        row++;
 
-        ws.Columns(1, 8).AdjustToContents();
+        // ── Section 4: CatalogQty quantities (live decomposition) ─────────────
+        ws.Cell(row, 1).Value = "CatalogQty quantities";
+        ws.Cell(row, 1).Style.Font.SetBold();
+        row++;
+        string[] cqHeaders = { "Type", "Catalog SKU", "Mode", "Input N", "Count", "Qty" };
+        for (int i = 0; i < cqHeaders.Length; i++) ws.Cell(row, i + 1).Value = cqHeaders[i];
+        ws.Range(row, 1, row, cqHeaders.Length).Style.Font.SetBold();
+        row++;
+        foreach (var f in fixtures.OrderBy(f => f.TypeMark, NaturalStringComparer.OrdinalIgnoreCase))
+        {
+            for (int c = 0; c < 6; c++)
+            {
+                string template = f.CatalogNumbers[c] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(template)) continue;
+                if (CatalogLengthTokenResolver.HasToken(template)) continue;           // → Length section
+                var rule = CatalogQtyParser.Parse(f.CatalogQtys[c]);
+                if (rule.Mode == CatalogQtyMode.Default) continue;                      // → Calc section
+
+                int r = row;
+                string n = rule.Value.ToString(inv);
+                ws.Cell(r, 1).Value = f.TypeMark;
+                ws.Cell(r, 2).Value = template;
+                ws.Cell(r, 3).Value = rule.Mode switch
+                {
+                    CatalogQtyMode.PerFixture => "Per Fixture (×N)",
+                    CatalogQtyMode.RatioPerFixture => "Ratio (1/N)",
+                    CatalogQtyMode.FixedPerType => "Fixed Per Type (N @type)",
+                    _ => rule.Mode.ToString(),
+                };
+                ws.Cell(r, 4).Value = rule.Value;
+                ws.Cell(r, 5).FormulaA1 = $"VLOOKUP(A{r},{cs}!A:L,9,FALSE)";            // Count
+                ws.Cell(r, 6).FormulaA1 = rule.Mode switch                              // Qty
+                {
+                    CatalogQtyMode.PerFixture => $"CEILING(E{r}*{n},1)",
+                    CatalogQtyMode.RatioPerFixture => $"CEILING(E{r}/{n},1)",
+                    CatalogQtyMode.FixedPerType => $"{n}",
+                    _ => $"E{r}",
+                };
+                row++;
+            }
+        }
+
+        ws.Columns(1, 9).AdjustToContents();
+        // AdjustToContents can't measure formula results (no cached value pre-recalc), so the Qty
+        // column under-sizes and clips 4-digit counts. Pin it wide enough with a buffer.
+        ws.Column(9).Width = 9;
     }
 
     #endregion
