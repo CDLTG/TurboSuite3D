@@ -160,7 +160,9 @@ namespace TurboSuite.Driver.Services
                 return null;
             }
 
-            double maxSubWattage = candidate.SubDriverPower;
+            // Apply derating only to the packing ceiling. SubDriverCount / IsValidDriver
+            // were computed from the rated SubDriverPower upstream and must not be derated.
+            double maxSubWattage = candidate.SubDriverPower * candidate.DerateFactor;
 
             // Split fixtures using this candidate's sub-driver capacity
             var segments = new List<FixtureSegment>();

@@ -257,6 +257,30 @@ namespace TurboSuite.Shared.Helpers
         }
 
         /// <summary>
+        /// Get the driver Derating factor (0,1] from a FamilySymbol type parameter.
+        /// The parameter is a Percentage type, so AsDouble() returns the ratio directly
+        /// (80% -> 0.8); no unit conversion is needed. Missing, unset, or out-of-range
+        /// values fall back to 1.0 (no derate) so existing driver families are unaffected.
+        /// </summary>
+        public static double GetDeratingFactor(FamilySymbol symbol)
+        {
+            if (symbol == null) return 1.0;
+
+            Parameter param = symbol.LookupParameter(ParameterNames.DeratingFactor);
+            if (param != null && param.HasValue)
+            {
+                double factor = param.AsDouble();
+                // Clamp to (0, 1]: treat 0/blank/negative as "no derate", and never
+                // allow >100% which would inflate capacity above the rated value.
+                if (factor > 0.0 && factor <= 1.0)
+                {
+                    return factor;
+                }
+            }
+            return 1.0;
+        }
+
+        /// <summary>
         /// Get Sub-Driver Power (watts per sub-driver) from a FamilySymbol type parameter
         /// </summary>
         public static double GetSubDriverPower(FamilySymbol symbol)

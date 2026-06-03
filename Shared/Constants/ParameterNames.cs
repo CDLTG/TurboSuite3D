@@ -23,6 +23,7 @@ public static class ParameterNames
     public const string MaximumFixtures = "Maximum Fixtures";
     public const string Power = "Power";
     public const string SubDriverPower = "Sub-Driver Power";
+    public const string DeratingFactor = "Derating Factor";
     public const string ReelLength = "Reel Length";
     public const string ChannelLength = "Channel Length";
     public const string RemotePowerSupply = "Remote Power Supply";

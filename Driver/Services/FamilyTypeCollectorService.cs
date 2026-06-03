@@ -46,6 +46,7 @@ namespace TurboSuite.Driver.Services
                 string dimmingProtocol = ParameterHelper.GetDimmingProtocol(symbol);
                 int maximumFixtures = ParameterHelper.GetMaximumFixtures(symbol);
                 string voltage = ParameterHelper.GetVoltage(symbol);
+                double derateFactor = ParameterHelper.GetDeratingFactor(symbol);
 
                 bool isValid = false;
                 int subCount = 0;
@@ -71,7 +72,8 @@ namespace TurboSuite.Driver.Services
                     IsValidDriver = isValid,
                     DimmingProtocol = dimmingProtocol,
                     MaximumFixtures = maximumFixtures,
-                    Voltage = voltage
+                    Voltage = voltage,
+                    DerateFactor = derateFactor
                 });
             }
 
