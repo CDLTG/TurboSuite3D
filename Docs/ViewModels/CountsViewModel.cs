@@ -178,11 +178,9 @@ public class CountsViewModel : ViewModelBase
             // save with an opaque IOException.
             if (FileLockHelper.IsFileLocked(outputPath))
             {
-                string owner = FileLockHelper.TryGetLockOwner(outputPath);
-                string who = string.IsNullOrWhiteSpace(owner) ? "another user" : owner;
-                StatusText = $"Workbook is open ({who}). Ask them to close it, then try again.";
+                StatusText = "Workbook is open (another user). Ask them to close it, then try again.";
                 System.Windows.MessageBox.Show(
-                    $"{Path.GetFileName(outputPath)} is currently open by {who}.\n\n" +
+                    $"{Path.GetFileName(outputPath)} is currently open by another user.\n\n" +
                     "Please ask them to close the workbook, then run the update again.",
                     "TurboDocs — Counts workbook in use",
                     System.Windows.MessageBoxButton.OK,
