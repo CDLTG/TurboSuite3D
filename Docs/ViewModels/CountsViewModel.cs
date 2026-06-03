@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Win32;
 using TurboSuite.Docs.Models;
 using TurboSuite.Docs.Services;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Docs.ViewModels;
@@ -170,6 +171,39 @@ public class CountsViewModel : ViewModelBase
             };
             if (openDialog.ShowDialog() != true) return;
             outputPath = openDialog.FileName;
+
+            // The pricing team can keep this workbook open for days during an active
+            // bid. Updating it in place needs exclusive access, so check up front and
+            // ask them to close it rather than burning a long export only to fail on
+            // save with an opaque IOException.
+            if (FileLockHelper.IsFileLocked(outputPath))
+            {
+                string owner = FileLockHelper.TryGetLockOwner(outputPath);
+                string who = string.IsNullOrWhiteSpace(owner) ? "another user" : owner;
+                StatusText = $"Workbook is open ({who}). Ask them to close it, then try again.";
+                System.Windows.MessageBox.Show(
+                    $"{Path.GetFileName(outputPath)} is currently open by {who}.\n\n" +
+                    "Please ask them to close the workbook, then run the update again.",
+                    "TurboDocs — Counts workbook in use",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            // Updating rebuilds the Revit-owned sheets in place — counts, contractor
+            // sheets, changes. It's destructive by design, so confirm the target file
+            // before touching it to guard against an accidental update of the wrong
+            // workbook. Default to No.
+            var confirm = System.Windows.MessageBox.Show(
+                $"Update {Path.GetFileName(outputPath)} with the current Revit counts?\n\n" +
+                "This rebuilds the counts, contractor, and changes sheets in place. " +
+                "Pricing entered by the team is preserved, but the Revit-owned data is overwritten.\n\n" +
+                "Make sure this is the correct workbook before continuing.",
+                "TurboDocs — Confirm Counts update",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning,
+                System.Windows.MessageBoxResult.No);
+            if (confirm != System.Windows.MessageBoxResult.Yes) return;
         }
         else
         {

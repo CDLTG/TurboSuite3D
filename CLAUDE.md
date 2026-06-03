@@ -114,7 +114,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Shared.Constants` | `ParameterNames` — centralized custom Revit parameter name strings |
 | `TurboSuite.Shared.Converters` | WPF value converters shared across windowed commands |
 | `TurboSuite.Shared.Filters` | `FixtureSelectionFilter`, `LightingFixtureTagFilter` |
-| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `NaturalStringComparer` |
+| `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `NaturalStringComparer`, `FileLockHelper` |
 | `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings`, `GeneralSettings` |
 | `TurboSuite.Shared.Services` | `DataStorageHelper`, `LinkedRoomFinderService`, `UpdateService`, settings storage/cache services |
 | `TurboSuite.Shared.Styles` | Shared WPF ResourceDictionary styles |
