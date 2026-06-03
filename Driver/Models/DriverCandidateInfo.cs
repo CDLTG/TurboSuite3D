@@ -25,5 +25,13 @@ namespace TurboSuite.Driver.Models
         /// math, which must use the rated SubDriverPower.
         /// </summary>
         public double DerateFactor { get; set; } = 1.0;
+
+        /// <summary>
+        /// True when this type belongs to the TBD placeholder family (family name contains
+        /// "TBD" — e.g. AL_RPS_TBD). TBD is the only wildcard: it bypasses the Voltage /
+        /// Dimming Protocol hard filters and is always ranked strictly last, so it surfaces
+        /// only when no real driver matches.
+        /// </summary>
+        public bool IsTbd { get; set; }
     }
 }

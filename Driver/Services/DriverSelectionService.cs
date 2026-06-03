@@ -12,8 +12,6 @@ namespace TurboSuite.Driver.Services
     /// </summary>
     public class DriverSelectionService
     {
-        private const double DefaultFallbackSubDriverWattage = 96.0;
-
         /// <summary>
         /// Get the recommended driver configuration for a list of fixtures,
         /// evaluating each valid driver candidate from the project
@@ -49,29 +47,7 @@ namespace TurboSuite.Driver.Services
                 ?? new List<DriverCandidateInfo>();
 
             if (validCandidates.Count == 0)
-            {
-                // No valid candidates — compute required specs using fallback for reporting
-                var fallbackSegments = new List<FixtureSegment>();
-                foreach (var fixture in fixturesWithPower)
-                {
-                    fallbackSegments.AddRange(SplitFixture(fixture, DefaultFallbackSubDriverWattage));
-                }
-                var fallbackSubs = PackSegments(fallbackSegments, DefaultFallbackSubDriverWattage);
-                int requiredSubs = fallbackSubs.Count;
-
-                return new DriverRecommendation
-                {
-                    DriverCount = 0,
-                    DriverType = null,
-                    SubDriversPerDriver = 0,
-                    TotalSubDrivers = requiredSubs,
-                    DisplayText = "No suitable driver found",
-                    SubDriverAssignments = fallbackSubs,
-                    RecommendedCandidate = null,
-                    HasMatch = false,
-                    WarningMessage = $"No suitable driver found. Required: {requiredSubs} sub-driver(s), {DefaultFallbackSubDriverWattage:F0}W each"
-                };
-            }
+                return NoMatchRecommendation();
 
             // Evaluate each valid candidate
             CandidateEvaluation bestEval = null;
@@ -89,20 +65,7 @@ namespace TurboSuite.Driver.Services
             }
 
             if (bestEval == null)
-            {
-                return new DriverRecommendation
-                {
-                    DriverCount = 0,
-                    DriverType = null,
-                    SubDriversPerDriver = 0,
-                    TotalSubDrivers = 0,
-                    DisplayText = "No suitable driver found",
-                    SubDriverAssignments = new List<SubDriverAssignment>(),
-                    RecommendedCandidate = null,
-                    HasMatch = false,
-                    WarningMessage = "No suitable driver configuration found for this circuit's fixtures"
-                };
-            }
+                return NoMatchRecommendation();
 
             var best = bestEval;
 
@@ -137,6 +100,27 @@ namespace TurboSuite.Driver.Services
             };
         }
 
+        /// <summary>
+        /// Unified "no driver" result. Returned whenever no real driver matches and no TBD
+        /// placeholder is present in the project. No fabricated fallback — the circuit fails
+        /// loudly so the designer either specifies a driver or adds the TBD family.
+        /// </summary>
+        private static DriverRecommendation NoMatchRecommendation()
+        {
+            return new DriverRecommendation
+            {
+                DriverCount = 0,
+                DriverType = null,
+                SubDriversPerDriver = 0,
+                TotalSubDrivers = 0,
+                DisplayText = "No matching driver",
+                SubDriverAssignments = new List<SubDriverAssignment>(),
+                RecommendedCandidate = null,
+                HasMatch = false,
+                WarningMessage = "No matching driver — specify a driver type or add a TBD placeholder."
+            };
+        }
+
         private CandidateEvaluation EvaluateCandidate(
             DriverCandidateInfo candidate,
             List<FixtureData> fixturesWithPower,
@@ -144,20 +128,32 @@ namespace TurboSuite.Driver.Services
             HashSet<string> fixtureDimmingProtocols,
             HashSet<string> fixtureVoltages)
         {
-            // Hard filter: if fixtures have dimming protocol(s) set, candidate must match
-            if (fixtureDimmingProtocols.Count > 0
-                && !string.IsNullOrWhiteSpace(candidate.DimmingProtocol)
-                && !fixtureDimmingProtocols.Contains(candidate.DimmingProtocol))
+            // A real (non-TBD) driver may only serve a circuit that has declared every
+            // discriminating spec the matcher filters on — today Voltage AND Dimming
+            // Protocol. Until both are present the circuit is underspecified, so no real
+            // driver is eligible and it falls through to the TBD placeholder. The gate
+            // fields below MUST stay in lockstep with the match checks: if a new hard
+            // filter is ever added, add its "declared?" guard here too. TBD is the
+            // wildcard and skips all of this.
+            if (!candidate.IsTbd)
             {
-                return null;
-            }
+                // Not enough information yet → defer to TBD (or fail if no TBD exists).
+                if (fixtureVoltages.Count == 0 || fixtureDimmingProtocols.Count == 0)
+                    return null;
 
-            // Hard filter: if fixtures have voltage(s) set, candidate must match
-            if (fixtureVoltages.Count > 0
-                && !string.IsNullOrWhiteSpace(candidate.Voltage)
-                && !fixtureVoltages.Contains(candidate.Voltage))
-            {
-                return null;
+                // A blank field on a real driver is NOT a wildcard — it must declare and
+                // match the circuit's value.
+                if (string.IsNullOrWhiteSpace(candidate.Voltage)
+                    || !fixtureVoltages.Contains(candidate.Voltage))
+                {
+                    return null;
+                }
+
+                if (string.IsNullOrWhiteSpace(candidate.DimmingProtocol)
+                    || !fixtureDimmingProtocols.Contains(candidate.DimmingProtocol))
+                {
+                    return null;
+                }
             }
 
             // Apply derating only to the packing ceiling. SubDriverCount / IsValidDriver
@@ -214,6 +210,11 @@ namespace TurboSuite.Driver.Services
         /// </summary>
         private bool IsBetterCandidate(CandidateEvaluation eval, CandidateEvaluation current)
         {
+            // 0. Last resort: a real driver always beats the TBD placeholder. TBD only
+            // wins when it is the sole survivor (nothing real matched the circuit).
+            if (eval.Candidate.IsTbd != current.Candidate.IsTbd)
+                return !eval.Candidate.IsTbd;
+
             // 1. Manufacturer match
             if (eval.ManufacturerMatch != current.ManufacturerMatch)
                 return eval.ManufacturerMatch;

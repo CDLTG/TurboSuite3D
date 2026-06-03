@@ -13,6 +13,10 @@ namespace TurboSuite.Driver.Services
     /// </summary>
     public class FamilyTypeCollectorService
     {
+        // A driver type is the TBD placeholder if its FAMILY name (never the type name)
+        // contains this token. Shipped as the "AL_RPS_TBD" family in the Revit template.
+        private const string TbdFamilyMarker = "TBD";
+
         /// <summary>
         /// Get all Lighting Device family types in the project
         /// </summary>
@@ -47,6 +51,8 @@ namespace TurboSuite.Driver.Services
                 int maximumFixtures = ParameterHelper.GetMaximumFixtures(symbol);
                 string voltage = ParameterHelper.GetVoltage(symbol);
                 double derateFactor = ParameterHelper.GetDeratingFactor(symbol);
+                bool isTbd = symbol.FamilyName != null
+                    && symbol.FamilyName.IndexOf(TbdFamilyMarker, StringComparison.OrdinalIgnoreCase) >= 0;
 
                 bool isValid = false;
                 int subCount = 0;
@@ -73,7 +79,8 @@ namespace TurboSuite.Driver.Services
                     DimmingProtocol = dimmingProtocol,
                     MaximumFixtures = maximumFixtures,
                     Voltage = voltage,
-                    DerateFactor = derateFactor
+                    DerateFactor = derateFactor,
+                    IsTbd = isTbd
                 });
             }
 
