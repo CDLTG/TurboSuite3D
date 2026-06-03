@@ -1997,6 +1997,16 @@ public static class CountsWorkbookService
         // fall through IFERROR to 0 instead of propagating as a string into Buy Ext.
         string buyEa = $"IFERROR({Col("J")}*1,0)";
         string buyExt = $"({buyEa})*{effQty}";
+        // "NO BID" sentinel: when the pricing team types the literal into Unit Cost (col J), the
+        // four money columns DISPLAY the text instead of a price, while the numeric variants above
+        // still feed every subtotal/tariff/total — J falls through IFERROR(…,0) to $0, so no
+        // exclusion logic is needed. Per-row, case-insensitive, blank-safe (UPPER(TRIM(J))).
+        // Wire dispXxx into the four Gap value calls only; leave the numeric variants for the math.
+        string noBid = $"EXACT(UPPER(TRIM({Col("J")})),\"NO BID\")";
+        string dispSellEa  = $"IF({noBid},\"NO BID\",{sellEa})";
+        string dispBuyEa   = $"IF({noBid},\"NO BID\",{buyEa})";
+        string dispSellExt = $"IF({noBid},\"NO BID\",{sellExt})";
+        string dispBuyExt  = $"IF({noBid},\"NO BID\",{buyExt})";
         // Tariff base = Sell Ext. (includes Adder). Prior version omitted M, underpricing tariffs.
         string tariffBasePerRow = sellExt;
         // Exclude "dependent" placeholder — it's a visual cue on Worksheet for drag-fill links,
@@ -2161,15 +2171,15 @@ public static class CountsWorkbookService
         if (includeDelta)
             ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effDelta, "\"\"", NoteBlank())},\"\")";
         // Buy Ea. — blank tariff row, blank note rows, no footer rows
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(buyEa, "\"\"", NoteBlank())},\"\")";
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(dispBuyEa, "\"\"", NoteBlank())},\"\")";
         // Buy Ext. + footer values
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(buyExt, "\"\"", NoteBlank())},\"\"),{buyValueFooter})";
+            $"_xlfn.VSTACK(IFERROR({Gap(dispBuyExt, "\"\"", NoteBlank())},\"\"),{buyValueFooter})";
         // Sell Ea. — blank tariff row, blank note rows, no footer rows (labels live on Qty)
-        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(sellEa, "\"\"", NoteBlank())},\"\")";
+        ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(dispSellEa, "\"\"", NoteBlank())},\"\")";
         // Sell Ext. + footer values (tariff row carries per-type tariff amount; note rows blank)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(sellExt, "_xlpm.totals*_xlpm.pcts", NoteBlank())},\"\"),{sellValueFooter})";
+            $"_xlfn.VSTACK(IFERROR({Gap(dispSellExt, "_xlpm.totals*_xlpm.pcts", NoteBlank())},\"\"),{sellValueFooter})";
         // InDataBlock flag — 1 for every data row, type-gap row, tariff row, and note row;
         // blank for footer/quote-notes rows (no VSTACK append). Mirrors Gap's structural shape
         // so the flag column aligns row-for-row with the visible helper columns on the print
@@ -3554,7 +3564,8 @@ public static class CountsWorkbookService
             var entry = newRowEntries[i];
             var key = (entry.Type.ToUpperInvariant(), entry.Catalog.ToUpperInvariant());
             var existing = existingByKey.GetValueOrDefault(key);
-            bool hasLiteralCost = existing != null && existing.UnitCost.HasValue && !existing.CostIsFormula;
+            bool hasLiteralCost = existing != null
+                && ((existing.UnitCost.HasValue && !existing.CostIsFormula) || IsNoBid(existing.UnitCostText));
             if (hasLiteralCost && !canonicalSheetRowByCatalog.ContainsKey(entry.Catalog))
                 canonicalSheetRowByCatalog[entry.Catalog] = sheetRow;
         }
@@ -3695,7 +3706,7 @@ public static class CountsWorkbookService
                 WritePricingCells(ws, row, canonicalRow,
                     existing.Description, existing.Calc, existing.UnitCost, existing.Markup, existing.Adder,
                     existing.DescIsFormula, existing.CalcIsFormula, existing.CostIsFormula,
-                    isNewRow: false);
+                    isNewRow: false, existingCostText: existing.UnitCostText);
 
                 // Type-canonical field (Tariff): preserve existing literal on canonical row.
                 // If this row's key had no tariff (e.g., a different catalog was canonical last
@@ -3811,7 +3822,8 @@ public static class CountsWorkbookService
                 ws.Cell(row, WsColCalc).Value = existing.Calc;
                 // Phase intentionally left blank — removed rows must not appear in Phase sheet FILTER results
                 ws.Cell(row, WsColDesc).Value = existing.Description ?? "";
-                if (existing.UnitCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existing.UnitCost.Value;
+                if (IsNoBid(existing.UnitCostText)) ws.Cell(row, WsColUnitCost).Value = existing.UnitCostText;
+                else if (existing.UnitCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existing.UnitCost.Value;
                 if (existing.Markup.HasValue) ws.Cell(row, WsColMarkup).Value = existing.Markup.Value;
                 if (existing.Tariff.HasValue) ws.Cell(row, WsColTariff).Value = existing.Tariff.Value;
                 if (existing.Adder.HasValue) ws.Cell(row, WsColAdder).Value = existing.Adder.Value;
@@ -4016,9 +4028,10 @@ public static class CountsWorkbookService
         IXLWorksheet ws, int row, int canonicalRow,
         string? existingDesc, string? existingCalc, double? existingCost, double? existingMarkup, double? existingAdder,
         bool descIsFormula, bool calcIsFormula, bool costIsFormula,
-        bool isNewRow)
+        bool isNewRow, string? existingCostText = null)
     {
         bool isCanonical = row == canonicalRow;
+        bool isNoBid = IsNoBid(existingCostText);
 
         // Markup % and Adder have NO canonical — every row holds its own literal (user-entered
         // or drag-filled). Preserve whatever value was read. `ReadExistingWorksheetRows`
@@ -4037,7 +4050,8 @@ public static class CountsWorkbookService
             {
                 if (existingDesc != null) ws.Cell(row, WsColDesc).Value = existingDesc;
                 if (!string.IsNullOrEmpty(existingCalc)) ws.Cell(row, WsColCalc).Value = existingCalc;
-                if (existingCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
+                if (isNoBid) ws.Cell(row, WsColUnitCost).Value = existingCostText;
+                else if (existingCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
             }
             return;
         }
@@ -4065,7 +4079,11 @@ public static class CountsWorkbookService
             StyleAutoFilledCell(ws.Cell(row, WsColCalc));
         }
 
-        if (!isNewRow && !costIsFormula && existingCost.HasValue)
+        if (!isNewRow && isNoBid)
+        {
+            ws.Cell(row, WsColUnitCost).Value = existingCostText;
+        }
+        else if (!isNewRow && !costIsFormula && existingCost.HasValue)
         {
             ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
         }
@@ -4142,6 +4160,12 @@ public static class CountsWorkbookService
         if (cell.IsEmpty()) return null;
         return cell.TryGetValue<double>(out double v) ? v : null;
     }
+
+    // The "NO BID" sentinel: a literal the pricing team types into Unit Cost to mark a line they
+    // aren't bidding. Trim + case-insensitive to mirror the display formula's UPPER(TRIM(J)).
+    // (Internal double-spaces are an unsupported typo — Excel TRIM collapses them, C# Trim does not.)
+    private static bool IsNoBid(string? s) =>
+        string.Equals(s?.Trim(), "NO BID", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Reads the 6 Schedule Notes cells for a row. The canonical row holds the authoritative
@@ -4477,6 +4501,11 @@ public static class CountsWorkbookService
                 Phase = ReadNumericCell(ws.Cell(r, WsColPhase)),
                 Description = ReadTextCell(ws.Cell(r, WsColDesc)),
                 UnitCost = ReadNumericCell(ws.Cell(r, WsColUnitCost)),
+                // Capture a non-numeric cost literal (e.g. "NO BID") only when the numeric read
+                // is empty — ReadTextCell stringifies numeric cells, so gate on numeric-null.
+                UnitCostText = ReadNumericCell(ws.Cell(r, WsColUnitCost)) is null
+                    ? ReadTextCell(ws.Cell(r, WsColUnitCost))
+                    : null,
                 Markup = ReadNumericCell(ws.Cell(r, WsColMarkup)),
                 Adder = ReadNumericCell(ws.Cell(r, WsColAdder)),
                 Tariff = ReadNumericCell(ws.Cell(r, WsColTariff)),
@@ -4508,6 +4537,8 @@ public static class CountsWorkbookService
         public double? Phase { get; init; }
         public string? Description { get; init; }
         public double? UnitCost { get; init; }
+        // Non-numeric Unit Cost literal (the "NO BID" sentinel) captured for round-trip restore.
+        public string? UnitCostText { get; init; }
         public double? Markup { get; init; }
         public double? Tariff { get; init; }
         public double? Adder { get; init; }
