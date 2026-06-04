@@ -1,3 +1,6 @@
+// Guarded so these extension stubs drop out on net8 (whose BCL has the matching
+// instance methods) once Core multi-targets net48;net8.0-windows.
+#if !NET5_0_OR_GREATER
 using System;
 using System.Text;
 
@@ -36,3 +39,4 @@ namespace TurboSuite.Compatibility
         }
     }
 }
+#endif
