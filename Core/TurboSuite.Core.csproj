@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>TurboSuite</RootNamespace>
+    <AssemblyName>TurboSuite.Core</AssemblyName>
+    <Company>CDLTG</Company>
+    <Authors>CDLTG</Authors>
+    <Product>TurboSuite</Product>
+    <Version>1.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

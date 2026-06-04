@@ -13,7 +13,7 @@
     <Version>1.1.0</Version>
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <DefaultItemExcludes>$(DefaultItemExcludes);Updater\**;Installer\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Updater\**;Installer\**;Abstractions\**;Core\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ACadSharp" Version="3.4.24" />
