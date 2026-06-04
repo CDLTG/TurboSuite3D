@@ -12,7 +12,7 @@ namespace TurboSuite.Zones.Services
         private const double SparePercentage = 0.05;
 
         // Module ordering inside panels: Relay first, then 0-10V, then ELV
-        internal static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
+        public static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
 
         /// <summary>
         /// Groups circuits by zone (ZONE N panels), recommends the minimum number of
@@ -564,7 +564,7 @@ namespace TurboSuite.Zones.Services
             return bins.Count;
         }
 
-        internal static IEnumerable<(string PartNumber, int Count)> GroupModulesByPartNumber(
+        public static IEnumerable<(string PartNumber, int Count)> GroupModulesByPartNumber(
             IEnumerable<ModuleResult> modules)
         {
             int RankOf(string t)
