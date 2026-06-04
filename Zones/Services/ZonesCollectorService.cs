@@ -97,12 +97,12 @@ namespace TurboSuite.Zones.Services
 
                         result.Add(new ZonesCircuitData
                         {
-                            CircuitId = circuit.Id,
+                            CircuitId = circuit.Id.ToRef(),
                             CircuitNumber = circuitNumber,
                             DimmingType = dimmingType ?? string.Empty,
                             PanelName = panelName ?? string.Empty,
                             RoomName = roomName ?? string.Empty,
-                            RegionId = regionId,
+                            RegionId = regionId.ToRef(),
                             CurrentLoadName = currentLoadName ?? string.Empty,
                             CircuitComments = circuitComments ?? string.Empty,
                             FixtureComments = fixtureComments ?? string.Empty,

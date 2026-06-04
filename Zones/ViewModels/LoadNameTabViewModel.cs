@@ -6,6 +6,7 @@ using System.Windows.Input;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Zones.Models;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 using TurboSuite.Zones.Services;
 
@@ -72,7 +73,7 @@ namespace TurboSuite.Zones.ViewModels
         {
             if (_isBusy || _selectedRow == null) return false;
             var id = _selectedRow.Data?.CircuitId;
-            return id != null && id != ElementId.InvalidElementId;
+            return id.HasValue && id.Value.IsValid;
         }
 
         private void Apply()
@@ -114,7 +115,7 @@ namespace TurboSuite.Zones.ViewModels
             IsBusy = true;
             _handler.CurrentRequest = new SelectInProjectRequest
             {
-                CircuitId = id,
+                CircuitId = id.ToElementId(),
                 OnComplete = result =>
                 {
                     try

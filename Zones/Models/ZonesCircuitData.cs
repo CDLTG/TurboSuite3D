@@ -1,5 +1,5 @@
 #nullable disable
-using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 
 namespace TurboSuite.Zones.Models
 {
@@ -13,7 +13,7 @@ namespace TurboSuite.Zones.Models
 
     public class ZonesCircuitData
     {
-        public ElementId CircuitId { get; set; }
+        public ElementRef CircuitId { get; set; }
         public string CircuitNumber { get; set; }
         public string DimmingType { get; set; }
         public string RoomName { get; set; }
@@ -23,7 +23,7 @@ namespace TurboSuite.Zones.Models
         public string LoadClassificationName { get; set; }
         public string PanelName { get; set; }
         public string RoomOverride { get; set; }
-        public ElementId RegionId { get; set; }
+        public ElementRef RegionId { get; set; }
         public string UpdatedLoadName { get; set; }
         public LabelSource LabelSource { get; set; }
         public bool IsWiredToSwitch { get; set; }
