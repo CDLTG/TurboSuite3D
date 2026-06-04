@@ -2,6 +2,7 @@
 // Core multi-targets net48;net8.0-windows.
 #if !NET5_0_OR_GREATER
 using System.Collections.Generic;
+using System.Linq;
 
 namespace TurboSuite.Compatibility
 {
@@ -36,6 +37,25 @@ namespace TurboSuite.Compatibility
             }
             actualValue = default!;
             return false;
+        }
+
+        public static bool TryAdd<TKey, TValue>(this Dictionary<TKey, TValue> dict, TKey key, TValue value)
+        {
+            if (dict.ContainsKey(key)) return false;
+            dict.Add(key, value);
+            return true;
+        }
+
+        public static HashSet<T> ToHashSet<T>(this IEnumerable<T> source)
+            => new HashSet<T>(source);
+
+        public static HashSet<T> ToHashSet<T>(this IEnumerable<T> source, IEqualityComparer<T> comparer)
+            => new HashSet<T>(source, comparer);
+
+        public static void Deconstruct<TKey, TValue>(this KeyValuePair<TKey, TValue> kvp, out TKey key, out TValue value)
+        {
+            key = kvp.Key;
+            value = kvp.Value;
         }
     }
 }

@@ -23,6 +23,9 @@ namespace TurboSuite.Compatibility
         public static string[] Split(this string s, char separator, int count)
             => s.Split(new[] { separator }, count, StringSplitOptions.None);
 
+        public static string[] Split(this string s, char separator, StringSplitOptions options)
+            => s.Split(new[] { separator }, options);
+
         public static string Replace(this string s, string oldValue, string newValue, StringComparison comparison)
         {
             if (string.IsNullOrEmpty(oldValue)) return s;
