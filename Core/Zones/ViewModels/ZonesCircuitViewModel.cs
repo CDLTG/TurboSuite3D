@@ -65,7 +65,7 @@ namespace TurboSuite.Zones.ViewModels
 
         private void RecalculateUpdatedLoadName()
         {
-            string label = ZonesCollectorService.ResolveLabel(
+            string label = ZonesLabelResolver.ResolveLabel(
                 _data.CircuitComments, _data.FixtureComments, _data.LoadClassificationName, out LabelSource source);
 
             string room = !string.IsNullOrWhiteSpace(_data.RoomOverride)

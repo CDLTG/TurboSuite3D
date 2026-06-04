@@ -86,7 +86,7 @@ namespace TurboSuite.Zones.Services
                         string loadClassificationName = ParameterHelper.GetLoadClassificationName(circuit);
 
                         // Resolve load name label using priority order
-                        string label = ResolveLabel(circuitComments, fixtureComments, loadClassificationName, out LabelSource labelSource);
+                        string label = ZonesLabelResolver.ResolveLabel(circuitComments, fixtureComments, loadClassificationName, out LabelSource labelSource);
                         string updatedLoadName = string.Empty;
                         if (!string.IsNullOrWhiteSpace(roomName) && !string.IsNullOrWhiteSpace(label))
                             updatedLoadName = $"{roomName.ToUpperInvariant()} - {label.ToLowerInvariant()}";
@@ -125,37 +125,6 @@ namespace TurboSuite.Zones.Services
             return result;
         }
 
-        /// <summary>
-        /// Resolves the label portion of a load name from pre-read values.
-        /// Priority: circuit comments > fixture comments > load classification name.
-        /// Strips parenthetical content from the result.
-        /// </summary>
-        public static string ResolveLabel(string circuitComments, string fixtureComments, string loadClassificationName, out LabelSource source)
-        {
-            // Priority 1: Circuit Comments
-            if (!string.IsNullOrWhiteSpace(circuitComments))
-            {
-                source = LabelSource.CircuitComments;
-                return StripParenthetical(circuitComments);
-            }
-
-            // Priority 2: Fixture Comments (unique, joined)
-            if (!string.IsNullOrWhiteSpace(fixtureComments))
-            {
-                source = LabelSource.FixtureComments;
-                return StripParenthetical(fixtureComments);
-            }
-
-            // Priority 3: Load Classification (full name)
-            if (!string.IsNullOrWhiteSpace(loadClassificationName))
-            {
-                source = LabelSource.Fallback;
-                return StripParenthetical(loadClassificationName);
-            }
-
-            source = LabelSource.None;
-            return string.Empty;
-        }
 
         public (int regular, int twoGang) GetKeypadCounts(Document doc)
         {
@@ -225,12 +194,5 @@ namespace TurboSuite.Zones.Services
             return result;
         }
 
-        private static string StripParenthetical(string label)
-        {
-            int parenIdx = label.IndexOf('(');
-            if (parenIdx >= 0)
-                label = label.Substring(0, parenIdx).TrimEnd();
-            return label ?? string.Empty;
-        }
     }
 }
