@@ -38,6 +38,7 @@
     <Resource Include="Icons\*.png" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="Core\TurboSuite.Core.csproj" />
     <ProjectReference Include="Updater\TurboSuiteUpdater.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
