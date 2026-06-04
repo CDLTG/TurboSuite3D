@@ -2371,7 +2371,9 @@ public static class CountsWorkbookService
         int? anchor = positions.Count > 0 ? positions.Values.Min() : fallbackAnchor;
         if (anchor != null)
         {
-            foreach (var name in names.Reverse())
+            // Enumerable.Reverse (not the in-place void MemoryExtensions.Reverse(Span<T>)
+            // that System.Memory — pulled in by ClosedXML — would otherwise bind here).
+            foreach (var name in Enumerable.Reverse(names))
             {
                 if (wb.Worksheets.TryGetWorksheet(name, out var ws))
                     ws.Position = anchor.Value;
