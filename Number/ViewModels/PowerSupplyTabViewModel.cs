@@ -1,19 +1,16 @@
 #nullable disable
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
-using TurboSuite.Number.Models;
+using TurboSuite.Abstractions;
 using TurboSuite.Number.Services;
-using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Number.ViewModels
 {
     public class PowerSupplyTabViewModel : TabViewModelBase
     {
-        private readonly Document _doc;
-        private readonly ExternalEvent _externalEvent;
-        private readonly RevitApiRequestHandler _handler;
+        private readonly IRevitWorkQueue _workQueue;
+        private readonly ISwitchIdWriter _switchIdWriter;
+        private readonly IPrefixSuffixStore _prefixSuffixStore;
         private string _prefix = "X";
         private string _suffix = "";
 
@@ -23,7 +20,7 @@ namespace TurboSuite.Number.ViewModels
             set
             {
                 if (SetProperty(ref _prefix, value ?? ""))
-                    RaiseRequest(new SavePrefixSuffixRequest { Prefix = _prefix, Suffix = _suffix });
+                    SavePrefixSuffix();
             }
         }
 
@@ -33,32 +30,25 @@ namespace TurboSuite.Number.ViewModels
             set
             {
                 if (SetProperty(ref _suffix, value ?? ""))
-                    RaiseRequest(new SavePrefixSuffixRequest { Prefix = _prefix, Suffix = _suffix });
+                    SavePrefixSuffix();
             }
         }
 
-        public PowerSupplyTabViewModel(Document doc, List<DeviceNumberRow> powerSupplies,
-            ExternalEvent externalEvent, RevitApiRequestHandler handler)
-            : base("Power Supplies", externalEvent, handler)
+        public PowerSupplyTabViewModel(IReadOnlyList<NumberableRowViewModel> rows,
+            string savedPrefix, string savedSuffix,
+            IRevitWorkQueue workQueue, ISwitchIdWriter switchIdWriter,
+            IPrefixSuffixStore prefixSuffixStore)
+            : base("Power Supplies")
         {
-            _doc = doc;
-            _externalEvent = externalEvent;
-            _handler = handler;
+            _workQueue = workQueue;
+            _switchIdWriter = switchIdWriter;
+            _prefixSuffixStore = prefixSuffixStore;
 
-            foreach (var d in powerSupplies)
-            {
-                AddRow(new NumberableRowViewModel(
-                    d.ElementId.ToRef(),
-                    d.Model,
-                    d.SwitchId,
-                    circuitNumber: d.CircuitNumber,
-                    circuitElementId: d.CircuitElementId.ToRef(),
-                    loadName: d.LoadName,
-                    typeName: d.TypeName,
-                    mark: d.Mark));
-            }
+            foreach (var row in rows)
+                AddRow(row);
 
-            var (savedPrefix, savedSuffix) = RoomOrderStorageService.LoadPrefixSuffix(doc);
+            // Prefix/suffix are read from ExtensibleStorage at collection time and
+            // passed in — a Core ctor cannot read Revit synchronously.
             if (savedPrefix != null) _prefix = savedPrefix;
             if (savedSuffix != null) _suffix = savedSuffix;
 
@@ -152,9 +142,9 @@ namespace TurboSuite.Number.ViewModels
         protected override bool TryParseNumber(string input, out int value)
         {
             // Strip known prefix/suffix so "X40" parses as 40
-            if (!string.IsNullOrEmpty(_prefix) && input.StartsWith(_prefix, System.StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(_prefix) && input.StartsWith(_prefix, StringComparison.OrdinalIgnoreCase))
                 input = input.Substring(_prefix.Length);
-            if (!string.IsNullOrEmpty(_suffix) && input.EndsWith(_suffix, System.StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(_suffix) && input.EndsWith(_suffix, StringComparison.OrdinalIgnoreCase))
                 input = input.Substring(0, input.Length - _suffix.Length);
             return int.TryParse(input, out value);
         }
@@ -171,13 +161,14 @@ namespace TurboSuite.Number.ViewModels
 
         protected override void Apply()
         {
-            RaiseRequest(new WriteDeviceSwitchIdsRequest { Rows = Rows });
+            _workQueue.Enqueue(() => { _switchIdWriter.WriteSwitchIds(Rows); return null; }, null);
         }
 
-        private void RaiseRequest(RevitApiRequest request)
+        private void SavePrefixSuffix()
         {
-            _handler.CurrentRequest = request;
-            _externalEvent.Raise();
+            var prefix = _prefix;
+            var suffix = _suffix;
+            _workQueue.Enqueue(() => { _prefixSuffixStore.Save(prefix, suffix); return null; }, null);
         }
     }
 }

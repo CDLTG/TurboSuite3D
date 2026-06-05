@@ -98,7 +98,7 @@ namespace TurboSuite.Number.ViewModels
 
         public KeypadTabViewModel(Document doc, List<DeviceNumberRow> keypads,
             ExternalEvent externalEvent, RevitApiRequestHandler handler)
-            : base("Keypads", externalEvent, handler)
+            : base("Keypads")
         {
             _doc = doc;
             _externalEvent = externalEvent;
