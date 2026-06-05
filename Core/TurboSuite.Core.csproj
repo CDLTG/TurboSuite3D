@@ -27,6 +27,12 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
+    <!-- System.Text.Json is in-box on net8 (shared framework) but absent from the net48
+         BCL, where DocsSettingsService needs it. net48-only on purpose: the net8 build
+         (the shipping Revit 2025 artifact) keeps using its built-in copy, so this package
+         and its transitive graph never enter the production dependency closure. Version
+         tracks the net8 in-box System.Text.Json so both TFMs serialize identically. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
