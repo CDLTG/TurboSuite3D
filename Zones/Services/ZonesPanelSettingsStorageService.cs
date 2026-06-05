@@ -5,17 +5,10 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Services;
+using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
 {
-    public class PanelSettings
-    {
-        public string Brand { get; set; }
-        public bool UseDedicatedRelayModule { get; set; }
-        public Dictionary<string, string> SpecialDeviceSelections { get; set; } = new Dictionary<string, string>();
-        public Dictionary<string, int> PanelSizeOverrides { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-    }
-
     public static class ZonesPanelSettingsStorageService
     {
         private static readonly Guid SchemaGuid = new Guid("b2c3d4e5-6f7a-8b9c-0d1e-2f3a4b5c6d7e");

@@ -5,7 +5,7 @@ using System.Windows;
 using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 
-namespace TurboSuite.Number.Services
+namespace TurboSuite.Shared.Services
 {
     /// <summary>
     /// Shim-side implementation of <see cref="IRevitWorkQueue"/> over an
@@ -15,6 +15,9 @@ namespace TurboSuite.Number.Services
     /// thread. Because callbacks run synchronously inline, any work they enqueue is
     /// picked up by the same drain pass — so sequential chaining works without re-raising
     /// the event (the old "never raise twice" footgun does not apply here).
+    ///
+    /// Shared shim infrastructure — both TurboNumber and TurboZones modeless commands
+    /// drive their Core ViewModels through one instance of this queue.
     /// </summary>
     public class RevitWorkQueue : IExternalEventHandler, IRevitWorkQueue, IDisposable
     {
@@ -22,11 +25,13 @@ namespace TurboSuite.Number.Services
         private readonly Queue<(Func<object> Work, Action<object> OnComplete)> _queue
             = new Queue<(Func<object>, Action<object>)>();
         private readonly string _errorTitle;
+        private readonly string _name;
         private ExternalEvent _externalEvent;
 
-        public RevitWorkQueue(string errorTitle)
+        public RevitWorkQueue(string errorTitle, string name = "TurboSuite Work Queue")
         {
             _errorTitle = errorTitle;
+            _name = name;
             _externalEvent = ExternalEvent.Create(this);
         }
 
@@ -70,7 +75,7 @@ namespace TurboSuite.Number.Services
             }
         }
 
-        public string GetName() => "TurboNumber Work Queue";
+        public string GetName() => _name;
 
         public void Dispose()
         {

@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
-using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
+using TurboSuite.Abstractions;
 using TurboSuite.Zones.Models;
-using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 using TurboSuite.Zones.Services;
 
@@ -14,19 +12,19 @@ namespace TurboSuite.Zones.ViewModels
 {
     public class LoadNameTabViewModel : ViewModelBase
     {
-        private readonly Document _doc;
-        private readonly ExternalEvent _externalEvent;
-        private readonly RevitApiRequestHandler _handler;
+        private readonly IRevitWorkQueue _workQueue;
+        private readonly ILoadNameWriter _loadNameWriter;
+        private readonly ICircuitSelector _selector;
 
         private bool _isBusy;
         private ZonesCircuitViewModel _selectedRow;
 
-        public LoadNameTabViewModel(Document doc, List<ZonesCircuitData> circuits,
-            ExternalEvent externalEvent, RevitApiRequestHandler handler)
+        public LoadNameTabViewModel(List<ZonesCircuitData> circuits,
+            IRevitWorkQueue workQueue, ILoadNameWriter loadNameWriter, ICircuitSelector selector)
         {
-            _doc = doc;
-            _externalEvent = externalEvent;
-            _handler = handler;
+            _workQueue = workQueue;
+            _loadNameWriter = loadNameWriter;
+            _selector = selector;
 
             Circuits = new ObservableCollection<ZonesCircuitViewModel>(
                 circuits
@@ -72,8 +70,7 @@ namespace TurboSuite.Zones.ViewModels
         private bool CanSelectInProject()
         {
             if (_isBusy || _selectedRow == null) return false;
-            var id = _selectedRow.Data?.CircuitId;
-            return id.HasValue && id.Value.IsValid;
+            return _selectedRow.Data != null && _selectedRow.Data.CircuitId.IsValid;
         }
 
         private void Apply()
@@ -81,10 +78,9 @@ namespace TurboSuite.Zones.ViewModels
             var circuitData = Circuits.Select(c => c.Data).ToList();
 
             IsBusy = true;
-            _handler.CurrentRequest = new UpdateLoadNamesRequest
-            {
-                Circuits = circuitData,
-                OnComplete = result =>
+            _workQueue.Enqueue(
+                () => _loadNameWriter.UpdateLoadNames(circuitData),
+                result =>
                 {
                     try
                     {
@@ -95,41 +91,36 @@ namespace TurboSuite.Zones.ViewModels
                                 if (!string.IsNullOrWhiteSpace(vm.Data.UpdatedLoadName))
                                     vm.CurrentLoadName = vm.Data.UpdatedLoadName;
                             }
-                            TaskDialog.Show("TurboZones", $"Updated {count} electrical circuit(s).");
+                            System.Windows.MessageBox.Show($"Updated {count} electrical circuit(s).", "TurboZones");
                         }
                     }
                     finally
                     {
                         IsBusy = false;
                     }
-                }
-            };
-            _externalEvent.Raise();
+                });
         }
 
         private void SelectInProject()
         {
             if (!CanSelectInProject()) return;
-            var id = _selectedRow.Data.CircuitId;
+            var circuitRef = _selectedRow.Data.CircuitId;
 
             IsBusy = true;
-            _handler.CurrentRequest = new SelectInProjectRequest
-            {
-                CircuitId = id.ToElementId(),
-                OnComplete = result =>
+            _workQueue.Enqueue(
+                () => _selector.SelectInProject(circuitRef),
+                result =>
                 {
                     try
                     {
                         if (result is bool ok && !ok)
-                            TaskDialog.Show("TurboZones", "This circuit no longer exists in the project.");
+                            System.Windows.MessageBox.Show("This circuit no longer exists in the project.", "TurboZones");
                     }
                     finally
                     {
                         IsBusy = false;
                     }
-                }
-            };
-            _externalEvent.Raise();
+                });
         }
     }
 }

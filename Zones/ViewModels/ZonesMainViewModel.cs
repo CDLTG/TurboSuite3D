@@ -1,7 +1,6 @@
 #nullable disable
 using System.Collections.Generic;
-using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
+using TurboSuite.Abstractions;
 using TurboSuite.Shared.ViewModels;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
@@ -10,15 +9,19 @@ namespace TurboSuite.Zones.ViewModels
 {
     public class ZonesMainViewModel : ViewModelBase
     {
-        public ZonesMainViewModel(Document doc, List<ZonesCircuitData> circuits,
+        public ZonesMainViewModel(List<ZonesCircuitData> circuits,
             int keypadCount, int twoGangKeypadCount,
             int hybridRepeaterCount, string hybridRepeaterPartNumber,
-            ExternalEvent externalEvent, RevitApiRequestHandler handler)
+            PanelSettings savedSettings,
+            IRevitWorkQueue workQueue,
+            ILoadNameWriter loadNameWriter,
+            IPanelSettingsStore panelSettingsStore,
+            ICircuitSelector circuitSelector)
         {
-            PanelTab = new PanelBreakdownTabViewModel(doc, circuits,
+            PanelTab = new PanelBreakdownTabViewModel(circuits,
                 keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
-                externalEvent, handler);
-            LoadNameTab = new LoadNameTabViewModel(doc, circuits, externalEvent, handler);
+                savedSettings, workQueue, panelSettingsStore);
+            LoadNameTab = new LoadNameTabViewModel(circuits, workQueue, loadNameWriter, circuitSelector);
         }
 
         public PanelBreakdownTabViewModel PanelTab { get; }

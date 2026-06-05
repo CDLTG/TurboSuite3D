@@ -5,8 +5,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows.Threading;
-using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
+using TurboSuite.Abstractions;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
 using TurboSuite.Shared.ViewModels;
@@ -28,9 +27,8 @@ namespace TurboSuite.Zones.ViewModels
         private readonly int _twoGangKeypadCount;
         private readonly int _hybridRepeaterCount;
         private readonly string _hybridRepeaterPartNumber;
-        private readonly Document _doc;
-        private readonly ExternalEvent _externalEvent;
-        private readonly RevitApiRequestHandler _handler;
+        private readonly IRevitWorkQueue _workQueue;
+        private readonly IPanelSettingsStore _settingsStore;
         private BrandConfig _currentBrand;
         private ObservableCollection<ZonesCircuitData> _unassignedCircuits;
 
@@ -40,14 +38,14 @@ namespace TurboSuite.Zones.ViewModels
         private bool _savePending;
         private bool _saveDirty;
 
-        public PanelBreakdownTabViewModel(Document doc, List<ZonesCircuitData> circuits,
+        public PanelBreakdownTabViewModel(List<ZonesCircuitData> circuits,
             int keypadCount, int twoGangKeypadCount,
             int hybridRepeaterCount, string hybridRepeaterPartNumber,
-            ExternalEvent externalEvent, RevitApiRequestHandler handler)
+            PanelSettings savedSettings,
+            IRevitWorkQueue workQueue, IPanelSettingsStore settingsStore)
         {
-            _doc = doc;
-            _externalEvent = externalEvent;
-            _handler = handler;
+            _workQueue = workQueue;
+            _settingsStore = settingsStore;
             _keypadCount = keypadCount;
             _twoGangKeypadCount = twoGangKeypadCount;
             _hybridRepeaterCount = hybridRepeaterCount;
@@ -59,7 +57,7 @@ namespace TurboSuite.Zones.ViewModels
             BrandNames = new List<string> { "Lutron", "Crestron" };
             _selectedBrandName = "Lutron";
 
-            LoadSavedSettings();
+            ApplySavedSettings(savedSettings);
         }
 
         public string TabHeader => "Panel Breakdown";
@@ -185,9 +183,8 @@ namespace TurboSuite.Zones.ViewModels
             SaveSettings();
         }
 
-        private void LoadSavedSettings()
+        private void ApplySavedSettings(PanelSettings settings)
         {
-            var settings = ZonesPanelSettingsStorageService.Load(_doc);
             if (settings != null)
             {
                 _selectedBrandName = settings.Brand ?? "Lutron";
@@ -248,9 +245,8 @@ namespace TurboSuite.Zones.ViewModels
         private void SaveSettings()
         {
             // Coalesce: if a save is already in flight, mark dirty and let the completion
-            // callback re-raise with a fresh snapshot. Without this, ExternalEvent.Raise()
-            // silently drops the second raise per CLAUDE.md, losing user changes (e.g. rapid
-            // ComboBox toggles).
+            // callback re-enqueue with a fresh snapshot. This guards against losing user
+            // changes (e.g. rapid ComboBox toggles) while a save is on the Revit thread.
             if (_savePending)
             {
                 _saveDirty = true;
@@ -265,10 +261,10 @@ namespace TurboSuite.Zones.ViewModels
             _savePending = true;
             _saveDirty = false;
 
-            _handler.CurrentRequest = new SavePanelSettingsRequest
-            {
-                Settings = BuildSettingsSnapshot(),
-                OnComplete = _ =>
+            var snapshot = BuildSettingsSnapshot();
+            _workQueue.Enqueue(
+                () => { _settingsStore.Save(snapshot); return null; },
+                _ =>
                 {
                     if (_saveDirty)
                     {
@@ -279,9 +275,7 @@ namespace TurboSuite.Zones.ViewModels
                     {
                         _savePending = false;
                     }
-                }
-            };
-            _externalEvent.Raise();
+                });
         }
 
         private void AttachPanelHandlers()

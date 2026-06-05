@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Services;
 using TurboSuite.Zones.ViewModels;
 using TurboSuite.Zones.Views;
@@ -59,12 +60,18 @@ namespace TurboSuite.Zones
                 var (keypadCount, twoGangKeypadCount) = collectorService.GetKeypadCounts(doc);
                 var (hybridRepeaterCount, hybridRepeaterPartNumber) = collectorService.GetHybridRepeaterInfo(doc);
 
-                var handler = new RevitApiRequestHandler(doc, uidoc, new LoadNameService());
-                var externalEvent = ExternalEvent.Create(handler);
+                // Load persisted panel settings shim-side (a Core ctor cannot read Revit synchronously).
+                var savedSettings = ZonesPanelSettingsStorageService.Load(doc);
 
-                var viewModel = new ZonesMainViewModel(doc, circuits,
+                // Work-queue + Revit-free operation impls — both tabs are Core VMs now.
+                var workQueue = new RevitWorkQueue("TurboZones Error", "TurboZones Work Queue");
+                var loadNameWriter = new LoadNameWriter(doc, new LoadNameService());
+                var panelSettingsStore = new PanelSettingsStore(doc);
+                var circuitSelector = new CircuitSelector(uidoc);
+
+                var viewModel = new ZonesMainViewModel(circuits,
                     keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
-                    externalEvent, handler);
+                    savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector);
 
                 var window = new TurboZonesWindow
                 {
@@ -77,7 +84,7 @@ namespace TurboSuite.Zones
                 window.Closed += (s, e) =>
                 {
                     _activeWindow = null;
-                    externalEvent.Dispose();
+                    workQueue.Dispose();
                 };
 
                 _activeWindow = window;

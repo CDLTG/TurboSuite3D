@@ -7,6 +7,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.Number.Services;
 using TurboSuite.Number.ViewModels;
 using TurboSuite.Number.Views;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Number
 {
@@ -65,7 +66,7 @@ namespace TurboSuite.Number
                 var panelScheduleService = new PanelScheduleService();
 
                 // Work-queue + Revit-free operation impls — all three tabs are Core VMs now.
-                var workQueue = new RevitWorkQueue("TurboNumber Error");
+                var workQueue = new RevitWorkQueue("TurboNumber Error", "TurboNumber Work Queue");
                 var switchIdWriter = new SwitchIdWriter(doc, writerService);
                 var prefixSuffixStore = new PrefixSuffixStore(doc);
                 var roomOrderStore = new RoomOrderStore(doc);
