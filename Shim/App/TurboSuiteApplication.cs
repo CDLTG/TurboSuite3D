@@ -26,6 +26,11 @@ public class TurboSuiteApplication : IExternalApplication
     {
         try
         {
+            // The running Revit supplies the version year — the shared shim source is
+            // identical across every per-version DLL, so all local-state and addins paths
+            // (%LOCALAPPDATA%\TurboSuite\{ver}\, Addins\{ver}\) isolate off this at runtime.
+            UpdateConstants.RevitVersion = application.ControlledApplication.VersionNumber;
+
             application.CreateRibbonTab("TurboSuite");
             RibbonPanel settingsPanel = application.CreateRibbonPanel("TurboSuite", "Settings");
             RibbonPanel commandsPanel = application.CreateRibbonPanel("TurboSuite", "Commands");

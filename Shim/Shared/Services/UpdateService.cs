@@ -14,14 +14,14 @@ namespace TurboSuite.Shared.Services;
 /// </summary>
 public static class UpdateService
 {
-    private static readonly string LocalAppData = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TurboSuite");
-
-    private static readonly string VersionFilePath = Path.Combine(LocalAppData, "version.txt");
-    private static readonly string StagingFolder = Path.Combine(LocalAppData, "Staging");
-    private static readonly string StagingCompleteMarker = Path.Combine(StagingFolder, ".complete");
-    private static readonly string UpdaterExePath = Path.Combine(LocalAppData, "TurboSuiteUpdater.exe");
+    // Per-version local state root (%LOCALAPPDATA%\TurboSuite\{RevitVersion}\). Computed
+    // properties, not static-readonly fields, because the version is only known at runtime
+    // (set in OnStartup) — type-load would capture it before UpdateConstants.RevitVersion is set.
+    private static string LocalAppData => UpdateConstants.LocalBaseDir;
+    private static string VersionFilePath => Path.Combine(LocalAppData, "version.txt");
+    private static string StagingFolder => Path.Combine(LocalAppData, "Staging");
+    private static string StagingCompleteMarker => Path.Combine(StagingFolder, ".complete");
+    private static string UpdaterExePath => Path.Combine(LocalAppData, "TurboSuiteUpdater.exe");
 
     /// <summary>
     /// Checks whether a newer version is available on the server.
@@ -121,7 +121,7 @@ public static class UpdateService
 
             var revitAddinsFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                @"Autodesk\Revit\Addins\2025\TurboSuite");
+                "Autodesk", "Revit", "Addins", UpdateConstants.RevitVersion ?? string.Empty, "TurboSuite");
 
             var revitPid = Process.GetCurrentProcess().Id;
 

@@ -51,7 +51,9 @@
   <Target Name="CopyToRevitAddins" AfterTargets="Build">
     <PropertyGroup>
       <RevitAddinsFolder>$(APPDATA)\Autodesk\Revit\Addins\2025</RevitAddinsFolder>
-      <TurboSuiteLocalAppData>$(LOCALAPPDATA)\TurboSuite</TurboSuiteLocalAppData>
+      <!-- Per-version local state — must match UpdateConstants.LocalBaseDir
+           (%LOCALAPPDATA%\TurboSuite\{RevitVersion}\) so the running DLL finds the updater. -->
+      <TurboSuiteLocalAppData>$(LOCALAPPDATA)\TurboSuite\2025</TurboSuiteLocalAppData>
     </PropertyGroup>
     <Copy SourceFiles="$(ProjectDir)TurboSuite.addin" DestinationFolder="$(RevitAddinsFolder)" />
     <ItemGroup>
