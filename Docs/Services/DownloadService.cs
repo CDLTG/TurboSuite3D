@@ -40,7 +40,14 @@ public static class DownloadService
     {
         try
         {
+            // File.ReadAllBytesAsync is .NET 5+/Core only; on the net48 Revit2024 shim
+            // fall back to a sync read offloaded to the thread pool (equivalent for a
+            // local cut-sheet PDF). net8 keeps the true-async path unchanged.
+#if NET5_0_OR_GREATER
             var bytes = await File.ReadAllBytesAsync(filePath);
+#else
+            var bytes = await Task.Run(() => File.ReadAllBytes(filePath));
+#endif
             return IsValidPdf(bytes) ? bytes : null;
         }
         catch
