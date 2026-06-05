@@ -4,9 +4,11 @@ using System.Collections.Generic;
 namespace TurboSuite.Bubble.Constants;
 
 /// <summary>
-/// All geometry constants used by TurboBubble.
+/// All geometry constants used by TurboBubble. Public (not internal) because it lives in
+/// TurboSuite.Core — the Revit-free slice ahead of the Bubble module's own migration — and
+/// the Bubble shim plus FamilyNameSettings consume it across the assembly boundary.
 /// </summary>
-internal static class BubbleConstants
+public static class BubbleConstants
 {
     // Unit conversion
     public const double InchesToFeet = 1.0 / 12.0;
