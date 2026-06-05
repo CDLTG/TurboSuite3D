@@ -1,0 +1,116 @@
+<UserControl
+    x:Class="TurboSuite.Docs.Views.SettingsTab"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    FontFamily="Segoe UI" FontSize="11">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel Margin="0,8">
+        <!-- Company Info -->
+        <GroupBox Header="Company" Margin="0,0,0,12">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Logo:" VerticalAlignment="Center" Grid.Row="0" Grid.Column="0"/>
+                <TextBox Text="{Binding LogoFilePath, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="0" Grid.Column="1" Margin="0,0,4,4" Height="24" VerticalContentAlignment="Center"/>
+                <Button Content="Browse..." Command="{Binding BrowseLogoCommand}"
+                        Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                        Grid.Row="0" Grid.Column="2" Width="70" Height="24" Margin="0,0,0,4"/>
+
+                <TextBlock Text="Address:" VerticalAlignment="Center" Grid.Row="1" Grid.Column="0"/>
+                <TextBox Text="{Binding CompanyAddress, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,4" Height="24"
+                         VerticalContentAlignment="Center"/>
+
+                <TextBlock Text="Phone:" VerticalAlignment="Center" Grid.Row="2" Grid.Column="0"/>
+                <TextBox Text="{Binding CompanyPhone, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,4" Height="24"
+                         VerticalContentAlignment="Center"/>
+
+                <TextBlock Text="Email:" VerticalAlignment="Center" Grid.Row="3" Grid.Column="0"/>
+                <TextBox Text="{Binding CompanyEmail, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,4" Height="24"
+                         VerticalContentAlignment="Center"/>
+
+                <TextBlock Text="Website:" VerticalAlignment="Center" Grid.Row="4" Grid.Column="0"/>
+                <TextBox Text="{Binding CompanyWebsite, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Height="24"
+                         VerticalContentAlignment="Center"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Cover Page Settings -->
+        <GroupBox Header="Cover Page" Margin="0,0,0,12">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Vertical Banner:" VerticalAlignment="Center" Grid.Row="0" Grid.Column="0"/>
+                <TextBox Text="{Binding CoverBrandingVerticalPath, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="0" Grid.Column="1" Margin="0,0,4,4" Height="24" VerticalContentAlignment="Center"/>
+                <Button Content="Browse..." Command="{Binding BrowseCoverVerticalCommand}"
+                        Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                        Grid.Row="0" Grid.Column="2" Width="70" Height="24" Margin="0,0,0,4"/>
+
+                <TextBlock Text="Footer Banner:" VerticalAlignment="Center" Grid.Row="1" Grid.Column="0"/>
+                <TextBox Text="{Binding CoverBrandingHorizontalPath, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="1" Grid.Column="1" Margin="0,0,4,4" Height="24" VerticalContentAlignment="Center"/>
+                <Button Content="Browse..." Command="{Binding BrowseCoverHorizontalCommand}"
+                        Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                        Grid.Row="1" Grid.Column="2" Width="70" Height="24" Margin="0,0,0,4"/>
+
+                <TextBlock Text="Project Location:" VerticalAlignment="Center" Grid.Row="2" Grid.Column="0"/>
+                <TextBox Text="{Binding ProjectLocation, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Height="24"
+                         VerticalContentAlignment="Center"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Document Settings -->
+        <GroupBox Header="Document" Margin="0,0,0,12">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Date:" VerticalAlignment="Center" Grid.Row="0" Grid.Column="0"/>
+                <DatePicker SelectedDate="{Binding HeaderDate, UpdateSourceTrigger=PropertyChanged}"
+                            Grid.Row="0" Grid.Column="1" Height="24"
+                            VerticalContentAlignment="Center"
+                            BorderBrush="#ABADB3" BorderThickness="1"/>
+            </Grid>
+        </GroupBox>
+
+    </StackPanel>
+</UserControl>

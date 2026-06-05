@@ -1,0 +1,82 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- net48's SDK default LangVersion is 7.3; the codebase uses records/init/
+         switch-expressions/target-typed new, so force latest (matches Core). -->
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>TurboSuite</RootNamespace>
+    <AssemblyName>TurboSuite</AssemblyName>
+    <Company>CDLTG</Company>
+    <Authors>CDLTG</Authors>
+    <Product>TurboSuite</Product>
+    <Version>1.1.0</Version>
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Updater/Installer/Abstractions/Core live at the repo root (one level up),
+         outside this project's compile cone, so no DefaultItemExcludes are needed. -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ACadSharp" Version="3.4.24" />
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="PdfSharpCore" Version="1.3.67" />
+    <!-- Pin System.Memory to the highest version required across the net48 graph
+         (ACadSharp 3.4.24 wants >= 4.6.3; ClosedXML wants >= 4.5.4) to avoid an
+         NU1605 downgrade. In-box on net8; required here. -->
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2024\RevitAPI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2024\RevitAPIUI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Xceed.Wpf.AvalonDock">
+      <HintPath>C:\Program Files\Autodesk\Revit 2024\Xceed.Wpf.AvalonDock.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Icons stay shared at the repo root; Link preserves the 'Icons/' logical resource
+         path so the pack URI (App/TurboSuiteApplication.cs) still resolves. -->
+    <Resource Include="..\Icons\*.png">
+      <Link>Icons\%(Filename)%(Extension)</Link>
+    </Resource>
+  </ItemGroup>
+  <!-- net48 lacks the modern BCL surface (init/records, Index/Range, the
+       StringComparison string overloads, etc.). Reuse Core's guarded polyfills
+       verbatim by linking them into this net48-only shim, rather than duplicating.
+       Core compiles them as internal too; internal types don't collide across
+       assemblies. On the net8 (Revit2025) shim these are NOT linked — the real
+       BCL types exist there. -->
+  <ItemGroup>
+    <Compile Include="..\Core\Compatibility\*.cs">
+      <Link>Compatibility\%(Filename)%(Extension)</Link>
+    </Compile>
+    <!-- HttpContentPolyfills (and any shim HttpClient use) needs the net48 GAC
+         assembly the SDK does not auto-reference; in-box on net8. -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
+    <ProjectReference Include="..\Core\TurboSuite.Core.csproj" />
+  </ItemGroup>
+  <Target Name="CopyToRevitAddins" AfterTargets="Build">
+    <PropertyGroup>
+      <RevitAddinsFolder>$(APPDATA)\Autodesk\Revit\Addins\2024</RevitAddinsFolder>
+    </PropertyGroup>
+    <Copy SourceFiles="$(ProjectDir)TurboSuite.addin" DestinationFolder="$(RevitAddinsFolder)" />
+    <ItemGroup>
+      <OutputDlls Include="$(TargetDir)*.dll" Exclude="$(TargetDir)RevitAPI.dll;$(TargetDir)RevitAPIUI.dll" />
+      <OutputPdbs Include="$(TargetDir)*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OutputDlls)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
+    <Copy SourceFiles="@(OutputPdbs)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
+  </Target>
+</Project>

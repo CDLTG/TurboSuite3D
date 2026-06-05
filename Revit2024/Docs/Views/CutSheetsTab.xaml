@@ -1,0 +1,150 @@
+<UserControl
+    x:Class="TurboSuite.Docs.Views.CutSheetsTab"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    FontFamily="Segoe UI" FontSize="11">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Faint selection highlight and lighter grid lines -->
+            <Style TargetType="DataGridRow">
+                <Style.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#D0D8E8"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#E0E4EC"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
+                </Style.Resources>
+            </Style>
+
+            <!-- Single-click checkbox editing -->
+            <Style x:Key="SingleClickCheckBoxColumn" TargetType="DataGridCell">
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridCell">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
+            </Style>
+
+            <!-- Vertically center text in taller rows -->
+            <Style x:Key="CenteredTextElement" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="4,0,0,0"/>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <DockPanel Margin="0,8">
+        <!-- Progress bar docked to bottom -->
+        <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
+                     Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
+
+        <!-- Fixture Types fills remaining space -->
+        <GroupBox Header="Fixture Types" Margin="6,0,6,0">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
+                                Style="{StaticResource RevitButtonStyle}" Padding="8,4"
+                                Margin="0,0,6,0"/>
+                        <Button Content="Deselect All" Command="{Binding DeselectAllCommand}" Width="85" Height="24"
+                                Style="{StaticResource RevitButtonStyle}" Padding="8,4"/>
+                    </StackPanel>
+
+                    <DataGrid ItemsSource="{Binding Fixtures}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False"
+                              CanUserSortColumns="False"
+                              IsReadOnly="False"
+                              SelectionMode="Single"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="All"
+                              HorizontalGridLinesBrush="#E0E0E0"
+                              VerticalGridLinesBrush="#E0E0E0"
+                              BorderThickness="1" BorderBrush="#CCCCCC"
+                              MinHeight="150">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="&#x2713;" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="35"
+                                                    CellStyle="{StaticResource SingleClickCheckBoxColumn}">
+                                <DataGridCheckBoxColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridCheckBoxColumn.HeaderStyle>
+                            </DataGridCheckBoxColumn>
+                            <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="45" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredTextElement}"/>
+                            <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="200" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredTextElement}"/>
+                            <DataGridTemplateColumn Header="PDF Source" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <DockPanel>
+                                            <!-- Clear local PDF -->
+                                            <Button DockPanel.Dock="Right" Content="&#x2715;" Width="18" Height="18" Margin="2,0,0,0"
+                                                    FontSize="9" Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                                    Command="{Binding DataContext.ClearLocalPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"
+                                                    Visibility="{Binding HasLocalPdf, Converter={StaticResource BoolToVisibility}}"/>
+                                            <!-- Set/clear as default (pin icon) -->
+                                            <Button DockPanel.Dock="Right" Width="18" Height="18" Margin="2,0,0,0"
+                                                    FontSize="9" Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                                    ToolTip="Set as default PDF for this catalog number (persists across projects)"
+                                                    Visibility="{Binding HasLocalPdf, Converter={StaticResource BoolToVisibility}}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Content" Value="&#x2606;"/>
+                                                        <Setter Property="Command" Value="{Binding DataContext.SetDefaultPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                                        <Setter Property="CommandParameter" Value="{Binding}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsDefaultPdf}" Value="True">
+                                                                <Setter Property="Content" Value="&#x2605;"/>
+                                                                <Setter Property="Foreground" Value="#D4A017"/>
+                                                                <Setter Property="Command" Value="{Binding DataContext.ClearDefaultPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                                                <Setter Property="ToolTip" Value="Remove as default PDF"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            <!-- Browse for local PDF -->
+                                            <Button DockPanel.Dock="Right" Content="..." Width="18" Height="18" Margin="2,0,0,0"
+                                                    FontSize="9" Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                                    Cursor="Hand"
+                                                    Command="{Binding DataContext.BrowseLocalPdfCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="{Binding DataSheetUrl}"/>
+                                                        <Setter Property="Foreground" Value="#666666"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasLocalPdf}" Value="True">
+                                                                <Setter Property="Text" Value="{Binding LocalPdfPath}"/>
+                                                                <Setter Property="Foreground" Value="#1A7F37"/>
+                                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+        </GroupBox>
+    </DockPanel>
+</UserControl>

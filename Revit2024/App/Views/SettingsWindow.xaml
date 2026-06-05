@@ -1,0 +1,265 @@
+<Window
+    x:Class="TurboSuite.App.Views.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="TurboSuite Settings"
+    Height="920" Width="500"
+    MinHeight="520" MinWidth="400"
+    WindowStartupLocation="CenterScreen"
+    FontFamily="Segoe UI" FontSize="11">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Header -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
+            <DockPanel>
+                <TextBlock Text="TurboSuite Settings" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding VersionText}" Foreground="#B0D0FF" FontSize="11"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Footer -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource FooterBgBrush}"
+                BorderBrush="#CCCCCC" BorderThickness="0,1,0,0" Padding="12,8">
+            <Grid>
+                <Button Content="Reset Defaults" HorizontalAlignment="Left"
+                        Command="{Binding ResetDefaultsCommand}"
+                        Style="{StaticResource RevitButtonStyle}"
+                        Padding="12,5" MinWidth="100"/>
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <Button Content="Save" Command="{Binding SaveCommand}"
+                            Style="{StaticResource RevitButtonStyle}"
+                            Padding="12,5" MinWidth="75" Margin="0,0,8,0"/>
+                    <Button Content="Cancel" IsCancel="True"
+                            Style="{StaticResource RevitButtonStyle}"
+                            Padding="12,5" MinWidth="75"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Content -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
+            <StackPanel>
+                <!-- General Settings -->
+                <GroupBox Header="General" Margin="0,0,0,10"
+                          BorderBrush="#2B579A" BorderThickness="1.5">
+                    <StackPanel Margin="4">
+                        <CheckBox Content="Show circuit comments dialog when creating circuits (TurboWire)"
+                                  IsChecked="{Binding ShowCircuitCommentsDialog}"
+                                  VerticalContentAlignment="Center"
+                                  Margin="0,0,0,4"/>
+                        <CheckBox Content="Auto-split linear fixtures when TurboDriver splits segments (TurboDriver)"
+                                  IsChecked="{Binding AutoSplitFixtures}"
+                                  VerticalContentAlignment="Center"
+                                  Margin="0,0,0,4"/>
+                        <CheckBox Content="Enable dynamic driver tags (TurboBubble)"
+                                  IsChecked="{Binding EnableDynamicDriverTags}"
+                                  VerticalContentAlignment="Center"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- CAD Room Source Settings -->
+                <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,10"
+                          BorderBrush="#2B579A" BorderThickness="1.5">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Configure how room names and ceiling heights are extracted from linked CAD files."
+                                   Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                        <!-- Mode selection -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <RadioButton Content="Block Attributes" IsChecked="{Binding IsBlockMode}"
+                                         Margin="0,0,16,0" VerticalContentAlignment="Center"/>
+                            <RadioButton Content="Text on Layer" IsChecked="{Binding IsTextMode}"
+                                         VerticalContentAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Block mode fields -->
+                        <StackPanel Visibility="{Binding IsBlockMode, Converter={StaticResource BoolToVis}}"
+                                    Margin="0,0,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Block Name:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="0" Grid.Column="1"
+                                         Text="{Binding BlockName, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Room Name Tags:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding RoomNameTagsText, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Tag:"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Grid.Row="2" Grid.Column="1"
+                                         Text="{Binding CeilingHeightTag, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+                            <TextBlock Text="Room Name Tags: comma-separated, concatenated in order (e.g., 003, 002)"
+                                       Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <!-- Text mode fields -->
+                        <StackPanel Visibility="{Binding IsTextMode, Converter={StaticResource BoolToVis}}"
+                                    Margin="0,0,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Room Name Layer:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="0" Grid.Column="1"
+                                         Text="{Binding RoomNameLayer, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Ceiling Height Layer:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding CeilingHeightLayer, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Block:"
+                                           VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox Grid.Row="2" Grid.Column="1"
+                                         Text="{Binding CeilingHeightBlockName, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Ceiling Height Tag:"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Grid.Row="3" Grid.Column="1"
+                                         Text="{Binding CeilingHeightBlockTag, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+                            <TextBlock Text="Ceiling heights from text layer OR block attributes. Leave Ceiling Height Layer blank to use blocks only, or leave Block fields blank to use text only."
+                                       Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Region Generation Layers -->
+                <GroupBox Header="Region Generation Layers (2D Workflow)" Margin="0,0,0,10"
+                          BorderBrush="#2B579A" BorderThickness="1.5">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="CAD layer names used by TurboName to auto-generate Room Region filled regions."
+                                   Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Wall Layers:"
+                                       VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <TextBox Grid.Row="0" Grid.Column="1"
+                                     Text="{Binding WallLayerNamesText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Door Layers:"
+                                       VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Text="{Binding DoorLayerNamesText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Window Layers:"
+                                       VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <TextBox Grid.Row="2" Grid.Column="1"
+                                     Text="{Binding WindowLayerNamesText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Region Type Name:"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Grid.Row="3" Grid.Column="1"
+                                     Text="{Binding RegionTypeName, UpdateSourceTrigger=PropertyChanged}"/>
+                        </Grid>
+                        <TextBlock Text="Comma-separated CAD layer names (e.g., WALL_INTR_B, A-WALL)"
+                                   Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <TextBlock Text="Configure which family names receive special routing behavior."
+                           Foreground="#555555" Margin="0,0,0,12" TextWrapping="Wrap"/>
+
+                <GroupBox Header="Wall Sconce Families" Margin="0,0,0,10">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Families matched for wall sconce spline routing (one per line):"
+                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding WallSconceFamiliesText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Receptacle Families" Margin="0,0,0,10">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Families matched for receptacle spline routing (one per line):"
+                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding ReceptacleFamiliesText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Vertical Families" Margin="0,0,0,10">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Lighting fixture families treated as wall-mounted for tag placement (one per line):"
+                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding VerticalFamiliesText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Switch Families" Margin="0,0,0,10">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Families matched for switch wire endpoint offset (one per line):"
+                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding SwitchFamiliesText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Equipment Box Families" Margin="0,0,0,10">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Families matched for vertical (up/down) switchleg placement (one per line):"
+                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding ElectricalVerticalFamiliesText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="95"/>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
