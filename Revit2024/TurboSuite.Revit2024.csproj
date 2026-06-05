@@ -62,10 +62,18 @@
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
     <ProjectReference Include="..\Core\TurboSuite.Core.csproj" />
+    <!-- Build the net48 updater alongside this shim (a 2024-only machine may lack
+         the .NET 8 runtime). ReferenceOutputAssembly=false: the shim doesn't link
+         the updater, it only needs it built so the post-build can deploy it. -->
+    <ProjectReference Include="..\Updater\TurboSuiteUpdater.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
   <Target Name="CopyToRevitAddins" AfterTargets="Build">
     <PropertyGroup>
       <RevitAddinsFolder>$(APPDATA)\Autodesk\Revit\Addins\2024</RevitAddinsFolder>
+      <!-- Per-version local state — matches UpdateConstants.LocalBaseDir. -->
+      <TurboSuiteLocalAppData>$(LOCALAPPDATA)\TurboSuite\2024</TurboSuiteLocalAppData>
     </PropertyGroup>
     <Copy SourceFiles="$(ProjectDir)TurboSuite.addin" DestinationFolder="$(RevitAddinsFolder)" />
     <ItemGroup>
@@ -74,5 +82,10 @@
     </ItemGroup>
     <Copy SourceFiles="@(OutputDlls)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
     <Copy SourceFiles="@(OutputPdbs)" DestinationFolder="$(RevitAddinsFolder)\TurboSuite\" />
+    <!-- Copy the net48 updater to %LOCALAPPDATA%\TurboSuite\2024\ (no .dll/runtimeconfig
+         on net48 — the exe is a managed PE that runs on the in-box framework). -->
+    <MakeDir Directories="$(TurboSuiteLocalAppData)" />
+    <Copy SourceFiles="$(ProjectDir)..\Updater\bin\$(Configuration)\net48\TurboSuiteUpdater.exe"
+          DestinationFolder="$(TurboSuiteLocalAppData)" SkipUnchangedFiles="false" />
   </Target>
 </Project>
