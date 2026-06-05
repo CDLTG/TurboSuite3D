@@ -16,14 +16,14 @@ TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting autom
 dotnet build TurboSuite.sln
 ```
 
-Platform target is **x64**. The solution contains three projects: `TurboSuite.csproj` (main add-in), `Updater/TurboSuiteUpdater.csproj` (auto-update helper), and `Installer/TurboSuiteInstaller.csproj` (standalone WPF installer). There are no automated tests or linting configurations.
+Platform target is **x64**. The solution contains the Revit 2025 add-in shim `TurboSuite.Revit2025.csproj` (still emits `TurboSuite.dll` via `AssemblyName`), the version-agnostic `Core/TurboSuite.Core.csproj` and `Abstractions/TurboSuite.Abstractions.csproj` (no Revit refs), plus `Updater/TurboSuiteUpdater.csproj` (auto-update helper) and `Installer/TurboSuiteInstaller.csproj` (standalone WPF installer). There are no automated tests or linting configurations.
 
 To publish a release to the server share (run from non-admin PowerShell):
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -Version "1.0.0"
 ```
 
-**IMPORTANT**: Always use `dotnet.exe` (not `dotnet`) when running from WSL — the `.exe` suffix is required to invoke Windows executables. Always use Windows-style paths for `dotnet.exe`/MSBuild commands (e.g., `'C:\Users\jacobq\...\TurboSuite.csproj'`). Never use WSL-style `/mnt/c/...` paths — they cause `MSB1001` errors.
+**IMPORTANT**: Always use `dotnet.exe` (not `dotnet`) when running from WSL — the `.exe` suffix is required to invoke Windows executables. Always use Windows-style paths for `dotnet.exe`/MSBuild commands (e.g., `'C:\Users\jacobq\...\TurboSuite.Revit2025.csproj'`). Never use WSL-style `/mnt/c/...` paths — they cause `MSB1001` errors.
 
 ## Git Repository
 
@@ -57,7 +57,7 @@ Revit auto-discovers `.addin` files from that directory on startup.
 
 **Uninstall:** Users can run `TurboSuiteInstaller.exe` again and click "Uninstall" to remove all TurboSuite files.
 
-The `Updater/` and `Installer/` subdirectories are excluded from the main project via `<DefaultItemExcludes>` in `TurboSuite.csproj` to prevent the WPF temp project from picking up their source files.
+The `Updater/` and `Installer/` subdirectories are excluded from the main project via `<DefaultItemExcludes>` in `TurboSuite.Revit2025.csproj` to prevent the WPF temp project from picking up their source files.
 
 ## Workflow Rules
 

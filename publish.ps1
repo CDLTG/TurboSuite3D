@@ -37,7 +37,7 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
 $sln = Join-Path $projectRoot "TurboSuite.sln"
-$mainCsproj = Join-Path $projectRoot "TurboSuite.csproj"
+$mainCsproj = Join-Path $projectRoot "TurboSuite.Revit2025.csproj"
 $installerCsproj = Join-Path $projectRoot "Installer\TurboSuiteInstaller.csproj"
 $addinFile = Join-Path $projectRoot "TurboSuite.addin"
 $archiveRoot = Join-Path $ServerPath "Archive"
