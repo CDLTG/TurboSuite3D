@@ -74,10 +74,11 @@ namespace TurboSuite.Number
                 var workQueue = new RevitWorkQueue("TurboNumber Error");
                 var switchIdWriter = new SwitchIdWriter(doc, writerService);
                 var prefixSuffixStore = new PrefixSuffixStore(doc);
+                var roomOrderStore = new RoomOrderStore(doc);
 
                 var viewModel = new NumberMainViewModel(doc, circuits, keypads, powerSupplies,
                     collectorService, externalEvent, handler,
-                    workQueue, switchIdWriter, prefixSuffixStore);
+                    workQueue, switchIdWriter, prefixSuffixStore, roomOrderStore);
 
                 var window = new TurboNumberWindow
                 {

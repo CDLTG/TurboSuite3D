@@ -7,11 +7,8 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Data;
 using System.Windows.Input;
-using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
-using TurboSuite.Number.Models;
+using TurboSuite.Abstractions;
 using TurboSuite.Number.Services;
-using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
@@ -56,9 +53,9 @@ namespace TurboSuite.Number.ViewModels
 
     public class KeypadTabViewModel : TabViewModelBase
     {
-        private readonly Document _doc;
-        private readonly ExternalEvent _externalEvent;
-        private readonly RevitApiRequestHandler _handler;
+        private readonly IRevitWorkQueue _workQueue;
+        private readonly ISwitchIdWriter _switchIdWriter;
+        private readonly IRoomOrderStore _roomOrderStore;
         private bool _isSidebarVisible;
         private bool _isReordering;
         private int _nextClickOrder;
@@ -96,40 +93,32 @@ namespace TurboSuite.Number.ViewModels
         public ICommand ApplyReorderCommand { get; }
         public ICommand CancelReorderCommand { get; }
 
-        public KeypadTabViewModel(Document doc, List<DeviceNumberRow> keypads,
-            ExternalEvent externalEvent, RevitApiRequestHandler handler)
+        public KeypadTabViewModel(IReadOnlyList<NumberableRowViewModel> rows,
+            IReadOnlyList<(string Name, int ClickOrder)> savedRoomOrder, bool sidebarWasOpen,
+            IRevitWorkQueue workQueue, ISwitchIdWriter switchIdWriter, IRoomOrderStore roomOrderStore)
             : base("Keypads")
         {
-            _doc = doc;
-            _externalEvent = externalEvent;
-            _handler = handler;
+            _workQueue = workQueue;
+            _switchIdWriter = switchIdWriter;
+            _roomOrderStore = roomOrderStore;
             ToggleSidebarCommand = new RelayCommand(ToggleSidebar);
             ResetRoomOrderCommand = new RelayCommand(ResetRoomOrder);
             StartReorderCommand = new RelayCommand(StartReorder);
             ApplyReorderCommand = new RelayCommand(ApplyReorder);
             CancelReorderCommand = new RelayCommand(CancelReorder);
 
-            foreach (var d in keypads)
-            {
-                AddRow(new NumberableRowViewModel(
-                    d.ElementId.ToRef(),
-                    d.Model,
-                    d.SwitchId,
-                    d.RoomName,
-                    d.RoomNumber,
-                    typeName: d.TypeName,
-                    mark: d.Mark));
-            }
+            foreach (var row in rows)
+                AddRow(row);
 
-            var savedOrder = RoomOrderStorageService.Load(doc);
-            for (int i = 0; i < savedOrder.Count; i++)
+            // Room order + sidebar flag are read from ExtensibleStorage at collection
+            // time and passed in — a Core ctor cannot read Revit synchronously.
+            for (int i = 0; i < savedRoomOrder.Count; i++)
             {
-                var item = new RoomOrderItem(savedOrder[i].Name, i + 1);
-                item.ClickOrder = savedOrder[i].ClickOrder;
+                var item = new RoomOrderItem(savedRoomOrder[i].Name, i + 1);
+                item.ClickOrder = savedRoomOrder[i].ClickOrder;
                 RoomOrder.Add(item);
             }
 
-            var sidebarWasOpen = RoomOrderStorageService.LoadSidebarVisible(doc);
             if (sidebarWasOpen && RoomOrder.Count > 0)
             {
                 MergeNewRooms();
@@ -154,7 +143,8 @@ namespace TurboSuite.Number.ViewModels
             }
 
             IsSidebarVisible = !IsSidebarVisible;
-            RaiseRequest(new SaveSidebarVisibleRequest { IsVisible = IsSidebarVisible });
+            var isVisible = IsSidebarVisible;
+            _workQueue.Enqueue(() => { _roomOrderStore.SaveSidebarVisible(isVisible); return null; }, null);
         }
 
         public void MoveRoom(int fromIndex, int toIndex)
@@ -314,21 +304,13 @@ namespace TurboSuite.Number.ViewModels
 
         private void SaveRoomOrder()
         {
-            RaiseRequest(new SaveRoomOrderRequest
-            {
-                RoomOrder = RoomOrder.Select(r => (r.Name, r.ClickOrder)).ToList()
-            });
+            var snapshot = RoomOrder.Select(r => (r.Name, r.ClickOrder)).ToList();
+            _workQueue.Enqueue(() => { _roomOrderStore.SaveRoomOrder(snapshot); return null; }, null);
         }
 
         protected override void Apply()
         {
-            RaiseRequest(new WriteDeviceSwitchIdsRequest { Rows = Rows });
-        }
-
-        private void RaiseRequest(RevitApiRequest request)
-        {
-            _handler.CurrentRequest = request;
-            _externalEvent.Raise();
+            _workQueue.Enqueue(() => { _switchIdWriter.WriteSwitchIds(Rows); return null; }, null);
         }
 
         private class RoomOrderComparer : IComparer

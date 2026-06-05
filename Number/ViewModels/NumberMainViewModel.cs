@@ -26,14 +26,27 @@ namespace TurboSuite.Number.ViewModels
             RevitApiRequestHandler handler,
             IRevitWorkQueue workQueue,
             ISwitchIdWriter switchIdWriter,
-            IPrefixSuffixStore prefixSuffixStore)
+            IPrefixSuffixStore prefixSuffixStore,
+            IRoomOrderStore roomOrderStore)
         {
             CircuitTab = new CircuitNumberTabViewModel(doc, circuits, collectorService, externalEvent, handler);
-            KeypadTab = new KeypadTabViewModel(doc, keypads, externalEvent, handler);
 
             // Project the Revit-coupled DeviceNumberRow into the Revit-free Core row VM
-            // shim-side (the .ToRef() conversions live in the shim), then hand the Core
-            // PowerSupply tab only abstractions.
+            // shim-side (the .ToRef() conversions live in the shim), read the per-tab
+            // ExtensibleStorage state here, then hand the Core tabs only abstractions.
+            var keypadRows = keypads.Select(d => new NumberableRowViewModel(
+                d.ElementId.ToRef(),
+                d.Model,
+                d.SwitchId,
+                d.RoomName,
+                d.RoomNumber,
+                typeName: d.TypeName,
+                mark: d.Mark)).ToList();
+            var savedRoomOrder = RoomOrderStorageService.Load(doc);
+            var sidebarWasOpen = RoomOrderStorageService.LoadSidebarVisible(doc);
+            KeypadTab = new KeypadTabViewModel(keypadRows, savedRoomOrder, sidebarWasOpen,
+                workQueue, switchIdWriter, roomOrderStore);
+
             var psRows = powerSupplies.Select(d => new NumberableRowViewModel(
                 d.ElementId.ToRef(),
                 d.Model,
@@ -43,9 +56,7 @@ namespace TurboSuite.Number.ViewModels
                 loadName: d.LoadName,
                 typeName: d.TypeName,
                 mark: d.Mark)).ToList();
-
             var (savedPrefix, savedSuffix) = RoomOrderStorageService.LoadPrefixSuffix(doc);
-
             PowerSupplyTab = new PowerSupplyTabViewModel(psRows, savedPrefix, savedSuffix,
                 workQueue, switchIdWriter, prefixSuffixStore);
         }
