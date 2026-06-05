@@ -1,32 +1,49 @@
-﻿<#
+<#
 .SYNOPSIS
-    Builds TurboSuite and publishes all deployment files to a network share,
-    or rolls back the share to a previously published version.
+    Builds one TurboSuite Revit-version channel and publishes its deployment files
+    to that version's subfolder on a network share, or rolls that subfolder back to
+    a previously published version.
+
+.DESCRIPTION
+    TurboSuite ships a separate DLL per Revit version (net8 for 2025, net48 for 2024).
+    The share is laid out with one subfolder per version:
+
+        <ServerPath>\2025\   net8 TurboSuite.dll + updater + version.txt + Archive\
+        <ServerPath>\2024\   net48 TurboSuite.dll + updater + version.txt + Archive\
+        <ServerPath>\        the (version-agnostic) combined TurboSuiteInstaller
+
+    Run this script once per version you want to publish.
 
 .PARAMETER ServerPath
-    The UNC path to the server share (e.g., \\SERVER\TurboSuite).
+    The UNC path to the share root (e.g., \\SERVER\TurboSuite). Version subfolders live under it.
+
+.PARAMETER RevitVersion
+    Which Revit channel to publish: "2024" or "2025".
 
 .PARAMETER Version
-    The version string to write to version.txt (e.g., 1.1.0). If omitted, you will be prompted.
+    The version string to write to that channel's version.txt (e.g., 1.1.0). Prompted if omitted.
     Ignored when -Rollback is used.
 
 .PARAMETER Rollback
-    If specified, skips the build/publish and restores the share from an archived version.
-    The value is the version string to restore (must exist under <ServerPath>\Archive\).
+    If specified, skips build/publish and restores <ServerPath>\<RevitVersion>\ from an archived
+    version (must exist under <ServerPath>\<RevitVersion>\Archive\).
 
 .EXAMPLE
-    .\publish.ps1 -ServerPath "\\SERVER\TurboSuite" -Version "1.1.0"
-    Publish 1.1.0. The currently-deployed version is archived to <ServerPath>\Archive\<prior-version>\.
+    .\publish.ps1 -ServerPath "\\SERVER\TurboSuite" -RevitVersion 2025 -Version "1.1.0"
+    Publish the Revit 2025 channel 1.1.0 to <ServerPath>\2025\.
 
 .EXAMPLE
-    .\publish.ps1 -ServerPath "\\SERVER\TurboSuite" -Rollback "1.0.0"
-    Restore the share to the archived 1.0.0 build. Current files are first archived under
-    <ServerPath>\Archive\<current-version>-rolledback-<timestamp>\ so the rollback is itself reversible.
+    .\publish.ps1 -ServerPath "\\SERVER\TurboSuite" -RevitVersion 2024 -Rollback "1.0.0"
+    Restore the Revit 2024 channel to the archived 1.0.0 build.
 #>
 
 param(
     [Parameter(Mandatory = $true)]
     [string]$ServerPath,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("2024", "2025")]
+    [string]$RevitVersion,
 
     [string]$Version,
 
@@ -37,13 +54,27 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
 $sln = Join-Path $projectRoot "TurboSuite.sln"
-$mainCsproj = Join-Path $projectRoot "Revit2025\TurboSuite.Revit2025.csproj"
 $installerCsproj = Join-Path $projectRoot "Installer\TurboSuiteInstaller.csproj"
-$addinFile = Join-Path $projectRoot "Revit2025\TurboSuite.addin"
-$archiveRoot = Join-Path $ServerPath "Archive"
+
+# Per-version layout: each version gets its own share subfolder + its own Archive\.
+$versionShare = Join-Path $ServerPath $RevitVersion
+$archiveRoot = Join-Path $versionShare "Archive"
+
+# Per-version build outputs. The shim project + target framework differ by version.
+$tfm = if ($RevitVersion -eq "2024") { "net48" } else { "net8.0-windows" }
+$shimProjDir = Join-Path $projectRoot "Revit$RevitVersion"
+$addinFile = Join-Path $shimProjDir "TurboSuite.addin"
+$mainBinDir = Join-Path $shimProjDir "bin\Release\$tfm"
+$updaterBinDir = Join-Path $projectRoot "Updater\bin\Release\$tfm"
+# net48 emits a self-contained managed exe; net8 emits exe + dll + runtimeconfig.
+$updaterFiles = if ($RevitVersion -eq "2024") {
+    @("TurboSuiteUpdater.exe")
+} else {
+    @("TurboSuiteUpdater.exe", "TurboSuiteUpdater.dll", "TurboSuiteUpdater.runtimeconfig.json")
+}
 
 function Get-DeployedVersion {
-    $versionFile = Join-Path $ServerPath "version.txt"
+    $versionFile = Join-Path $versionShare "version.txt"
     if (Test-Path $versionFile) {
         return (Get-Content $versionFile -Raw).Trim()
     }
@@ -58,7 +89,7 @@ function Copy-ShareToArchive {
         return
     }
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
-    Get-ChildItem -Path $ServerPath -File | ForEach-Object {
+    Get-ChildItem -Path $versionShare -File | ForEach-Object {
         Copy-Item $_.FullName -Destination $dest -Force
     }
     Write-Host "  Archived prior deployment to $dest"
@@ -67,9 +98,9 @@ function Copy-ShareToArchive {
 # === Rollback path ===
 if ($Rollback) {
     Write-Host ""
-    Write-Host "=== TurboSuite Rollback ===" -ForegroundColor Cyan
+    Write-Host "=== TurboSuite Rollback (Revit $RevitVersion) ===" -ForegroundColor Cyan
     Write-Host "  Target version: $Rollback"
-    Write-Host "  Share:          $ServerPath"
+    Write-Host "  Channel share:  $versionShare"
     Write-Host ""
 
     $archiveDir = Join-Path $archiveRoot $Rollback
@@ -95,15 +126,15 @@ if ($Rollback) {
     }
 
     Write-Host "[2/2] Restoring $Rollback from archive..." -ForegroundColor Yellow
-    Get-ChildItem -Path $ServerPath -File | ForEach-Object { Remove-Item $_.FullName -Force }
+    Get-ChildItem -Path $versionShare -File | ForEach-Object { Remove-Item $_.FullName -Force }
     Get-ChildItem -Path $archiveDir -File | ForEach-Object {
-        Copy-Item $_.FullName -Destination $ServerPath -Force
+        Copy-Item $_.FullName -Destination $versionShare -Force
         Write-Host "  Restored $($_.Name)"
     }
 
     Write-Host ""
     Write-Host "=== Rollback Complete ===" -ForegroundColor Green
-    Write-Host "  Share restored to $Rollback. Users will see this on their next Revit launch." -ForegroundColor Cyan
+    Write-Host "  Revit $RevitVersion channel restored to $Rollback. Users see it on next Revit launch." -ForegroundColor Cyan
     exit 0
 }
 
@@ -119,9 +150,9 @@ if (-not $Version) {
 }
 
 Write-Host ""
-Write-Host "=== TurboSuite Publish ===" -ForegroundColor Cyan
+Write-Host "=== TurboSuite Publish (Revit $RevitVersion) ===" -ForegroundColor Cyan
 Write-Host "  Version:     $Version"
-Write-Host "  Destination: $ServerPath"
+Write-Host "  Destination: $versionShare"
 Write-Host ""
 
 # Pre-flight: Verify CHANGELOG.md has an entry for this version
@@ -143,7 +174,7 @@ if (Test-Path $changelogPath) {
     Write-Warning "CHANGELOG.md not found at $changelogPath — skipping changelog check."
 }
 
-# Step 1: Build solution in Release
+# Step 1: Build solution in Release (builds both shims + the updater for both TFMs)
 Write-Host "[1/6] Building solution in Release mode..." -ForegroundColor Yellow
 dotnet build $sln -c Release
 if ($LASTEXITCODE -ne 0) {
@@ -151,7 +182,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Step 2: Publish installer as single-file
+# Step 2: Publish the combined installer as single-file (version-agnostic; lives at share root)
 Write-Host "[2/6] Publishing installer..." -ForegroundColor Yellow
 $installerPublishDir = Join-Path $projectRoot "Installer\publish"
 dotnet publish $installerCsproj -c Release -o $installerPublishDir
@@ -160,13 +191,12 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Step 3: Ensure server directory exists
+# Step 3: Ensure server directories exist (share root + this version's subfolder + its Archive)
 Write-Host "[3/6] Preparing server directory..." -ForegroundColor Yellow
-if (-not (Test-Path $ServerPath)) {
-    New-Item -ItemType Directory -Path $ServerPath -Force | Out-Null
-}
-if (-not (Test-Path $archiveRoot)) {
-    New-Item -ItemType Directory -Path $archiveRoot -Force | Out-Null
+foreach ($dir in @($ServerPath, $versionShare, $archiveRoot)) {
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
 }
 
 # Step 4: Archive currently-deployed version (if any) before overwriting
@@ -174,45 +204,37 @@ Write-Host "[4/6] Archiving prior deployment..." -ForegroundColor Yellow
 $priorVersion = Get-DeployedVersion
 if ($priorVersion) {
     if ($priorVersion -eq $Version) {
-        Write-Error "Prior deployment is already version $Version. Bump the version before republishing."
+        Write-Error "Prior $RevitVersion deployment is already version $Version. Bump the version before republishing."
         exit 1
     }
     Copy-ShareToArchive -ArchiveName $priorVersion
 } else {
-    Write-Host "  No prior version.txt found — nothing to archive (first publish)."
+    Write-Host "  No prior version.txt found — nothing to archive (first publish of this channel)."
 }
 
-# Step 5: Copy files to server share
-Write-Host "[5/6] Copying files to server..." -ForegroundColor Yellow
-
-$mainBinDir = Join-Path $projectRoot "Revit2025\bin\Release\net8.0-windows"
-$updaterBinDir = Join-Path $projectRoot "Updater\bin\Release\net8.0-windows"
+# Step 5: Copy files to the version subfolder
+Write-Host "[5/6] Copying files to $versionShare..." -ForegroundColor Yellow
 
 # Copy main DLLs and PDBs (exclude Revit API DLLs)
 $excludePatterns = @("RevitAPI.dll", "RevitAPIUI.dll", "Xceed.Wpf.AvalonDock.dll")
 Get-ChildItem -Path $mainBinDir -Filter "*.dll" | Where-Object { $_.Name -notin $excludePatterns } | ForEach-Object {
-    Copy-Item $_.FullName -Destination $ServerPath -Force
+    Copy-Item $_.FullName -Destination $versionShare -Force
     Write-Host "  Copied $($_.Name)"
 }
 Get-ChildItem -Path $mainBinDir -Filter "*.pdb" | ForEach-Object {
-    Copy-Item $_.FullName -Destination $ServerPath -Force
+    Copy-Item $_.FullName -Destination $versionShare -Force
     Write-Host "  Copied $($_.Name)"
 }
 
 # Copy .addin manifest
-Copy-Item $addinFile -Destination $ServerPath -Force
+Copy-Item $addinFile -Destination $versionShare -Force
 Write-Host "  Copied TurboSuite.addin"
 
-# Copy updater and its runtime files (try RID-specific path first, then plain)
-$updaterDir = Join-Path $updaterBinDir "win-x64"
-if (-not (Test-Path (Join-Path $updaterDir "TurboSuiteUpdater.exe"))) {
-    $updaterDir = $updaterBinDir
-}
-$updaterFiles = @("TurboSuiteUpdater.exe", "TurboSuiteUpdater.dll", "TurboSuiteUpdater.runtimeconfig.json")
+# Copy the version-matched updater
 foreach ($updaterFile in $updaterFiles) {
-    $updaterPath = Join-Path $updaterDir $updaterFile
+    $updaterPath = Join-Path $updaterBinDir $updaterFile
     if (Test-Path $updaterPath) {
-        Copy-Item $updaterPath -Destination $ServerPath -Force
+        Copy-Item $updaterPath -Destination $versionShare -Force
         Write-Host "  Copied $updaterFile"
     } else {
         Write-Error "$updaterFile not found at: $updaterPath"
@@ -220,30 +242,30 @@ foreach ($updaterFile in $updaterFiles) {
     }
 }
 
-# Copy installer files
+# Copy the combined installer to the share ROOT (shared across versions)
 if (Test-Path $installerPublishDir) {
     Get-ChildItem -Path $installerPublishDir -File | ForEach-Object {
         Copy-Item $_.FullName -Destination $ServerPath -Force
-        Write-Host "  Copied $($_.Name)"
+        Write-Host "  Copied (root) $($_.Name)"
     }
 } else {
     Write-Error "Installer publish directory not found at: $installerPublishDir"
     exit 1
 }
 
-# Step 6: Write version.txt
+# Step 6: Write this channel's version.txt
 Write-Host "[6/6] Writing version.txt..." -ForegroundColor Yellow
-Set-Content -Path (Join-Path $ServerPath "version.txt") -Value $Version -NoNewline
-Write-Host "  Version set to $Version"
+Set-Content -Path (Join-Path $versionShare "version.txt") -Value $Version -NoNewline
+Write-Host "  Revit $RevitVersion version set to $Version"
 
 # Summary
 Write-Host ""
 Write-Host "=== Publish Complete ===" -ForegroundColor Green
-Write-Host "  Files deployed to: $ServerPath"
+Write-Host "  Files deployed to: $versionShare"
 Write-Host "  Version: $Version"
 if ($priorVersion) {
     Write-Host "  Prior version $priorVersion archived to: $archiveRoot\$priorVersion"
-    Write-Host "  To roll back: .\publish.ps1 -ServerPath `"$ServerPath`" -Rollback `"$priorVersion`"" -ForegroundColor DarkGray
+    Write-Host "  To roll back: .\publish.ps1 -ServerPath `"$ServerPath`" -RevitVersion $RevitVersion -Rollback `"$priorVersion`"" -ForegroundColor DarkGray
 }
 Write-Host ""
 Write-Host "Users can now run TurboSuiteInstaller.exe from the share to install." -ForegroundColor Cyan
