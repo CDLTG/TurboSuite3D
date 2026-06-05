@@ -1,5 +1,5 @@
 #nullable disable
-using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 
 namespace TurboSuite.Driver.Models
 {
@@ -8,7 +8,7 @@ namespace TurboSuite.Driver.Models
     /// </summary>
     public class FixtureData
     {
-        public ElementId FixtureId { get; set; }
+        public ElementRef FixtureId { get; set; }
         public string TypeMark { get; set; }
         public string Comments { get; set; }
         public double LinearLength { get; set; }

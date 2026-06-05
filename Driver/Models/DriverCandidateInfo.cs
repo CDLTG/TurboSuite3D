@@ -1,5 +1,5 @@
 #nullable disable
-using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 
 namespace TurboSuite.Driver.Models
 {
@@ -8,7 +8,19 @@ namespace TurboSuite.Driver.Models
     /// </summary>
     public class DriverCandidateInfo
     {
-        public FamilySymbol FamilySymbol { get; set; }
+        /// <summary>
+        /// Revit-free handle to the driver's <c>FamilySymbol</c>. Shim code resolves the
+        /// concrete symbol via <c>doc.GetElement(SymbolRef.ToElementId())</c> for placement
+        /// and the family-type dropdown.
+        /// </summary>
+        public ElementRef SymbolRef { get; set; }
+
+        /// <summary>
+        /// The driver's Catalog Number1, pre-extracted at collection time so the selection
+        /// algorithm stays Revit-free (it once read this off the live <c>FamilySymbol</c>).
+        /// </summary>
+        public string CatalogNumber { get; set; }
+
         public string FamilyTypeName { get; set; }
         public string Manufacturer { get; set; }
         public double TotalPower { get; set; }

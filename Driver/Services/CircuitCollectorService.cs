@@ -238,7 +238,7 @@ namespace TurboSuite.Driver.Services
             // Fall back to reading Switch ID from fixtures
             foreach (var fixture in data.LightingFixtures)
             {
-                var element = doc.GetElement(fixture.FixtureId);
+                var element = doc.GetElement(fixture.FixtureId.ToElementId());
                 if (element != null)
                 {
                     string switchId = ParameterHelper.GetSwitchID(element);
@@ -254,7 +254,7 @@ namespace TurboSuite.Driver.Services
         {
             return new FixtureData
             {
-                FixtureId = element.Id,
+                FixtureId = element.Id.ToRef(),
                 TypeMark = ParameterHelper.GetTypeMark(element),
                 Comments = ParameterHelper.GetComments(element),
                 LinearLength = ParameterHelper.GetLinearLength(element),

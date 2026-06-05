@@ -50,7 +50,7 @@ public class FixtureSplitService
         foreach (var group in segmentsByFixture)
         {
             var fixtureId = group.Key;
-            var fixture = _doc.GetElement(fixtureId) as FamilyInstance;
+            var fixture = _doc.GetElement(fixtureId.ToElementId()) as FamilyInstance;
             if (fixture == null) continue;
 
             if (!GeometryHelper.IsLineBasedFixture(fixture)) continue;
@@ -120,7 +120,7 @@ public class FixtureSplitService
 
             if (copy == null) continue;
 
-            segments[i].FixtureId = copy.Id;
+            segments[i].FixtureId = copy.Id.ToRef();
             allCopies.Add((copy, i));
         }
 

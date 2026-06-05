@@ -2,8 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TurboSuite.Abstractions;
 using TurboSuite.Driver.Models;
-using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Driver.Services
 {
@@ -79,7 +79,7 @@ namespace TurboSuite.Driver.Services
                 }
             }
 
-            string catalogNumber = best.Candidate.FamilySymbol?.LookupParameter(ParameterNames.CatalogNumber1)?.AsString() ?? "";
+            string catalogNumber = best.Candidate.CatalogNumber ?? "";
             string manufacturer = best.Candidate.Manufacturer ?? "";
             string displayBase = $"{catalogNumber} | {manufacturer}";
             string displayText = best.DriversNeeded > 1
@@ -259,7 +259,7 @@ namespace TurboSuite.Driver.Services
         }
 
         private List<FixtureSegment> SplitRecursive(
-            Autodesk.Revit.DB.ElementId fixtureId, string typeMark,
+            ElementRef fixtureId, string typeMark,
             double wattage, double originalWattage, double linearLength,
             double maxSubDriverWattage)
         {

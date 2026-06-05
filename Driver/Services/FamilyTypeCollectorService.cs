@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using TurboSuite.Driver.Models;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Driver.Services
@@ -51,6 +52,7 @@ namespace TurboSuite.Driver.Services
                 int maximumFixtures = ParameterHelper.GetMaximumFixtures(symbol);
                 string voltage = ParameterHelper.GetVoltage(symbol);
                 double derateFactor = ParameterHelper.GetDeratingFactor(symbol);
+                string catalogNumber = symbol.LookupParameter(ParameterNames.CatalogNumber1)?.AsString() ?? "";
                 bool isTbd = symbol.FamilyName != null
                     && symbol.FamilyName.IndexOf(TbdFamilyMarker, StringComparison.OrdinalIgnoreCase) >= 0;
 
@@ -69,7 +71,8 @@ namespace TurboSuite.Driver.Services
 
                 candidates.Add(new DriverCandidateInfo
                 {
-                    FamilySymbol = symbol,
+                    SymbolRef = symbol.Id.ToRef(),
+                    CatalogNumber = catalogNumber,
                     FamilyTypeName = symbol.Name,
                     Manufacturer = manufacturer,
                     TotalPower = power,

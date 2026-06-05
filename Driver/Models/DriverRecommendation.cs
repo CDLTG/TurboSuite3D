@@ -1,6 +1,6 @@
 #nullable disable
 using System.Collections.Generic;
-using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 
 namespace TurboSuite.Driver.Models
 {
@@ -37,7 +37,7 @@ namespace TurboSuite.Driver.Models
     /// </summary>
     public class FixtureSegment
     {
-        public ElementId FixtureId { get; set; }
+        public ElementRef FixtureId { get; set; }
         public string TypeMark { get; set; }
         public double Wattage { get; set; }
         public bool IsSplit { get; set; }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using TurboSuite.Driver.Models;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Driver.ViewModels
@@ -44,11 +45,12 @@ namespace TurboSuite.Driver.ViewModels
             HashSet<string> circuitDimmingProtocols,
             HashSet<string> circuitVoltages,
             List<DriverCandidateInfo> allCandidates,
-            bool hasMatch)
+            bool hasMatch,
+            Dictionary<ElementId, FamilySymbol> symbolsById)
         {
             _data = data;
-            RecommendedFamilyTypeId = recommendedCandidate?.FamilySymbol?.Id ?? ElementId.InvalidElementId;
-            AvailableFamilyTypes = BuildTypeList(circuitDimmingProtocols, circuitVoltages, allCandidates, hasMatch);
+            RecommendedFamilyTypeId = recommendedCandidate?.SymbolRef.ToElementId() ?? ElementId.InvalidElementId;
+            AvailableFamilyTypes = BuildTypeList(circuitDimmingProtocols, circuitVoltages, allCandidates, hasMatch, symbolsById);
 
             _selectedFamilyType = AvailableFamilyTypes.Find(t => t.Id == data.CurrentFamilyTypeId);
         }
@@ -57,14 +59,15 @@ namespace TurboSuite.Driver.ViewModels
             HashSet<string> circuitDimmingProtocols,
             HashSet<string> circuitVoltages,
             List<DriverCandidateInfo> allCandidates,
-            bool hasMatch)
+            bool hasMatch,
+            Dictionary<ElementId, FamilySymbol> symbolsById)
         {
             // No match: show all lighting device types alphabetically, no highlight
             if (!hasMatch)
             {
                 return allCandidates
                     .OrderBy(c => c.FamilyTypeName)
-                    .Select(c => c.FamilySymbol)
+                    .Select(c => symbolsById[c.SymbolRef.ToElementId()])
                     .ToList();
             }
 
@@ -91,7 +94,7 @@ namespace TurboSuite.Driver.ViewModels
 
             return validCandidates
                 .OrderBy(c => c.FamilyTypeName)
-                .Select(c => c.FamilySymbol)
+                .Select(c => symbolsById[c.SymbolRef.ToElementId()])
                 .ToList();
         }
 

@@ -8,6 +8,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Driver.Models;
 using TurboSuite.Driver.Services;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Driver.ViewModels
@@ -21,6 +22,11 @@ namespace TurboSuite.Driver.ViewModels
         private readonly UIDocument _uidoc;
         private readonly ElementUpdateService _updateService;
         private readonly List<DriverCandidateInfo> _driverCandidates;
+
+        // Maps a driver candidate's SymbolRef back to its concrete FamilySymbol. Built from
+        // availableTypes once, so the device-VM dropdown can resolve symbols without the
+        // (now Revit-free) DriverCandidateInfo carrying a FamilySymbol.
+        private readonly Dictionary<ElementId, FamilySymbol> _symbolsById;
 
         public ObservableCollection<CircuitViewModel> Circuits { get; set; }
         public List<FamilySymbol> AvailableLightingDeviceTypes { get; set; }
@@ -37,9 +43,10 @@ namespace TurboSuite.Driver.ViewModels
             _uidoc = uidoc;
             _updateService = new ElementUpdateService(doc, uidoc);
             _driverCandidates = driverCandidates;
+            _symbolsById = availableTypes.ToDictionary(t => t.Id);
 
             var validDriverTypeIds = new HashSet<ElementId>(
-                driverCandidates.Where(c => c.IsValidDriver).Select(c => c.FamilySymbol.Id));
+                driverCandidates.Where(c => c.IsValidDriver).Select(c => c.SymbolRef.ToElementId()));
             AvailableLightingDeviceTypes = availableTypes
                 .Where(t => validDriverTypeIds.Contains(t.Id))
                 .ToList();
@@ -88,7 +95,8 @@ namespace TurboSuite.Driver.ViewModels
                             circuitDimmingProtocols,
                             circuitVoltages,
                             _driverCandidates,
-                            hasMatch);
+                            hasMatch,
+                            _symbolsById);
 
                         deviceVM.FamilyTypeChanged += (sender, args) => OnDeviceFamilyTypeChanged(deviceVM, circuitVM);
 

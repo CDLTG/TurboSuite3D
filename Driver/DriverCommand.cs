@@ -176,12 +176,15 @@ namespace TurboSuite.Driver
                     }
                 }
 
+                var driverSymbol = doc.GetElement(
+                    recommendation.RecommendedCandidate.SymbolRef.ToElementId()) as FamilySymbol;
+
                 var plan = new DeploymentPlan();
                 plan.Circuits.Add(new CircuitDeployment
                 {
                     CircuitId = circuit.Id,
                     CircuitNumber = circuitData.CircuitNumber,
-                    DriverSymbol = recommendation.RecommendedCandidate.FamilySymbol,
+                    DriverSymbol = driverSymbol,
                     QuantityToPlace = recommendation.DriverCount,
                     SwitchId = switchId,
                     Assignments = recommendation.SubDriverAssignments
