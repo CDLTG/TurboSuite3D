@@ -27,6 +27,10 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
+    <!-- net48 keeps HttpClient/HttpContent in a separate GAC assembly the SDK does not
+         auto-reference (net8 has them in-box). DownloadService + its HttpContent polyfill
+         need it. -->
+    <Reference Include="System.Net.Http" />
     <!-- System.Text.Json is in-box on net8 (shared framework) but absent from the net48
          BCL, where DocsSettingsService needs it. net48-only on purpose: the net8 build
          (the shipping Revit 2025 artifact) keeps using its built-in copy, so this package
