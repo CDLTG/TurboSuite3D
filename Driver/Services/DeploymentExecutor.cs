@@ -11,7 +11,7 @@ using TurboSuite.Shared.Helpers;
 namespace TurboSuite.Driver.Services
 {
     /// <summary>
-    /// Result of a Warp deployment execution.
+    /// Result of a TurboDriver deployment execution.
     /// </summary>
     public class DeploymentResult
     {
@@ -35,7 +35,7 @@ namespace TurboSuite.Driver.Services
         private const double SpacingFt = 9.5 / 12.0; // 9.5 inches in feet
 
         /// <summary>
-        /// Execute the Warp deployment: pick one point, place all power supplies in a column.
+        /// Execute the TurboDriver deployment: pick one point, place all power supplies in a column.
         /// </summary>
         public DeploymentResult Execute(UIDocument uidoc, DeploymentPlan plan)
         {

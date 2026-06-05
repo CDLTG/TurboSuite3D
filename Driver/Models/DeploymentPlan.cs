@@ -6,7 +6,7 @@ namespace TurboSuite.Driver.Models
 {
     /// <summary>
     /// Plan for deploying power supplies across all qualifying circuits.
-    /// Built by MainViewModel when user clicks Warp; consumed by DeploymentExecutor.
+    /// Built by DriverCommand (headless TurboDriver); consumed by DeploymentExecutor.
     /// </summary>
     public class DeploymentPlan
     {
