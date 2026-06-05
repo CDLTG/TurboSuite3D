@@ -46,11 +46,17 @@ namespace TurboSuite.Compatibility
             return true;
         }
 
+        // Unlike the other members here, .NET Framework 4.8's reference graph in this
+        // project already supplies Enumerable.ToHashSet (via the System.Memory/ClosedXML
+        // transitive surface), so emitting it on net48 makes the call ambiguous (CS0121).
+        // Keep it only for plain netstandard2.0 consumers, where it is genuinely missing.
+#if !NETFRAMEWORK
         public static HashSet<T> ToHashSet<T>(this IEnumerable<T> source)
             => new HashSet<T>(source);
 
         public static HashSet<T> ToHashSet<T>(this IEnumerable<T> source, IEqualityComparer<T> comparer)
             => new HashSet<T>(source, comparer);
+#endif
 
         public static void Deconstruct<TKey, TValue>(this KeyValuePair<TKey, TValue> kvp, out TKey key, out TValue value)
         {

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
+    <UseWPF>true</UseWPF>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -18,6 +19,14 @@
          ClosedXML's graph (System.IO.Packaging wants 4.5.5; ClosedXML pulls 4.5.4).
          Not needed on net8 (built-in); harmless there and required on net48. -->
     <PackageReference Include="System.Memory" Version="4.5.5" />
+  </ItemGroup>
+  <!-- net48 splits System.IO.Compression{,.FileSystem} into separate GAC assemblies
+       that the SDK does not auto-reference (netstandard2.0 bundled them). The Counts
+       workbook post-processing uses ZipArchive + ZipFile.Open for .xlsx header/footer
+       patching. net8 has these in-box, so the reference is net48-only. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
