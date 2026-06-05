@@ -1,11 +1,11 @@
 #nullable disable
-using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 
 namespace TurboSuite.Number.Models
 {
     public class CircuitNumberRow
     {
-        public ElementId ElementId { get; set; }
+        public ElementRef ElementId { get; set; }
         public string CircuitNumber { get; set; }
         public string Panel { get; set; }
         public string LoadName { get; set; }

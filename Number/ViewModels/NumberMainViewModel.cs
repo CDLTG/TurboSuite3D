@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
@@ -21,19 +20,19 @@ namespace TurboSuite.Number.ViewModels
             List<CircuitNumberRow> circuits,
             List<DeviceNumberRow> keypads,
             List<DeviceNumberRow> powerSupplies,
-            NumberCollectorService collectorService,
-            ExternalEvent externalEvent,
-            RevitApiRequestHandler handler,
             IRevitWorkQueue workQueue,
             ISwitchIdWriter switchIdWriter,
             IPrefixSuffixStore prefixSuffixStore,
-            IRoomOrderStore roomOrderStore)
+            IRoomOrderStore roomOrderStore,
+            ICircuitNumberOperations circuitOps)
         {
-            CircuitTab = new CircuitNumberTabViewModel(doc, circuits, collectorService, externalEvent, handler);
+            // All three tabs are Revit-free Core VMs driven by IRevitWorkQueue + the op
+            // interfaces. This shim VM does the one-time Revit collection/projection and
+            // hands each tab only abstractions.
+            var panelSettings = BuildPanelSettings(doc, circuits);
+            CircuitTab = new CircuitNumberTabViewModel(circuits, panelSettings,
+                ParameterHelper.CircuitNamingOptions, workQueue, circuitOps);
 
-            // Project the Revit-coupled DeviceNumberRow into the Revit-free Core row VM
-            // shim-side (the .ToRef() conversions live in the shim), read the per-tab
-            // ExtensibleStorage state here, then hand the Core tabs only abstractions.
             var keypadRows = keypads.Select(d => new NumberableRowViewModel(
                 d.ElementId.ToRef(),
                 d.Model,
@@ -59,6 +58,36 @@ namespace TurboSuite.Number.ViewModels
             var (savedPrefix, savedSuffix) = RoomOrderStorageService.LoadPrefixSuffix(doc);
             PowerSupplyTab = new PowerSupplyTabViewModel(psRows, savedPrefix, savedSuffix,
                 workQueue, switchIdWriter, prefixSuffixStore);
+        }
+
+        private static List<PanelSettingsModel> BuildPanelSettings(Document doc, List<CircuitNumberRow> circuits)
+        {
+            var result = new List<PanelSettingsModel>();
+            var distinctPanels = circuits
+                .Select(c => c.Panel ?? "")
+                .Where(p => !string.IsNullOrEmpty(p))
+                .Distinct()
+                .OrderBy(p => p)
+                .ToList();
+
+            foreach (var panelName in distinctPanels)
+            {
+                Element panelEl = ParameterHelper.GetPanelElement(doc, panelName);
+                if (panelEl == null) continue;
+
+                string naming = ParameterHelper.GetCircuitNaming(panelEl);
+                if (string.IsNullOrEmpty(naming) || !ParameterHelper.CircuitNamingOptions.Contains(naming))
+                    naming = "(None)";
+
+                result.Add(new PanelSettingsModel(
+                    panelName,
+                    panelEl.Id.ToRef(),
+                    naming,
+                    ParameterHelper.GetCircuitPrefix(panelEl),
+                    ParameterHelper.GetCircuitPrefixSeparator(panelEl)));
+            }
+
+            return result;
         }
     }
 }

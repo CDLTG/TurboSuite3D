@@ -23,7 +23,7 @@ namespace TurboSuite.Number.Services
                 .ThenBy(es => ParameterHelper.GetCircuitNumber(es))
                 .Select(es => new CircuitNumberRow
                 {
-                    ElementId = es.Id,
+                    ElementId = es.Id.ToRef(),
                     CircuitNumber = ParameterHelper.GetCircuitNumber(es),
                     Panel = ParameterHelper.GetPanelName(es),
                     LoadName = ParameterHelper.GetLoadName(es)

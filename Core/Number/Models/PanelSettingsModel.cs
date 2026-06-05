@@ -1,5 +1,5 @@
 #nullable disable
-using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.Models
@@ -11,7 +11,7 @@ namespace TurboSuite.Number.Models
         private string _circuitPrefixSeparator;
 
         public string PanelName { get; }
-        public ElementId PanelElementId { get; }
+        public ElementRef PanelElementId { get; }
 
         public string CircuitNaming
         {
@@ -31,7 +31,7 @@ namespace TurboSuite.Number.Models
             set => SetProperty(ref _circuitPrefixSeparator, value);
         }
 
-        public PanelSettingsModel(string panelName, ElementId panelElementId,
+        public PanelSettingsModel(string panelName, ElementRef panelElementId,
             string circuitNaming, string circuitPrefix, string circuitPrefixSeparator)
         {
             PanelName = panelName;

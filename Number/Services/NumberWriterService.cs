@@ -11,7 +11,7 @@ namespace TurboSuite.Number.Services
 {
     public class NumberWriterService
     {
-        public void WritePanelSettings(Document doc, IList<PanelSettingsModel> panelSettings)
+        public void WritePanelSettings(Document doc, IReadOnlyList<PanelSettingsModel> panelSettings)
         {
             int updated = 0;
             int skipped = 0;
@@ -22,7 +22,7 @@ namespace TurboSuite.Number.Services
 
                 foreach (var panel in panelSettings)
                 {
-                    Element panelEl = doc.GetElement(panel.PanelElementId);
+                    Element panelEl = doc.GetElement(panel.PanelElementId.ToElementId());
                     if (panelEl == null) { skipped++; continue; }
 
                     ParameterHelper.SetCircuitNaming(panelEl, panel.CircuitNaming);

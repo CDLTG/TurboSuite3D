@@ -64,21 +64,16 @@ namespace TurboSuite.Number
                 var writerService = new NumberWriterService();
                 var panelScheduleService = new PanelScheduleService();
 
-                var handler = new RevitApiRequestHandler(doc, uidoc,
-                    panelScheduleService, writerService, collectorService);
-                var externalEvent = ExternalEvent.Create(handler);
-
-                // New work-queue + Revit-free operation impls for the migrated
-                // PowerSupply tab (Core). The other tabs still ride the legacy handler
-                // above until they migrate.
+                // Work-queue + Revit-free operation impls — all three tabs are Core VMs now.
                 var workQueue = new RevitWorkQueue("TurboNumber Error");
                 var switchIdWriter = new SwitchIdWriter(doc, writerService);
                 var prefixSuffixStore = new PrefixSuffixStore(doc);
                 var roomOrderStore = new RoomOrderStore(doc);
+                var circuitOps = new CircuitNumberOperations(doc, uidoc,
+                    panelScheduleService, writerService, collectorService);
 
                 var viewModel = new NumberMainViewModel(doc, circuits, keypads, powerSupplies,
-                    collectorService, externalEvent, handler,
-                    workQueue, switchIdWriter, prefixSuffixStore, roomOrderStore);
+                    workQueue, switchIdWriter, prefixSuffixStore, roomOrderStore, circuitOps);
 
                 var window = new TurboNumberWindow
                 {
@@ -91,7 +86,6 @@ namespace TurboSuite.Number
                 window.Closed += (s, e) =>
                 {
                     _activeWindow = null;
-                    externalEvent.Dispose();
                     workQueue.Dispose();
                 };
 
