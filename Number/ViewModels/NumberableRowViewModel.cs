@@ -1,6 +1,6 @@
 #nullable disable
 using System;
-using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
@@ -10,13 +10,13 @@ namespace TurboSuite.Number.ViewModels
         private string _value;
         private bool _isDuplicate;
 
-        public ElementId ElementId { get; }
+        public ElementRef ElementId { get; }
         public string DisplayLabel { get; }
         public string TypeName { get; }
         public string RoomName { get; }
         public string RoomNumber { get; }
         public string CircuitNumber { get; }
-        public ElementId CircuitElementId { get; }
+        public ElementRef CircuitElementId { get; }
         public string LoadName { get; }
         public string Panel { get; }
         public string Mark { get; }
@@ -43,9 +43,9 @@ namespace TurboSuite.Number.ViewModels
 
         public event EventHandler ValueChanged;
 
-        public NumberableRowViewModel(ElementId elementId, string displayLabel, string value,
+        public NumberableRowViewModel(ElementRef elementId, string displayLabel, string value,
             string roomName = "", string roomNumber = "", string circuitNumber = "",
-            ElementId circuitElementId = null, string panel = "",
+            ElementRef circuitElementId = default, string panel = "",
             string typeName = "", string loadName = "", string mark = "")
         {
             ElementId = elementId;
@@ -54,7 +54,7 @@ namespace TurboSuite.Number.ViewModels
             RoomName = roomName ?? "";
             RoomNumber = roomNumber ?? "";
             CircuitNumber = circuitNumber ?? "";
-            CircuitElementId = circuitElementId ?? ElementId.InvalidElementId;
+            CircuitElementId = circuitElementId;
             LoadName = loadName ?? "";
             Panel = panel ?? "";
             TypeName = typeName ?? "";

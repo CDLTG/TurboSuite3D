@@ -8,6 +8,7 @@ using System.Windows.Input;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.UI;
+using TurboSuite.Abstractions;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
 using TurboSuite.Shared.Helpers;
@@ -153,7 +154,7 @@ namespace TurboSuite.Number.ViewModels
                     continue;
 
                 AllCircuitRows.Add(new NumberableRowViewModel(
-                    c.ElementId,
+                    c.ElementId.ToRef(),
                     displayLabel: c.CircuitNumber,
                     value: c.CircuitNumber,
                     panel: c.Panel ?? "",
@@ -231,7 +232,7 @@ namespace TurboSuite.Number.ViewModels
                                     : slot.SlotType == "Space" ? "(Space)"
                                     : "";
                     var emptyRow = new NumberableRowViewModel(
-                        ElementId.InvalidElementId,
+                        ElementRef.None,
                         displayLabel: $"Slot {slot.SlotNumber}",
                         value: "",
                         panel: _selectedPanel,
@@ -252,7 +253,7 @@ namespace TurboSuite.Number.ViewModels
                                     : slot.SlotType == "Space" ? "(Space)"
                                     : ParameterHelper.GetLoadName(es) ?? "";
                     var row = new NumberableRowViewModel(
-                        es.Id,
+                        es.Id.ToRef(),
                         displayLabel: circuitNumber,
                         value: circuitNumber,
                         panel: _selectedPanel,

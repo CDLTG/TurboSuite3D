@@ -11,6 +11,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
@@ -111,7 +112,7 @@ namespace TurboSuite.Number.ViewModels
             foreach (var d in keypads)
             {
                 AddRow(new NumberableRowViewModel(
-                    d.ElementId,
+                    d.ElementId.ToRef(),
                     d.Model,
                     d.SwitchId,
                     d.RoomName,

@@ -48,7 +48,7 @@ namespace TurboSuite.Number.Services
 
                 foreach (var row in rows)
                 {
-                    Element el = doc.GetElement(row.ElementId);
+                    Element el = doc.GetElement(row.ElementId.ToElementId());
                     if (el == null) { skipped++; continue; }
 
                     Parameter param = el.LookupParameter(ParameterNames.SwitchId);

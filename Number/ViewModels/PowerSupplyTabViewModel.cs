@@ -5,6 +5,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
+using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Number.ViewModels
 {
@@ -47,11 +48,11 @@ namespace TurboSuite.Number.ViewModels
             foreach (var d in powerSupplies)
             {
                 AddRow(new NumberableRowViewModel(
-                    d.ElementId,
+                    d.ElementId.ToRef(),
                     d.Model,
                     d.SwitchId,
                     circuitNumber: d.CircuitNumber,
-                    circuitElementId: d.CircuitElementId,
+                    circuitElementId: d.CircuitElementId.ToRef(),
                     loadName: d.LoadName,
                     typeName: d.TypeName,
                     mark: d.Mark));
@@ -76,7 +77,7 @@ namespace TurboSuite.Number.ViewModels
                 var circuitId = sorted[i].CircuitElementId;
 
                 var group = new List<NumberableRowViewModel> { sorted[i] };
-                if (circuitId != ElementId.InvalidElementId)
+                if (circuitId.IsValid)
                 {
                     for (int j = i + 1; j < sorted.Count; j++)
                     {
@@ -117,7 +118,7 @@ namespace TurboSuite.Number.ViewModels
 
                 // Gather consecutive rows on the same circuit
                 var group = new List<NumberableRowViewModel> { sorted[i] };
-                if (circuitId != ElementId.InvalidElementId)
+                if (circuitId.IsValid)
                 {
                     for (int j = i + 1; j < sorted.Count; j++)
                     {
