@@ -37,9 +37,9 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
 $sln = Join-Path $projectRoot "TurboSuite.sln"
-$mainCsproj = Join-Path $projectRoot "TurboSuite.Revit2025.csproj"
+$mainCsproj = Join-Path $projectRoot "Revit2025\TurboSuite.Revit2025.csproj"
 $installerCsproj = Join-Path $projectRoot "Installer\TurboSuiteInstaller.csproj"
-$addinFile = Join-Path $projectRoot "TurboSuite.addin"
+$addinFile = Join-Path $projectRoot "Revit2025\TurboSuite.addin"
 $archiveRoot = Join-Path $ServerPath "Archive"
 
 function Get-DeployedVersion {
@@ -185,7 +185,7 @@ if ($priorVersion) {
 # Step 5: Copy files to server share
 Write-Host "[5/6] Copying files to server..." -ForegroundColor Yellow
 
-$mainBinDir = Join-Path $projectRoot "bin\Release\net8.0-windows"
+$mainBinDir = Join-Path $projectRoot "Revit2025\bin\Release\net8.0-windows"
 $updaterBinDir = Join-Path $projectRoot "Updater\bin\Release\net8.0-windows"
 
 # Copy main DLLs and PDBs (exclude Revit API DLLs)

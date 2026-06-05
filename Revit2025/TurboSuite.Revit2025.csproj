@@ -13,7 +13,8 @@
     <Version>1.1.0</Version>
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <DefaultItemExcludes>$(DefaultItemExcludes);Updater\**;Installer\**;Abstractions\**;Core\**</DefaultItemExcludes>
+    <!-- Updater/Installer/Abstractions/Core now live at the repo root (one level up),
+         outside this project's compile cone, so no DefaultItemExcludes are needed. -->
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ACadSharp" Version="3.4.24" />
@@ -35,15 +36,19 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Icons\*.png" />
+    <!-- Icons stay shared at the repo root; Link preserves the 'Icons/' logical resource
+         path so the pack URI (App/TurboSuiteApplication.cs) still resolves. -->
+    <Resource Include="..\Icons\*.png">
+      <Link>Icons\%(Filename)%(Extension)</Link>
+    </Resource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="Abstractions\TurboSuite.Abstractions.csproj" />
-    <ProjectReference Include="Core\TurboSuite.Core.csproj" />
-    <ProjectReference Include="Updater\TurboSuiteUpdater.csproj">
+    <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
+    <ProjectReference Include="..\Core\TurboSuite.Core.csproj" />
+    <ProjectReference Include="..\Updater\TurboSuiteUpdater.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
-    <ProjectReference Include="Installer\TurboSuiteInstaller.csproj">
+    <ProjectReference Include="..\Installer\TurboSuiteInstaller.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
   </ItemGroup>
@@ -62,9 +67,9 @@
     <!-- Copy updater files to %LOCALAPPDATA%\TurboSuite\ -->
     <MakeDir Directories="$(TurboSuiteLocalAppData)" />
     <ItemGroup>
-      <UpdaterFiles Include="$(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.exe;
-                             $(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.dll;
-                             $(ProjectDir)Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.runtimeconfig.json" />
+      <UpdaterFiles Include="$(ProjectDir)..\Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.exe;
+                             $(ProjectDir)..\Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.dll;
+                             $(ProjectDir)..\Updater\bin\$(Configuration)\net8.0-windows\TurboSuiteUpdater.runtimeconfig.json" />
     </ItemGroup>
     <Copy SourceFiles="@(UpdaterFiles)" DestinationFolder="$(TurboSuiteLocalAppData)" SkipUnchangedFiles="false" />
   </Target>
