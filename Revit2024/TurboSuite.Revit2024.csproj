@@ -42,13 +42,9 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
-  <ItemGroup>
-    <!-- Icons stay shared at the repo root; Link preserves the 'Icons/' logical resource
-         path so the pack URI (App/TurboSuiteApplication.cs) still resolves. -->
-    <Resource Include="..\Icons\*.png">
-      <Link>Icons\%(Filename)%(Extension)</Link>
-    </Resource>
-  </ItemGroup>
+  <!-- Shared shim source (all Revit-coupled command code + XAML + Icons), compiled
+       identically into every per-version shim. Single source of truth in Shim/. -->
+  <Import Project="..\Shim\Shim.projitems" Label="Shared" />
   <!-- net48 lacks the modern BCL surface (init/records, Index/Range, the
        StringComparison string overloads, etc.). Reuse Core's guarded polyfills
        verbatim by linking them into this net48-only shim, rather than duplicating.

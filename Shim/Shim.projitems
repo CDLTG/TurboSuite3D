@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>546549f7-f4fd-403f-aa30-2bf14414f48f</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>TurboSuite</Import_RootNamespace>
+  </PropertyGroup>
+
+  <!-- Shared TurboSuite shim source: ALL Revit-coupled command code (App/, the 11
+       command folders, Shared/). Compiled by every per-version shim csproj
+       (Revit2024 net48, Revit2025 net8, future Revit20XX). One physical copy; a
+       version-specific divergence is handled by a per-shim partial class or an
+       abstraction in Core/Abstractions, never by forking this tree.
+       Link metadata mirrors the original folder layout so WPF BAML/pack-URI
+       resource paths (e.g. Shared/Styles/TurboSuiteStyles.xaml) stay identical. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)**\*.cs"
+             Exclude="$(MSBuildThisFileDirectory)obj\**\*.cs;$(MSBuildThisFileDirectory)bin\**\*.cs">
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Page Include="$(MSBuildThisFileDirectory)**\*.xaml"
+          Exclude="$(MSBuildThisFileDirectory)obj\**\*.xaml;$(MSBuildThisFileDirectory)bin\**\*.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Page>
+    <!-- Icons live at the repo root, shared across all versions. Link preserves the
+         'Icons/' logical resource path the pack URI in App/TurboSuiteApplication.cs
+         resolves. -->
+    <Resource Include="$(MSBuildThisFileDirectory)..\Icons\*.png">
+      <Link>Icons\%(Filename)%(Extension)</Link>
+    </Resource>
+  </ItemGroup>
+</Project>

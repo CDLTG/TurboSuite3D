@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TurboSuite.Revit2025", "Rev
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TurboSuite.Revit2024", "Revit2024\TurboSuite.Revit2024.csproj", "{4BB9DB77-2EA3-4A05-814D-22B00A0B776E}"
 EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "Shim", "Shim\Shim.shproj", "{546549F7-F4FD-403F-AA30-2BF14414F48F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TurboSuiteUpdater", "Updater\TurboSuiteUpdater.csproj", "{A1B2C3D4-E5F6-7A8B-9C0D-1E2F3A4B5C6D}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Installer", "Installer", "{1860D2E4-5C43-71D5-59A5-599A4DE1DF67}"
@@ -22,6 +24,11 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TurboSuite.Core", "Core\TurboSuite.Core.csproj", "{2DD1C43F-1F8D-4EE4-8AB1-3BA8410FFE9C}"
 EndProject
 Global
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		Shim\Shim.projitems*{546549f7-f4fd-403f-aa30-2bf14414f48f}*SharedItemsImports = 13
+		Shim\Shim.projitems*{4bb9db77-2ea3-4a05-814d-22b00a0b776e}*SharedItemsImports = 5
+		Shim\Shim.projitems*{b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e}*SharedItemsImports = 5
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Debug|x64 = Debug|x64
