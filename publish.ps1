@@ -53,7 +53,6 @@ param(
 $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
-$sln = Join-Path $projectRoot "TurboSuite.sln"
 $installerCsproj = Join-Path $projectRoot "Installer\TurboSuiteInstaller.csproj"
 
 # Per-version layout: each version gets its own share subfolder + its own Archive\.
@@ -63,6 +62,7 @@ $archiveRoot = Join-Path $versionShare "Archive"
 # Per-version build outputs. The shim project + target framework differ by version.
 $tfm = if ($RevitVersion -eq "2024") { "net48" } else { "net8.0-windows" }
 $shimProjDir = Join-Path $projectRoot "Revit$RevitVersion"
+$shimProj = Join-Path $shimProjDir "TurboSuite.Revit$RevitVersion.csproj"
 $addinFile = Join-Path $shimProjDir "TurboSuite.addin"
 $mainBinDir = Join-Path $shimProjDir "bin\Release\$tfm"
 $updaterBinDir = Join-Path $projectRoot "Updater\bin\Release\$tfm"
@@ -174,11 +174,13 @@ if (Test-Path $changelogPath) {
     Write-Warning "CHANGELOG.md not found at $changelogPath — skipping changelog check."
 }
 
-# Step 1: Build solution in Release (builds both shims + the updater for both TFMs).
-# SkipRevitDeploy=true suppresses the dev inner-loop post-build copy into the Revit
-# addins folder, so publishing never fails just because Revit is open (locked DLLs).
-Write-Host "[1/6] Building solution in Release mode..." -ForegroundColor Yellow
-dotnet build $sln -c Release -p:SkipRevitDeploy=true
+# Step 1: Build only this channel's shim project in Release. Building the shim csproj
+# directly (rather than the whole solution) pulls its full dependency closure via
+# ProjectReferences into bin\Release\$tfm\ while avoiding the shared-project (.shproj)
+# and the other channel. SkipRevitDeploy=true suppresses the dev inner-loop post-build
+# copy into the Revit addins folder, so publishing never depends on Revit being closed.
+Write-Host "[1/6] Building the Revit $RevitVersion shim ($tfm) in Release mode..." -ForegroundColor Yellow
+dotnet build $shimProj -c Release -p:SkipRevitDeploy=true
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed."
     exit 1
