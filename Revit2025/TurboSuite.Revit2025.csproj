@@ -48,7 +48,9 @@
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
   </ItemGroup>
-  <Target Name="CopyToRevitAddins" AfterTargets="Build">
+  <!-- Dev inner-loop deploy. Skipped during publish (-p:SkipRevitDeploy=true) so a
+       publish build never depends on the Revit addins folder being unlocked. -->
+  <Target Name="CopyToRevitAddins" AfterTargets="Build" Condition="'$(SkipRevitDeploy)' != 'true'">
     <PropertyGroup>
       <RevitAddinsFolder>$(APPDATA)\Autodesk\Revit\Addins\2025</RevitAddinsFolder>
       <!-- Per-version local state — must match UpdateConstants.LocalBaseDir

@@ -174,11 +174,20 @@ if (Test-Path $changelogPath) {
     Write-Warning "CHANGELOG.md not found at $changelogPath — skipping changelog check."
 }
 
-# Step 1: Build solution in Release (builds both shims + the updater for both TFMs)
+# Step 1: Build solution in Release (builds both shims + the updater for both TFMs).
+# SkipRevitDeploy=true suppresses the dev inner-loop post-build copy into the Revit
+# addins folder, so publishing never fails just because Revit is open (locked DLLs).
 Write-Host "[1/6] Building solution in Release mode..." -ForegroundColor Yellow
-dotnet build $sln -c Release
+dotnet build $sln -c Release -p:SkipRevitDeploy=true
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed."
+    exit 1
+}
+
+# Verify the build actually produced this channel's output before we try to copy it.
+$mainDll = Join-Path $mainBinDir "TurboSuite.dll"
+if (-not (Test-Path $mainDll)) {
+    Write-Error "Build reported success but $mainDll was not produced (expected output dir: $mainBinDir). Aborting."
     exit 1
 }
 
