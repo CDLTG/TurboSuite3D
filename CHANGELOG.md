@@ -7,6 +7,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-06-05
+
+### Added
+- Multi-version Revit support: TurboSuite now builds and ships for **Revit 2024 (.NET Framework 4.8)** alongside Revit 2025 (.NET 8) from a single shared source tree. Version-agnostic logic lives in `TurboSuite.Core`/`TurboSuite.Abstractions`; thin per-version shim projects (`Revit2024`/`Revit2025`) each emit their own `TurboSuite.dll`. Existing Revit 2025 behavior, ExtensibleStorage schemas, and parameter names are unchanged.
+
+### Changed
+- Deployment is now **per Revit version**: each version installs to `Addins\{ver}\` and isolates its auto-update state under `%LOCALAPPDATA%\TurboSuite\{ver}\`, so multiple Revit versions coexist on one machine without interfering. The network share gains per-version subfolders (`\2024\`, `\2025\`), each independently versioned and rolled back; `publish.ps1` takes a `-RevitVersion` parameter and is run once per version.
+- A single combined installer auto-detects installed Revit versions and installs the matching add-in(s). **One-time migration for existing 1.1.0 users:** run the new installer's Uninstall, then Install, to move from the old flat layout to the per-version layout (see `PUBLISHING.md`).
+
 ### Fixed
 - Counts: Reel/Channel Qty under-counted when stock length was fractional (e.g. 5m reels = 16.404 ft). Removed inner `CEILING` on stock length so the user-entered value is trusted as the actual usable length.
 
