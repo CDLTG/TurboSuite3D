@@ -85,7 +85,7 @@ function Copy-ShareToArchive {
     param([string]$ArchiveName)
     $dest = Join-Path $archiveRoot $ArchiveName
     if (Test-Path $dest) {
-        Write-Host "  Archive already exists at $dest — skipping."
+        Write-Host "  Archive already exists at $dest - skipping."
         return
     }
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
@@ -122,7 +122,7 @@ if ($Rollback) {
         Write-Host "[1/2] Snapshotting current $current deployment..." -ForegroundColor Yellow
         Copy-ShareToArchive -ArchiveName $snapshotName
     } else {
-        Write-Host "[1/2] No version.txt present — skipping snapshot." -ForegroundColor Yellow
+        Write-Host "[1/2] No version.txt present - skipping snapshot." -ForegroundColor Yellow
     }
 
     Write-Host "[2/2] Restoring $Rollback from archive..." -ForegroundColor Yellow
@@ -171,7 +171,7 @@ if (Test-Path $changelogPath) {
         Write-Host "  CHANGELOG.md entry found for $Version." -ForegroundColor DarkGray
     }
 } else {
-    Write-Warning "CHANGELOG.md not found at $changelogPath — skipping changelog check."
+    Write-Warning "CHANGELOG.md not found at $changelogPath - skipping changelog check."
 }
 
 # Step 1: Build only this channel's shim project in Release. Building the shim csproj
@@ -220,7 +220,7 @@ if ($priorVersion) {
     }
     Copy-ShareToArchive -ArchiveName $priorVersion
 } else {
-    Write-Host "  No prior version.txt found — nothing to archive (first publish of this channel)."
+    Write-Host "  No prior version.txt found - nothing to archive (first publish of this channel)."
 }
 
 # Step 5: Copy files to the version subfolder
