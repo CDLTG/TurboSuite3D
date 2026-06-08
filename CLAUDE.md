@@ -6,9 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **v1.0.0 deployed 2026-05-26** to ~5 users at CDLTG. Future work ships via the network-share auto-update channel — assume every change reaches production users on their next Revit launch. Breaking changes to ExtensibleStorage schemas, parameter names, or settings shapes require a coordinated rollout (see "ExtensibleStorage Schema Changes" below).
 
+**v1.2.0 adds multi-version support (Revit 2024 + 2025).** Auto-update local state moved from flat `%LOCALAPPDATA%\TurboSuite\` to per-version `%LOCALAPPDATA%\TurboSuite\{year}\`, so the v1.0.0/1.1.0→1.2.0 hop is the one update that can't self-migrate — existing users must run the new installer's **Uninstall then Install** once (it relocates `config.json`). Subsequent updates auto-migrate normally.
+
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting automation, written in C#. A single `TurboSuite.dll` (.NET 8.0-windows) implements `IExternalApplication` and registers eleven shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). A twelfth command, TurboMask, is compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
+TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers eleven shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). A twelfth command, TurboMask, is compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
 
 ## Build Commands
 
@@ -16,11 +18,14 @@ TurboSuite is a unified Autodesk Revit 2025 add-in for electrical/lighting autom
 dotnet build TurboSuite.sln
 ```
 
-Platform target is **x64**. The solution contains the Revit 2025 add-in shim `TurboSuite.Revit2025.csproj` (still emits `TurboSuite.dll` via `AssemblyName`), the version-agnostic `Core/TurboSuite.Core.csproj` and `Abstractions/TurboSuite.Abstractions.csproj` (no Revit refs), plus `Updater/TurboSuiteUpdater.csproj` (auto-update helper) and `Installer/TurboSuiteInstaller.csproj` (standalone WPF installer). There are no automated tests or linting configurations.
+Platform target is **x64**. All Revit-coupled add-in source lives **once** in `Shim/` (a Visual Studio Shared Project — `Shim/Shim.projitems` imported by both csprojs; `Shim/Shim.shproj` is the VS node, never built by the CLI). It compiles into **two thin per-version shims** — `Revit2025/TurboSuite.Revit2025.csproj` (net8.0-windows, Revit 2025 API) and `Revit2024/TurboSuite.Revit2024.csproj` (net48, Revit 2024 API) — each of which emits `TurboSuite.dll` via `AssemblyName` into its own `Addins\{year}\` folder. **The shared source carries no version constant: the Revit year comes from the running Revit at runtime** (`UIControlledApplication.ControlledApplication.VersionNumber`, captured in `OnStartup`), so the only compile-time divergence is the csproj TFM/API refs and `ElementRefConversions` (the single `.Value`↔`.IntegerValue` seam). Supporting these are the version-agnostic, multi-targeted (`net48;net8.0-windows`) `Core/TurboSuite.Core.csproj` and `Abstractions/TurboSuite.Abstractions.csproj` (no Revit refs), plus `Updater/TurboSuiteUpdater.csproj` (auto-update helper, also multi-targeted) and `Installer/TurboSuiteInstaller.csproj` (standalone WPF installer). There are no automated tests or linting configurations.
 
-To publish a release to the server share (run from non-admin PowerShell):
+To build just one channel (e.g. in CI or a quick check): `dotnet build Revit2025/TurboSuite.Revit2025.csproj` (or `Revit2024/...`). In Visual Studio, set the desired shim as startup project and F5 to launch that Revit.
+
+To publish a release to the server share (run from non-admin PowerShell), **once per Revit version** into that version's share subfolder:
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -Version "1.0.0"
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -RevitVersion "2025" -Version "1.2.0"
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -RevitVersion "2024" -Version "1.2.0"
 ```
 
 **IMPORTANT**: Always use `dotnet.exe` (not `dotnet`) when running from WSL — the `.exe` suffix is required to invoke Windows executables. Always use Windows-style paths for `dotnet.exe`/MSBuild commands (e.g., `'C:\Users\jacobq\...\TurboSuite.Revit2025.csproj'`). Never use WSL-style `/mnt/c/...` paths — they cause `MSB1001` errors.
@@ -38,26 +43,26 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\Sha
 
 ## Deployment
 
-The post-build target copies `TurboSuite.addin` and `TurboSuite.dll`/`.pdb` to:
+Each shim's post-build target copies `TurboSuite.addin` and `TurboSuite.dll`/`.pdb` to its own per-version folder (`{year}` = the shim's Revit version, 2024 or 2025):
 ```
-%APPDATA%\Autodesk\Revit\Addins\2025\
-%APPDATA%\Autodesk\Revit\Addins\2025\TurboSuite\
+%APPDATA%\Autodesk\Revit\Addins\{year}\
+%APPDATA%\Autodesk\Revit\Addins\{year}\TurboSuite\
 ```
-It also copies `TurboSuiteUpdater.exe` to `%LOCALAPPDATA%\TurboSuite\`.
+It also copies the version-matched `TurboSuiteUpdater.exe` (net48 for 2024 — exe only; net8 for 2025 — exe + dll + runtimeconfig) to `%LOCALAPPDATA%\TurboSuite\{year}\`.
 
-Revit auto-discovers `.addin` files from that directory on startup.
+Revit auto-discovers `.addin` files from that directory on startup. The two channels are fully isolated — same DLL name, different per-version folders.
 
 ### Installation and Auto-Update
 
-**First-time install:** Users run `TurboSuiteInstaller.exe` from the network share. It copies add-in files to the Revit addins folder, writes a `config.json` to `%LOCALAPPDATA%\TurboSuite\` with the server path (auto-detected from the installer's own directory), and writes the initial `version.txt`.
+**First-time install:** Users run the combined `TurboSuiteInstaller.exe` from the network share root. It auto-discovers the per-version channel subfolders next to it (`\2024\`, `\2025\` — matched by a year-shape regex, so a future `\2027\` needs no installer change), and for each Revit version present it copies that channel's files to `Addins\{year}\`, writes a `config.json` to `%LOCALAPPDATA%\TurboSuite\{year}\` (ServerPath = that channel's share subfolder), and writes the initial `version.txt`. If no matching Revit is found it offers to install all available channels ahead of Revit.
 
-**Auto-update:** On Revit launch, `UpdateService` reads the server path from `%LOCALAPPDATA%\TurboSuite\config.json` and checks for a newer `version.txt`. If found, files are staged to `%LOCALAPPDATA%\TurboSuite\Staging\`. The user is prompted to accept or skip. If accepted, `TurboSuiteUpdater.exe` applies the update after Revit closes. Skipped updates remain staged and prompt again on next launch.
+**Auto-update:** On Revit launch, the year is captured in `OnStartup` and `UpdateService` reads the server path from `%LOCALAPPDATA%\TurboSuite\{year}\config.json`, checking that channel's subfolder for a newer `version.txt`. If found, files are staged to `%LOCALAPPDATA%\TurboSuite\{year}\Staging\`. The user is prompted to accept or skip. If accepted, the per-version `TurboSuiteUpdater.exe` applies the update after Revit closes. Skipped updates remain staged and prompt again on next launch.
 
-**Publishing updates:** Run `publish.ps1` from a non-admin PowerShell (admin sessions cannot see mapped network drives). See `PUBLISHING.md` for full syntax. Bump the version each release.
+**Publishing updates:** Run `publish.ps1` once per `-RevitVersion` from a non-admin PowerShell (admin sessions cannot see mapped network drives). Each run publishes one channel into `<ServerPath>\<year>\` (own `version.txt`, DLL set, version-matched updater, and `Archive\`); the combined installer is published once to the share root. Rollback is per-channel (`-Rollback <ver>`). See `PUBLISHING.md` for full syntax. Bump the version each release.
 
-**Uninstall:** Users can run `TurboSuiteInstaller.exe` again and click "Uninstall" to remove all TurboSuite files.
+**Uninstall:** Users can run `TurboSuiteInstaller.exe` again and click "Uninstall" to remove all TurboSuite files for every installed Revit version.
 
-The `Updater/` and `Installer/` subdirectories are excluded from the main project via `<DefaultItemExcludes>` in `TurboSuite.Revit2025.csproj` to prevent the WPF temp project from picking up their source files.
+Each shim's add-in source comes from the `Shim/Shim.projitems` import (a Shared Project), not a recursive glob — and the shims live in their own `Revit{year}/` subdirectories, so `Updater/`, `Installer/`, and the other channel sit outside the project's compile cone with no `DefaultItemExcludes` needed.
 
 ## Workflow Rules
 
@@ -165,7 +170,7 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 
 ## Dependencies
 
-- `RevitAPI.dll`, `RevitAPIUI.dll`, `Xceed.Wpf.AvalonDock.dll` (from Revit 2025 install)
+- `RevitAPI.dll`, `RevitAPIUI.dll`, `Xceed.Wpf.AvalonDock.dll` (from the matching Revit 2024/2025 install, per shim)
 - `ACadSharp` (NuGet) — DWG/DXF reading for TurboName
 - `PdfSharpCore` (NuGet) — PDF operations for TurboDocs
-- .NET 8.0-windows / WPF
+- .NET 8.0-windows (Revit 2025 shim) / .NET Framework 4.8 (Revit 2024 shim) / Core multi-targets both / WPF

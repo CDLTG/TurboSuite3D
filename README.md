@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit 2025 add-in for electrical and lighting automation, built for electrical/lighting designers working on luxury architectural lighting projects. Eleven commands plus a Settings dialog consolidated into a single `TurboSuite.dll` targeting .NET 8.0-windows (x64).
+A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024 and 2025**, built for electrical/lighting designers working on luxury architectural lighting projects. Eleven commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET 8.0-windows for Revit 2025, .NET Framework 4.8 for Revit 2024), x64.
 
 ## Installation
 
@@ -8,8 +8,8 @@ A unified Autodesk Revit 2025 add-in for electrical and lighting automation, bui
 
 1. Navigate to the TurboSuite network share folder
 2. Run `TurboSuiteInstaller.exe`
-3. Click **Install** — the installer copies all required files to the correct locations and configures auto-update
-4. Launch Revit 2025 — the TurboSuite ribbon tab will appear automatically
+3. Click **Install** — the installer detects which Revit versions (2024, 2025) are present and installs the matching channel for each, copying all required files to the correct locations and configuring auto-update
+4. Launch Revit 2024 or 2025 — the TurboSuite ribbon tab will appear automatically
 
 Revit must be closed during installation.
 
@@ -117,11 +117,11 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 
 ## Software Dependencies
 
-- RevitAPI.dll and RevitAPIUI.dll (Revit 2025)
-- Xceed.Wpf.AvalonDock.dll (ships with Revit 2025) — used by TurboTab for document tab coloring
+- RevitAPI.dll and RevitAPIUI.dll (Revit 2024 or 2025, depending on the channel)
+- Xceed.Wpf.AvalonDock.dll (ships with Revit) — used by TurboTab for document tab coloring
 - [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation
 - [PdfSharpCore](https://github.com/ststeiger/PdfSharpCore) (NuGet) — PDF generation, reading, stamping, and merging. Used by TurboDocs.
-- .NET 8.0-windows / WPF
+- .NET 8.0-windows (Revit 2025) / .NET Framework 4.8 (Revit 2024) / WPF
 
 ## Building from Source
 
@@ -129,7 +129,13 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 dotnet build TurboSuite.sln -c Release
 ```
 
-Platform target is **x64**. Requires .NET 8.0 SDK and a local Revit 2025 install (for `RevitAPI.dll` / `RevitAPIUI.dll` references). Post-build copies the add-in into `%APPDATA%\Autodesk\Revit\Addins\2025\` for local testing.
+The shared add-in source lives once in `Shim/` (a Visual Studio Shared Project) and compiles into a thin per-version shim: `Revit2025/` (net8.0-windows, Revit 2025 API) and `Revit2024/` (net48, Revit 2024 API). Both emit `TurboSuite.dll` into their own `Addins\{year}\` folder. To build a single channel directly:
+
+```bash
+dotnet build Revit2025/TurboSuite.Revit2025.csproj -c Release   # or Revit2024/...
+```
+
+Platform target is **x64**. Requires the .NET 8.0 SDK and a local install of the matching Revit version (for `RevitAPI.dll` / `RevitAPIUI.dll` references). Post-build copies each add-in into `%APPDATA%\Autodesk\Revit\Addins\{year}\` for local testing.
 
 ## License
 
