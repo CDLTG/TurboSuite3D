@@ -111,6 +111,15 @@ public static class CountsWorkbookService
     // their ExpandSlot output here as a JSON array of TokenFreezeEntry. Bid Compare reads this for
     // the baseline side; ReconcileBaselinePricing refreshes the per-SKU SellEa just like Cat1-6.
     private const int CsColTokenFreeze = 30;  // AD
+    // Per-slot frozen effective qty on cols AE..AJ (hidden): the CatalogQty-resolved quantity
+    // (`CatalogQtyParser.Parse(QtyX).Evaluate(Count)`) for each Cat slot 1..6 — the same value the
+    // Worksheet writes to col D / BR. CsColCount holds the Type's raw fixture total, which is only
+    // correct for default (blank) QtyX; slots with 1/N, N, or N @type resolve to a different qty.
+    // Bid Compare's baseline OldQty and static Bid Total must use this per-slot value, not Count,
+    // or the diff falsely reports the whole Type's count against the resolved current qty. Token
+    // slots leave these blank — their per-SKU qty lives in CsColTokenFreeze. Snapshots written
+    // before this column existed read blank and fall back to CsColCount (legacy behavior).
+    private const int CsColQty1 = 31;       // AE
 
     // Highlight colors
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
@@ -193,6 +202,9 @@ public static class CountsWorkbookService
         // now that today's snapshot is in place so the pricing team can lock the bid against the
         // initial generation without waiting for an update.
         RefreshReferenceCountsDropdown(wb);
+
+        // Final tab placement: last sheet before the Counts snapshots.
+        PositionCalculationsSheet(wb);
 
         wb.SaveAs(outputPath);
 
@@ -282,6 +294,11 @@ public static class CountsWorkbookService
             stage = "append-changes";
             if (prevData != null)
                 AppendChanges(wb, fixtures, prevData, headerDate);
+
+            // Re-place Calculations as the last tab before the Counts snapshots. Runs after
+            // Changes is appended so the order resolves to …|Changes|Calculations|Counts….
+            stage = "position-calculations";
+            PositionCalculationsSheet(wb);
 
             stage = "save";
             wb.Save();
@@ -1416,6 +1433,8 @@ public static class CountsWorkbookService
             ws.Cell(1, CsColSellEa1 + s).Value = $"_SellEa{s + 1}";
         ws.Cell(1, CsColTariffPct).Value = "_TariffPct";
         ws.Cell(1, CsColTokenFreeze).Value = "_TokenFreeze";
+        for (int s = 0; s < 6; s++)
+            ws.Cell(1, CsColQty1 + s).Value = $"_Qty{s + 1}";
 
         ws.SheetView.FreezeRows(1);
         ws.SheetView.FreezeColumns(1);
@@ -1467,6 +1486,18 @@ public static class CountsWorkbookService
             for (int n = 0; n < 6; n++)
                 ws.Cell(row, CsColNote1 + n).Value = f.Notes[n] ?? string.Empty;
             ws.Cell(row, CsColCatCombo).FormulaA1 = BuildCatComboFormula(row);
+
+            // Freeze per-slot CatalogQty-resolved qty (mirrors the Worksheet's col D literal:
+            // `qtyRule.Evaluate(Count)`). CsColCount holds only the Type's raw fixture total, which
+            // is wrong for 1/N, N, or N @type slots. Token slots are skipped — their per-SKU qty is
+            // frozen in CsColTokenFreeze below.
+            for (int c = 0; c < 6; c++)
+            {
+                string template = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(template)) continue;
+                if (CatalogLengthTokenResolver.HasToken(template)) continue;
+                ws.Cell(row, CsColQty1 + c).Value = CatalogQtyParser.Parse(f.CatalogQtys[c]).Evaluate(f.Count);
+            }
 
             // Freeze pricing per slot. Each catalog has its own (J,K,M) on Worksheet — even
             // catalogs that share a name across Types are linked by dependent formula, not by
@@ -1546,6 +1577,8 @@ public static class CountsWorkbookService
             ws.Column(CsColSellEa1 + s).Hide();
         ws.Column(CsColTariffPct).Hide();
         ws.Column(CsColTokenFreeze).Hide();
+        for (int s = 0; s < 6; s++)
+            ws.Column(CsColQty1 + s).Hide();
 
         // Frozen Dashboard meta on column V (hidden). Sheet-scoped names so Bid Compare can
         // resolve the snapshot's bid-time Lutron / Freight Sell / Sales Tax rate from any sheet.
@@ -2591,11 +2624,13 @@ public static class CountsWorkbookService
                 // a baseline row that no current (resolved) row can match.
                 if (CatalogLengthTokenResolver.HasToken(cat)) continue;
                 baseline.Cell(r, CsColSellEa1 + c).TryGetValue(out double slotSellEa);
+                // Per-slot CatalogQty-resolved qty (legacy snapshots fall back to the Type total).
+                double slotQty = ReadSlotQty(baseline, r, c, qty);
                 var key = (type.ToUpperInvariant(), cat.ToUpperInvariant());
                 if (!baselineRows.ContainsKey(key))
                     baselineRows.Add(key, new BcRow
                     {
-                        Type = type, Mfr = mfr, Catalog = cat, Slot = c, Qty = qty, SellEa = slotSellEa,
+                        Type = type, Mfr = mfr, Catalog = cat, Slot = c, Qty = slotQty, SellEa = slotSellEa,
                     });
             }
 
@@ -2622,6 +2657,10 @@ public static class CountsWorkbookService
         {
             for (int c = 0; c < 6; c++)
             {
+                string template = f.CatalogNumbers[c] ?? "";
+                if (string.IsNullOrWhiteSpace(template)) continue;
+                bool isToken = CatalogLengthTokenResolver.HasToken(template);
+                var qtyRule = CatalogQtyParser.Parse(f.CatalogQtys[c]);
                 // ExpandSlot mirrors the Worksheet: plain templates yield one (template, Count)
                 // pair; length-token templates yield one resolved cut-length SKU per length, so
                 // the keys line up with the Worksheet's resolved rows (wsRowByKey) below.
@@ -2636,10 +2675,14 @@ public static class CountsWorkbookService
                         double uc = p.UnitCost ?? 0, mk = p.Markup ?? 0, ad = p.Adder ?? 0;
                         curSellEa = (uc * (1 + mk)) + ad;
                     }
+                    // Token slots carry their per-SKU qty from ExpandSlot; plain slots resolve the
+                    // CatalogQty rule (matches the Worksheet col D / BR the live Qty formula reads).
+                    // Only used as the fallback display when a row has no live Worksheet row.
+                    double newQty = isToken ? expandedQty : qtyRule.Evaluate(f.Count);
                     currentRows.Add(key, new BcRow
                     {
                         Type = f.TypeMark, Mfr = f.Manufacturer, Catalog = cat, Slot = c,
-                        Qty = expandedQty, SellEa = curSellEa,
+                        Qty = newQty, SellEa = curSellEa,
                     });
                 }
             }
@@ -2703,13 +2746,16 @@ public static class CountsWorkbookService
             string type = baseline.Cell(r, CsColType).GetString();
             if (string.IsNullOrWhiteSpace(type)) continue;
             baseline.Cell(r, CsColCount).TryGetValue(out double q);
-            double rowSellSum = 0;
+            // Σ(per-slot qty × per-slot SellEa). Per-slot qty is the CatalogQty-resolved value
+            // (CsColQty1..6); using the Type total q here would over/under-count 1/N, N, N @type
+            // slots. Legacy snapshots fall back to q. Token slots add their per-SKU ext below.
+            double rowSellExt = 0;
             for (int c = 0; c < 6; c++)
             {
                 baseline.Cell(r, CsColSellEa1 + c).TryGetValue(out double slot);
-                rowSellSum += slot;
+                if (slot == 0) continue;
+                rowSellExt += ReadSlotQty(baseline, r, c, q) * slot;
             }
-            double rowSellExt = q * rowSellSum;
             // Token slots price per resolved cut-length SKU (qty * SellEa) from the freeze column,
             // not via CsColCount * SellEa1-6. Same per-row tariff applies.
             foreach (var e in ReadTokenFreeze(baseline.Cell(r, CsColTokenFreeze).GetString()))
@@ -2723,7 +2769,7 @@ public static class CountsWorkbookService
 
         // 5. Emit sheet.
         var ws = wb.Worksheets.Add("Bid Compare");
-        ws.TabColor = XLColor.FromHtml("#FF8ED973");
+        ws.TabColor = XLColor.FromHtml("#FFF28B82");  // match Changes/Calculations (diff group)
         ws.Style.Font.FontName = "Segoe UI";
         ws.Style.Font.FontSize = 11;
 
@@ -3302,6 +3348,35 @@ public static class CountsWorkbookService
     //   4. CatalogQty — live decomposition of the N / 1/N / N @type CatalogQtyEvaluator rules.
     // Each catalog slot lands in exactly one section, matching the live Qty precedence in
     // BuildWorksheetSheet: length-token > non-blank CatalogQty > Calc/default.
+    /// <summary>
+    /// Moves the Calculations sheet to the last position before the first "Counts {date}"
+    /// snapshot. Run at the very end of each build path — after Bid Compare and Changes are
+    /// placed — so the final tab order resolves to …|Bid Compare|Changes|Calculations|Counts….
+    /// BuildCalculationsSheet adds the sheet at workbook end, so without this it would trail the
+    /// snapshots (update path) or sit mid-workbook (create path).
+    /// </summary>
+    private static void PositionCalculationsSheet(IXLWorkbook wb)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Calculations", out var ws)) return;
+
+        int? targetPos = null;
+        foreach (var w in wb.Worksheets)
+        {
+            if (w.Name.StartsWith("Counts ", StringComparison.OrdinalIgnoreCase)
+                && (targetPos == null || w.Position < targetPos))
+            {
+                targetPos = w.Position;
+            }
+        }
+        if (targetPos == null) return;
+
+        // Land immediately before the first Counts snapshot. Moving the sheet *forward* (current
+        // position lower than target — the create path, where Calculations is added before the
+        // snapshot) first removes it, shifting Counts down one slot, so we must target one less.
+        // Moving *backward* (update path, sheet re-added at workbook end) targets the slot directly.
+        ws.Position = ws.Position < targetPos.Value ? targetPos.Value - 1 : targetPos.Value;
+    }
+
     private static void BuildCalculationsSheet(IXLWorkbook wb, List<CountsFixtureModel> fixtures, string countsSheetName)
     {
         // Migration: drop a stale sheet under either name before rebuilding.
@@ -3309,7 +3384,10 @@ public static class CountsWorkbookService
         if (wb.Worksheets.TryGetWorksheet("Calculations", out var existing)) existing.Delete();
 
         var ws = wb.Worksheets.Add("Calculations");
-        ws.Visibility = XLWorksheetVisibility.Hidden;
+        // Visible by default and color-matched to Changes/Bid Compare (the diff/audit group).
+        // Final position is set by PositionCalculationsSheet at the end of each build path so it
+        // lands as the last tab before the Counts snapshots, after Changes is placed.
+        ws.TabColor = XLColor.FromHtml("#FFF28B82");
 
         string cs = $"'{countsSheetName}'";  // Counts sheet ref (col 9=Count, 10=Linear, 11=Reel, 12=Channel)
         var inv = System.Globalization.CultureInfo.InvariantCulture;
@@ -4534,6 +4612,16 @@ public static class CountsWorkbookService
         return wb.Worksheets
             .Where(ws => ws.Name.StartsWith("Counts ", StringComparison.OrdinalIgnoreCase))
             .OrderBy(ws => ws.Name);
+    }
+
+    // Read a snapshot's frozen per-slot effective qty (CsColQty1..6). Legacy snapshots written
+    // before this column existed have an empty cell — fall back to the Type's raw fixture total
+    // (CsColCount), reproducing the pre-fix behavior for those baselines rather than diffing to 0.
+    private static double ReadSlotQty(IXLWorksheet baseline, int row, int slot, double fallbackCount)
+    {
+        var cell = baseline.Cell(row, CsColQty1 + slot);
+        if (cell.IsEmpty()) return fallbackCount;
+        return cell.TryGetValue(out double q) ? q : fallbackCount;
     }
 
     // Deserialize the snapshot's hidden CsColTokenFreeze JSON. Returns an empty list for blank
