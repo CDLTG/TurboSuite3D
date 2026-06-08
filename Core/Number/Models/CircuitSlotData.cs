@@ -13,11 +13,11 @@ namespace TurboSuite.Number.Models
     public class CircuitSlotData
     {
         public ElementRef CircuitRef { get; set; }
-        public string CircuitNumber { get; set; }
-        public string LoadName { get; set; }
+        public string CircuitNumber { get; set; } = string.Empty;
+        public string LoadName { get; set; } = string.Empty;
         public int SlotNumber { get; set; }
         public int SlotRow { get; set; }
         public int SlotCol { get; set; }
-        public string SlotType { get; set; } // "Circuit", "Empty", "Spare", "Space"
+        public string SlotType { get; set; } = string.Empty; // "Circuit", "Empty", "Spare", "Space"
     }
 }

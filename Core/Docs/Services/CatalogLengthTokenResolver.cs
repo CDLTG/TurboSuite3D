@@ -47,8 +47,9 @@ public static class CatalogLengthTokenResolver
     public static bool HasToken(string? catalogNumber)
     {
         if (string.IsNullOrEmpty(catalogNumber)) return false;
-        return (catalogNumber.Contains("{xx", StringComparison.Ordinal)
-            || catalogNumber.Contains("{ft", StringComparison.Ordinal))
+        // net48's string.IsNullOrEmpty lacks [NotNullWhen(false)], so flag non-null explicitly.
+        return (catalogNumber!.Contains("{xx", StringComparison.Ordinal)
+            || catalogNumber!.Contains("{ft", StringComparison.Ordinal))
             && TokenRegex.IsMatch(catalogNumber);
     }
 
@@ -63,7 +64,7 @@ public static class CatalogLengthTokenResolver
         int cursor = 0;
         while (true)
         {
-            int iXx = catalogNumber.IndexOf("{xx", cursor, StringComparison.Ordinal);
+            int iXx = catalogNumber!.IndexOf("{xx", cursor, StringComparison.Ordinal);
             int iFt = catalogNumber.IndexOf("{ft", cursor, StringComparison.Ordinal);
             int idx;
             if (iXx >= 0 && (iFt < 0 || iXx <= iFt)) idx = iXx;

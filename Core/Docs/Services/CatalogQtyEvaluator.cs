@@ -40,7 +40,8 @@ public static class CatalogQtyParser
         if (string.IsNullOrWhiteSpace(raw))
             return CatalogQtyRule.DefaultRule;
 
-        var input = raw.Trim();
+        // net48's string.IsNullOrWhiteSpace lacks [NotNullWhen(false)], so flag non-null explicitly.
+        var input = raw!.Trim();
 
         // Trailing @type suffix (case-insensitive, optional whitespace before @)
         if (input.EndsWith("@type", StringComparison.OrdinalIgnoreCase))
