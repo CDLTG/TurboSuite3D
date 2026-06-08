@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ClosedXML.Excel;
@@ -103,6 +104,13 @@ public static class CountsWorkbookService
     // needed at read time. Source is Worksheet col L, which is canonical-per-Type (literal only
     // on the Type's first row; other rows mirror via formula).
     private const int CsColTariffPct = 29;  // AC
+    // Hidden frozen-expansion column (AD). Length-token catalog slots can't be represented by
+    // the fixed Cat1-6 / SellEa1-6 layout — one slot explodes into many resolved cut-length SKUs,
+    // each with its own Worksheet price. So token slots keep their raw template in Cat1-6 (so
+    // ReadCountsSheetData / change-detection stay per-Type and untouched) and additionally freeze
+    // their ExpandSlot output here as a JSON array of TokenFreezeEntry. Bid Compare reads this for
+    // the baseline side; ReconcileBaselinePricing refreshes the per-SKU SellEa just like Cat1-6.
+    private const int CsColTokenFreeze = 30;  // AD
 
     // Highlight colors
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
@@ -514,9 +522,12 @@ public static class CountsWorkbookService
         StyleEditableCell(ws.Cell("B9"));
 
         // --- REFERENCE COUNTS ---
-        // Live pointer to a historical Counts sheet. When set, Worksheet col E (and the
-        // Quote Δ column it feeds) re-resolves against that snapshot via INDIRECT/SUMIFS.
-        // When blank, behavior falls back to "compare against latest prior run."
+        // Live pointer to a historical Counts snapshot, read via ReadBidDate. This baseline is
+        // consumed by the Bid Compare sheet only (see ResolveBaselineSheet + BuildBidCompareSheet,
+        // and the bid-lock ReconcileBaselinePricing). It does NOT feed Worksheet col E: Prev Qty
+        // is a separate "compare against latest prior run" diff computed from the previous export
+        // pass's cached values (existing.PrevQty / prevFixture in UpdateWorksheetSheet), with no
+        // INDIRECT/SUMIFS against this snapshot.
         WriteSectionBar(ws, 11, "REFERENCE COUNTS");
         ws.Cell("A12").Value = "Compare to";
         ws.Cell("B12").Style.NumberFormat.Format = "yyyy-mm-dd";
@@ -1404,6 +1415,7 @@ public static class CountsWorkbookService
         for (int s = 0; s < 6; s++)
             ws.Cell(1, CsColSellEa1 + s).Value = $"_SellEa{s + 1}";
         ws.Cell(1, CsColTariffPct).Value = "_TariffPct";
+        ws.Cell(1, CsColTokenFreeze).Value = "_TokenFreeze";
 
         ws.SheetView.FreezeRows(1);
         ws.SheetView.FreezeColumns(1);
@@ -1495,6 +1507,37 @@ public static class CountsWorkbookService
                 ws.Cell(row, CsColTariffPct).Style.NumberFormat.Format = "0.00%";
             }
 
+            // Freeze length-token slots. Each token slot explodes into resolved cut-length SKUs
+            // (one Worksheet row each), so its raw template can't carry per-SKU qty/price in the
+            // fixed Cat1-6 / SellEa1-6 columns. ExpandSlot mirrors the Worksheet's expansion; the
+            // per-SKU SellEa is read from the same canonical Worksheet rows the slot loop uses.
+            var tokenFreeze = new List<TokenFreezeEntry>();
+            for (int c = 0; c < 6; c++)
+            {
+                string template = f.CatalogNumbers[c] ?? "";
+                if (!CatalogLengthTokenResolver.HasToken(template)) continue;
+                foreach (var (sku, qty) in CatalogLengthTokenResolver.ExpandSlot(f, c))
+                {
+                    double sellEa = 0;
+                    if (pricingWs != null)
+                    {
+                        var key = (f.TypeMark.ToUpperInvariant(), sku.ToUpperInvariant());
+                        if (wsRowByKey.TryGetValue(key, out int wsRow))
+                        {
+                            int costRow = catalogCanonicalRow.TryGetValue(sku, out int canon) ? canon : wsRow;
+                            pricingWs.Cell(costRow, WsColUnitCost).TryGetValue(out double uc);
+                            pricingWs.Cell(wsRow, WsColMarkup).TryGetValue(out double mk);
+                            pricingWs.Cell(wsRow, WsColAdder).TryGetValue(out double ad);
+                            sellEa = (uc * (1 + mk)) + ad;
+                            if (sellEa != 0) anyPriced = true;
+                        }
+                    }
+                    tokenFreeze.Add(new TokenFreezeEntry { Slot = c, Sku = sku, Qty = qty, SellEa = sellEa });
+                }
+            }
+            if (tokenFreeze.Count > 0)
+                ws.Cell(row, CsColTokenFreeze).Value = JsonSerializer.Serialize(tokenFreeze);
+
             row++;
         }
         int lastDataRow = row - 1;
@@ -1502,6 +1545,7 @@ public static class CountsWorkbookService
         for (int s = 0; s < 6; s++)
             ws.Column(CsColSellEa1 + s).Hide();
         ws.Column(CsColTariffPct).Hide();
+        ws.Column(CsColTokenFreeze).Hide();
 
         // Frozen Dashboard meta on column V (hidden). Sheet-scoped names so Bid Compare can
         // resolve the snapshot's bid-time Lutron / Freight Sell / Sales Tax rate from any sheet.
@@ -2290,6 +2334,25 @@ public static class CountsWorkbookService
                 wsSheet.Cell(tRow, WsColTariff).TryGetValue(out tariff);
             baseline.Cell(r, CsColTariffPct).Value = tariff;
             baseline.Cell(r, CsColTariffPct).Style.NumberFormat.Format = "0.00%";
+
+            // Refresh frozen per-SKU SellEa in the token-freeze column, same canonicalization as
+            // the Cat1-6 slots above. Re-resolve each cut-length SKU against the live Worksheet.
+            var tokenEntries = ReadTokenFreeze(baseline.Cell(r, CsColTokenFreeze).GetString());
+            if (tokenEntries.Count > 0)
+            {
+                foreach (var e in tokenEntries)
+                {
+                    var key = (type.ToUpperInvariant(), e.Sku.ToUpperInvariant());
+                    if (!wsRowByKey.TryGetValue(key, out int wsRow)) continue;
+                    int costRow = catalogCanonicalRow.TryGetValue(e.Sku, out int canon) ? canon : wsRow;
+                    wsSheet.Cell(costRow, WsColUnitCost).TryGetValue(out double uc);
+                    wsSheet.Cell(wsRow, WsColMarkup).TryGetValue(out double mk);
+                    wsSheet.Cell(wsRow, WsColAdder).TryGetValue(out double ad);
+                    double sellEa = (uc * (1 + mk)) + ad;
+                    if (sellEa != 0) e.SellEa = sellEa;
+                }
+                baseline.Cell(r, CsColTokenFreeze).Value = JsonSerializer.Serialize(tokenEntries);
+            }
         }
 
         // Refresh frozen Dashboard meta (V1/V2/V3) from current Dashboard values.
@@ -2458,6 +2521,16 @@ public static class CountsWorkbookService
     private static readonly XLColor BcPriceDownTint = XLColor.FromHtml("#D9F2D9");  // pale green
     private static readonly XLColor BcAddedTint = XLColor.FromHtml("#E5F5E5");      // pale green
 
+    // One resolved cut-length SKU frozen from a length-token slot's ExpandSlot output. Persisted
+    // as a JSON array in the snapshot's hidden CsColTokenFreeze column (one array per fixture row).
+    private sealed class TokenFreezeEntry
+    {
+        public int Slot { get; set; }
+        public string Sku { get; set; } = "";
+        public double Qty { get; set; }
+        public double SellEa { get; set; }
+    }
+
     private sealed class BcRow
     {
         public string Type = "";
@@ -2513,12 +2586,28 @@ public static class CountsWorkbookService
             {
                 string cat = baseline.Cell(r, CsColCat1 + c).GetString();
                 if (string.IsNullOrWhiteSpace(cat)) continue;
+                // Token slots carry the raw template here; their resolved cut-length SKUs live in
+                // the freeze column and are added below. Skip the raw template so it never becomes
+                // a baseline row that no current (resolved) row can match.
+                if (CatalogLengthTokenResolver.HasToken(cat)) continue;
                 baseline.Cell(r, CsColSellEa1 + c).TryGetValue(out double slotSellEa);
                 var key = (type.ToUpperInvariant(), cat.ToUpperInvariant());
                 if (!baselineRows.ContainsKey(key))
                     baselineRows.Add(key, new BcRow
                     {
                         Type = type, Mfr = mfr, Catalog = cat, Slot = c, Qty = qty, SellEa = slotSellEa,
+                    });
+            }
+
+            // Frozen resolved cut-length SKUs for this fixture's token slots (qty/SellEa per SKU).
+            foreach (var e in ReadTokenFreeze(baseline.Cell(r, CsColTokenFreeze).GetString()))
+            {
+                if (string.IsNullOrWhiteSpace(e.Sku)) continue;
+                var key = (type.ToUpperInvariant(), e.Sku.ToUpperInvariant());
+                if (!baselineRows.ContainsKey(key))
+                    baselineRows.Add(key, new BcRow
+                    {
+                        Type = type, Mfr = mfr, Catalog = e.Sku, Slot = e.Slot, Qty = e.Qty, SellEa = e.SellEa,
                     });
             }
         }
@@ -2533,22 +2622,26 @@ public static class CountsWorkbookService
         {
             for (int c = 0; c < 6; c++)
             {
-                string cat = f.CatalogNumbers[c] ?? "";
-                if (string.IsNullOrWhiteSpace(cat)) continue;
-                var key = (f.TypeMark.ToUpperInvariant(), cat.ToUpperInvariant());
-                if (currentRows.ContainsKey(key)) continue;
-                double curSellEa = 0;
-                if (currentPricing != null
-                    && currentPricing.TryGetValue((f.TypeMark, cat), out var p))
+                // ExpandSlot mirrors the Worksheet: plain templates yield one (template, Count)
+                // pair; length-token templates yield one resolved cut-length SKU per length, so
+                // the keys line up with the Worksheet's resolved rows (wsRowByKey) below.
+                foreach (var (cat, expandedQty) in CatalogLengthTokenResolver.ExpandSlot(f, c))
                 {
-                    double uc = p.UnitCost ?? 0, mk = p.Markup ?? 0, ad = p.Adder ?? 0;
-                    curSellEa = (uc * (1 + mk)) + ad;
+                    var key = (f.TypeMark.ToUpperInvariant(), cat.ToUpperInvariant());
+                    if (currentRows.ContainsKey(key)) continue;
+                    double curSellEa = 0;
+                    if (currentPricing != null
+                        && currentPricing.TryGetValue((f.TypeMark, cat), out var p))
+                    {
+                        double uc = p.UnitCost ?? 0, mk = p.Markup ?? 0, ad = p.Adder ?? 0;
+                        curSellEa = (uc * (1 + mk)) + ad;
+                    }
+                    currentRows.Add(key, new BcRow
+                    {
+                        Type = f.TypeMark, Mfr = f.Manufacturer, Catalog = cat, Slot = c,
+                        Qty = expandedQty, SellEa = curSellEa,
+                    });
                 }
-                currentRows.Add(key, new BcRow
-                {
-                    Type = f.TypeMark, Mfr = f.Manufacturer, Catalog = cat, Slot = c,
-                    Qty = f.Count, SellEa = curSellEa,
-                });
             }
         }
 
@@ -2617,6 +2710,10 @@ public static class CountsWorkbookService
                 rowSellSum += slot;
             }
             double rowSellExt = q * rowSellSum;
+            // Token slots price per resolved cut-length SKU (qty * SellEa) from the freeze column,
+            // not via CsColCount * SellEa1-6. Same per-row tariff applies.
+            foreach (var e in ReadTokenFreeze(baseline.Cell(r, CsColTokenFreeze).GetString()))
+                rowSellExt += e.Qty * e.SellEa;
             bidPreAdj += rowSellExt;
             baseline.Cell(r, CsColTariffPct).TryGetValue(out double rowTariff);
             bidTariff += rowSellExt * rowTariff;
@@ -4437,6 +4534,22 @@ public static class CountsWorkbookService
         return wb.Worksheets
             .Where(ws => ws.Name.StartsWith("Counts ", StringComparison.OrdinalIgnoreCase))
             .OrderBy(ws => ws.Name);
+    }
+
+    // Deserialize the snapshot's hidden CsColTokenFreeze JSON. Returns an empty list for blank
+    // cells (non-token rows) or any parse failure — Bid Compare then simply has no baseline token
+    // rows for that fixture, which degrades to the pre-token behavior rather than throwing.
+    private static List<TokenFreezeEntry> ReadTokenFreeze(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<TokenFreezeEntry>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<TokenFreezeEntry>>(json) ?? new List<TokenFreezeEntry>();
+        }
+        catch (JsonException)
+        {
+            return new List<TokenFreezeEntry>();
+        }
     }
 
     private static string BuildCatComboFormula(int row) =>
