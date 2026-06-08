@@ -35,28 +35,28 @@ The "TurboSuite" ribbon tab has three panels:
 
 | Button | Description |
 |--------|-------------|
-| [Settings](App/README.md) | Configure family name settings stored in ExtensibleStorage |
-| [TurboTab](Tab/README.md) | Toggle document tab coloring — colors each open tab by project for visual identification |
+| [Settings](Shim/App/README.md) | Configure family name settings stored in ExtensibleStorage |
+| [TurboTab](Shim/Tab/README.md) | Toggle document tab coloring — colors each open tab by project for visual identification |
 
 ### Commands Panel
 
 | Button | Shortcut | Description |
 |--------|----------|-------------|
-| [TurboCompact](Compact/README.md) | `Ctrl+Shift+S` | Remove unused materials and compact-save the active family |
-| [TurboTag](Tag/README.md) | `TT` | Batch-place type tags on selected lighting fixtures |
-| [TurboWire](Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
-| [TurboBubble](Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
-| [TurboDriver](Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
+| [TurboCompact](Shim/Compact/README.md) | `Ctrl+Shift+S` | Remove unused materials and compact-save the active family |
+| [TurboTag](Shim/Tag/README.md) | `TT` | Batch-place type tags on selected lighting fixtures |
+| [TurboWire](Shim/Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
+| [TurboBubble](Shim/Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
+| [TurboDriver](Shim/Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
 
 ### Utilities Panel
 
 | Button | Description |
 |--------|-------------|
-| [TurboName](Name/README.md) | Assign CAD room names and ceiling heights to filled regions |
-| [TurboZones](Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
-| [TurboNumber](Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
-| [TurboRPS](Driver/README.md) | Review power supply assignments across all RPS circuits |
-| [TurboDocs](Docs/README.md) | Generate fixture/RPS schedules, load/panel schedules, cut sheets, and cover/notes PDFs |
+| [TurboName](Shim/Name/README.md) | Assign CAD room names and ceiling heights to filled regions |
+| [TurboZones](Shim/Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
+| [TurboNumber](Shim/Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
+| [TurboRPS](Shim/Driver/README.md) | Review power supply assignments across all RPS circuits |
+| [TurboDocs](Shim/Docs/README.md) | Generate fixture/RPS schedules, load/panel schedules, cut sheets, and cover/notes PDFs |
 
 ## Supported Workflows
 
