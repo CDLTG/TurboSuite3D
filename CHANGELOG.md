@@ -108,6 +108,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.2.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.0
 [1.1.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.1.0
 [1.0.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.0.3
 [1.0.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.0.2
