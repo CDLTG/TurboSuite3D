@@ -31,10 +31,10 @@ Each version channel carries its own `version.txt` and `Archive\`, so the two ve
 
 ```powershell
 # Revit 2025 channel
-powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVERNAME\ShareName\path\to\TurboSuite" -RevitVersion 2025 -Version "1.1.0"
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVERNAME\ShareName\path\to\TurboSuite" -RevitVersion 2025 -Version "1.2.0"
 
 # Revit 2024 channel
-powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVERNAME\ShareName\path\to\TurboSuite" -RevitVersion 2024 -Version "1.1.0"
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVERNAME\ShareName\path\to\TurboSuite" -RevitVersion 2024 -Version "1.2.0"
 ```
 
 Each run:
@@ -72,16 +72,16 @@ Users run **`TurboSuiteInstaller.exe`** from the share root. It:
 
 All local state (config, version.txt, staging, updater) is isolated per version under `%LOCALAPPDATA%\TurboSuite\{ver}\`, so multiple Revit versions coexist without interfering.
 
-## Migrating existing v1.0.0 users to v1.1.0 (one-time)
+## Migrating existing flat-layout users (v1.0.0 / v1.1.0) to v1.2.0 (one-time)
 
-v1.0.0 stored its add-in and local state in a **flat** layout (`%LOCALAPPDATA%\TurboSuite\` with no version subfolder). v1.1.0 moves everything to **per-version** folders. This is the one update that can't migrate itself, because the auto-updater never repopulates `config.json` at the new path.
+v1.0.0 and v1.1.0 stored the add-in and local state in a **flat** layout (`%LOCALAPPDATA%\TurboSuite\` with no version subfolder). v1.2.0 moves everything to **per-version** folders. This is the one update that can't migrate itself, because the auto-updater never repopulates `config.json` at the new path.
 
 **Each existing user must, once:**
 1. Close Revit.
 2. Run the **new** `TurboSuiteInstaller.exe` from the share and click **Uninstall** — this sweeps the old flat layout *and* any per-version folders clean.
 3. Run it again and click **Install** — lays down the fresh per-version layout for their installed Revit version(s).
 
-From v1.1.0 onward, normal auto-update applies and no manual step is needed. (The old v1.0.0 uninstaller is replaced on the share by the new combined installer, which cleans both layouts — so use the new one for both steps.)
+From v1.2.0 onward, normal auto-update applies and no manual step is needed. (The old flat-layout uninstaller is replaced on the share by the new combined installer, which cleans both layouts — so use the new one for both steps.)
 
 ## Notes
 
