@@ -79,21 +79,31 @@ namespace TurboSuite.Number.ViewModels
                 }
 
                 string padded = PadNumber(baseNumber);
-
-                if (group.Count == 1)
-                {
-                    group[0].Value = $"{_prefix}{padded}{_suffix}";
-                }
-                else
-                {
-                    for (int g = 0; g < group.Count; g++)
-                    {
-                        char letter = (char)('a' + g);
-                        group[g].Value = $"{_prefix}{padded}{letter}{_suffix}";
-                    }
-                }
+                AssignGroupValues(group, padded);
 
                 i += group.Count;
+            }
+        }
+
+        /// <summary>
+        /// Writes the Switch ID for one circuit's power supplies. A single supply gets
+        /// the bare number; multiples get a/b/c by descending model Y so the suffix
+        /// tracks plan top-to-bottom (TurboDriver stacks 'a' at the highest Y), not the
+        /// grid/Mark sort order the user happens to be viewing.
+        /// </summary>
+        private void AssignGroupValues(List<NumberableRowViewModel> group, string padded)
+        {
+            if (group.Count == 1)
+            {
+                group[0].Value = $"{_prefix}{padded}{_suffix}";
+                return;
+            }
+
+            group.Sort((a, b) => b.PositionY.CompareTo(a.PositionY));
+            for (int g = 0; g < group.Count; g++)
+            {
+                char letter = (char)('a' + g);
+                group[g].Value = $"{_prefix}{padded}{letter}{_suffix}";
             }
         }
 
@@ -120,19 +130,7 @@ namespace TurboSuite.Number.ViewModels
                 }
 
                 string padded = PadNumber(baseNumber);
-
-                if (group.Count == 1)
-                {
-                    group[0].Value = $"{_prefix}{padded}{_suffix}";
-                }
-                else
-                {
-                    for (int g = 0; g < group.Count; g++)
-                    {
-                        char letter = (char)('a' + g);
-                        group[g].Value = $"{_prefix}{padded}{letter}{_suffix}";
-                    }
-                }
+                AssignGroupValues(group, padded);
 
                 i += group.Count;
                 baseNumber++;

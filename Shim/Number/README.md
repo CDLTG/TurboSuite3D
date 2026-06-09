@@ -27,7 +27,7 @@ Lists all Lighting Devices with a `Sub-Driver Power` type parameter.
 
 - Editable **Switch ID** with configurable prefix/suffix (default prefix: `X`)
 - **Auto-number** assigns IDs in format `{prefix}{number}{suffix}`
-- Devices sharing a circuit are sub-lettered (e.g., X01a, X01b)
+- Devices sharing a circuit are sub-lettered top-to-bottom by plan position (model Y), so the suffix matches the column TurboDriver stacks — e.g., X01a, X01b — regardless of grid sort order
 
 All tabs support **Apply** to write changes to Revit.
 

@@ -54,7 +54,8 @@ namespace TurboSuite.Number.ViewModels
                 circuitElementId: d.CircuitElementId.ToRef(),
                 loadName: d.LoadName,
                 typeName: d.TypeName,
-                mark: d.Mark)).ToList();
+                mark: d.Mark,
+                positionY: d.PositionY)).ToList();
             var (savedPrefix, savedSuffix) = RoomOrderStorageService.LoadPrefixSuffix(doc);
             PowerSupplyTab = new PowerSupplyTabViewModel(psRows, savedPrefix, savedSuffix,
                 workQueue, switchIdWriter, prefixSuffixStore);

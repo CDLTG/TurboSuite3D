@@ -16,5 +16,13 @@ namespace TurboSuite.Number.Models
         public ElementId CircuitElementId { get; set; }
         public string LoadName { get; set; }
         public string Mark { get; set; }
+
+        /// <summary>
+        /// Model-space Y of the device location. Used to order multiple power supplies
+        /// on the same circuit top-to-bottom for a/b/c suffixing, matching the column
+        /// TurboDriver stacks along (model −Y). View-independent by design — see
+        /// PowerSupplyTabViewModel.AutoNumber.
+        /// </summary>
+        public double PositionY { get; set; }
     }
 }

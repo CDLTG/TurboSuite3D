@@ -25,6 +25,12 @@ namespace TurboSuite.Number.ViewModels
         public int SlotCol { get; set; }
         public string SlotType { get; set; }
 
+        /// <summary>
+        /// Model-space Y of the device. Drives a/b/c ordering of co-circuit power
+        /// supplies so the suffix tracks live plan position, not list/Mark order.
+        /// </summary>
+        public double PositionY { get; }
+
         public bool IsDuplicate
         {
             get => _isDuplicate;
@@ -46,7 +52,8 @@ namespace TurboSuite.Number.ViewModels
         public NumberableRowViewModel(ElementRef elementId, string displayLabel, string value,
             string roomName = "", string roomNumber = "", string circuitNumber = "",
             ElementRef circuitElementId = default, string panel = "",
-            string typeName = "", string loadName = "", string mark = "")
+            string typeName = "", string loadName = "", string mark = "",
+            double positionY = 0.0)
         {
             ElementId = elementId;
             DisplayLabel = displayLabel;
@@ -59,6 +66,7 @@ namespace TurboSuite.Number.ViewModels
             Panel = panel ?? "";
             TypeName = typeName ?? "";
             Mark = mark ?? "";
+            PositionY = positionY;
         }
     }
 }
