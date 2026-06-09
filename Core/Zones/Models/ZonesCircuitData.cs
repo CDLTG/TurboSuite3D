@@ -23,7 +23,6 @@ namespace TurboSuite.Zones.Models
         public string LoadClassificationName { get; set; }
         public string PanelName { get; set; }
         public string RoomOverride { get; set; }
-        public ElementRef RegionId { get; set; }
         public string UpdatedLoadName { get; set; }
         public LabelSource LabelSource { get; set; }
         public bool IsWiredToSwitch { get; set; }

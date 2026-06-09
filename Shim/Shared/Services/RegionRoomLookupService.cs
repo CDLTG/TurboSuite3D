@@ -8,7 +8,6 @@ namespace TurboSuite.Shared.Services;
 /// <summary>
 /// Provides room name lookup from "Room Region" FilledRegions as a fallback
 /// when no Revit Room elements exist (2D drafting workflows).
-/// Also supports writing room name overrides back to region Comments.
 /// </summary>
 public class RegionRoomLookupService
 {
@@ -67,7 +66,7 @@ public class RegionRoomLookupService
                 loopPoints.Add(points);
             }
 
-            _regions.Add(new RegionEntry(region.Id, comments, loopPoints));
+            _regions.Add(new RegionEntry(comments, loopPoints));
         }
     }
 
@@ -83,32 +82,6 @@ public class RegionRoomLookupService
                 return entry.Comments;
         }
         return null;
-    }
-
-    /// <summary>
-    /// Returns the ElementId of the "Room Region" containing the given point,
-    /// or InvalidElementId if no region contains it.
-    /// </summary>
-    public ElementId FindRegionId(XYZ point)
-    {
-        foreach (var entry in _regions)
-        {
-            if (IsPointInZone(entry.Loops, point))
-                return entry.RegionId;
-        }
-        return ElementId.InvalidElementId;
-    }
-
-    /// <summary>
-    /// Writes a room name override to the Comments parameter of the specified region.
-    /// Must be called inside an active Transaction.
-    /// </summary>
-    public static void WriteRoomNameToRegion(Document doc, ElementId regionId, string roomName)
-    {
-        if (regionId == ElementId.InvalidElementId) return;
-        var element = doc.GetElement(regionId);
-        element?.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)
-            ?.Set(roomName);
     }
 
     private static bool IsPointInZone(List<List<XYZ>> loops, XYZ point)
@@ -191,5 +164,5 @@ public class RegionRoomLookupService
         return inside;
     }
 
-    private record RegionEntry(ElementId RegionId, string Comments, List<List<XYZ>> Loops);
+    private record RegionEntry(string Comments, List<List<XYZ>> Loops);
 }

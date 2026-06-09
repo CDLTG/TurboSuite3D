@@ -15,6 +15,10 @@ namespace TurboSuite.Zones.Services
         {
             int updatedCount = 0;
 
+            // Per-circuit room overrides to persist (UniqueId → override). Built from
+            // the full snapshot so cleared/removed overrides are pruned on write.
+            var roomOverrides = new Dictionary<string, string>();
+
             using (var trans = new Transaction(doc, "TurboZones - Update Load Names"))
             {
                 trans.Start();
@@ -46,18 +50,16 @@ namespace TurboSuite.Zones.Services
                         updated = true;
                     }
 
-                    // Room override → FilledRegion Comments
-                    if (!string.IsNullOrWhiteSpace(circuitData.RoomOverride)
-                        && circuitData.RegionId.IsValid)
-                    {
-                        RegionRoomLookupService.WriteRoomNameToRegion(
-                            doc, circuitData.RegionId.ToElementId(), circuitData.RoomOverride);
-                        updated = true;
-                    }
+                    // Room override → persisted per-circuit (keyed by UniqueId), kept
+                    // separate from any room-name source so it never bleeds to the region.
+                    if (!string.IsNullOrWhiteSpace(circuitData.RoomOverride))
+                        roomOverrides[circuit.UniqueId] = circuitData.RoomOverride;
 
                     if (updated)
                         updatedCount++;
                 }
+
+                ZonesRoomOverrideStorageService.Write(doc, roomOverrides);
 
                 trans.Commit();
             }

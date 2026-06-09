@@ -31,6 +31,9 @@ namespace TurboSuite.Zones.Services
                 var regionFallback = new RegionRoomLookupService(doc);
                 var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
 
+                // Persisted per-circuit room overrides (keyed by circuit UniqueId).
+                var roomOverrides = ZonesRoomOverrideStorageService.Load(doc);
+
                 foreach (ElectricalSystem circuit in circuits)
                 {
                     try
@@ -73,7 +76,9 @@ namespace TurboSuite.Zones.Services
 
                         // Resolve room name from first fixture (falls back to region Comments in 2D)
                         string roomName = roomCache.FindRoomName(fixtures[0]);
-                        ElementId regionId = roomCache.FindRegionId(fixtures[0]);
+
+                        // Persisted override for this circuit, if any.
+                        roomOverrides.TryGetValue(circuit.UniqueId, out string roomOverride);
 
                         string circuitComments = ParameterHelper.GetCircuitComments(circuit);
 
@@ -87,9 +92,11 @@ namespace TurboSuite.Zones.Services
 
                         // Resolve load name label using priority order
                         string label = ZonesLabelResolver.ResolveLabel(circuitComments, fixtureComments, loadClassificationName, out LabelSource labelSource);
+                        // Override takes priority over the resolved room name (matches the VM).
+                        string room = !string.IsNullOrWhiteSpace(roomOverride) ? roomOverride : roomName;
                         string updatedLoadName = string.Empty;
-                        if (!string.IsNullOrWhiteSpace(roomName) && !string.IsNullOrWhiteSpace(label))
-                            updatedLoadName = $"{roomName.ToUpperInvariant()} - {label.ToLowerInvariant()}";
+                        if (!string.IsNullOrWhiteSpace(room) && !string.IsNullOrWhiteSpace(label))
+                            updatedLoadName = $"{room.ToUpperInvariant()} - {label.ToLowerInvariant()}";
                         else
                             labelSource = LabelSource.None;
 
@@ -102,7 +109,7 @@ namespace TurboSuite.Zones.Services
                             DimmingType = dimmingType ?? string.Empty,
                             PanelName = panelName ?? string.Empty,
                             RoomName = roomName ?? string.Empty,
-                            RegionId = regionId.ToRef(),
+                            RoomOverride = roomOverride ?? string.Empty,
                             CurrentLoadName = currentLoadName ?? string.Empty,
                             CircuitComments = circuitComments ?? string.Empty,
                             FixtureComments = fixtureComments ?? string.Empty,

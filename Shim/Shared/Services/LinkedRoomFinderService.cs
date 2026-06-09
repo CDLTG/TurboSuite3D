@@ -150,16 +150,5 @@ public static class LinkedRoomFinderService
 
             return null;
         }
-
-        /// <summary>
-        /// Returns the ElementId of the "Room Region" containing the fixture,
-        /// or InvalidElementId if no region fallback is configured or no region matches.
-        /// </summary>
-        public ElementId FindRegionId(FamilyInstance fixture)
-        {
-            if (_regionFallback == null || !TryGetFixturePoint(fixture, out XYZ point))
-                return ElementId.InvalidElementId;
-            return _regionFallback.FindRegionId(point);
-        }
     }
 }
