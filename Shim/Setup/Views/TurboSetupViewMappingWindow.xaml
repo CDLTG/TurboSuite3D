@@ -1,0 +1,63 @@
+<Window
+    x:Class="TurboSuite.Setup.Views.TurboSetupViewMappingWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="TurboSetup — View Mapping"
+    SizeToContent="Height" Width="600"
+    MinWidth="520"
+    WindowStartupLocation="CenterScreen"
+    FontFamily="Segoe UI" FontSize="11"
+    ResizeMode="NoResize">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,8"
+                   Text="Map each new view to a linked architectural view. Floor plans list linked floor plans; RCPs list linked ceiling plans. Leave as (none) to create the view without a link override."/>
+
+        <DataGrid Grid.Row="1"
+                  ItemsSource="{Binding Rows}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  HeadersVisibility="Column"
+                  GridLinesVisibility="Horizontal"
+                  MaxHeight="380">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="New view" Width="*" IsReadOnly="True"
+                    Binding="{Binding ViewName}"/>
+                <DataGridTemplateColumn Header="Linked view" Width="2*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox ItemsSource="{Binding AvailableLinkedViews}"
+                                      SelectedItem="{Binding SelectedLinkedView, UpdateSourceTrigger=PropertyChanged}"
+                                      DisplayMemberPath="DisplayName"
+                                      Margin="2"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Cancel" Width="80" Margin="0,0,8,0"
+                    Style="{StaticResource RevitButtonStyle}"
+                    Click="CancelButton_Click" IsCancel="True"/>
+            <Button Content="Create" Width="80"
+                    Style="{StaticResource RevitButtonStyle}"
+                    Command="{Binding OkCommand}" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

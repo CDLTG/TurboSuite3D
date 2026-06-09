@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers eleven shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). A twelfth command, TurboMask, is compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
+TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers eleven shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). Two more commands, TurboMask and TurboSetup, are compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
 
 ## Build Commands
 
@@ -135,6 +135,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, control BOM PDF, load schedule PDF, panel schedule PDF, and cover/notes PDF (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
 | `TurboSuite.Mask` | TurboMask — masking region + per-fixture annotation stamps (gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`) |
+| `TurboSuite.Setup` | TurboSetup — new-project setup: copy levels from the linked arch model, create Floor/RCP views with firm templates, configure RVT link display (gated behind `ExperimentalCommandsEnabled`; **3D RVT-linked only**; link-graphics path is Revit 2025-only, 2024 sets up levels/views/templates and leaves links manual) |
 | `Guide/` | `Guide.md` — user-facing documentation |
 | `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
 | `Installer/` | TurboSuiteInstaller — standalone WPF installer for network share deployment |

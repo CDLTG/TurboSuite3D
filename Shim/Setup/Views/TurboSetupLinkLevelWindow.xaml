@@ -1,0 +1,129 @@
+<Window
+    x:Class="TurboSuite.Setup.Views.TurboSetupLinkLevelWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="TurboSetup — Links &amp; Levels"
+    SizeToContent="Height" Width="520"
+    MinWidth="460"
+    WindowStartupLocation="CenterScreen"
+    FontFamily="Segoe UI" FontSize="11"
+    ResizeMode="NoResize">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Faint selection highlight and lighter grid lines -->
+            <Style TargetType="DataGridRow">
+                <Style.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#D0D8E8"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#E0E4EC"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
+                </Style.Resources>
+            </Style>
+
+            <!-- Single-click toggle for checkbox / radio cells -->
+            <Style x:Key="SingleClickToggleColumn" TargetType="DataGridCell">
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridCell">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
+            </Style>
+
+            <Style x:Key="CenteredHeader" TargetType="DataGridColumnHeader">
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            </Style>
+
+            <!-- Vertically center text in rows -->
+            <Style x:Key="CenteredTextElement" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="4,0,0,0"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Architectural link picker -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Architectural link:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+            <ComboBox ItemsSource="{Binding Links}" SelectedItem="{Binding SelectedLink}"
+                      DisplayMemberPath="DisplayName"/>
+        </StackPanel>
+
+        <!-- Level table -->
+        <StackPanel Grid.Row="2">
+            <TextBlock Text="Levels to set up:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+            <DataGrid ItemsSource="{Binding Levels}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserSortColumns="False"
+                      IsReadOnly="False"
+                      SelectionMode="Single"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="All"
+                      HorizontalGridLinesBrush="#E0E0E0"
+                      VerticalGridLinesBrush="#E0E0E0"
+                      BorderThickness="1" BorderBrush="#CCCCCC"
+                      MaxHeight="320"
+                      Height="Auto">
+                <DataGrid.Columns>
+                    <DataGridCheckBoxColumn Header="&#x2713;" Width="35"
+                        Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}"
+                        CellStyle="{StaticResource SingleClickToggleColumn}"
+                        HeaderStyle="{StaticResource CenteredHeader}"/>
+                    <DataGridTextColumn Header="Level" Width="*" IsReadOnly="True"
+                        Binding="{Binding Name}"
+                        ElementStyle="{StaticResource CenteredTextElement}"/>
+                    <DataGridTextColumn Header="Elevation" Width="110" IsReadOnly="True"
+                        Binding="{Binding ElevationDisplay}"
+                        ElementStyle="{StaticResource CenteredTextElement}"/>
+                    <DataGridTemplateColumn Header="Main" Width="60"
+                        CellStyle="{StaticResource SingleClickToggleColumn}"
+                        HeaderStyle="{StaticResource CenteredHeader}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <RadioButton GroupName="MainLevelGroup"
+                                             HorizontalAlignment="Center"
+                                             IsChecked="{Binding IsMain, UpdateSourceTrigger=PropertyChanged}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </StackPanel>
+
+        <TextBlock Grid.Row="3" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="#666"
+                   Text="Main is numbered 01. Levels above step up (02, 03…); levels below step down (00, -01…)."/>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Cancel" Width="80" Margin="0,0,8,0"
+                    Style="{StaticResource RevitButtonStyle}"
+                    Click="CancelButton_Click" IsCancel="True"/>
+            <Button Content="Next" Width="80"
+                    Style="{StaticResource RevitButtonStyle}"
+                    Command="{Binding OkCommand}" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>
