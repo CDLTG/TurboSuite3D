@@ -62,7 +62,7 @@ namespace TurboSuite.Zones.Services
                 // Group all circuits in this zone by dimming type
                 var circuitsByType = zoneCircuits
                     .GroupBy(c => c.DimmingType, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(g => g.Key, g => g.OrderBy(c => c.CircuitNumber).ToList(), StringComparer.OrdinalIgnoreCase);
+                    .ToDictionary(g => g.Key, g => g.OrderBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
 
                 // Calculate modules needed per dimming type
                 var moduleCountByType = new Dictionary<string, int>();
