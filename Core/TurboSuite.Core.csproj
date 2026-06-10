@@ -24,7 +24,7 @@
     <!-- Pin System.Memory to resolve a netstandard2.0 transitive downgrade in
          ClosedXML's graph (System.IO.Packaging wants 4.5.5; ClosedXML pulls 4.5.4).
          Not needed on net8 (built-in); harmless there and required on net48. -->
-    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
   </ItemGroup>
   <!-- net48 splits System.IO.Compression{,.FileSystem} into separate GAC assemblies
        that the SDK does not auto-reference (netstandard2.0 bundled them). The Counts
@@ -42,7 +42,7 @@
          (the shipping Revit 2025 artifact) keeps using its built-in copy, so this package
          and its transitive graph never enter the production dependency closure. Version
          tracks the net8 in-box System.Text.Json so both TFMs serialize identically. -->
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="System.Text.Json" Version="10.0.9" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
