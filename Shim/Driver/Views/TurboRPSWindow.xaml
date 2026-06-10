@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:TurboSuite.Driver.Views"
     Title="TurboRPS"
-    Height="640" Width="1180"
+    Height="768" Width="1506"
     MinHeight="420" MinWidth="820"
     WindowStartupLocation="CenterScreen"
     FontFamily="Segoe UI" FontSize="11"
@@ -31,6 +31,10 @@
             <SolidColorBrush x:Key="RebuildRowBrush" Color="#FFDDDD"/>
             <SolidColorBrush x:Key="NewRowBrush" Color="#E3F0FB"/>
             <SolidColorBrush x:Key="NoMatchRowBrush" Color="#F5C2C7"/>
+            <!-- DEFERRED: neutral grey (accepted decision, not an issue). REVIEW: amber, matching
+                 STALE's "fixable / needs attention" tone — a deferral whose config has drifted. -->
+            <SolidColorBrush x:Key="DeferredRowBrush" Color="#ECECEC"/>
+            <SolidColorBrush x:Key="ReviewRowBrush" Color="#FFF3CD"/>
 
             <Style x:Key="TableHeaderStyle" TargetType="TextBlock">
                 <Setter Property="FontWeight" Value="SemiBold"/>
@@ -41,6 +45,15 @@
             <Style x:Key="TableCellStyle" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
                 <Setter Property="Padding" Value="6,3"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+
+            <!-- Vertically centers the text in each DataGrid cell. The default
+                 DataGridCell template ignores VerticalContentAlignment, so the
+                 alignment must live on the column's generated element. Keeps the
+                 text aligned with the centered checkbox when a long Note wraps
+                 and grows the row. -->
+            <Style x:Key="GridCellTextStyle" TargetType="TextBlock">
                 <Setter Property="VerticalAlignment" Value="Center"/>
             </Style>
         </ResourceDictionary>
@@ -82,11 +95,11 @@
                             Command="{Binding RescanCommand}"
                             Style="{StaticResource RevitButtonStyle}" Height="28"
                             Margin="0,0,12,0"/>
-                    <TextBlock Text="Circuit:" VerticalAlignment="Center" Margin="0,0,4,0"
+                    <TextBlock Text="Circuit / Switch ID:" VerticalAlignment="Center" Margin="0,0,4,0"
                                Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <TextBox Width="110" Height="24" VerticalContentAlignment="Center"
+                    <TextBox Width="130" Height="24" VerticalContentAlignment="Center"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
-                             ToolTip="Live filter on circuit number"/>
+                             ToolTip="Live filter on circuit number or driver Switch ID (e.g. X07 matches X07a, X07b)"/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -115,12 +128,23 @@
                       RowHeaderWidth="0"
                       IsReadOnly="True"
                       SelectionChanged="CircuitsGrid_SelectionChanged">
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Defer circuit"
+                                  Command="{Binding PlacementTarget.DataContext.DeferSelectedCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <MenuItem Header="Clear deferral"
+                                  Command="{Binding PlacementTarget.DataContext.ClearDeferralCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
                 <DataGrid.RowStyle>
                     <Style TargetType="DataGridRow">
                         <!-- Always-present transparent left stripe so toggling the active
                              accent does not resize rows. -->
                         <Setter Property="BorderThickness" Value="4,0,0,0"/>
                         <Setter Property="BorderBrush" Value="Transparent"/>
+                        <!-- Right-click selects the row first, so the context menu's defer/clear
+                             commands act on the row under the cursor. -->
+                        <EventSetter Event="PreviewMouseRightButtonDown" Handler="Row_PreviewMouseRightButtonDown"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding StatusText}" Value="STALE">
                                 <Setter Property="Background" Value="{StaticResource StaleRowBrush}"/>
@@ -133,6 +157,12 @@
                             </DataTrigger>
                             <DataTrigger Binding="{Binding StatusText}" Value="NO MATCH">
                                 <Setter Property="Background" Value="{StaticResource NoMatchRowBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusText}" Value="DEFERRED">
+                                <Setter Property="Background" Value="{StaticResource DeferredRowBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusText}" Value="REVIEW">
+                                <Setter Property="Background" Value="{StaticResource ReviewRowBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsActiveRow}" Value="True">
                                 <Setter Property="BorderBrush" Value="{StaticResource HeaderBlueBrush}"/>
@@ -151,14 +181,15 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="72"/>
-                    <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="60"/>
-                    <DataGridTextColumn Header="Load Name" Binding="{Binding LoadName}" Width="150"/>
-                    <DataGridTextColumn Header="Dimming" Binding="{Binding DimmingProtocol}" Width="70"/>
-                    <DataGridTextColumn Header="Watts" Binding="{Binding RpsLoadWatts, StringFormat={}{0:F0}}" Width="55"/>
-                    <DataGridTextColumn Header="Panel" Binding="{Binding Panel}" Width="60"/>
-                    <DataGridTextColumn Header="Current" Binding="{Binding CurrentDisplay}" Width="120"/>
-                    <DataGridTextColumn Header="Recommended" Binding="{Binding RecommendedDisplay}" Width="120"/>
+                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="64" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="72" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Number" Binding="{Binding SwitchIdsDisplay}" Width="90" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Load Name" Binding="{Binding LoadName}" Width="165" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Dimming" Binding="{Binding DimmingProtocol}" Width="70" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Watts" Binding="{Binding RpsLoadWatts, StringFormat={}{0:F0}}" Width="55" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Panel" Binding="{Binding Panel}" Width="60" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Current" Binding="{Binding CurrentDisplay}" Width="120" ElementStyle="{StaticResource GridCellTextStyle}"/>
+                    <DataGridTextColumn Header="Recommended" Binding="{Binding RecommendedDisplay}" Width="120" ElementStyle="{StaticResource GridCellTextStyle}"/>
                     <!-- Reason / hint ("→ TurboDriver" with cause, or re-split note) -->
                     <DataGridTextColumn Header="Note" Binding="{Binding ReasonNote}" Width="*">
                         <DataGridTextColumn.ElementStyle>

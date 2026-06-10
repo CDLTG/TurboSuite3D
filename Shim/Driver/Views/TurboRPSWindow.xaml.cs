@@ -38,6 +38,14 @@ namespace TurboSuite.Driver.Views
                 vm.SelectedRow = row;
             }
         }
+
+        // WPF DataGrid doesn't select on right-click; do it ourselves so the context menu's
+        // defer/clear commands operate on the row the user actually clicked.
+        private void Row_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is DataGridRow row)
+                row.IsSelected = true;
+        }
     }
 
     /// <summary>null → Visible (placeholder), non-null → Collapsed.</summary>

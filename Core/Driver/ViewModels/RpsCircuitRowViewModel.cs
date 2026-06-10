@@ -37,6 +37,14 @@ namespace TurboSuite.Driver.ViewModels
         public RpsCircuitData Data => _data;
 
         public string CircuitNumber => _data.CircuitNumber;
+
+        /// <summary>Comma-joined Switch IDs of the placed drivers (e.g. "X07a, X07b"); em dash when
+        /// none are placed. Drives the grid's "Switch IDs" column and the search-box match.</summary>
+        public string SwitchIdsDisplay =>
+            _data.SwitchIds != null && _data.SwitchIds.Count > 0
+                ? string.Join(", ", _data.SwitchIds)
+                : "—";
+
         public string LoadName => _data.LoadName;
         public string DimmingProtocol => _data.DimmingProtocol;
         public double ApparentPower => _data.ApparentPower;
@@ -48,7 +56,16 @@ namespace TurboSuite.Driver.ViewModels
 
         public RpsStatus Status => _data.Status;
 
-        public string StatusText => _data.Status switch
+        public bool IsDeferred => _data.IsDeferred;
+
+        /// <summary>A deferred circuit whose config has drifted since it was deferred — re-surfaced
+        /// for review rather than staying silently neutral.</summary>
+        public bool DeferralConfigChanged =>
+            _data.IsDeferred
+            && !string.Equals(_data.DeferredSignature, RpsDeferral.Signature(_data), StringComparison.Ordinal);
+
+        /// <summary>The underlying classifier verdict, independent of deferral.</summary>
+        private string BaseStatusText => _data.Status switch
         {
             RpsStatus.Ok => "OK",
             RpsStatus.Stale => "STALE",
@@ -58,8 +75,20 @@ namespace TurboSuite.Driver.ViewModels
             _ => ""
         };
 
-        /// <summary>Only <see cref="RpsStatus.Stale"/> rows can be batch-corrected in place.</summary>
-        public bool CanSelect => _data.Status == RpsStatus.Stale;
+        /// <summary>What the Status column shows and the row tint keys off. Deferral masks the real
+        /// verdict to a neutral "DEFERRED"; a drifted deferral becomes "REVIEW".</summary>
+        public string StatusText
+        {
+            get
+            {
+                if (DeferralConfigChanged) return "REVIEW";
+                if (_data.IsDeferred) return "DEFERRED";
+                return BaseStatusText;
+            }
+        }
+
+        /// <summary>Only non-deferred <see cref="RpsStatus.Stale"/> rows can be batch-corrected in place.</summary>
+        public bool CanSelect => _data.Status == RpsStatus.Stale && !_data.IsDeferred;
 
         public string CurrentDisplay
         {
@@ -86,6 +115,12 @@ namespace TurboSuite.Driver.ViewModels
         {
             get
             {
+                // Deferral context takes the Note slot: it explains why the row is neutral and
+                // preserves the masked verdict so the original problem isn't lost.
+                if (DeferralConfigChanged)
+                    return $"deferred config changed — review (was {BaseStatusText})";
+                if (_data.IsDeferred)
+                    return $"deferred — was {BaseStatusText}";
                 if (_data.Status == RpsStatus.Rebuild)
                     return _data.RebuildReason;
                 if (_data.HasSplitSegments)
@@ -149,6 +184,24 @@ namespace TurboSuite.Driver.ViewModels
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(CanSelect));
             OnPropertyChanged(nameof(CurrentDisplay));
+            OnPropertyChanged(nameof(ReasonNote));
+            OnPropertyChanged(nameof(HasReasonNote));
+            OnPropertyChanged(nameof(IsSelected));
+        }
+
+        /// <summary>Apply a defer/clear result from the Revit side. Updates the stored flag +
+        /// signature and refreshes the masked status, tint, selectability, and note.</summary>
+        public void SetDeferred(bool deferred, string signature)
+        {
+            _data.IsDeferred = deferred;
+            _data.DeferredSignature = deferred ? signature : null;
+            if (deferred)
+                _isSelected = false;
+
+            OnPropertyChanged(nameof(IsDeferred));
+            OnPropertyChanged(nameof(DeferralConfigChanged));
+            OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(CanSelect));
             OnPropertyChanged(nameof(ReasonNote));
             OnPropertyChanged(nameof(HasReasonNote));
             OnPropertyChanged(nameof(IsSelected));

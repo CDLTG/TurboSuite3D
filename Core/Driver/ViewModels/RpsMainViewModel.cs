@@ -45,6 +45,8 @@ namespace TurboSuite.Driver.ViewModels
             RescanCommand = new RelayCommand(Rescan, () => !_isBusy);
             ReRunSelectedCommand = new RelayCommand(ReRunSelected, CanReRun);
             SelectInProjectCommand = new RelayCommand(SelectInProject, CanSelectInProject);
+            DeferSelectedCommand = new RelayCommand(DeferSelected, () => CanToggleDeferral && !_selectedRow.IsDeferred);
+            ClearDeferralCommand = new RelayCommand(ClearDeferral, () => CanToggleDeferral && _selectedRow.IsDeferred);
         }
 
         public ObservableCollection<RpsCircuitRowViewModel> Rows { get; }
@@ -54,6 +56,8 @@ namespace TurboSuite.Driver.ViewModels
         public ICommand RescanCommand { get; }
         public ICommand ReRunSelectedCommand { get; }
         public ICommand SelectInProjectCommand { get; }
+        public ICommand DeferSelectedCommand { get; }
+        public ICommand ClearDeferralCommand { get; }
 
         public bool IsBusy
         {
@@ -102,11 +106,15 @@ namespace TurboSuite.Driver.ViewModels
         }
 
         // ---- Live counts (footer) ----
+        // Issue counts exclude deferred rows — a deferred circuit is an accepted decision, not an
+        // open issue. A drifted deferral surfaces under ReviewCount instead.
         public int TotalCount => Rows.Count;
-        public int StaleCount => Rows.Count(r => r.Status == RpsStatus.Stale);
-        public int RebuildCount => Rows.Count(r => r.Status == RpsStatus.Rebuild);
-        public int NewCount => Rows.Count(r => r.Status == RpsStatus.NotDeployed);
-        public int NoMatchCount => Rows.Count(r => r.Status == RpsStatus.NoMatch);
+        public int StaleCount => Rows.Count(r => r.Status == RpsStatus.Stale && !r.IsDeferred);
+        public int RebuildCount => Rows.Count(r => r.Status == RpsStatus.Rebuild && !r.IsDeferred);
+        public int NewCount => Rows.Count(r => r.Status == RpsStatus.NotDeployed && !r.IsDeferred);
+        public int NoMatchCount => Rows.Count(r => r.Status == RpsStatus.NoMatch && !r.IsDeferred);
+        public int DeferredCount => Rows.Count(r => r.IsDeferred && !r.DeferralConfigChanged);
+        public int ReviewCount => Rows.Count(r => r.DeferralConfigChanged);
 
         public string CountsSummary
         {
@@ -117,6 +125,8 @@ namespace TurboSuite.Driver.ViewModels
                 if (RebuildCount > 0) parts.Add($"{RebuildCount} rebuild");
                 if (NewCount > 0) parts.Add($"{NewCount} new");
                 if (NoMatchCount > 0) parts.Add($"{NoMatchCount} no match");
+                if (ReviewCount > 0) parts.Add($"{ReviewCount} review");
+                if (DeferredCount > 0) parts.Add($"{DeferredCount} deferred");
                 return string.Join(" · ", parts);
             }
         }
@@ -142,14 +152,23 @@ namespace TurboSuite.Driver.ViewModels
             if (item is not RpsCircuitRowViewModel row)
                 return false;
 
-            if (_showOnlyIssues && row.Status == RpsStatus.Ok)
+            // "Issues" excludes Ok rows and accepted (non-drifted) deferrals; a drifted deferral
+            // (REVIEW) is still an open issue and stays visible.
+            if (_showOnlyIssues
+                && (row.Status == RpsStatus.Ok || (row.IsDeferred && !row.DeferralConfigChanged)))
                 return false;
 
-            if (!string.IsNullOrWhiteSpace(_searchText)
-                && (row.CircuitNumber == null
-                    || row.CircuitNumber.IndexOf(_searchText.Trim(), StringComparison.OrdinalIgnoreCase) < 0))
+            if (!string.IsNullOrWhiteSpace(_searchText))
             {
-                return false;
+                // Match on circuit number OR any placed driver's Switch ID. Substring so a base
+                // (e.g. "X07") catches its suffixed drivers ("X07a", "X07b").
+                string term = _searchText.Trim();
+                bool matchesCircuit = row.CircuitNumber != null
+                    && row.CircuitNumber.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+                bool matchesSwitchId = row.Data.SwitchIds != null
+                    && row.Data.SwitchIds.Any(id => id.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
+                if (!matchesCircuit && !matchesSwitchId)
+                    return false;
             }
 
             return true;
@@ -162,7 +181,50 @@ namespace TurboSuite.Driver.ViewModels
             OnPropertyChanged(nameof(RebuildCount));
             OnPropertyChanged(nameof(NewCount));
             OnPropertyChanged(nameof(NoMatchCount));
+            OnPropertyChanged(nameof(DeferredCount));
+            OnPropertyChanged(nameof(ReviewCount));
             OnPropertyChanged(nameof(CountsSummary));
+        }
+
+        private bool CanToggleDeferral
+            => !_isBusy && _selectedRow != null && _selectedRow.Data.CircuitRef.IsValid;
+
+        private void DeferSelected() => ApplyDeferral(true);
+
+        private void ClearDeferral() => ApplyDeferral(false);
+
+        private void ApplyDeferral(bool defer)
+        {
+            if (!CanToggleDeferral) return;
+            var row = _selectedRow;
+            var circuitRef = row.Data.CircuitRef;
+            // Signature is captured from the config the user is accepting right now.
+            string signature = defer ? RpsDeferral.Signature(row.Data) : null;
+
+            IsBusy = true;
+            _workQueue.Enqueue(
+                () => _ops.SetDeferred(circuitRef, defer, signature),
+                result =>
+                {
+                    try
+                    {
+                        if (result is bool ok && ok)
+                        {
+                            row.SetDeferred(defer, signature);
+                            RowsView.Refresh();
+                            RaiseCountsChanged();
+                        }
+                        else
+                        {
+                            System.Windows.MessageBox.Show(
+                                "This circuit no longer exists in the project.", "TurboRPS");
+                        }
+                    }
+                    finally
+                    {
+                        IsBusy = false;
+                    }
+                });
         }
 
         private void SelectAllStale()

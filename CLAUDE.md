@@ -125,7 +125,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Shared.Styles` | Shared WPF ResourceDictionary styles |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` |
 | `TurboSuite.Name` | TurboName — room name assignment from linked DWG files (MVVM) |
-| `TurboSuite.Driver` | TurboDriver (deploys power supplies, modal) + TurboRPS (staleness dashboard + batch in-place driver-type corrector, MVVM modeless; Core VMs `RpsMainViewModel`/`RpsCircuitRowViewModel` + `StaleClassifier`, shim `RpsRevitOperations`/`RpsCircuitDataBuilder`) |
+| `TurboSuite.Driver` | TurboDriver (deploys power supplies, modal) + TurboRPS (staleness dashboard + batch in-place driver-type corrector, MVVM modeless; Core VMs `RpsMainViewModel`/`RpsCircuitRowViewModel` + `StaleClassifier` + `RpsDeferral`, shim `RpsRevitOperations`/`RpsCircuitDataBuilder`/`RpsDeferralStorageService`. Right-click **Defer circuit** flags an intentionally-"wrong" config — stored in ExtensibleStorage **on the circuit element** (per-element entity, not the doc-singleton pattern), masking its verdict to DEFERRED and resurfacing as REVIEW if the snapshotted config later drifts) |
 | `TurboSuite.Bubble` | TurboBubble — switchleg tags and wires |
 | `TurboSuite.Tag` | TurboTag — auto-places lighting fixture type tags |
 | `TurboSuite.Wire` | TurboWire — circuit creation and wire routing |

@@ -53,6 +53,7 @@ namespace TurboSuite.Driver.Services
                 // Summarize placed driver instances.
                 var placedDeviceRefs = new List<ElementRef>();
                 var placedTypeRefs = new List<ElementRef>();
+                var switchIds = new List<string>();
                 foreach (var typeList in circuit.DevicesByType.Values)
                 {
                     foreach (var device in typeList)
@@ -62,8 +63,11 @@ namespace TurboSuite.Driver.Services
                             continue;
                         placedDeviceRefs.Add(device.DeviceId.ToRef());
                         placedTypeRefs.Add(typeRef);
+                        if (!string.IsNullOrWhiteSpace(device.SwitchID))
+                            switchIds.Add(device.SwitchID.Trim());
                     }
                 }
+                switchIds.Sort(NaturalStringComparer.OrdinalIgnoreCase);
 
                 int placedCount = placedDeviceRefs.Count;
                 var distinctTypeRefs = placedTypeRefs.Distinct().ToList();
@@ -88,6 +92,9 @@ namespace TurboSuite.Driver.Services
 
                 var reco = recommendation?.RecommendedCandidate;
 
+                // Deferral flag persisted on the circuit element (shared via the model).
+                var (deferred, deferredSig) = RpsDeferralStorageService.Read(doc.GetElement(circuit.CircuitId));
+
                 result.Add(new RpsCircuitData
                 {
                     CircuitRef = circuit.CircuitId.ToRef(),
@@ -100,6 +107,7 @@ namespace TurboSuite.Driver.Services
 
                     DeviceRefs = placedDeviceRefs,
                     PlacedTypeName = placedCandidate?.FamilyTypeName ?? string.Empty,
+                    SwitchIds = switchIds,
                     PlacedCount = placedCount,
                     DistinctPlacedTypeCount = distinctCount,
                     PlacedChannels = placedCandidate?.SubDriverCount ?? 0,
@@ -113,7 +121,10 @@ namespace TurboSuite.Driver.Services
                     RecommendedTypeName = reco?.FamilyTypeName ?? string.Empty,
                     RecommendedCount = recommendation?.DriverCount ?? 0,
 
-                    Fixtures = rpsFixtures
+                    Fixtures = rpsFixtures,
+
+                    IsDeferred = deferred,
+                    DeferredSignature = deferredSig
                 });
             }
 

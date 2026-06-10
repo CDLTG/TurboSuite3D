@@ -34,6 +34,12 @@ namespace TurboSuite.Driver.Models
 
         /// <summary>Display name of the single placed driver type; empty when none/mixed.</summary>
         public string PlacedTypeName { get; set; }
+
+        /// <summary>Switch IDs (driver numbers) of the placed drivers on this circuit, in placement
+        /// order — e.g. <c>X07a</c>, <c>X07b</c>. TurboDriver assigns a per-circuit base and suffixes
+        /// each physical driver. Surfaced in the grid's "Switch IDs" column and matched by the search box.</summary>
+        public List<string> SwitchIds { get; set; } = new List<string>();
+
         public int PlacedCount { get; set; }
         public int DistinctPlacedTypeCount { get; set; }
         public int PlacedChannels { get; set; }
@@ -60,6 +66,18 @@ namespace TurboSuite.Driver.Models
         public int RecommendedCount { get; set; }
 
         public List<FixtureData> Fixtures { get; set; } = new List<FixtureData>();
+
+        /// <summary>User has intentionally deferred this circuit — a knowingly "incorrect" driver
+        /// config kept for external reasons. Deferred circuits render neutral (not amber/red), are
+        /// excluded from the issue counts and batch-correct, and hidden by "Show only issues".
+        /// Persisted in ExtensibleStorage on the circuit element (see RpsDeferralStorageService).</summary>
+        public bool IsDeferred { get; set; }
+
+        /// <summary>The config signature (<see cref="RpsDeferral.Signature"/>) captured when the
+        /// circuit was deferred. Compared against the live signature on each scan: a mismatch means
+        /// the circuit changed since deferral, so the row is surfaced for review instead of staying
+        /// silently neutral. Null when not deferred.</summary>
+        public string DeferredSignature { get; set; }
     }
 
     /// <summary>One in-place driver retype: set <see cref="DeviceRef"/>'s symbol to

@@ -111,5 +111,14 @@ namespace TurboSuite.Driver.Services
         {
             return RpsCircuitDataBuilder.Build(_doc);
         }
+
+        public bool SetDeferred(ElementRef circuitRef, bool deferred, string signature)
+        {
+            if (_doc.GetElement(circuitRef.ToElementId()) is not ElectricalSystem circuit)
+                return false;
+
+            RpsDeferralStorageService.Save(_doc, circuit, deferred, signature);
+            return true;
+        }
     }
 }

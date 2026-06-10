@@ -36,19 +36,31 @@ and fixes the common case in place.
      is recommended (cross-family `Symbol` swap throws), or the placed supplies are mixed/ambiguous.
    - **NEW** — RPS fixtures but no supplies placed yet.
    - **NO MATCH** — no real driver fits.
+   - **DEFERRED** — a user has intentionally accepted a "mathematically wrong" config (see Usage); the
+     real verdict is masked to neutral and excluded from the issue counts.
+   - **REVIEW** — a deferred circuit whose config has drifted since it was deferred, re-surfaced for review.
 
 ### Usage
 
 1. Run TurboRPS (no pre-selection needed — scans the entire project). The modeless window stays open
    alongside Revit edits.
-2. Each circuit is a grid row with its status, current vs. recommended driver, and a detail pane
-   (recommended sub-driver packing + grouped fixtures) for the selected row.
+2. Each circuit is a grid row with its status, the placed-driver Switch IDs (the **Number** column,
+   e.g. `X07a, X07b`), current vs. recommended driver, and a detail pane (recommended sub-driver
+   packing + grouped fixtures) for the selected row. The search box live-filters on circuit number
+   **or** Switch ID (substring, so `X07` matches `X07a`/`X07b`).
 3. Check the **STALE** rows (only those are selectable) — or **Select all stale** — and click
    **Re-run selected**. Each placed driver is retyped via an in-place `FamilyInstance.Symbol` swap in a
    **single transaction (one undo step)**, preserving location, Workset, the Plan Visibility param,
    wiring, tags, instance Switch IDs, and the manual switch-system memberships.
 4. **Rescan** re-collects + reclassifies without closing (after editing wattage with the window open).
    **Select in Project** selects + zooms the selected circuit's member elements.
+5. **Defer a circuit** — right-click a row → **Defer circuit** for systems that are intentionally
+   "wrong" (a knowingly non-optimal driver config kept for external reasons). The row goes neutral
+   (**DEFERRED**), drops out of the issue counts and batch-correct, and is hidden by "Show only issues".
+   The flag is stored in ExtensibleStorage **on the circuit element**, so it travels with the model
+   (all users see it) and auto-clears if the circuit is deleted/rewired. The config is snapshotted at
+   defer time; if the circuit later drifts the row resurfaces as **REVIEW** so a stale deferral can't
+   hide a new problem. Right-click → **Clear deferral** to undo.
 
 REBUILD/NEW/NO MATCH rows are not auto-fixed — their checkbox is disabled and a hint points to TurboDriver.
 A STALE row whose recommendation re-splits a linear fixture also shows an info-only "linear cut-list

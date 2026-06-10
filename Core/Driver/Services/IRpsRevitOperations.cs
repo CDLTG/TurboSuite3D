@@ -26,5 +26,10 @@ namespace TurboSuite.Driver.Services
 
         /// <summary>Re-collects + reclassifies all RPS circuits on the Revit thread (for Rescan).</summary>
         IReadOnlyList<RpsCircuitData> Rescan();
+
+        /// <summary>Sets/clears the deferred flag on a circuit, persisting it to ExtensibleStorage
+        /// on the circuit element. <paramref name="signature"/> is the config snapshot to store when
+        /// deferring (ignored when clearing). Returns false if the circuit no longer exists.</summary>
+        bool SetDeferred(ElementRef circuitRef, bool deferred, string signature);
     }
 }
