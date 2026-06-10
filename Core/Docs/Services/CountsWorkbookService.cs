@@ -2125,8 +2125,15 @@ public static class CountsWorkbookService
                 $"_xlpm.n{i}Col,IF(_xlpm.isLast*(_xlpm.n{i}<>\"\"),{noteContentExprs[i - 1]},_xlfn.NA())"));
             string hstackCols = "_xlpm.gapCol,_xlpm.vals,_xlpm.tariffCol,"
                 + string.Join(",", Enumerable.Range(1, 6).Select(i => $"_xlpm.n{i}Col"));
-            return "_xlfn.LAMBDA(_xlpm.types,_xlpm.vals,_xlpm.pcts,_xlpm.base,"
-                 +   "_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
+            // Emitted as an outer LET (name←arg pairs) rather than an immediately-invoked
+            // LAMBDA: ClosedXML 0.105+ parses formulas on FormulaA1 assignment and rejects the
+            // `LAMBDA(...)(args)` IIFE shape (the trailing call is unparseable), but accepts LET.
+            // LET binds the same names to the same args, so this is a pure syntactic transform —
+            // see the throwaway-harness validation in roadmap Dependencies-1.
+            string letHead = "_xlfn.LET("
+                 + $"_xlpm.types,{typesArg},_xlpm.vals,{valsArg},_xlpm.pcts,{pctsArg},_xlpm.base,{baseArg},"
+                 + string.Join(",", Enumerable.Range(1, 6).Select(i => $"_xlpm.n{i},{noteArgs[i - 1]}")) + ",";
+            return letHead
                  +   "IF(ROWS(_xlpm.vals)<=1,_xlpm.vals,"
                  +     "_xlfn.LET("
                  +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
@@ -2139,7 +2146,7 @@ public static class CountsWorkbookService
                  +       $"_xlfn.TOCOL(_xlfn.HSTACK({hstackCols}),2)"
                  +     ")"
                  +   ")"
-                 + $")({typesArg},{valsArg},{pctsArg},{baseArg},{string.Join(",", noteArgs)})";
+                 + ")";
         }
 
         // Note content expressions per print-column. Most columns leave note rows blank;
@@ -2265,8 +2272,13 @@ public static class CountsWorkbookService
             $"_xlpm.n{n}Col,IF(_xlpm.isLast*(_xlpm.n{n}<>\"\"),1,_xlfn.NA())"));
         string flagHstackCols = "_xlpm.gapCol,_xlpm.valsCol,_xlpm.tariffCol,"
             + string.Join(",", Enumerable.Range(1, 6).Select(n => $"_xlpm.n{n}Col"));
+        // Outer LET (name←arg pairs) instead of an immediately-invoked LAMBDA — see the Gap()
+        // note above; ClosedXML 0.105+ rejects `LAMBDA(...)(args)` on assignment but accepts LET.
+        string flagLetHead = "_xlfn.LET("
+            + $"_xlpm.types,{typesArg},_xlpm.pcts,{pctsArg},"
+            + string.Join(",", Enumerable.Range(1, 6).Select(n => $"_xlpm.n{n},{noteArgs[n - 1]}")) + ",";
         string flagLambda =
-              "_xlfn.LAMBDA(_xlpm.types,_xlpm.pcts,_xlpm.n1,_xlpm.n2,_xlpm.n3,_xlpm.n4,_xlpm.n5,_xlpm.n6,"
+              flagLetHead
             +   "IF(ROWS(_xlpm.types)<=1,1,"
             +     "_xlfn.LET("
             +       "_xlpm.prev,_xlfn.VSTACK(INDEX(_xlpm.types,1),_xlfn.DROP(_xlpm.types,-1)),"
@@ -2279,7 +2291,7 @@ public static class CountsWorkbookService
             +       $"_xlfn.TOCOL(_xlfn.HSTACK({flagHstackCols}),2)"
             +     ")"
             +   ")"
-            + $")({typesArg},{pctsArg},{string.Join(",", noteArgs)})";
+            + ")";
         // Append a single 1 row — corresponds to the buffer row VSTACKed in front of the
         // footer block so the print-sheet border CF ($flagCol=1) paints that row too.
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"_xlfn.VSTACK(IFERROR({flagLambda},\"\"),1)";

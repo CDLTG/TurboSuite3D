@@ -18,9 +18,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ACadSharp" Version="3.6.12" />
-    <!-- ClosedXML PINNED to 0.104.x — see note in Core/TurboSuite.Core.csproj
-         (0.105.0's formula parser rejects the Counts immediately-invoked LAMBDAs). -->
-    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <!-- ClosedXML — see note in Core/TurboSuite.Core.csproj (0.105.0's formula
+         parser is satisfied by the LET-rewritten Counts formulas). -->
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="PdfSharpCore" Version="1.3.67" />
   </ItemGroup>
   <ItemGroup>
