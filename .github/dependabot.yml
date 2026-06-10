@@ -4,3 +4,9 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    ignore:
+      # 0.105.0 rewrote the formula engine and parses formulas on assignment,
+      # rejecting the Counts module's immediately-invoked array LAMBDAs.
+      # Pinned to 0.104.x until the Counts formula emission is reworked.
+      - dependency-name: "ClosedXML"
+        versions: [">=0.105.0"]
