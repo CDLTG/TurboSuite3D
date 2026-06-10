@@ -1,25 +1,39 @@
 #nullable disable
 using System;
+using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using TurboSuite.Driver.ViewModels;
 using TurboSuite.Driver.Services;
+using TurboSuite.Driver.ViewModels;
 using TurboSuite.Driver.Views;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Driver
 {
     /// <summary>
-    /// External Command that launches the TurboRPS window
+    /// TurboRPS — modeless staleness dashboard + batch in-place driver-type corrector.
+    /// Re-runs the driver selection across all RPS circuits, flags stale ones, and fixes
+    /// Case-A drift (same family + same driver count) via an in-place
+    /// <c>FamilyInstance.Symbol</c> swap. Mirrors the TurboZones modeless pattern; all Revit
+    /// writes go through <see cref="IExternalEventHandler"/> (see CLAUDE.md "Modeless pattern").
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     public class RPSCommand : IExternalCommand
     {
+        private static TurboRPSWindow _activeWindow;
+
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             try
             {
+                if (_activeWindow != null)
+                {
+                    _activeWindow.Activate();
+                    return Result.Succeeded;
+                }
+
                 UIDocument uidoc = commandData.Application.ActiveUIDocument;
                 Document doc = uidoc?.Document;
 
@@ -35,12 +49,7 @@ namespace TurboSuite.Driver
                     return Result.Failed;
                 }
 
-                CircuitCollectorService circuitService = new CircuitCollectorService();
-                FamilyTypeCollectorService typeService = new FamilyTypeCollectorService();
-
-                var circuits = circuitService.GetFilteredCircuits(doc);
-                var availableTypes = typeService.GetAllLightingDeviceTypes(doc);
-                var driverCandidates = typeService.GetDriverCandidates(availableTypes);
+                var circuits = RpsCircuitDataBuilder.Build(doc);
 
                 if (circuits.Count == 0)
                 {
@@ -53,17 +62,26 @@ namespace TurboSuite.Driver
                     return Result.Cancelled;
                 }
 
-                MainViewModel viewModel = new MainViewModel(doc, uidoc, circuits, availableTypes, driverCandidates);
+                var workQueue = new RevitWorkQueue("TurboRPS Error", "TurboRPS Work Queue");
+                var operations = new RpsRevitOperations(uidoc);
+                var viewModel = new RpsMainViewModel(circuits, operations, workQueue);
 
-                TurboRPSWindow window = new TurboRPSWindow
+                var window = new TurboRPSWindow
                 {
                     DataContext = viewModel
                 };
 
                 var revitHandle = commandData.Application.MainWindowHandle;
-                var helper = new System.Windows.Interop.WindowInteropHelper(window) { Owner = revitHandle };
+                new WindowInteropHelper(window) { Owner = revitHandle };
 
-                window.ShowDialog();
+                window.Closed += (s, e) =>
+                {
+                    _activeWindow = null;
+                    workQueue.Dispose();
+                };
+
+                _activeWindow = window;
+                window.Show();
 
                 return Result.Succeeded;
             }

@@ -22,6 +22,15 @@ namespace TurboSuite.Driver.Models
         public string CatalogNumber { get; set; }
 
         public string FamilyTypeName { get; set; }
+
+        /// <summary>
+        /// The owning Family's name (e.g. "AL_RPS_60"). Used by <c>StaleClassifier</c> to
+        /// decide whether a same-count recommendation can be applied via an in-place
+        /// <c>FamilyInstance.Symbol</c> swap — the Revit API only permits that within the
+        /// SAME family, so a cross-family recommendation must route to TurboDriver (Rebuild).
+        /// </summary>
+        public string FamilyName { get; set; }
+
         public string Manufacturer { get; set; }
         public double TotalPower { get; set; }
         public double SubDriverPower { get; set; }

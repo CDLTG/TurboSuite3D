@@ -4,8 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:TurboSuite.Driver.Views"
     Title="TurboRPS"
-    Height="850" Width="500"
-    MinHeight="400" MinWidth="650"
+    Height="640" Width="1180"
+    MinHeight="420" MinWidth="820"
     WindowStartupLocation="CenterScreen"
     FontFamily="Segoe UI" FontSize="11"
     KeyDown="Window_KeyDown">
@@ -16,203 +16,39 @@
                 <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Converters -->
+            <!-- Detail-pane converters -->
             <local:FeetInchesConverter x:Key="FeetInchesConverter"/>
-            <local:FlattenDevicesConverter x:Key="FlattenDevicesConverter"/>
-            <local:FamilyTypeDisplayConverter x:Key="FamilyTypeDisplayConverter"/>
             <local:SubDriverHeaderConverter x:Key="SubDriverHeaderConverter"/>
             <local:SegmentDisplayConverter x:Key="SegmentDisplayConverter"/>
-            <local:IsRecommendedTypeConverter x:Key="IsRecommendedTypeConverter"/>
+            <local:NullToVisibilityConverter x:Key="NullToVisibility"/>
+            <local:NotNullToVisibilityConverter x:Key="NotNullToVisibility"/>
 
-            <!-- Module-specific Brushes -->
-            <SolidColorBrush x:Key="SectionBgBrush" Color="#F5F5F5"/>
-            <SolidColorBrush x:Key="CardBorderBrush" Color="#D5D5D5"/>
-            <SolidColorBrush x:Key="TableHeaderBgBrush" Color="#E8E8E8"/>
-            <SolidColorBrush x:Key="AltRowBgBrush" Color="#F9F9F9"/>
-            <SolidColorBrush x:Key="CircuitHeaderBgBrush" Color="#D0DBE9"/>
-            <SolidColorBrush x:Key="SelectionBgBrush" Color="#EDF2F9"/>
-            <SolidColorBrush x:Key="SelectionBorderBrush" Color="#4A78B0"/>
+            <!-- Status row-tint brushes. Escalating severity: amber STALE (fixable in place) →
+                 light red REBUILD (needs a TurboDriver redeploy) → deeper red NO MATCH (no driver
+                 fits at all). NEW is informational blue. Light red #FFDDDD matches TurboNumber's
+                 error-row tint. -->
+            <SolidColorBrush x:Key="StaleRowBrush" Color="#FFF3CD"/>
+            <SolidColorBrush x:Key="RebuildRowBrush" Color="#FFDDDD"/>
+            <SolidColorBrush x:Key="NewRowBrush" Color="#E3F0FB"/>
+            <SolidColorBrush x:Key="NoMatchRowBrush" Color="#F5C2C7"/>
 
-            <!-- Label Style -->
-            <Style x:Key="LabelStyle" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-                <Setter Property="FontSize" Value="11"/>
-                <Setter Property="VerticalAlignment" Value="Center"/>
-            </Style>
-
-            <!-- Value Style -->
-            <Style x:Key="ValueStyle" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                <Setter Property="FontSize" Value="11"/>
-                <Setter Property="VerticalAlignment" Value="Center"/>
-            </Style>
-
-            <!-- Section Header Style -->
-            <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
-                <Setter Property="FontWeight" Value="SemiBold"/>
-                <Setter Property="FontSize" Value="11"/>
-                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                <Setter Property="Margin" Value="0,8,0,4"/>
-            </Style>
-
-            <!-- Table Header Style -->
             <Style x:Key="TableHeaderStyle" TargetType="TextBlock">
                 <Setter Property="FontWeight" Value="SemiBold"/>
-                <Setter Property="FontSize" Value="11"/>
                 <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                <Setter Property="Padding" Value="8,3"/>
+                <Setter Property="Padding" Value="6,3"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
             </Style>
-
-            <!-- Table Cell Style -->
             <Style x:Key="TableCellStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11"/>
                 <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                <Setter Property="Padding" Value="8,3"/>
+                <Setter Property="Padding" Value="6,3"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
             </Style>
-
-        <!-- Circuit Expander Style -->
-        <Style x:Key="CircuitExpanderStyle" TargetType="Expander">
-            <Setter Property="IsExpanded" Value="True"/>
-            <Setter Property="Margin" Value="0,0,0,5"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Expander">
-                        <Border BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="3"
-                                SnapsToDevicePixels="True"
-                                ClipToBounds="True">
-                            <DockPanel>
-                                <ToggleButton x:Name="HeaderToggle"
-                                              DockPanel.Dock="Top"
-                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                              Content="{TemplateBinding Header}"
-                                              ContentTemplate="{TemplateBinding HeaderTemplate}"
-                                              Cursor="Hand">
-                                    <ToggleButton.Template>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border x:Name="headerBorder"
-                                                    Background="{StaticResource CircuitHeaderBgBrush}"
-                                                    Padding="10,6">
-                                                <DockPanel>
-                                                    <Path x:Name="Arrow"
-                                                          DockPanel.Dock="Left"
-                                                          Data="M 0 0 L 5 4 L 10 0"
-                                                          Stroke="{StaticResource TextSecondaryBrush}"
-                                                          StrokeThickness="1.5"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,8,0"
-                                                          RenderTransformOrigin="0.5,0.5">
-                                                        <Path.RenderTransform>
-                                                            <RotateTransform Angle="-90"/>
-                                                        </Path.RenderTransform>
-                                                    </Path>
-                                                    <ContentPresenter/>
-                                                </DockPanel>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="Arrow" Property="RenderTransform">
-                                                        <Setter.Value>
-                                                            <RotateTransform Angle="0"/>
-                                                        </Setter.Value>
-                                                    </Setter>
-                                                </Trigger>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="headerBorder" Property="Background" Value="#C2CFE0"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </ToggleButton.Template>
-                                </ToggleButton>
-                                <ContentPresenter x:Name="ExpanderContent"
-                                                  DockPanel.Dock="Bottom"
-                                                  Visibility="Collapsed"/>
-                            </DockPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsExpanded" Value="True">
-                                <Setter TargetName="ExpanderContent" Property="Visibility" Value="Visible"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- Sub-section Expander Style (gray header for inner expanders) -->
-        <Style x:Key="SubExpanderStyle" TargetType="Expander" BasedOn="{StaticResource CircuitExpanderStyle}">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Expander">
-                        <Border BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="3"
-                                SnapsToDevicePixels="True"
-                                ClipToBounds="True">
-                            <DockPanel>
-                                <ToggleButton x:Name="HeaderToggle"
-                                              DockPanel.Dock="Top"
-                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                              Content="{TemplateBinding Header}"
-                                              ContentTemplate="{TemplateBinding HeaderTemplate}"
-                                              Cursor="Hand">
-                                    <ToggleButton.Template>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border x:Name="headerBorder"
-                                                    Background="{StaticResource SectionBgBrush}"
-                                                    Padding="10,6">
-                                                <DockPanel>
-                                                    <Path x:Name="Arrow"
-                                                          DockPanel.Dock="Left"
-                                                          Data="M 0 0 L 5 4 L 10 0"
-                                                          Stroke="{StaticResource TextSecondaryBrush}"
-                                                          StrokeThickness="1.5"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,8,0"
-                                                          RenderTransformOrigin="0.5,0.5">
-                                                        <Path.RenderTransform>
-                                                            <RotateTransform Angle="-90"/>
-                                                        </Path.RenderTransform>
-                                                    </Path>
-                                                    <ContentPresenter/>
-                                                </DockPanel>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="Arrow" Property="RenderTransform">
-                                                        <Setter.Value>
-                                                            <RotateTransform Angle="0"/>
-                                                        </Setter.Value>
-                                                    </Setter>
-                                                </Trigger>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="headerBorder" Property="Background" Value="#E8E8E8"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </ToggleButton.Template>
-                                </ToggleButton>
-                                <ContentPresenter x:Name="ExpanderContent"
-                                                  DockPanel.Dock="Bottom"
-                                                  Visibility="Collapsed"/>
-                            </DockPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsExpanded" Value="True">
-                                <Setter TargetName="ExpanderContent" Property="Visibility" Value="Visible"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
         </ResourceDictionary>
     </Window.Resources>
 
     <Grid Background="{StaticResource ContentBgBrush}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
@@ -220,279 +56,217 @@
 
         <!-- Blue header bar -->
         <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
-            <TextBlock Text="TurboRPS - Power Supply Selection Manager"
+            <TextBlock Text="TurboRPS — Power Supply Review"
                        Foreground="White" FontSize="16" FontWeight="SemiBold"
                        VerticalAlignment="Center"/>
         </Border>
 
-        <!-- Content area -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="8,6">
-            <ItemsControl ItemsSource="{Binding Circuits}" Margin="4">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <!-- Circuit Card as Expander -->
-                        <Expander Style="{StaticResource CircuitExpanderStyle}">
-                            <!-- Header: Circuit summary line -->
-                            <Expander.Header>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding CircuitNumber, StringFormat='Circuit: {0}'}"
-                                               FontWeight="Bold" FontSize="12"
-                                               Foreground="{StaticResource TextPrimaryBrush}"/>
-                                    <TextBlock Text=" | " Foreground="{StaticResource TextSecondaryBrush}" Margin="6,0"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding LoadName}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text=" | " Foreground="{StaticResource TextSecondaryBrush}" Margin="6,0"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding LoadClassificationAbbreviation}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text=" | " Foreground="{StaticResource TextSecondaryBrush}" Margin="6,0"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding ApparentPower, StringFormat='{}{0:F1} W'}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text=" | " Foreground="{StaticResource TextSecondaryBrush}" Margin="6,0"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Panel}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Expander.Header>
-
-                            <!-- Content: Fixtures, Driver, Devices -->
-                            <Border Padding="10,6" Background="{StaticResource ContentBgBrush}">
-                                <StackPanel>
-
-                                    <!-- === POWER SUPPLY SELECTION === -->
-                                    <TextBlock Text="Select Power Supplies:"
-                                               FontWeight="Bold" FontSize="12"
-                                               Foreground="{StaticResource HeaderBlueBrush}"
-                                               Margin="0,2,0,4"/>
-                                    <Border BorderBrush="{StaticResource SelectionBorderBrush}" BorderThickness="1" CornerRadius="2"
-                                            Background="{StaticResource SelectionBgBrush}" Padding="10,6">
-                                        <ItemsControl ItemsSource="{Binding DeviceGroups, Converter={StaticResource FlattenDevicesConverter}}"
-                                                      Grid.IsSharedSizeScope="True">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Grid Margin="0,2">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" SharedSizeGroup="SwitchIDCol"/>
-                                                            <ColumnDefinition Width="*"/>
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0"
-                                                                   Text="{Binding SwitchID, StringFormat='{}{0}:'}"
-                                                                   Style="{StaticResource ValueStyle}"
-                                                                   FontSize="13" FontWeight="Bold"
-                                                                   Margin="0,0,10,0"/>
-                                                        <ComboBox Grid.Column="1"
-                                                                  ItemsSource="{Binding AvailableFamilyTypes}"
-                                                                  SelectedItem="{Binding SelectedFamilyType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                  MinWidth="350" HorizontalAlignment="Left"
-                                                                  Padding="4,3">
-                                                            <ComboBox.ItemTemplate>
-                                                                <DataTemplate>
-                                                                    <TextBlock>
-                                                                        <TextBlock.Text>
-                                                                            <MultiBinding Converter="{StaticResource FamilyTypeDisplayConverter}">
-                                                                                <Binding Path="Name"/>
-                                                                                <Binding/>
-                                                                            </MultiBinding>
-                                                                        </TextBlock.Text>
-                                                                        <TextBlock.Style>
-                                                                            <Style TargetType="TextBlock">
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Value="True">
-                                                                                        <DataTrigger.Binding>
-                                                                                            <MultiBinding Converter="{StaticResource IsRecommendedTypeConverter}">
-                                                                                                <Binding/>
-                                                                                                <Binding Path="DataContext.RecommendedFamilyTypeId"
-                                                                                                         RelativeSource="{RelativeSource AncestorType=ComboBox}"/>
-                                                                                            </MultiBinding>
-                                                                                        </DataTrigger.Binding>
-                                                                                        <Setter Property="FontWeight" Value="Bold"/>
-                                                                                        <Setter Property="Foreground" Value="{StaticResource HeaderBlueBrush}"/>
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </TextBlock.Style>
-                                                                    </TextBlock>
-                                                                </DataTemplate>
-                                                            </ComboBox.ItemTemplate>
-                                                        </ComboBox>
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </Border>
-
-                                    <!-- === RECOMMENDED DRIVER === -->
-                                    <Expander Style="{StaticResource SubExpanderStyle}" IsExpanded="False" Margin="0,8,0,5">
-                                        <Expander.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Recommended Power Supplies &#x2192; "
-                                                           FontWeight="SemiBold"/>
-                                                <TextBlock Text="{Binding DriverRecommendation.DisplayText,
-                                                                  TargetNullValue='No Linear Power data available',
-                                                                  FallbackValue='No Linear Power data available'}"
-                                                           FontWeight="Bold">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasDriverMatch}" Value="False">
-                                                                    <Setter Property="Foreground" Value="Red"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </StackPanel>
-                                        </Expander.Header>
-                                        <Border Padding="10,8"
-                                                Background="{StaticResource SectionBgBrush}">
-                                            <StackPanel>
-                                                <!-- Warning message for no-match case -->
-                                                <TextBlock Text="{Binding DriverWarning}"
-                                                           Foreground="Red" FontWeight="SemiBold"
-                                                           Margin="0,0,0,6" TextWrapping="Wrap">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding DriverWarning}" Value="">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                                <ItemsControl ItemsSource="{Binding DriverRecommendation.SubDriverAssignments}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <StackPanel Margin="0,1,0,3">
-                                                                <TextBlock Text="{Binding Converter={StaticResource SubDriverHeaderConverter}}"
-                                                                           FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                                <ItemsControl ItemsSource="{Binding Segments}" Margin="16,0,0,0">
-                                                                    <ItemsControl.ItemTemplate>
-                                                                        <DataTemplate>
-                                                                            <TextBlock Text="{Binding Converter={StaticResource SegmentDisplayConverter}}"
-                                                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                                        </DataTemplate>
-                                                                    </ItemsControl.ItemTemplate>
-                                                                </ItemsControl>
-                                                            </StackPanel>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                        </Border>
-                                    </Expander>
-
-                                    <!-- === LIGHTING FIXTURES === -->
-                                    <Expander Style="{StaticResource SubExpanderStyle}" IsExpanded="False" Margin="0,0,0,5">
-                                        <Expander.Header>
-                                            <TextBlock Text="Lighting Fixtures" FontWeight="SemiBold"/>
-                                        </Expander.Header>
-                                        <StackPanel Grid.IsSharedSizeScope="True">
-                                            <!-- Column headers -->
-                                            <Grid Background="{StaticResource TableHeaderBgBrush}">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="FixtureQtyCol"/>
-                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="FixtureTypeCol"/>
-                                                    <ColumnDefinition Width="2*"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Qty" Style="{StaticResource TableHeaderStyle}" TextAlignment="Center"/>
-                                                <TextBlock Grid.Column="1" Text="Types" Style="{StaticResource TableHeaderStyle}" TextAlignment="Center"/>
-                                                <TextBlock Grid.Column="2" Text="Comments" Style="{StaticResource TableHeaderStyle}"/>
-                                                <TextBlock Grid.Column="3" Text="Lengths" Style="{StaticResource TableHeaderStyle}"/>
-                                            </Grid>
-
-                                            <!-- Fixture rows with alternating backgrounds -->
-                                            <ListBox ItemsSource="{Binding GroupedFixtures}"
-                                                     AlternationCount="2"
-                                                     BorderThickness="0"
-                                                     Padding="0"
-                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                                     PreviewMouseWheel="FixtureList_PreviewMouseWheel">
-                                                <ListBox.ItemContainerStyle>
-                                                    <Style TargetType="ListBoxItem">
-                                                        <Setter Property="Focusable" Value="False"/>
-                                                        <Setter Property="Template">
-                                                            <Setter.Value>
-                                                                <ControlTemplate TargetType="ListBoxItem">
-                                                                    <Border x:Name="Bd" Background="Transparent" Padding="0">
-                                                                        <ContentPresenter/>
-                                                                    </Border>
-                                                                    <ControlTemplate.Triggers>
-                                                                        <Trigger Property="ItemsControl.AlternationIndex" Value="1">
-                                                                            <Setter TargetName="Bd" Property="Background" Value="#F9F9F9"/>
-                                                                        </Trigger>
-                                                                    </ControlTemplate.Triggers>
-                                                                </ControlTemplate>
-                                                            </Setter.Value>
-                                                        </Setter>
-                                                    </Style>
-                                                </ListBox.ItemContainerStyle>
-                                                <ListBox.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto" SharedSizeGroup="FixtureQtyCol"/>
-                                                                <ColumnDefinition Width="Auto" SharedSizeGroup="FixtureTypeCol"/>
-                                                                <ColumnDefinition Width="2*"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                            </Grid.ColumnDefinitions>
-                                                            <TextBlock Grid.Column="0" Text="{Binding Quantity}" Style="{StaticResource TableCellStyle}" TextAlignment="Center"/>
-                                                            <TextBlock Grid.Column="1" Text="{Binding TypeMark}" Style="{StaticResource TableCellStyle}" TextAlignment="Center"/>
-                                                            <TextBlock Grid.Column="2" Text="{Binding Comments}" Style="{StaticResource TableCellStyle}"/>
-                                                            <TextBlock Grid.Column="3" Text="{Binding LinearLength, Converter={StaticResource FeetInchesConverter}}" Style="{StaticResource TableCellStyle}"/>
-                                                        </Grid>
-                                                    </DataTemplate>
-                                                </ListBox.ItemTemplate>
-                                            </ListBox>
-
-                                            <!-- Totals row -->
-                                            <Grid Background="{StaticResource FooterBgBrush}">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="FixtureQtyCol"/>
-                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="FixtureTypeCol"/>
-                                                    <ColumnDefinition Width="2*"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="{Binding TotalFixtureCount}" FontWeight="SemiBold" Style="{StaticResource TableCellStyle}" TextAlignment="Center"/>
-                                                <TextBlock Grid.Column="1" Style="{StaticResource TableCellStyle}"/>
-                                                <TextBlock Grid.Column="2" Style="{StaticResource TableCellStyle}"/>
-                                                <TextBlock Grid.Column="3" Text="{Binding TotalLinearLength, Converter={StaticResource FeetInchesConverter}}" FontWeight="SemiBold" Style="{StaticResource TableCellStyle}"/>
-                                            </Grid>
-                                        </StackPanel>
-                                    </Expander>
-
-                                </StackPanel>
-                            </Border>
-                        </Expander>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-
-        <!-- Footer bar -->
-        <Border Grid.Row="2" Background="{StaticResource FooterBgBrush}" Padding="12,7"
-                BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0">
+        <!-- Toolbar -->
+        <Border Grid.Row="1" Background="#F3F3F3"
+                BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,0,0,1"
+                Padding="8,6">
             <DockPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Circuits.Count, StringFormat='Total Circuits: {0}'}"
-                               FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
-                    <TextBlock Text="  |  " Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <TextBlock Text="{Binding TotalPowerSupplies, StringFormat='Existing Power Supplies: {0}'}"
-                               FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                <Button Content="Re-run selected"
+                        Command="{Binding ReRunSelectedCommand}"
+                        Style="{StaticResource RevitButtonStyle}" Height="28" MinWidth="120"
+                        DockPanel.Dock="Right"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Select all stale"
+                            Command="{Binding SelectAllStaleCommand}"
+                            Style="{StaticResource RevitButtonStyle}" Height="28"
+                            Margin="0,0,8,0"/>
+                    <CheckBox Content="Show only issues"
+                              IsChecked="{Binding ShowOnlyIssues}"
+                              VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Button Content="Rescan"
+                            Command="{Binding RescanCommand}"
+                            Style="{StaticResource RevitButtonStyle}" Height="28"
+                            Margin="0,0,12,0"/>
+                    <TextBlock Text="Circuit:" VerticalAlignment="Center" Margin="0,0,4,0"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBox Width="110" Height="24" VerticalContentAlignment="Center"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                             ToolTip="Live filter on circuit number"/>
                 </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Body: grid (left) + detail pane (right) -->
+        <Grid Grid.Row="2" Margin="8,6,8,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="300"/>
+            </Grid.ColumnDefinitions>
+
+            <DataGrid x:Name="CircuitsGrid"
+                      Grid.Column="0"
+                      ItemsSource="{Binding RowsView}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserReorderColumns="False"
+                      SelectionMode="Single"
+                      SelectionUnit="FullRow"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="Horizontal"
+                      HorizontalGridLinesBrush="{StaticResource SeparatorBrush}"
+                      BorderThickness="1"
+                      BorderBrush="{StaticResource SeparatorBrush}"
+                      RowHeaderWidth="0"
+                      IsReadOnly="True"
+                      SelectionChanged="CircuitsGrid_SelectionChanged">
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <!-- Always-present transparent left stripe so toggling the active
+                             accent does not resize rows. -->
+                        <Setter Property="BorderThickness" Value="4,0,0,0"/>
+                        <Setter Property="BorderBrush" Value="Transparent"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding StatusText}" Value="STALE">
+                                <Setter Property="Background" Value="{StaticResource StaleRowBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusText}" Value="REBUILD">
+                                <Setter Property="Background" Value="{StaticResource RebuildRowBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusText}" Value="NEW">
+                                <Setter Property="Background" Value="{StaticResource NewRowBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusText}" Value="NO MATCH">
+                                <Setter Property="Background" Value="{StaticResource NoMatchRowBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsActiveRow}" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource HeaderBlueBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
+                <DataGrid.Columns>
+                    <!-- Selection checkbox (enabled only on Stale rows) -->
+                    <DataGridTemplateColumn Width="30" CanUserSort="False">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding CanSelect}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="72"/>
+                    <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="60"/>
+                    <DataGridTextColumn Header="Load Name" Binding="{Binding LoadName}" Width="150"/>
+                    <DataGridTextColumn Header="Dimming" Binding="{Binding DimmingProtocol}" Width="70"/>
+                    <DataGridTextColumn Header="Watts" Binding="{Binding RpsLoadWatts, StringFormat={}{0:F0}}" Width="55"/>
+                    <DataGridTextColumn Header="Panel" Binding="{Binding Panel}" Width="60"/>
+                    <DataGridTextColumn Header="Current" Binding="{Binding CurrentDisplay}" Width="120"/>
+                    <DataGridTextColumn Header="Recommended" Binding="{Binding RecommendedDisplay}" Width="120"/>
+                    <!-- Reason / hint ("→ TurboDriver" with cause, or re-split note) -->
+                    <DataGridTextColumn Header="Note" Binding="{Binding ReasonNote}" Width="*">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                <Setter Property="FontStyle" Value="Italic"/>
+                                <Setter Property="TextWrapping" Value="Wrap"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- Detail pane (selected row) -->
+            <Border Grid.Column="1" Margin="6,0,0,0"
+                    BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="1"
+                    Background="#FAFAFA">
+                <Grid>
+                    <!-- Placeholder when nothing selected -->
+                    <TextBlock Text="Select a circuit to see its recommended packing"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
+                               TextAlignment="Center" TextWrapping="Wrap" Margin="16"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontStyle="Italic"
+                               Visibility="{Binding SelectedRow, Converter={StaticResource NullToVisibility}}"/>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" DataContext="{Binding SelectedRow}">
+                        <StackPanel Margin="10"
+                                    Visibility="{Binding DataContext.SelectedRow, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource NotNullToVisibility}}">
+                            <TextBlock Text="Recommended" FontWeight="Bold"
+                                       Foreground="{StaticResource HeaderBlueBrush}"/>
+                            <TextBlock Text="{Binding RecommendedHeader}" FontWeight="SemiBold"
+                                       Margin="0,2,0,8" TextWrapping="Wrap"/>
+
+                            <!-- Sub-driver packing -->
+                            <ItemsControl ItemsSource="{Binding SubDriverAssignments}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,1,0,4">
+                                            <TextBlock Text="{Binding Converter={StaticResource SubDriverHeaderConverter}}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <ItemsControl ItemsSource="{Binding Segments}" Margin="14,0,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Converter={StaticResource SegmentDisplayConverter}}"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Fixtures table -->
+                            <TextBlock Text="Fixtures" FontWeight="Bold" Margin="0,8,0,2"
+                                       Foreground="{StaticResource HeaderBlueBrush}"/>
+                            <Grid Background="#E8E8E8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="46"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="64"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Qty" Style="{StaticResource TableHeaderStyle}" TextAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="Type" Style="{StaticResource TableHeaderStyle}"/>
+                                <TextBlock Grid.Column="2" Text="Comments" Style="{StaticResource TableHeaderStyle}"/>
+                                <TextBlock Grid.Column="3" Text="Length" Style="{StaticResource TableHeaderStyle}"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding GroupedFixtures}" AlternationCount="2">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="36"/>
+                                                <ColumnDefinition Width="Auto" MinWidth="46"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto" MinWidth="64"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Quantity}" Style="{StaticResource TableCellStyle}" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding TypeMark}" Style="{StaticResource TableCellStyle}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Comments}" Style="{StaticResource TableCellStyle}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding LinearLength, Converter={StaticResource FeetInchesConverter}}" Style="{StaticResource TableCellStyle}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="3" Background="{StaticResource FooterBgBrush}"
+                BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0"
+                Padding="8,6">
+            <DockPanel>
                 <Button Content="Close" Click="CloseButton_Click"
-                        Style="{StaticResource RevitButtonStyle}"
-                        Width="80" Height="28"
-                        DockPanel.Dock="Right" HorizontalAlignment="Right"/>
+                        Style="{StaticResource RevitButtonStyle}" Height="28" Width="80"
+                        DockPanel.Dock="Right"/>
+                <Button Content="Select in Project"
+                        Command="{Binding SelectInProjectCommand}"
+                        Style="{StaticResource RevitButtonStyle}" Height="28"
+                        DockPanel.Dock="Left" Margin="0,0,12,0"/>
+                <TextBlock Text="{Binding CountsSummary}" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
             </DockPanel>
         </Border>
     </Grid>

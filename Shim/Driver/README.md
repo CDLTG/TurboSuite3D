@@ -19,21 +19,41 @@ Headless command for deploying power supplies on a per-circuit basis.
 
 ## TurboRPS (RPSCommand)
 
-Review window for inspecting power supply assignments across all RPS circuits.
+Modeless **staleness dashboard + batch in-place driver-type corrector** across all RPS circuits.
+TurboDriver owns the physical deployment; TurboRPS re-runs the driver selection on what's already
+placed, flags circuits whose driver selection has gone stale (typically after tape wattage changes),
+and fixes the common case in place.
 
 ### How It Works
 
 1. Scans all circuits with at least one Lighting Fixture that has the `Remote Power Supply` type parameter enabled.
-2. For each circuit, reads fixture wattage, manufacturer, dimming protocol, and voltage.
-3. Evaluates all loaded driver family types (must have both `Power` and `Sub-Driver Power` parameters; `Power` must be an integer multiple of `Sub-Driver Power`).
-4. Runs **First-Fit Decreasing bin-packing** to assign fixtures to sub-drivers, recursively splitting high-wattage fixtures across multiple slots.
-5. Recommends the best driver type per circuit, prioritizing: manufacturer match, fewest physical drivers, fewest sub-drivers.
+2. For each circuit, reads fixture wattage, manufacturer, dimming protocol, and voltage, and re-runs the
+   same recommendation engine TurboDriver uses (First-Fit Decreasing bin-packing over loaded driver types).
+3. Compares the placed supplies against the fresh recommendation and assigns a status (see `StaleClassifier`):
+   - **OK** — placed type == recommended type, same physical driver count.
+   - **STALE** — recommended type differs but is the **same family + same driver count**; fixable in place.
+   - **REBUILD** — needs delete+re-place (→ TurboDriver): physical count changed, a **different family**
+     is recommended (cross-family `Symbol` swap throws), or the placed supplies are mixed/ambiguous.
+   - **NEW** — RPS fixtures but no supplies placed yet.
+   - **NO MATCH** — no real driver fits.
 
 ### Usage
 
-1. Run TurboRPS (no pre-selection needed — scans the entire project).
-2. The window shows each qualifying circuit with its fixtures, wattage, and recommendation.
-3. Use the **dropdown** on each device group to change the family type — changes are written to Revit immediately.
+1. Run TurboRPS (no pre-selection needed — scans the entire project). The modeless window stays open
+   alongside Revit edits.
+2. Each circuit is a grid row with its status, current vs. recommended driver, and a detail pane
+   (recommended sub-driver packing + grouped fixtures) for the selected row.
+3. Check the **STALE** rows (only those are selectable) — or **Select all stale** — and click
+   **Re-run selected**. Each placed driver is retyped via an in-place `FamilyInstance.Symbol` swap in a
+   **single transaction (one undo step)**, preserving location, Workset, the Plan Visibility param,
+   wiring, tags, instance Switch IDs, and the manual switch-system memberships.
+4. **Rescan** re-collects + reclassifies without closing (after editing wattage with the window open).
+   **Select in Project** selects + zooms the selected circuit's member elements.
+
+REBUILD/NEW/NO MATCH rows are not auto-fixed — their checkbox is disabled and a hint points to TurboDriver.
+A STALE row whose recommendation re-splits a linear fixture also shows an info-only "linear cut-list
+changed — re-run TurboDriver to re-split" note; the in-place swap still fixes the driver *type*, but the
+physical tape segmentation is a TurboDriver job.
 
 Requires at least one loaded Lighting Device family type with valid `Power` and `Sub-Driver Power` parameters.
 

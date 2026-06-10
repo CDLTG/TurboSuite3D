@@ -1,12 +1,11 @@
 #nullable disable
 using System;
-using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using TurboSuite.Driver.Models;
 using TurboSuite.Driver.ViewModels;
-using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Driver.Views
 {
@@ -20,44 +19,48 @@ namespace TurboSuite.Driver.Views
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
-            {
-                this.Close();
-            }
+                Close();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
-            this.Close();
+            Close();
         }
 
-        private void FixtureList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        // Push the clicked row into the VM so the detail pane + "Select in Project" track it.
+        // SelectionUnit is full-row here (no in-cell editing), so SelectedItem binds cleanly.
+        private void CircuitsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            e.Handled = true;
-            var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+            if (sender is DataGrid grid
+                && DataContext is RpsMainViewModel vm
+                && grid.SelectedItem is RpsCircuitRowViewModel row)
             {
-                RoutedEvent = UIElement.MouseWheelEvent
-            };
-            ((UIElement)((FrameworkElement)sender).Parent).RaiseEvent(eventArg);
+                vm.SelectedRow = row;
+            }
         }
     }
 
-    public class FlattenDevicesConverter : IValueConverter
+    /// <summary>null → Visible (placeholder), non-null → Collapsed.</summary>
+    public class NullToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            if (value is System.Collections.ObjectModel.ObservableCollection<DeviceGroupViewModel> groups)
-            {
-                return groups.SelectMany(g => g.Devices).ToList();
-            }
-            return null;
-        }
+            => value == null ? Visibility.Visible : Visibility.Collapsed;
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
+            => throw new NotImplementedException();
     }
 
+    /// <summary>non-null → Visible (detail content), null → Collapsed.</summary>
+    public class NotNullToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => value != null ? Visibility.Visible : Visibility.Collapsed;
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => throw new NotImplementedException();
+    }
+
+    /// <summary>feet (double) → "F' - I"" string for the detail-pane fixtures table.</summary>
     public class FeetInchesConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -80,44 +83,13 @@ namespace TurboSuite.Driver.Views
         }
     }
 
-    public class FamilyTypeDisplayConverter : IMultiValueConverter
-    {
-        public object Convert(object[] values, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            if (values.Length >= 2 && values[0] is string name && values[1] is Autodesk.Revit.DB.FamilySymbol symbol)
-            {
-                string catalogNumber = "";
-                string manufacturer = "";
-
-                try
-                {
-                    var catParam = symbol.LookupParameter(ParameterNames.CatalogNumber1);
-                    catalogNumber = catParam?.AsString() ?? "";
-
-                    var mfgParam = symbol.LookupParameter(ParameterNames.Manufacturer);
-                    manufacturer = mfgParam?.AsString() ?? "";
-                }
-                catch { }
-
-                return $"{catalogNumber} | {manufacturer}";
-            }
-            return values[0]?.ToString() ?? "";
-        }
-
-        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
+    /// <summary>SubDriverAssignment → "Sub-driver N (Driver M): xW / yW" header line.</summary>
     public class SubDriverHeaderConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
             if (value is SubDriverAssignment sub)
-            {
                 return $"Sub-driver {sub.SubDriverIndex} (Driver {sub.DriverIndex}): {sub.TotalLoad:F1}W / {sub.Capacity:F0}W";
-            }
             return "";
         }
 
@@ -127,25 +99,7 @@ namespace TurboSuite.Driver.Views
         }
     }
 
-    public class IsRecommendedTypeConverter : IMultiValueConverter
-    {
-        public object Convert(object[] values, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            if (values.Length >= 2
-                && values[0] is Autodesk.Revit.DB.FamilySymbol symbol
-                && values[1] is Autodesk.Revit.DB.ElementId recommendedId)
-            {
-                return symbol.Id == recommendedId;
-            }
-            return false;
-        }
-
-        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
+    /// <summary>FixtureSegment → "TypeMark (label): wattage / length" detail line.</summary>
     public class SegmentDisplayConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -154,13 +108,9 @@ namespace TurboSuite.Driver.Views
             {
                 string label = seg.TypeMark ?? "";
                 if (seg.IsSplit && !string.IsNullOrEmpty(seg.SplitLabel))
-                {
                     label += $" ({seg.SplitLabel})";
-                }
                 if (seg.LinearLength <= 0.0001)
-                {
                     return $"{label}: {seg.Wattage:F1}W";
-                }
                 int wholeFeet = (int)seg.LinearLength;
                 int remainingInches = (int)Math.Round((seg.LinearLength - wholeFeet) * 12.0);
                 if (remainingInches >= 12) { wholeFeet++; remainingInches = 0; }

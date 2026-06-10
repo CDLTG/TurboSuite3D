@@ -19,5 +19,13 @@ namespace TurboSuite.Driver.Models
         public string Manufacturer { get; set; }
         public string DimmingProtocol { get; set; }
         public string Voltage { get; set; }
+
+        /// <summary>
+        /// True when the fixture's "Remote Power Supply" type parameter is checked — i.e. it
+        /// needs a driver. On a switched/relay circuit, line-voltage fixtures (e.g. recessed
+        /// downlights) share the circuit for total-wattage/power-density purposes but must NOT
+        /// feed the driver recommendation. TurboRPS sizes drivers over RPS fixtures only.
+        /// </summary>
+        public bool HasRemotePowerSupply { get; set; }
     }
 }

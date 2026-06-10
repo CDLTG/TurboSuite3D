@@ -55,7 +55,7 @@ The "TurboSuite" ribbon tab has three panels:
 | [TurboName](Shim/Name/README.md) | Assign CAD room names and ceiling heights to filled regions |
 | [TurboZones](Shim/Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Shim/Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
-| [TurboRPS](Shim/Driver/README.md) | Review power supply assignments across all RPS circuits |
+| [TurboRPS](Shim/Driver/README.md) | Flag stale power-supply selections across all RPS circuits and batch-fix them in place |
 | [TurboDocs](Shim/Docs/README.md) | Generate fixture/RPS schedules, load/panel schedules, cut sheets, and cover/notes PDFs |
 
 ## Supported Workflows

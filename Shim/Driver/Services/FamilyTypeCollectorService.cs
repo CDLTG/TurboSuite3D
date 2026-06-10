@@ -74,6 +74,7 @@ namespace TurboSuite.Driver.Services
                     SymbolRef = symbol.Id.ToRef(),
                     CatalogNumber = catalogNumber,
                     FamilyTypeName = symbol.Name,
+                    FamilyName = symbol.FamilyName,
                     Manufacturer = manufacturer,
                     TotalPower = power,
                     SubDriverPower = subPower,

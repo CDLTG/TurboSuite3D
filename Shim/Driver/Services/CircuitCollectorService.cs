@@ -15,76 +15,23 @@ namespace TurboSuite.Driver.Services
     public class CircuitCollectorService
     {
         /// <summary>
-        /// Get all electrical circuits that have at least one Lighting Fixture with Remote Power Supply checked
+        /// Get all electrical circuits that have at least one Lighting Fixture with Remote Power Supply checked.
         /// </summary>
-	public List<CircuitData> GetFilteredCircuits(Document doc)
+        /// <remarks>
+        /// Membership is read from each circuit's <see cref="ElectricalSystem.Elements"/> — the
+        /// authoritative electrical-system membership — NOT by bucketing elements on their
+        /// <c>RBS_ELEC_CIRCUIT_NUMBER</c> string. Circuits not assigned to a panel all report the
+        /// same circuit-number string (e.g. "&lt;unnamed&gt;"), so the old string-keyed approach
+        /// merged every unassigned circuit's fixtures onto every unassigned row (yielding an
+        /// identical, hugely-oversized recommendation on dozens of rows) and re-ran the
+        /// recommendation/parameter reads over that merged list once per duplicate.
+        /// </remarks>
+        public List<CircuitData> GetFilteredCircuits(Document doc)
         {
             List<CircuitData> circuitDataList = new List<CircuitData>();
 
             try
             {
-                FilteredElementCollector deviceCollector = new FilteredElementCollector(doc)
-                    .OfCategory(BuiltInCategory.OST_LightingDevices)
-                    .OfClass(typeof(FamilyInstance));
-
-                Dictionary<string, List<FamilyInstance>> devicesByCircuit = new Dictionary<string, List<FamilyInstance>>();
-
-                foreach (FamilyInstance device in deviceCollector)
-                {
-                    try
-                    {
-                        Parameter circuitParam = device.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_NUMBER);
-                        string circuitNumber = circuitParam?.AsString();
-
-                        if (string.IsNullOrWhiteSpace(circuitNumber))
-                            continue;
-
-                        if (!devicesByCircuit.TryGetValue(circuitNumber, out var deviceList))
-                        {
-                            deviceList = new List<FamilyInstance>();
-                            devicesByCircuit[circuitNumber] = deviceList;
-                        }
-                        deviceList.Add(device);
-                    }
-                    catch (Exception)
-                    {
-                        continue;
-                    }
-                }
-
-                FilteredElementCollector fixtureCollector = new FilteredElementCollector(doc)
-                    .OfCategory(BuiltInCategory.OST_LightingFixtures)
-                    .OfClass(typeof(FamilyInstance));
-
-                Dictionary<string, List<FamilyInstance>> fixturesByCircuit = new Dictionary<string, List<FamilyInstance>>();
-                HashSet<string> qualifyingCircuits = new HashSet<string>();
-
-                foreach (FamilyInstance fixture in fixtureCollector)
-                {
-                    try
-                    {
-                        Parameter circuitParam = fixture.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_NUMBER);
-                        string circuitNumber = circuitParam?.AsString();
-
-                        if (string.IsNullOrWhiteSpace(circuitNumber))
-                            continue;
-
-                        if (!fixturesByCircuit.TryGetValue(circuitNumber, out var fixtureList))
-                        {
-                            fixtureList = new List<FamilyInstance>();
-                            fixturesByCircuit[circuitNumber] = fixtureList;
-                        }
-                        fixtureList.Add(fixture);
-
-                        if (ParameterHelper.HasRemotePowerSupply(fixture))
-                            qualifyingCircuits.Add(circuitNumber);
-                    }
-                    catch (Exception)
-                    {
-                        continue;
-                    }
-                }
-
                 FilteredElementCollector circuitCollector = new FilteredElementCollector(doc)
                     .OfClass(typeof(ElectricalSystem))
                     .OfCategory(BuiltInCategory.OST_ElectricalCircuit);
@@ -93,64 +40,9 @@ namespace TurboSuite.Driver.Services
                 {
                     try
                     {
-                        string circuitNumber = ParameterHelper.GetCircuitNumber(circuit);
-
-                        if (!qualifyingCircuits.Contains(circuitNumber))
-                            continue;
-
-                        CircuitData data = new CircuitData
-                        {
-                            CircuitId = circuit.Id,
-                            CircuitNumber = circuitNumber,
-                            LoadName = ParameterHelper.GetLoadName(circuit),
-                            LoadClassificationAbbreviation = ParameterHelper.GetLoadClassification(circuit),
-                            NumberOfElements = 0,
-                            ApparentPower = ParameterHelper.GetApparentLoad(circuit),
-                            Panel = ParameterHelper.GetPanelName(circuit)
-                        };
-
-                        if (fixturesByCircuit.TryGetValue(circuitNumber, out var circuitFixtures))
-                        {
-                            foreach (FamilyInstance fixture in circuitFixtures)
-                            {
-                                try
-                                {
-                                    FixtureData fixtureData = CreateFixtureData(fixture);
-                                    data.LightingFixtures.Add(fixtureData);
-                                }
-                                catch
-                                {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        if (devicesByCircuit.TryGetValue(circuitNumber, out var circuitDevices))
-                        {
-                            foreach (FamilyInstance device in circuitDevices)
-                            {
-                                try
-                                {
-                                    DeviceData deviceData = CreateDeviceData(device);
-
-                                    if (!data.DevicesByType.TryGetValue(deviceData.CurrentFamilyTypeName, out var typeList))
-                                    {
-                                        typeList = new List<DeviceData>();
-                                        data.DevicesByType[deviceData.CurrentFamilyTypeName] = typeList;
-                                    }
-                                    typeList.Add(deviceData);
-                                }
-                                catch
-                                {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        data.NumberOfElements = data.LightingFixtures.Count +
-                                                data.DevicesByType.Values.Sum(list => list.Count);
-
-                        circuitDataList.Add(data);
+                        CircuitData data = BuildCircuitData(circuit, requireRemotePowerSupply: true);
+                        if (data != null)
+                            circuitDataList.Add(data);
                     }
                     catch (Exception)
                     {
@@ -168,10 +60,11 @@ namespace TurboSuite.Driver.Services
         }
 
         /// <summary>
-        /// Build CircuitData for a single pre-selected electrical circuit.
-        /// No "Remote Power Supply" filter — the user explicitly chose this circuit.
+        /// Build <see cref="CircuitData"/> from a circuit's actual membership. When
+        /// <paramref name="requireRemotePowerSupply"/> is true, returns null unless at least one
+        /// member fixture has the Remote Power Supply type parameter checked.
         /// </summary>
-        public CircuitData GetCircuitData(Document doc, ElectricalSystem circuit)
+        private CircuitData BuildCircuitData(ElectricalSystem circuit, bool requireRemotePowerSupply)
         {
             var data = new CircuitData
             {
@@ -183,6 +76,8 @@ namespace TurboSuite.Driver.Services
                 ApparentPower = ParameterHelper.GetApparentLoad(circuit),
                 Panel = ParameterHelper.GetPanelName(circuit)
             };
+
+            bool hasRps = false;
 
             if (circuit.Elements != null)
             {
@@ -196,6 +91,8 @@ namespace TurboSuite.Driver.Services
                         if (fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingFixtures)
                         {
                             data.LightingFixtures.Add(CreateFixtureData(fi));
+                            if (ParameterHelper.HasRemotePowerSupply(fi))
+                                hasRps = true;
                         }
                         else if (fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingDevices)
                         {
@@ -215,9 +112,21 @@ namespace TurboSuite.Driver.Services
                 }
             }
 
+            if (requireRemotePowerSupply && !hasRps)
+                return null;
+
             data.NumberOfElements = data.LightingFixtures.Count +
                                     data.DevicesByType.Values.Sum(list => list.Count);
             return data;
+        }
+
+        /// <summary>
+        /// Build CircuitData for a single pre-selected electrical circuit.
+        /// No "Remote Power Supply" filter — the user explicitly chose this circuit.
+        /// </summary>
+        public CircuitData GetCircuitData(Document doc, ElectricalSystem circuit)
+        {
+            return BuildCircuitData(circuit, requireRemotePowerSupply: false);
         }
 
         /// <summary>
@@ -262,7 +171,8 @@ namespace TurboSuite.Driver.Services
                 TypePower = ParameterHelper.GetDriverPower(element.Symbol),
                 Manufacturer = ParameterHelper.GetManufacturer(element),
                 DimmingProtocol = ParameterHelper.GetDimmingProtocol(element),
-                Voltage = ParameterHelper.GetVoltage(element)
+                Voltage = ParameterHelper.GetVoltage(element),
+                HasRemotePowerSupply = ParameterHelper.HasRemotePowerSupply(element)
             };
         }
 
