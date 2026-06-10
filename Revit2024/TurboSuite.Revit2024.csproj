@@ -20,7 +20,7 @@
          outside this project's compile cone, so no DefaultItemExcludes are needed. -->
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="ACadSharp" Version="3.4.24" />
+    <PackageReference Include="ACadSharp" Version="3.6.12" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="PdfSharpCore" Version="1.3.67" />
     <!-- Pin System.Memory to the highest version required across the net48 graph
