@@ -7,17 +7,27 @@ using TurboSuite.Docs.Models;
 
 namespace TurboSuite.Docs.Services;
 
-public enum CatalogQtyMode { Default, PerFixture, RatioPerFixture, FixedPerType }
+public enum CatalogQtyMode { Default, PerFixture, RatioPerFixture, FixedPerType, Length }
 
 public record CatalogQtyRule(CatalogQtyMode Mode, double Value)
 {
-    public int Evaluate(int fixtureCount) => Mode switch
+    /// <summary>
+    /// Resolves the per-slot quantity. <paramref name="linearLength"/> is the fixture's total
+    /// Linear Length in feet; only the <see cref="CatalogQtyMode.Length"/> stock-cut mode reads it
+    /// (the others ignore it). For <c>Length</c>, <see cref="Value"/> is the stock length in feet
+    /// (the parser canonicalizes <c>@in</c> inputs to feet), so the math stays unit-agnostic:
+    /// padded length (feet) divided by stock (feet).
+    /// </summary>
+    public int Evaluate(int count, double linearLength) => Mode switch
     {
-        CatalogQtyMode.Default => fixtureCount,
-        CatalogQtyMode.PerFixture => (int)Math.Ceiling(fixtureCount * Value),
-        CatalogQtyMode.RatioPerFixture => (int)Math.Ceiling(fixtureCount / Value),
+        CatalogQtyMode.Default => count,
+        CatalogQtyMode.PerFixture => (int)Math.Ceiling(count * Value),
+        CatalogQtyMode.RatioPerFixture => (int)Math.Ceiling(count / Value),
         CatalogQtyMode.FixedPerType => (int)Value,
-        _ => fixtureCount,
+        CatalogQtyMode.Length => Value > 0
+            ? (int)Math.Ceiling(Math.Ceiling(linearLength * 1.05) / Value)
+            : count,
+        _ => count,
     };
 
     public static CatalogQtyRule DefaultRule { get; } = new(CatalogQtyMode.Default, 0);
@@ -43,18 +53,15 @@ public static class CatalogQtyParser
         // net48's string.IsNullOrWhiteSpace lacks [NotNullWhen(false)], so flag non-null explicitly.
         var input = raw!.Trim();
 
-        // Trailing @type suffix (case-insensitive, optional whitespace before @)
-        if (input.EndsWith("@type", StringComparison.OrdinalIgnoreCase))
-        {
-            var prefix = input.Substring(0, input.Length - "@type".Length).TrimEnd();
-            if (prefix.Length == 0)
-                throw new CatalogQtyParseException(raw, "Missing quantity before '@type'");
-            if (!double.TryParse(prefix, NumberStyles.Float, CultureInfo.InvariantCulture, out var fixedQty))
-                throw new CatalogQtyParseException(raw, $"Invalid number '{prefix}' before '@type'");
-            if (fixedQty <= 0)
-                throw new CatalogQtyParseException(raw, "Quantity must be greater than zero");
-            return new CatalogQtyRule(CatalogQtyMode.FixedPerType, fixedQty);
-        }
+        // Trailing keyword suffixes (case-insensitive, optional whitespace before @). None is a
+        // suffix of another, so the order is irrelevant. @ft and @in both produce the Length mode;
+        // @in is canonicalized to feet (÷ 12) so the rule's Value is always feet downstream.
+        if (TryStripSuffix(input, "@type", out var typePrefix))
+            return new CatalogQtyRule(CatalogQtyMode.FixedPerType, ParsePositive(raw, typePrefix, "@type"));
+        if (TryStripSuffix(input, "@ft", out var ftPrefix))
+            return new CatalogQtyRule(CatalogQtyMode.Length, ParsePositive(raw, ftPrefix, "@ft"));
+        if (TryStripSuffix(input, "@in", out var inPrefix))
+            return new CatalogQtyRule(CatalogQtyMode.Length, ParsePositive(raw, inPrefix, "@in") / 12.0);
 
         // Ratio form 1/N
         if (input.Contains('/'))
@@ -85,8 +92,36 @@ public static class CatalogQtyParser
         // Common mistake hints
         if (input.Contains("type", StringComparison.OrdinalIgnoreCase))
             throw new CatalogQtyParseException(raw, "Missing '@' before 'type'; did you mean '" + input.Replace("type", "@type", StringComparison.OrdinalIgnoreCase) + "'?");
+        // @length never shipped — it's retired in favor of the unit-explicit @ft / @in forms.
+        if (input.EndsWith("@length", StringComparison.OrdinalIgnoreCase)
+            || input.Contains("length", StringComparison.OrdinalIgnoreCase))
+            throw new CatalogQtyParseException(raw, "'@length' is not supported — specify a unit: use 'N @ft' or 'N @in'");
 
-        throw new CatalogQtyParseException(raw, "Unrecognized format (expected blank, N, 1/N, or N @type)");
+        throw new CatalogQtyParseException(raw, "Unrecognized format (expected blank, N, 1/N, N @type, N @ft, or N @in)");
+    }
+
+    // Splits a trailing keyword suffix (e.g. "@ft") off the input, trimming whitespace before it.
+    private static bool TryStripSuffix(string input, string suffix, out string prefix)
+    {
+        if (input.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            prefix = input.Substring(0, input.Length - suffix.Length).TrimEnd();
+            return true;
+        }
+        prefix = string.Empty;
+        return false;
+    }
+
+    // Parses the numeric prefix that precedes a keyword suffix, enforcing N > 0.
+    private static double ParsePositive(string raw, string prefix, string suffix)
+    {
+        if (prefix.Length == 0)
+            throw new CatalogQtyParseException(raw, $"Missing quantity before '{suffix}'");
+        if (!double.TryParse(prefix, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            throw new CatalogQtyParseException(raw, $"Invalid number '{prefix}' before '{suffix}'");
+        if (value <= 0)
+            throw new CatalogQtyParseException(raw, "Quantity must be greater than zero");
+        return value;
     }
 }
 
@@ -133,14 +168,22 @@ public static class CatalogQtyValidator
             {
                 var raw = f.CatalogQtys[c];
                 if (string.IsNullOrWhiteSpace(raw)) continue;
+                CatalogQtyRule rule;
                 try
                 {
-                    CatalogQtyParser.Parse(raw);
+                    rule = CatalogQtyParser.Parse(raw);
                 }
                 catch (CatalogQtyParseException ex)
                 {
                     errors.Add(new CatalogQtyValidationError(f.TypeMark, c + 1, raw, ex.Message));
+                    continue;
                 }
+
+                // Semantic check: the Length stock-cut mode (N @ft / N @in) divides the fixture's
+                // padded Linear Length by the stock length — meaningless without a positive Linear.
+                if (rule.Mode == CatalogQtyMode.Length && f.LinearLength <= 0)
+                    errors.Add(new CatalogQtyValidationError(f.TypeMark, c + 1, raw,
+                        "Stock-length qty (N @ft / N @in) requires a positive Linear Length on the fixture instances"));
             }
         }
         if (errors.Count > 0)

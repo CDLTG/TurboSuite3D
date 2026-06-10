@@ -80,14 +80,6 @@ public static class CountsCollectorService
                         model.CatalogQtys[c] = qtyParam.AsString()?.Trim() ?? string.Empty;
                 }
 
-                var rlParam = symbol.LookupParameter(ParameterNames.ReelLength);
-                if (rlParam is { HasValue: true, StorageType: StorageType.Double })
-                    model.ReelLength = rlParam.AsDouble();
-
-                var clParam = symbol.LookupParameter(ParameterNames.ChannelLength);
-                if (clParam is { HasValue: true, StorageType: StorageType.Double })
-                    model.ChannelLength = clParam.AsDouble();
-
                 for (int n = 0; n < 6; n++)
                 {
                     var noteParam = symbol.LookupParameter($"Schedule Notes{n + 1}");

@@ -64,6 +64,10 @@ All commands work in both:
 - **3D Model** — Hosted families with 3D geometry in plan/RCP views
 - **2D Drafting** — Unhosted families placed over linked CAD in floor plan views
 
+## Documentation
+
+- **[Counts Cheat Sheet](docs/counts-cheatsheet.html)** — quick reference for authoring TurboDocs **Counts** parameters: Catalog Number length tokens (`max=` / `sizes=` / `pool=`) and Catalog Qty modes (`N`, `1/N`, `N @type`, and the stock-cut `N @ft` / `N @in`). Best viewed rendered via GitHub Pages: <https://cdltg.github.io/TurboSuite3D/counts-cheatsheet.html> (enable under **Settings → Pages → Deploy from branch → `main` / `/docs`**).
+
 ## Revit Project Dependencies
 
 TurboSuite expects certain families, parameters, and annotation types to be loaded in the Revit project. See each command's README for specific requirements. The table below summarizes shared dependencies.

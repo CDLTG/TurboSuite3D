@@ -27,7 +27,11 @@ public static class CountsWorkbookService
     // pricing block (H–V). Mirrors the Type value in gray italic; locked.
     private const int WsColTypeRepeat = 7;  // G
     private const int WsColDesc = 8;        // H
-    private const int WsColCalc = 9;        // I
+    // Column I is a hidden, unused gap. It formerly held the "Calc" dropdown (Reel/Channel/
+    // End Cap/Clip), retired when stock-cut quantities moved into the `N @ft`/`@in` Catalog Qty
+    // mode. Kept as a gap (not shifted out) so Description (H), Unit Cost (J), and every column
+    // to the right keep their positions.
+    private const int WsColCalc = 9;        // I (hidden gap)
     private const int WsColUnitCost = 10;   // J
     private const int WsColMarkup = 11;     // K
     private const int WsColTariff = 12;     // L
@@ -75,8 +79,9 @@ public static class CountsWorkbookService
     private const int CsColCat6 = 8;        // H
     private const int CsColCount = 9;       // I
     private const int CsColLinear = 10;     // J
-    private const int CsColReel = 11;       // K
-    private const int CsColChannel = 12;    // L
+    // Columns K (11) and L (12) are hidden, unused gaps — they formerly held Reel Length /
+    // Channel Length, retired now that stock length is expressed inline via the `N @ft`/`@in`
+    // Catalog Qty mode. Left as gaps so Notes (M) and everything to the right keep their positions.
     private const int CsColNote1 = 13;      // M — Schedule Notes 1..6 emitted for reference
     private const int CsColNote6 = 18;      // R
     // Hidden helper column — Type|Cat1Cat2…Cat6 concatenation used by the Bid Compare sheet's
@@ -112,14 +117,23 @@ public static class CountsWorkbookService
     // the baseline side; ReconcileBaselinePricing refreshes the per-SKU SellEa just like Cat1-6.
     private const int CsColTokenFreeze = 30;  // AD
     // Per-slot frozen effective qty on cols AE..AJ (hidden): the CatalogQty-resolved quantity
-    // (`CatalogQtyParser.Parse(QtyX).Evaluate(Count)`) for each Cat slot 1..6 — the same value the
-    // Worksheet writes to col D / BR. CsColCount holds the Type's raw fixture total, which is only
-    // correct for default (blank) QtyX; slots with 1/N, N, or N @type resolve to a different qty.
+    // (`CatalogQtyParser.Parse(QtyX).Evaluate(Count, LinearLength)`) for each Cat slot 1..6 — the
+    // same value the Worksheet writes to col D / BR. CsColCount holds the Type's raw fixture total,
+    // which is only correct for default (blank) QtyX; slots with 1/N, N, N @type, or N @ft/@in
+    // resolve to a different qty.
     // Bid Compare's baseline OldQty and static Bid Total must use this per-slot value, not Count,
     // or the diff falsely reports the whole Type's count against the resolved current qty. Token
     // slots leave these blank — their per-SKU qty lives in CsColTokenFreeze. Snapshots written
     // before this column existed read blank and fall back to CsColCount (legacy behavior).
     private const int CsColQty1 = 31;       // AE
+
+    // Per-slot raw Catalog Qty *input* text on cols AK..AP (hidden): the literal QtyX string the
+    // user typed (e.g. "16.40 @ft", "1/4", "" for blank), one per Cat slot 1..6. Distinct from
+    // CsColQty1 above, which freezes the *resolved* numeric qty. ReadCountsSheetData reads these
+    // back so PrevQty recomputation parses the historical rule (CatalogQtyParser.Parse) instead of
+    // the retired Calc-dropdown lookup. Snapshots written before this column existed read blank →
+    // Default rule → Count (a one-time transitional artifact on the first re-export after upgrade).
+    private const int CsColCatQtyIn1 = 37;  // AK
 
     // Highlight colors
     private static readonly XLColor GreenFill = XLColor.FromHtml("#C6EFCE");
@@ -1424,8 +1438,6 @@ public static class CountsWorkbookService
         ws.Cell(1, CsColCat6).Value = "Cat 6";
         ws.Cell(1, CsColCount).Value = "Count";
         ws.Cell(1, CsColLinear).Value = "Linear Length";
-        ws.Cell(1, CsColReel).Value = "Reel Length";
-        ws.Cell(1, CsColChannel).Value = "Channel Length";
         for (int n = 0; n < 6; n++)
             ws.Cell(1, CsColNote1 + n).Value = $"Schedule Notes {n + 1}";
         ws.Cell(1, CsColCatCombo).Value = "_CatCombo";
@@ -1435,6 +1447,8 @@ public static class CountsWorkbookService
         ws.Cell(1, CsColTokenFreeze).Value = "_TokenFreeze";
         for (int s = 0; s < 6; s++)
             ws.Cell(1, CsColQty1 + s).Value = $"_Qty{s + 1}";
+        for (int s = 0; s < 6; s++)
+            ws.Cell(1, CsColCatQtyIn1 + s).Value = $"_CatQtyIn{s + 1}";
 
         ws.SheetView.FreezeRows(1);
         ws.SheetView.FreezeColumns(1);
@@ -1481,22 +1495,23 @@ public static class CountsWorkbookService
                 ws.Cell(row, CsColCat1 + c).Value = f.CatalogNumbers[c] ?? "";
             ws.Cell(row, CsColCount).Value = f.Count;
             ws.Cell(row, CsColLinear).Value = Math.Round(f.LinearLength, 2);
-            ws.Cell(row, CsColReel).Value = Math.Round(f.ReelLength, 2);
-            ws.Cell(row, CsColChannel).Value = Math.Round(f.ChannelLength, 2);
             for (int n = 0; n < 6; n++)
                 ws.Cell(row, CsColNote1 + n).Value = f.Notes[n] ?? string.Empty;
             ws.Cell(row, CsColCatCombo).FormulaA1 = BuildCatComboFormula(row);
 
             // Freeze per-slot CatalogQty-resolved qty (mirrors the Worksheet's col D literal:
-            // `qtyRule.Evaluate(Count)`). CsColCount holds only the Type's raw fixture total, which
-            // is wrong for 1/N, N, or N @type slots. Token slots are skipped — their per-SKU qty is
-            // frozen in CsColTokenFreeze below.
+            // `qtyRule.Evaluate(Count, LinearLength)`). CsColCount holds only the Type's raw fixture
+            // total, which is wrong for 1/N, N, N @type, or N @ft/@in slots. Token slots are skipped
+            // — their per-SKU qty is frozen in CsColTokenFreeze below. The raw QtyX input text is
+            // also stored (CsColCatQtyIn) so PrevQty can re-parse the historical rule.
             for (int c = 0; c < 6; c++)
             {
+                ws.Cell(row, CsColCatQtyIn1 + c).Value = f.CatalogQtys[c] ?? "";
+
                 string template = f.CatalogNumbers[c] ?? "";
                 if (string.IsNullOrWhiteSpace(template)) continue;
                 if (CatalogLengthTokenResolver.HasToken(template)) continue;
-                ws.Cell(row, CsColQty1 + c).Value = CatalogQtyParser.Parse(f.CatalogQtys[c]).Evaluate(f.Count);
+                ws.Cell(row, CsColQty1 + c).Value = CatalogQtyParser.Parse(f.CatalogQtys[c]).Evaluate(f.Count, f.LinearLength);
             }
 
             // Freeze pricing per slot. Each catalog has its own (J,K,M) on Worksheet — even
@@ -1572,6 +1587,9 @@ public static class CountsWorkbookService
             row++;
         }
         int lastDataRow = row - 1;
+        // Hide the retired Reel/Channel gap columns (K, L) so the raw sheet reads cleanly.
+        ws.Column(11).Hide();
+        ws.Column(12).Hide();
         ws.Column(CsColCatCombo).Hide();
         for (int s = 0; s < 6; s++)
             ws.Column(CsColSellEa1 + s).Hide();
@@ -1579,6 +1597,8 @@ public static class CountsWorkbookService
         ws.Column(CsColTokenFreeze).Hide();
         for (int s = 0; s < 6; s++)
             ws.Column(CsColQty1 + s).Hide();
+        for (int s = 0; s < 6; s++)
+            ws.Column(CsColCatQtyIn1 + s).Hide();
 
         // Frozen Dashboard meta on column V (hidden). Sheet-scoped names so Bid Compare can
         // resolve the snapshot's bid-time Lutron / Freight Sell / Sales Tax rate from any sheet.
@@ -1652,7 +1672,7 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColQty).Value = "Qty";
         ws.Cell(1, WsColPrevQty).Value = "Prev";
         ws.Cell(1, WsColDelta).Value = "Δ";
-        ws.Cell(1, WsColCalc).Value = "Calc";
+        // Column I (WsColCalc) is a hidden gap — no header. (Was the retired "Calc" dropdown.)
         ws.Cell(1, WsColPhase).Value = "Phase";
         ws.Cell(1, WsColDesc).Value = "Description";
         ws.Cell(1, WsColUnitCost).Value = "Unit Cost";
@@ -1668,10 +1688,8 @@ public static class CountsWorkbookService
         // Style headers — uniform #262626 background and bold; per-section font colors below.
         ApplyWorksheetHeaderStyling(ws);
 
-        string csRef = $"'{countsSheetName}'";
-
         // Track first occurrence of each catalog number (canonical source for per-catalog
-        // pricing fields: Description, Calc, Unit Cost) and each Type (source for per-Type Tariff).
+        // pricing fields: Description, Unit Cost) and each Type (source for per-Type Tariff).
         var catalogFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var typeFirstRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
@@ -1714,30 +1732,25 @@ public static class CountsWorkbookService
                     ws.Cell(row, WsColCatalog).Value = resolvedSku;
                     ws.Cell(row, WsColTypeRepeat).Value = f.TypeMark;
 
-                    // Qty precedence: length-token literal > QtyX rule literal > Calc-driven formula.
+                    // Qty precedence: length-token literal > CatalogQty rule (which now covers the
+                    // stock-cut Length mode that the retired Calc dropdown used to handle).
                     if (isExpanded)
                         ws.Cell(row, WsColQty).Value = expandedQty;
-                    else if (qtyRule.Mode == CatalogQtyMode.Default)
-                        ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
                     else
-                        ws.Cell(row, WsColQty).Value = qtyRule.Evaluate(f.Count);
+                        ws.Cell(row, WsColQty).Value = qtyRule.Evaluate(f.Count, f.LinearLength);
 
                     // Prev Qty — blank on first export. Delta picks up once it's populated.
                     ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
-                    ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
 
-                    // Catalog-canonical fields (Description, Calc, Unit Cost): subsequent
-                    // occurrences reference the first. Markup % and Adder have NO canonical —
-                    // users drag-fill.
+                    // Catalog-canonical fields (Description, Unit Cost): subsequent occurrences
+                    // reference the first. Markup % and Adder have NO canonical — users drag-fill.
                     if (catalogFirstRow.TryGetValue(resolvedSku, out int firstRow))
                     {
                         // Desc / Unit Cost: empty canonical → "dependent" placeholder so the
-                        // link is visible. Calc: plain ref (no wrap) — dropdown stays usable.
+                        // link is visible.
                         ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("H", firstRow);
-                        ws.Cell(row, WsColCalc).FormulaA1 = $"IF(I{firstRow}=\"\",\"\",I{firstRow})";
                         ws.Cell(row, WsColUnitCost).FormulaA1 = DependentFormula("J", firstRow);
                         StyleAutoFilledCell(ws.Cell(row, WsColDesc));
-                        StyleAutoFilledCell(ws.Cell(row, WsColCalc));
                         StyleAutoFilledCell(ws.Cell(row, WsColUnitCost));
                     }
                     else
@@ -1800,7 +1813,7 @@ public static class CountsWorkbookService
         ws.Column(WsColCatalog).AdjustToContents();
         ApplyQtyColumnFormatting(ws);
         ws.Column(WsColDesc).Width = 25;
-        ws.Column(WsColCalc).Width = 10;
+        ws.Column(WsColCalc).Hide();  // retired Calc dropdown — column I is now a hidden gap
         ws.Column(WsColUnitCost).Width = 12;
         ws.Column(WsColMarkup).Width = 10;
         ws.Column(WsColTariff).Width = 10;
@@ -1996,35 +2009,6 @@ public static class CountsWorkbookService
         pricingBlock.Style.Border.InsideBorderColor = inside;
         pricingBlock.Style.Border.OutsideBorder = XLBorderStyleValues.Medium;
         pricingBlock.Style.Border.OutsideBorderColor = XLColor.Black;
-    }
-
-    // C# mirror of BuildQtyFormula for recomputing Qty when the Excel-side cached value
-    // isn't available (used by the PrevQty fallback path on 3rd+ update passes).
-    private static double ComputeQtyForCalc(string? calc, CountsFixtureModel f)
-    {
-        double linearPadded = Math.Ceiling(f.LinearLength * 1.05);
-        return calc switch
-        {
-            "Reel"    => f.ReelLength > 0    ? Math.Ceiling(linearPadded / f.ReelLength) : f.Count,
-            "Channel" => f.ChannelLength > 0 ? Math.Ceiling(linearPadded / f.ChannelLength) : f.Count,
-            "Clip"    => Math.Ceiling(linearPadded / 1.75),
-            "End Cap" => f.Count,
-            _         => f.Count,
-        };
-    }
-
-    private static string BuildQtyFormula(int row, string csRef)
-    {
-        // VLOOKUP indices: Col 9=Count, Col 10=LinearLength, Col 11=ReelLength, Col 12=ChannelLength
-        return $"IF(I{row}=\"Reel\"," +
-               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/VLOOKUP(A{row},{csRef}!A:L,11,FALSE),1)," +
-               $"IF(I{row}=\"Channel\"," +
-               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/VLOOKUP(A{row},{csRef}!A:L,12,FALSE),1)," +
-               $"IF(I{row}=\"End Cap\"," +
-               $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)," +
-               $"IF(I{row}=\"Clip\"," +
-               $"CEILING(CEILING(VLOOKUP(A{row},{csRef}!A:L,10,FALSE)*1.05,1)/1.75,1)," +
-               $"VLOOKUP(A{row},{csRef}!A:L,9,FALSE)))))";
     }
 
     /// <summary>
@@ -2690,7 +2674,7 @@ public static class CountsWorkbookService
                     // Token slots carry their per-SKU qty from ExpandSlot; plain slots resolve the
                     // CatalogQty rule (matches the Worksheet col D / BR the live Qty formula reads).
                     // Only used as the fallback display when a row has no live Worksheet row.
-                    double newQty = isToken ? expandedQty : qtyRule.Evaluate(f.Count);
+                    double newQty = isToken ? expandedQty : qtyRule.Evaluate(f.Count, f.LinearLength);
                     currentRows.Add(key, new BcRow
                     {
                         Type = f.TypeMark, Mfr = f.Manufacturer, Catalog = cat, Slot = c,
@@ -3352,14 +3336,16 @@ public static class CountsWorkbookService
 
     // Hidden audit sheet that shows the work behind every computed Qty so the pricing team can
     // sanity-check large jobs. Four sections stacked vertically:
-    //   1. Constants  — the magic numbers buried in the Qty formulas (overage, clip spacing, ...)
-    //   2. Calc       — live decomposition of the Calc-dropdown Qty formula (BuildQtyFormula),
-    //                    keyed by resolved SKU so each reel/channel/end-cap slot is its own row.
+    //   1. Constants  — the magic numbers buried in the Qty math (overage, pool min offcut).
+    //   2. Stock-cut  — static decomposition of the `N @ft`/`@in` Length CatalogQty mode
+    //                   (Linear → ×1.05 → Round Up → Stock → Pieces (raw) → Qty), one row per slot.
     //   3. Length     — the former Waste table: cover-algorithm totals for length-token slots.
-    //                    Static snapshot (greedy bin-packing isn't a spreadsheet formula).
+    //                   Static snapshot (greedy bin-packing isn't a spreadsheet formula).
     //   4. CatalogQty — live decomposition of the N / 1/N / N @type CatalogQtyEvaluator rules.
-    // Each catalog slot lands in exactly one section, matching the live Qty precedence in
-    // BuildWorksheetSheet: length-token > non-blank CatalogQty > Calc/default.
+    // Sections 2 and 3 are the length-aware group, both static snapshots (mode/stock/Linear/Count
+    // only change on re-export, so a snapshot is as faithful as a live formula). Each catalog slot
+    // lands in exactly one section, matching the live Qty precedence in BuildWorksheetSheet:
+    // length-token > Length CatalogQty (stock-cut) > other non-blank CatalogQty > default.
     /// <summary>
     /// Moves the Calculations sheet to the last position before the first "Counts {date}"
     /// snapshot. Run at the very end of each build path — after Bid Compare and Changes are
@@ -3401,7 +3387,7 @@ public static class CountsWorkbookService
         // lands as the last tab before the Counts snapshots, after Changes is placed.
         ws.TabColor = XLColor.FromHtml("#FFF28B82");
 
-        string cs = $"'{countsSheetName}'";  // Counts sheet ref (col 9=Count, 10=Linear, 11=Reel, 12=Channel)
+        string cs = $"'{countsSheetName}'";  // Counts sheet ref (col 9=Count, 10=Linear) — used by the live CatalogQty section
         var inv = System.Globalization.CultureInfo.InvariantCulture;
 
         int row = 1;
@@ -3420,51 +3406,49 @@ public static class CountsWorkbookService
             row++;
         }
         Constant("Overage", "5% (applied as ×1.05 before the ceiling)");
-        Constant("Clip spacing", "1.75 ft (one clip per 1.75 ft of padded length)");
         Constant("Pool min offcut",
             $"{CatalogLengthTokenResolver.PoolMinOffcutInches}\" (shortest offcut reused across instances in pool= mode)");
         row++;
 
-        // ── Section 2: Calc-driven quantities (live decomposition) ────────────
-        ws.Cell(row, 1).Value = "Calc-driven quantities";
+        // ── Section 2: Stock-cut quantities (N @ft / N @in Length mode, static snapshot) ──
+        // Decomposes the Length CatalogQty mode's two-ceiling math the same way the old live Calc
+        // section did — Linear → ×1.05 → Round Up → Stock → Pieces (raw) → Qty — but written as
+        // literal C# values: mode/stock/Linear/Count only change on re-export, so a snapshot is as
+        // faithful as a live formula (and the Calc dropdown that needed liveness is gone). Stock is
+        // always shown in feet (the rule's canonical Value), whether the user typed @ft or @in.
+        ws.Cell(row, 1).Value = "Stock-cut quantities (N @ft / N @in)";
         ws.Cell(row, 1).Style.Font.SetBold();
         row++;
-        string[] calcHeaders = { "Type", "Catalog SKU", "Calc Mode", "Linear (LF)", "×1.05", "Round Up", "Stock (LF)", "Pieces (raw)", "Qty" };
+        string[] calcHeaders = { "Type", "Catalog SKU", "Linear (LF)", "×1.05", "Round Up", "Stock (LF)", "Pieces (raw)", "Qty" };
         for (int i = 0; i < calcHeaders.Length; i++) ws.Cell(row, i + 1).Value = calcHeaders[i];
         ws.Range(row, 1, row, calcHeaders.Length).Style.Font.SetBold();
         row++;
         foreach (var f in fixtures.OrderBy(f => f.TypeMark, NaturalStringComparer.OrdinalIgnoreCase))
         {
-            // Only stock-length parts are worth decomposing here. A type with no Reel or Channel
-            // length defined can only resolve to Clip/End-Cap/Count, which don't use this chain.
-            if (f.ReelLength <= 0 && f.ChannelLength <= 0) continue;
-
             for (int c = 0; c < 6; c++)
             {
                 string template = f.CatalogNumbers[c] ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(template)) continue;
                 if (CatalogLengthTokenResolver.HasToken(template)) continue;           // → Length section
-                if (CatalogQtyParser.Parse(f.CatalogQtys[c]).Mode != CatalogQtyMode.Default) continue; // → CatalogQty section
+                var rule = CatalogQtyParser.Parse(f.CatalogQtys[c]);
+                if (rule.Mode != CatalogQtyMode.Length) continue;                       // only stock-cut slots here
+
+                double linear = f.LinearLength;
+                double padded = linear * 1.05;
+                double roundUp = Math.Ceiling(padded);
+                double stock = rule.Value;                                              // feet (canonical)
+                int qty = rule.Evaluate(f.Count, f.LinearLength);
 
                 int r = row;
                 ws.Cell(r, 1).Value = f.TypeMark;
                 ws.Cell(r, 2).Value = template;
-                // Calc mode lives on the Worksheet (col I), canonical per SKU — look it up by SKU (col C, idx 7
-                // of C:I). An empty Calc cell makes VLOOKUP return 0; show "None" for both 0 and "".
-                ws.Cell(r, 3).FormulaA1 =
-                    $"IFERROR(IF(OR(VLOOKUP(B{r},Worksheet!C:I,7,FALSE)=0,VLOOKUP(B{r},Worksheet!C:I,7,FALSE)=\"\")," +
-                    $"\"None\",VLOOKUP(B{r},Worksheet!C:I,7,FALSE)),\"None\")";
-                ws.Cell(r, 4).FormulaA1 = $"VLOOKUP(A{r},{cs}!A:L,10,FALSE)";            // Linear
-                ws.Cell(r, 5).FormulaA1 = $"D{r}*1.05";                                  // padded
-                ws.Cell(r, 6).FormulaA1 = $"CEILING(E{r},1)";                            // ceil(padded)
-                ws.Cell(r, 7).FormulaA1 =                                                // stock length per mode
-                    $"IF(C{r}=\"Reel\",VLOOKUP(A{r},{cs}!A:L,11,FALSE)," +
-                    $"IF(C{r}=\"Channel\",VLOOKUP(A{r},{cs}!A:L,12,FALSE)," +
-                    $"IF(C{r}=\"Clip\",1.75,\"\")))";
-                ws.Cell(r, 8).FormulaA1 = $"IF(G{r}=\"\",\"\",F{r}/G{r})";               // raw pieces (pre-ceiling)
-                ws.Cell(r, 8).Style.NumberFormat.Format = "0.00";
-                ws.Cell(r, 9).FormulaA1 =                                                // Qty: ceil(raw), Count fallback
-                    $"IF(H{r}=\"\",VLOOKUP(A{r},{cs}!A:L,9,FALSE),CEILING(H{r},1))";
+                ws.Cell(r, 3).Value = Math.Round(linear, 2);
+                ws.Cell(r, 4).Value = Math.Round(padded, 2);
+                ws.Cell(r, 5).Value = roundUp;
+                ws.Cell(r, 6).Value = Math.Round(stock, 2);
+                ws.Cell(r, 7).Value = stock > 0 ? Math.Round(roundUp / stock, 2) : 0.0; // raw pieces (pre-ceiling)
+                ws.Cell(r, 7).Style.NumberFormat.Format = "0.00";
+                ws.Cell(r, 8).Value = qty;
                 row++;
             }
         }
@@ -3517,7 +3501,8 @@ public static class CountsWorkbookService
                 if (string.IsNullOrWhiteSpace(template)) continue;
                 if (CatalogLengthTokenResolver.HasToken(template)) continue;           // → Length section
                 var rule = CatalogQtyParser.Parse(f.CatalogQtys[c]);
-                if (rule.Mode == CatalogQtyMode.Default) continue;                      // → Calc section
+                if (rule.Mode == CatalogQtyMode.Default) continue;                      // default → not audited here
+                if (rule.Mode == CatalogQtyMode.Length) continue;                       // → Stock-cut section
 
                 int r = row;
                 string n = rule.Value.ToString(inv);
@@ -3544,9 +3529,12 @@ public static class CountsWorkbookService
         }
 
         ws.Columns(1, 9).AdjustToContents();
-        // AdjustToContents can't measure formula results (no cached value pre-recalc), so the Qty
-        // column under-sizes and clips 4-digit counts. Pin it wide enough with a buffer.
-        ws.Column(9).Width = 9;
+        // AdjustToContents can't measure formula results (no cached value pre-recalc). The only
+        // live formulas left are the CatalogQty section's Count (E) and Qty (F) VLOOKUPs, which
+        // under-size and clip 4-digit counts — pin them wide enough with a buffer. (Section 2's
+        // stock-cut Qty is now a static literal, so it auto-fits.)
+        if (ws.Column(5).Width < 9) ws.Column(5).Width = 9;
+        if (ws.Column(6).Width < 9) ws.Column(6).Width = 9;
     }
 
     #endregion
@@ -3586,8 +3574,6 @@ public static class CountsWorkbookService
             BuildWorksheetSheet(wb, fixtures, countsSheetName, null);
             return;
         }
-
-        string csRef = $"'{countsSheetName}'";
 
         sub = "build-new-keys";
         // Build set of new (Type, Catalog) pairs. Length-token templates expand here so each
@@ -3776,17 +3762,6 @@ public static class CountsWorkbookService
             typeCanonicalSheetRow.TryAdd(entry.Type, sheetRow);
         }
 
-        // Catalog → canonical Calc literal from the prior pass. Used to recompute PrevQty
-        // when the Qty formula's cached value wasn't preserved (ClosedXML doesn't emit caches
-        // on fresh FormulaA1 writes, so a user who never opens the file in Excel between
-        // passes loses the cache on pass 3+).
-        var prevCalcByCatalog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var er in existingRows)
-        {
-            if (!er.CalcIsFormula && !string.IsNullOrWhiteSpace(er.Calc))
-                prevCalcByCatalog.TryAdd(er.Catalog, er.Calc);
-        }
-
         // Type → Tariff literal from the prior pass. Tariff lives only on each Type's
         // canonical row; if sort order elects a different catalog as canonical this pass,
         // the new-canonical row's existingByKey lookup returns null and the tariff drops.
@@ -3839,20 +3814,18 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColCatalog).Value = catalog;
             ws.Cell(row, WsColTypeRepeat).Value = type;
 
-            // Qty: length-token rows hold a literal cut count, QtyX rule overrides the
-            // Calc-driven formula, else fall through to the formula path. Mirrors BuildWorksheetSheet.
+            // Qty: length-token rows hold a literal cut count; otherwise the CatalogQty rule
+            // resolves it (including the stock-cut Length mode). Mirrors BuildWorksheetSheet.
             var fixtureForRow = fixtureByType.GetValueOrDefault(type);
             var qtyRule = fixtureForRow != null
                 ? CatalogQtyParser.Parse(fixtureForRow.CatalogQtys[slot])
                 : CatalogQtyRule.DefaultRule;
             if (entry.IsExpanded)
                 ws.Cell(row, WsColQty).Value = entry.Qty;
-            else if (qtyRule.Mode == CatalogQtyMode.Default)
-                ws.Cell(row, WsColQty).FormulaA1 = BuildQtyFormula(row, csRef);
-            else
-                ws.Cell(row, WsColQty).Value = qtyRule.Evaluate(fixtureForRow!.Count);
+            else if (fixtureForRow != null)
+                ws.Cell(row, WsColQty).Value = qtyRule.Evaluate(fixtureForRow.Count, fixtureForRow.LinearLength);
+            // else: row has no current fixture (shouldn't occur for non-token new rows) — leave Qty blank.
             ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
-            ws.Cell(row, WsColCalc).GetDataValidation().List("\"Reel,Channel,End Cap,Clip\"", true);
 
             // Carry Mfr/Qty overrides forward on matched rows. EffQty (P) is always rewritten.
             if (existing != null)
@@ -3866,21 +3839,23 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
             // Prev Qty — always the literal prior-update value. Prefer the previous Worksheet's
-            // cached Qty (reflects Calc adjustments), else recompute from the preserved canonical
-            // Calc + prev fixture lengths (cache may be missing on 3rd+ passes — ClosedXML doesn't
-            // emit caches for rewritten formulas), else leave blank for types not previously present.
-            // The B12-driven "Compare to" baseline is consumed by the Bid Compare sheet, not here.
+            // cached Qty, else recompute from the prior pass's snapshotted CatalogQty rule + prev
+            // fixture Count/LinearLength (the Worksheet cache may be missing on 3rd+ passes —
+            // ClosedXML doesn't emit caches for rewritten formulas), else leave blank for types not
+            // previously present. The recompute uses the *historical* QtyX text frozen on the prior
+            // Counts sheet (read into prevFixture.CatalogQtys), so PrevQty reflects the rule in force
+            // last pass. The B12-driven "Compare to" baseline is consumed by Bid Compare, not here.
             if (existing?.PrevQty.HasValue == true)
             {
                 ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
             }
             else if (!entry.IsExpanded && prevData != null && prevData.TryGetValue(type, out var prevFixture))
             {
-                // Skipped for length-token rows: ComputeQtyForCalc reads the prior fixture's
-                // total LinearLength/Count, which doesn't represent a single cut. Brand-new
-                // length-rows leave PrevQty blank (Δ stays blank too — correct behavior).
-                prevCalcByCatalog.TryGetValue(catalog, out string? prevCalc);
-                ws.Cell(row, WsColPrevQty).Value = ComputeQtyForCalc(prevCalc, prevFixture);
+                // Skipped for length-token rows: the prior fixture's total LinearLength/Count
+                // doesn't represent a single cut. Brand-new length-rows leave PrevQty blank
+                // (Δ stays blank too — correct behavior).
+                var prevQtyRule = CatalogQtyParser.Parse(prevFixture.CatalogQtys[slot]);
+                ws.Cell(row, WsColPrevQty).Value = prevQtyRule.Evaluate(prevFixture.Count, prevFixture.LinearLength);
             }
 
             int typeCanonical = typeCanonicalSheetRow[type];
@@ -3893,8 +3868,8 @@ public static class CountsWorkbookService
 
                 // Catalog-canonical fields
                 WritePricingCells(ws, row, canonicalRow,
-                    existing.Description, existing.Calc, existing.UnitCost, existing.Markup, existing.Adder,
-                    existing.DescIsFormula, existing.CalcIsFormula, existing.CostIsFormula,
+                    existing.Description, existing.UnitCost, existing.Markup, existing.Adder,
+                    existing.DescIsFormula, existing.CostIsFormula,
                     isNewRow: false, existingCostText: existing.UnitCostText);
 
                 // Type-canonical field (Tariff): preserve existing literal on canonical row.
@@ -3918,7 +3893,7 @@ public static class CountsWorkbookService
             {
                 // New row — no existing data
                 WritePricingCells(ws, row, canonicalRow,
-                    null, null, null, null, null, false, false, false, isNewRow: true);
+                    null, null, null, null, false, false, isNewRow: true);
 
                 // If this brand-new catalog happens to land on the Type-canonical slot and the
                 // Type itself existed before, carry the prior tariff forward. For truly new
@@ -4008,7 +3983,6 @@ public static class CountsWorkbookService
 
             if (existing != null)
             {
-                ws.Cell(row, WsColCalc).Value = existing.Calc;
                 // Phase intentionally left blank — removed rows must not appear in Phase sheet FILTER results
                 ws.Cell(row, WsColDesc).Value = existing.Description ?? "";
                 if (IsNoBid(existing.UnitCostText)) ws.Cell(row, WsColUnitCost).Value = existing.UnitCostText;
@@ -4215,8 +4189,8 @@ public static class CountsWorkbookService
 
     private static void WritePricingCells(
         IXLWorksheet ws, int row, int canonicalRow,
-        string? existingDesc, string? existingCalc, double? existingCost, double? existingMarkup, double? existingAdder,
-        bool descIsFormula, bool calcIsFormula, bool costIsFormula,
+        string? existingDesc, double? existingCost, double? existingMarkup, double? existingAdder,
+        bool descIsFormula, bool costIsFormula,
         bool isNewRow, string? existingCostText = null)
     {
         bool isCanonical = row == canonicalRow;
@@ -4233,21 +4207,19 @@ public static class CountsWorkbookService
 
         if (isCanonical)
         {
-            // Canonical row: Desc / Calc / Unit Cost get literal values — preserved across updates.
+            // Canonical row: Desc / Unit Cost get literal values — preserved across updates.
             // New rows start blank; pricing team enters manually.
             if (!isNewRow)
             {
                 if (existingDesc != null) ws.Cell(row, WsColDesc).Value = existingDesc;
-                if (!string.IsNullOrEmpty(existingCalc)) ws.Cell(row, WsColCalc).Value = existingCalc;
                 if (isNoBid) ws.Cell(row, WsColUnitCost).Value = existingCostText;
                 else if (existingCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
             }
             return;
         }
 
-        // Non-canonical row (Desc / Calc / Unit Cost): preserve user-entered literal, else
-        // propagate from canonical. Calc uses a plain =H{canonical} ref (no "dependent" wrap)
-        // so the dropdown stays usable.
+        // Non-canonical row (Desc / Unit Cost): preserve user-entered literal, else propagate
+        // from canonical.
         if (!isNewRow && !descIsFormula && existingDesc != null)
         {
             ws.Cell(row, WsColDesc).Value = existingDesc;
@@ -4256,16 +4228,6 @@ public static class CountsWorkbookService
         {
             ws.Cell(row, WsColDesc).FormulaA1 = DependentFormula("H", canonicalRow);
             StyleAutoFilledCell(ws.Cell(row, WsColDesc));
-        }
-
-        if (!isNewRow && !calcIsFormula && !string.IsNullOrEmpty(existingCalc))
-        {
-            ws.Cell(row, WsColCalc).Value = existingCalc;
-        }
-        else
-        {
-            ws.Cell(row, WsColCalc).FormulaA1 = $"IF(I{canonicalRow}=\"\",\"\",I{canonicalRow})";
-            StyleAutoFilledCell(ws.Cell(row, WsColCalc));
         }
 
         if (!isNewRow && isNoBid)
@@ -4433,6 +4395,16 @@ public static class CountsWorkbookService
                 string newCat = f.CatalogNumbers[c] ?? "";
                 if (oldCat != newCat)
                     batch.Add((f.TypeMark, $"Catalog Number {c + 1}", oldCat, newCat));
+
+                // Catalog Qty edits change the resolved Worksheet Qty (the Δ column already shows
+                // it) but touch none of the fields above, so they'd otherwise leave no Changes-sheet
+                // trace. Compare the raw input text frozen on the prior Counts snapshot. (On the
+                // first re-export after the _CatQtyIn columns were introduced, the prior snapshot
+                // lacks them and reads blank — a one-time "" → value entry for any non-blank slot.)
+                string oldQty = prev.CatalogQtys[c] ?? "";
+                string newQty = f.CatalogQtys[c] ?? "";
+                if (oldQty != newQty)
+                    batch.Add((f.TypeMark, $"Catalog Qty {c + 1}", oldQty, newQty));
             }
         }
 
@@ -4672,12 +4644,15 @@ public static class CountsWorkbookService
                 CatalogNumbers = new string[6],
                 Count = (int)ws.Cell(r, CsColCount).GetDouble(),
                 LinearLength = ws.Cell(r, CsColLinear).GetDouble(),
-                ReelLength = ws.Cell(r, CsColReel).GetDouble(),
-                ChannelLength = ws.Cell(r, CsColChannel).GetDouble(),
             };
 
             for (int c = 0; c < 6; c++)
+            {
                 model.CatalogNumbers[c] = ws.Cell(r, CsColCat1 + c).GetString();
+                // Raw QtyX input text, frozen for PrevQty re-parse. Blank on pre-upgrade snapshots
+                // that lack this column → Default rule → Count (acceptable one-time transition).
+                model.CatalogQtys[c] = ws.Cell(r, CsColCatQtyIn1 + c).GetString();
+            }
 
             result[typeMark] = model;
         }
@@ -4711,7 +4686,6 @@ public static class CountsWorkbookService
                 Type = type,
                 Mfr = ws.Cell(r, WsColMfr).GetString(),
                 Catalog = ws.Cell(r, WsColCatalog).GetString(),
-                Calc = ws.Cell(r, WsColCalc).HasFormula ? string.Empty : ws.Cell(r, WsColCalc).GetString(),
                 PrevQty = ReadCachedDouble(ws.Cell(r, WsColQty)),
                 Phase = ReadNumericCell(ws.Cell(r, WsColPhase)),
                 Description = ReadTextCell(ws.Cell(r, WsColDesc)),
@@ -4725,7 +4699,6 @@ public static class CountsWorkbookService
                 Adder = ReadNumericCell(ws.Cell(r, WsColAdder)),
                 Tariff = ReadNumericCell(ws.Cell(r, WsColTariff)),
                 DescIsFormula = ws.Cell(r, WsColDesc).HasFormula,
-                CalcIsFormula = ws.Cell(r, WsColCalc).HasFormula,
                 CostIsFormula = ws.Cell(r, WsColUnitCost).HasFormula,
                 IsStrikethrough = ws.Cell(r, WsColType).Style.Font.Strikethrough,
                 MfrOverride = ws.Cell(r, WsColMfrOverride).GetString(),
@@ -4747,7 +4720,6 @@ public static class CountsWorkbookService
         public string Type { get; init; } = string.Empty;
         public string Mfr { get; init; } = string.Empty;
         public string Catalog { get; init; } = string.Empty;
-        public string Calc { get; init; } = string.Empty;
         public double? PrevQty { get; init; }
         public double? Phase { get; init; }
         public string? Description { get; init; }
@@ -4758,7 +4730,6 @@ public static class CountsWorkbookService
         public double? Tariff { get; init; }
         public double? Adder { get; init; }
         public bool DescIsFormula { get; init; }
-        public bool CalcIsFormula { get; init; }
         public bool CostIsFormula { get; init; }
         public bool IsStrikethrough { get; init; }
         public string MfrOverride { get; init; } = string.Empty;

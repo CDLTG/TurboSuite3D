@@ -24,8 +24,6 @@ public static class ParameterNames
     public const string Power = "Power";
     public const string SubDriverPower = "Sub-Driver Power";
     public const string DeratingFactor = "Derating Factor";
-    public const string ReelLength = "Reel Length";
-    public const string ChannelLength = "Channel Length";
     public const string RemotePowerSupply = "Remote Power Supply";
     public const string DataSheetUrl = "Data Sheet URL";
     public const string Manufacturer = "Manufacturer";

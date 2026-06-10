@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Counts Cheat Sheet — Length Tokens &amp; Catalog Qty</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1a2029;
+      --border: #30363d;
+      --border-strong: #3d444d;
+      --text: #e6edf3;
+      --text-muted: #9198a1;
+      --accent: #4493f8;
+      --code-bg: #1c2128;
+      /* length-token cut modes */
+      --max: #d2a8ff;
+      --max-soft: #2a1f3d;
+      --sizes: #e8b339;
+      --sizes-soft: #332817;
+      --pool: #3fb950;
+      --pool-soft: #16291d;
+      /* catalog-qty modes */
+      --q-default: #9198a1;
+      --q-default-soft: #1c2128;
+      --q-mult: #4493f8;
+      --q-mult-soft: #122036;
+      --q-ratio: #39c5cf;
+      --q-ratio-soft: #0d2b2d;
+      --q-type: #f778ba;
+      --q-type-soft: #2d1424;
+      --q-length: #e3833c;
+      --q-length-soft: #2b1c10;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+    .page {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 48px 32px 80px;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 4px;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      margin: 0 0 28px;
+      font-size: 15px;
+    }
+    .section-label {
+      display: inline-block;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      border-radius: 999px;
+      padding: 3px 12px;
+      margin: 56px 0 0;
+    }
+    h2 {
+      font-size: 20px;
+      letter-spacing: -0.01em;
+      margin: 14px 0 6px;
+    }
+    h3 {
+      font-size: 16px;
+      margin: 28px 0 12px;
+      color: var(--text);
+    }
+    .lead {
+      color: var(--text-muted);
+      margin: 0 0 20px;
+      font-size: 14.5px;
+    }
+    code, .mono {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    code {
+      background: var(--code-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    /* ---- two-system hero ---- */
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 0;
+      align-items: stretch;
+      margin: 8px 0 8px;
+    }
+    @media (max-width: 760px) {
+      .hero { grid-template-columns: 1fr; }
+      .hero .vs { transform: rotate(90deg); padding: 8px 0; }
+    }
+    .hero-card {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      padding: 18px 22px;
+    }
+    .hero-card .what {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .hero-card .title {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .hero-card p { margin: 4px 0; font-size: 13.5px; color: var(--text-muted); }
+    .hero .vs {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      gap: 4px;
+    }
+    .hero .vs .xclusive {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      text-align: center;
+      max-width: 90px;
+    }
+    .hero .vs .glyph {
+      font-size: 22px;
+      color: var(--border-strong);
+      line-height: 1;
+    }
+
+    /* ---- mode cards (length tokens) ---- */
+    .grid-modes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 880px) {
+      .grid-modes { grid-template-columns: 1fr; }
+    }
+    .mode-card {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      padding: 18px 20px;
+      border-top: 4px solid;
+    }
+    .mode-card.max { border-top-color: var(--max); }
+    .mode-card.sizes { border-top-color: var(--sizes); }
+    .mode-card.pool { border-top-color: var(--pool); }
+    .mode-card.length { border-top-color: var(--q-length); }
+    .mode-header {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .mode-tag {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .mode-card.max .mode-tag { background: var(--max-soft); color: var(--max); }
+    .mode-card.sizes .mode-tag { background: var(--sizes-soft); color: var(--sizes); }
+    .mode-card.pool .mode-tag { background: var(--pool-soft); color: var(--pool); }
+    .mode-card.length .mode-tag { background: var(--q-length-soft); color: var(--q-length); }
+    .mode-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .mode-card p {
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .mode-card .use-when {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .mode-card .use-when strong {
+      color: var(--text);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) 2fr;
+      gap: 32px;
+    }
+    @media (max-width: 880px) {
+      .two-col { grid-template-columns: 1fr; gap: 16px; }
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      font-size: 14px;
+    }
+    th, td {
+      text-align: left;
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    th {
+      background: var(--code-bg);
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td.token, td.example, td.formula { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; }
+    td.formula { color: var(--text-muted); }
+    td.result { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; color: var(--pool); }
+
+    .mode-pill {
+      display: inline-block;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .mode-pill.max { background: var(--max-soft); color: var(--max); }
+    .mode-pill.sizes { background: var(--sizes-soft); color: var(--sizes); }
+    .mode-pill.pool { background: var(--pool-soft); color: var(--pool); }
+    .mode-pill.plain { background: var(--code-bg); color: var(--text-muted); }
+    .mode-pill.q-default { background: var(--q-default-soft); color: var(--q-default); }
+    .mode-pill.q-mult { background: var(--q-mult-soft); color: var(--q-mult); }
+    .mode-pill.q-ratio { background: var(--q-ratio-soft); color: var(--q-ratio); }
+    .mode-pill.q-type { background: var(--q-type-soft); color: var(--q-type); }
+    .mode-pill.q-length { background: var(--q-length-soft); color: var(--q-length); }
+
+    .rules {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 24px;
+      margin: 0;
+    }
+    .rules li { margin: 6px 0; font-size: 14px; }
+    .note {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* ---- callout / deep dive ---- */
+    .callout {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-left: 4px solid var(--q-length);
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin: 16px 0;
+    }
+    .callout h4 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+    .callout p { margin: 6px 0; font-size: 14px; color: var(--text-muted); }
+    .callout p strong { color: var(--text); }
+
+    /* ---- length-mode pipeline ---- */
+    .pipeline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 14px 0 4px;
+    }
+    .pipe-step {
+      background: var(--code-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 7px 12px;
+      text-align: center;
+      min-width: 78px;
+    }
+    .pipe-step .pl { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pipe-step .pv { display: block; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 14px; color: var(--text); margin-top: 2px; }
+    .pipe-step.final { border-color: var(--q-length); }
+    .pipe-step.final .pv { color: var(--q-length); font-weight: 600; }
+    .pipe-arrow { color: var(--border-strong); font-size: 18px; }
+
+    .col-comp {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 760px) { .col-comp { grid-template-columns: 1fr; } }
+    .comp-card {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+    .comp-card .where {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .comp-card .head { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .comp-card p { font-size: 14px; margin: 6px 0; }
+    .comp-card .when { font-size: 13px; color: var(--text-muted); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <h1>Counts Cheat Sheet</h1>
+    <p class="subtitle">
+      Every fixture slot in Counts has two independent knobs:
+      <strong>Catalog Number<sub>1–6</sub></strong> builds the part-number string (and can explode a run into multiple cut rows), and
+      <strong>Catalog Qty<sub>1–6</sub></strong> decides how many of that part to order.
+      Both resolve per fixture instance — the length-aware modes against the <code>Linear Length</code> parameter.
+    </p>
+
+    <div class="hero">
+      <div class="hero-card">
+        <div class="what">Catalog Number{1–6}</div>
+        <div class="title">The part string</div>
+        <p>Static text plus optional length tokens. Length tokens can <em>explode</em> one instance into several Worksheet rows — one per cut length — with the length baked into the SKU.</p>
+      </div>
+      <div class="vs">
+        <span class="glyph">⊗</span>
+        <span class="xclusive">mutually exclusive per&nbsp;slot</span>
+      </div>
+      <div class="hero-card">
+        <div class="what">Catalog Qty{1–6}</div>
+        <div class="title">How many</div>
+        <p>One quantity rule per slot — flat counts, multiples, ratios, per-type, or continuous-stock piece counts via <code>N @ft</code> / <code>N @in</code>. Never explodes; the SKU stays fixed and only the quantity scales.</p>
+      </div>
+    </div>
+    <p class="note">A single slot uses <em>one or the other</em>: a length token in the Catalog Number and a Catalog Qty value on the same slot is a validation error.</p>
+
+    <!-- ============================ LENGTH TOKENS ============================ -->
+    <span class="section-label">Part 1 · Catalog Number</span>
+    <h2>Length tokens</h2>
+    <p class="lead">Drop a <code>{…}</code> token into <code>Catalog Number1</code>–<code>Catalog Number6</code> to stamp each instance's <code>Linear Length</code> into the part number. A bare format produces one row per unique resolved length; a cut-list mode (<code>max</code> / <code>sizes</code> / <code>pool</code>) splits each run into orderable pieces.</p>
+
+    <h3>Pick a cut mode</h3>
+    <div class="grid-modes">
+
+      <div class="mode-card max">
+        <div class="mode-header">
+          <span class="mode-tag">max=N</span>
+          <span class="mode-subtitle">Made-to-length</span>
+        </div>
+        <p>Greedy-splits each instance into N&quot;-sized cuts plus one remainder piece. Every cut is a real ordered length — zero waste.</p>
+        <div class="use-when">
+          <strong>Use when</strong>
+          Vendor cuts to spec: sealed extrusion, factory-finished continuous-run linear, IP-rated tape channel.
+        </div>
+      </div>
+
+      <div class="mode-card sizes">
+        <div class="mode-header">
+          <span class="mode-tag">sizes=N|N|...</span>
+          <span class="mode-subtitle">Discrete stock, per-instance</span>
+        </div>
+        <p>Covers each instance with the fewest sticks whose sum ≥ instance length, tie-break least overage. Each instance gets dedicated material — no offcut reuse.</p>
+        <div class="use-when">
+          <strong>Use when</strong>
+          Track with a feed + end-cap kit per cut, sealed-but-cuttable stock, anything where fresh sticks have a meaningful advantage over offcuts.
+        </div>
+      </div>
+
+      <div class="mode-card pool">
+        <div class="mode-header">
+          <span class="mode-tag">pool=N|N|...</span>
+          <span class="mode-subtitle">Discrete stock, pooled</span>
+        </div>
+        <p>Same stock sizes as <code>sizes=</code>, but offcuts are reused across instances. Hardcoded 18&quot; minimum reusable offcut. Typically drops waste from ~25% to ~3–5% on multi-size jobs.</p>
+        <div class="use-when">
+          <strong>Use when</strong>
+          Offcuts are fungible with fresh-stick cut ends: raw aluminum LED channel, raw track without factory-finished ends.
+        </div>
+      </div>
+
+    </div>
+
+    <div class="two-col" style="margin-top:24px;">
+
+      <div>
+        <h3>Formats</h3>
+        <table>
+          <thead>
+            <tr><th>Token</th><th>Output (42&quot;)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="token">{xx}</td><td class="token">42</td></tr>
+            <tr><td class="token">{xx&quot;}</td><td class="token">42&quot;</td></tr>
+            <tr><td class="token">{xxIN}</td><td class="token">42IN</td></tr>
+            <tr><td class="token">{ft}</td><td class="token">3</td></tr>
+            <tr><td class="token">{xx'}</td><td class="token">3'</td></tr>
+            <tr><td class="token">{xxFT}</td><td class="token">3FT</td></tr>
+            <tr><td class="token">{xx'-xx&quot;}</td><td class="token">3'-6&quot;</td></tr>
+            <tr><td class="token">{xxFT-xxIN}</td><td class="token">3FT-6IN</td></tr>
+          </tbody>
+        </table>
+        <p class="note">Feet formats (<code>ft</code>, <code>xx'</code>, <code>xxFT</code>) truncate via integer division by 12.</p>
+      </div>
+
+      <div>
+        <h3>Examples in a part number</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:38%">Catalog Number parameter</th>
+              <th style="width:14%">Mode</th>
+              <th>Resolved Worksheet row(s)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="example">LUT-RBN-{xx&quot;}</td>
+              <td><span class="mode-pill plain">plain</span></td>
+              <td class="example">LUT-RBN-42&quot;, LUT-RBN-78&quot;</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xxIN}</td>
+              <td><span class="mode-pill plain">plain</span></td>
+              <td class="example">LUT-RBN-42IN, LUT-RBN-78IN</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xx'}</td>
+              <td><span class="mode-pill plain">plain</span></td>
+              <td class="example">LUT-RBN-3', LUT-RBN-6'</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xxFT}</td>
+              <td><span class="mode-pill plain">plain</span></td>
+              <td class="example">LUT-RBN-3FT, LUT-RBN-6FT</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xx'-xx&quot;}</td>
+              <td><span class="mode-pill plain">plain</span></td>
+              <td class="example">LUT-RBN-3'-6&quot;, LUT-RBN-6'-6&quot;</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xx&quot;,max=96}</td>
+              <td><span class="mode-pill max">max</span></td>
+              <td class="example">LUT-RBN-96&quot; + LUT-RBN-28&quot; (for 124&quot; instance)</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xxFT-xxIN,max=96}</td>
+              <td><span class="mode-pill max">max</span></td>
+              <td class="example">LUT-RBN-8FT-0IN + LUT-RBN-2FT-4IN</td>
+            </tr>
+            <tr>
+              <td class="example">TEK4{ft,sizes=48|96|144}</td>
+              <td><span class="mode-pill sizes">sizes</span></td>
+              <td class="example">TEK44, TEK48, TEK412</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xx&quot;,sizes=94|48}</td>
+              <td><span class="mode-pill sizes">sizes</span></td>
+              <td class="example">LUT-RBN-48&quot; + LUT-RBN-94&quot; (covering 130&quot; instance, no offcut reuse)</td>
+            </tr>
+            <tr>
+              <td class="example">LUT-RBN-{xx&quot;,pool=94|48}</td>
+              <td><span class="mode-pill pool">pool</span></td>
+              <td class="example">LUT-RBN-48&quot; + LUT-RBN-94&quot; (stock-SKU rows; offcuts reused across instances)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ============================ CATALOG QTY ============================ -->
+    <span class="section-label">Part 2 · Catalog Qty</span>
+    <h2>Catalog Qty modes</h2>
+    <p class="lead">
+      Put a quantity rule in <code>Catalog Qty1</code>–<code>Catalog Qty6</code> to control the ordered quantity for that slot's part. The input string picks the mode automatically. Leave it blank and the slot just inherits the fixture <code>Count</code>.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:18%">Input</th>
+          <th style="width:16%">Mode</th>
+          <th style="width:30%">Computes</th>
+          <th>What it's for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="token"><em>(blank)</em></td>
+          <td><span class="mode-pill q-default">default</span></td>
+          <td class="formula">Count</td>
+          <td>One per fixture. The normal case — order as many parts as there are fixtures.</td>
+        </tr>
+        <tr>
+          <td class="token">N</td>
+          <td><span class="mode-pill q-mult">per-fixture</span></td>
+          <td class="formula">Count × N</td>
+          <td>A fixed multiple per fixture: 2 mounting clips, 4 screws, a pair of end caps.</td>
+        </tr>
+        <tr>
+          <td class="token">1/N</td>
+          <td><span class="mode-pill q-ratio">ratio</span></td>
+          <td class="formula">ceil(Count / N)</td>
+          <td>One shared part per N fixtures: one driver per 4 heads, one feed per 6 modules. Rounds up.</td>
+        </tr>
+        <tr>
+          <td class="token">N @type</td>
+          <td><span class="mode-pill q-type">per-type</span></td>
+          <td class="formula">N</td>
+          <td>A flat count for the whole type, regardless of fixture count: one controller, one power pack.</td>
+        </tr>
+        <tr>
+          <td class="token">N @ft</td>
+          <td><span class="mode-pill q-length">length</span></td>
+          <td class="formula">ceil(ceil(LinearLength × 1.05) / N)</td>
+          <td>Continuous stock <strong>N feet</strong> long, cut to cover the run, with 5% overage. Tape reels, channel sticks.</td>
+        </tr>
+        <tr>
+          <td class="token">N @in</td>
+          <td><span class="mode-pill q-length">length</span></td>
+          <td class="formula">ceil(ceil(LinearLength × 1.05) / (N ÷ 12))</td>
+          <td>Same as <code>@ft</code>, but stock is given in <strong>inches</strong> (normalized to feet internally). Use for clip spacing and short stock you naturally measure in inches.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note"><code>N</code> is a positive number. It must be a whole number for the first four modes; for <code>@ft</code>/<code>@in</code> it may be fractional (stock lengths like <code>16.40</code> ft or <code>21</code> in are valid). <code>@ft</code> and <code>@in</code> are the <em>same Length mode</em> — only the unit of the number differs, and <code>@in</code> is divided by 12 to feet, so <code>16.40 @ft</code> and <code>196.80 @in</code> compute identically.</p>
+
+    <h3>The Length mode (<code>@ft</code> / <code>@in</code>) in detail</h3>
+    <div class="callout">
+      <h4>Continuous stock → piece count</h4>
+      <p><strong>N is the stock length</strong> — a reel, a channel stick, or a clip interval. State the unit in the keyword: <code>@ft</code> for feet, <code>@in</code> for inches. The run (<code>Linear Length</code>, in feet) is padded by <strong>5%</strong> for overage, rounded up to whole feet, then divided by the stock length and rounded up to whole pieces. <code>@in</code> stock is converted to feet (<code>÷ 12</code>) first, so the division is always feet ÷ feet.</p>
+      <p style="margin-top:12px;">Example — a <strong>30&nbsp;ft</strong> run ordered in <strong>5&nbsp;m (16.40&nbsp;ft) reels</strong>, i.e. <code>16.40 @ft</code>:</p>
+      <div class="pipeline">
+        <div class="pipe-step"><span class="pl">Linear</span><span class="pv">30 ft</span></div>
+        <span class="pipe-arrow">→</span>
+        <div class="pipe-step"><span class="pl">×1.05</span><span class="pv">31.5</span></div>
+        <span class="pipe-arrow">→</span>
+        <div class="pipe-step"><span class="pl">round up</span><span class="pv">32</span></div>
+        <span class="pipe-arrow">→</span>
+        <div class="pipe-step"><span class="pl">÷ stock</span><span class="pv">32 / 16.40</span></div>
+        <span class="pipe-arrow">→</span>
+        <div class="pipe-step"><span class="pl">= 1.95</span><span class="pv">round up</span></div>
+        <span class="pipe-arrow">→</span>
+        <div class="pipe-step final"><span class="pl">Qty</span><span class="pv">2 reels</span></div>
+      </div>
+    </div>
+
+    <h3>Worked examples</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:18%">Catalog Qty</th>
+          <th style="width:14%">Mode</th>
+          <th>Scenario</th>
+          <th style="width:18%">Worksheet Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="token"><em>(blank)</em></td>
+          <td><span class="mode-pill q-default">default</span></td>
+          <td>12 downlights, one trim each</td>
+          <td class="result">12</td>
+        </tr>
+        <tr>
+          <td class="token">2</td>
+          <td><span class="mode-pill q-mult">per-fixture</span></td>
+          <td>12 fixtures, 2 mounting clips apiece</td>
+          <td class="result">24</td>
+        </tr>
+        <tr>
+          <td class="token">1/4</td>
+          <td><span class="mode-pill q-ratio">ratio</span></td>
+          <td>14 heads, one driver per 4</td>
+          <td class="result">ceil(14/4) = 4</td>
+        </tr>
+        <tr>
+          <td class="token">1 @type</td>
+          <td><span class="mode-pill q-type">per-type</span></td>
+          <td>One control processor for the whole type</td>
+          <td class="result">1</td>
+        </tr>
+        <tr>
+          <td class="token">16.40 @ft</td>
+          <td><span class="mode-pill q-length">length</span></td>
+          <td>30 ft run, 5 m (16.40 ft) reels</td>
+          <td class="result">ceil(32 / 16.40) = 2</td>
+        </tr>
+        <tr>
+          <td class="token">21 @in</td>
+          <td><span class="mode-pill q-length">length</span></td>
+          <td>30 ft run, mounting clip every 21" (1.75 ft)</td>
+          <td class="result">ceil(32 / (21÷12)) = 19</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ============================ WHICH ONE ============================ -->
+    <span class="section-label">Choosing</span>
+    <h2>Length token, or <code>@ft</code> / <code>@in</code>?</h2>
+    <p class="lead">Both deal with continuous runs, but they answer different questions. The deciding factor is whether the cut length belongs in the <em>part number</em> or only in the <em>quantity</em>.</p>
+
+    <div class="col-comp">
+      <div class="comp-card" style="border-top:4px solid var(--sizes);">
+        <div class="where">Catalog Number · max / sizes / pool</div>
+        <div class="head">Explode by length</div>
+        <p>One instance becomes several Worksheet rows, each a distinct SKU with the cut length stamped into the part number. Pricing sees a line per length.</p>
+        <div class="when">Use when each cut is its own orderable, length-specific item — made-to-spec extrusion, end-capped track kits, finished linear.</div>
+      </div>
+      <div class="comp-card" style="border-top:4px solid var(--q-length);">
+        <div class="where">Catalog Qty · N @ft / N @in</div>
+        <div class="head">Scale one SKU</div>
+        <p>One fixed part number, one row. Only the quantity grows with the run — the number of reels, sticks, or clips needed to cover it.</p>
+        <div class="when">Use when the stock is a single SKU no matter how much you cut — LED tape reels, generic channel by the stick, mounting clips by spacing.</div>
+      </div>
+    </div>
+
+    <!-- ============================ RULES ============================ -->
+    <span class="section-label">Reference</span>
+    <h2>Rules</h2>
+    <ul class="rules">
+      <li>Within a Catalog Number token, <code>max</code>, <code>sizes</code>, and <code>pool</code> are mutually exclusive.</li>
+      <li>All <code>max</code>, <code>sizes</code>, and <code>pool</code> values are positive integers in inches, regardless of the display format.</li>
+      <li><strong>Units are explicit, never guessed.</strong> Catalog Number cut-list tokens (<code>max</code>/<code>sizes</code>/<code>pool</code>) are always inches; Catalog Qty stock length states its own unit — <code>@ft</code> or <code>@in</code>. There is no unit-less length keyword.</li>
+      <li>A slot cannot carry both a length token (in Catalog Number) and a Catalog Qty value — pick one per slot.</li>
+      <li><code>N @ft</code> / <code>N @in</code> require the type to have instances with a positive <code>Linear Length</code>; otherwise it's a validation error.</li>
+      <li>Length-aware modes (length tokens and <code>@ft</code>/<code>@in</code>) resolve against each instance's <code>Linear Length</code>; the other Catalog Qty modes resolve against the fixture <code>Count</code>.</li>
+      <li><code>N</code> is whole-number for <code>N</code>, <code>1/N</code>, and <code>N @type</code>; <code>N @ft</code>/<code>@in</code> accept fractional stock lengths.</li>
+    </ul>
+
+  </div>
+</body>
+</html>

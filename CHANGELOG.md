@@ -7,6 +7,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+- Counts: Catalog Qty gains a stock-cut **Length mode** — `N @ft` / `N @in` orders continuous stock (LED tape reels, channel by the stick, clips by spacing) as `ceil(ceil(LinearLength × 1.05) / stock)` with 5% overage. `@in` is normalized to feet, so `16.40 @ft` and `196.80 @in` are equivalent. All per-slot quantity logic now lives in the Catalog Qty family parameters.
+- Public **Counts cheat sheet** (`docs/counts-cheatsheet.html`) covering Catalog Number length tokens (`max=`/`sizes=`/`pool=`) and Catalog Qty modes.
+
+### Changed
+- Counts: the Worksheet **Calc** column (the Reel/Channel/End Cap/Clip dropdown) is retired; its quantities move into Catalog Qty (`N @ft`/`@in` for stock-cut, blank for the former End Cap). The hidden **Calculations** audit sheet's stock-cut section is now a static C# snapshot rather than live formulas.
+
+### Removed
+- Counts: the `Reel Length` and `Channel Length` family parameters — stock length is now expressed inline in Catalog Qty via `N @ft` / `N @in`. Families that still carry the old parameters are silently ignored.
+
+### Fixed
+- Counts: the **Changes** sheet now records Catalog Qty edits. Previously a Catalog Qty change updated the Worksheet Qty/Δ but produced no Changes-sheet entry, so the sheet could stay empty after a real change.
+
 ## [1.2.0] — 2026-06-05
 
 ### Added
