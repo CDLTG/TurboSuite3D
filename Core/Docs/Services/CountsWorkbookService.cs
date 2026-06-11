@@ -1511,7 +1511,18 @@ public static class CountsWorkbookService
                 string template = f.CatalogNumbers[c] ?? "";
                 if (string.IsNullOrWhiteSpace(template)) continue;
                 if (CatalogLengthTokenResolver.HasToken(template)) continue;
-                ws.Cell(row, CsColQty1 + c).Value = CatalogQtyParser.Parse(f.CatalogQtys[c]).Evaluate(f.Count, f.LinearLength);
+
+                // Effective qty = manual Qty Override (Worksheet col V) if present, else the
+                // CatalogQty-resolved Revit value — mirrors the live EffQty `IF(V="",D,V)`. Reading
+                // the Worksheet (which on update is still the prior pass, since BuildCountsSheet runs
+                // before UpdateWorksheetSheet) keeps Bid Compare's frozen baseline aligned with the
+                // override the user shipped, the same way SellEa is frozen from this sheet.
+                double resolvedQty = CatalogQtyParser.Parse(f.CatalogQtys[c]).Evaluate(f.Count, f.LinearLength);
+                if (pricingWs != null
+                    && wsRowByKey.TryGetValue((f.TypeMark.ToUpperInvariant(), template.ToUpperInvariant()), out int ovrRow)
+                    && ReadNumericCell(pricingWs.Cell(ovrRow, WsColQtyOverride)) is double ovrQty)
+                    resolvedQty = ovrQty;
+                ws.Cell(row, CsColQty1 + c).Value = resolvedQty;
             }
 
             // Freeze pricing per slot. Each catalog has its own (J,K,M) on Worksheet — even
@@ -1565,6 +1576,7 @@ public static class CountsWorkbookService
                 foreach (var (sku, qty) in CatalogLengthTokenResolver.ExpandSlot(f, c))
                 {
                     double sellEa = 0;
+                    double effQty = qty;  // Revit cut count, unless a Qty Override replaces it below
                     if (pricingWs != null)
                     {
                         var key = (f.TypeMark.ToUpperInvariant(), sku.ToUpperInvariant());
@@ -1576,9 +1588,12 @@ public static class CountsWorkbookService
                             pricingWs.Cell(wsRow, WsColAdder).TryGetValue(out double ad);
                             sellEa = (uc * (1 + mk)) + ad;
                             if (sellEa != 0) anyPriced = true;
+                            // Override-aware frozen qty, mirroring the non-token CsColQty freeze.
+                            if (ReadNumericCell(pricingWs.Cell(wsRow, WsColQtyOverride)) is double ovrQty)
+                                effQty = ovrQty;
                         }
                     }
-                    tokenFreeze.Add(new TokenFreezeEntry { Slot = c, Sku = sku, Qty = qty, SellEa = sellEa });
+                    tokenFreeze.Add(new TokenFreezeEntry { Slot = c, Sku = sku, Qty = effQty, SellEa = sellEa });
                 }
             }
             if (tokenFreeze.Count > 0)
@@ -2354,6 +2369,18 @@ public static class CountsWorkbookService
                     baseline.Cell(r, CsColSellEa1 + c).Value = sellEa;
                     baseline.Cell(r, CsColSellEa1 + c).Style.NumberFormat.Format = "$#,##0.00";
                 }
+
+                // Re-capture the frozen effective qty the same way Sell Ea. is refreshed: a bid
+                // born from a fresh export froze the Revit count (no overrides existed yet), so if
+                // the pricer has since entered a Qty Override, lock in IF(V="",D,V) now. Only
+                // non-token slots reach here (token templates aren't Worksheet catalogs, so the
+                // wsRowByKey lookup above already `continue`d past them); their per-cut qty lives
+                // in CsColTokenFreeze and can't carry an override. An override of 0 is a real
+                // "bid zero" and is frozen; a spurious empty Qty leaves the existing freeze intact.
+                if (ReadNumericCell(wsSheet.Cell(wsRow, WsColQtyOverride)) is double ovrQty)
+                    baseline.Cell(r, CsColQty1 + c).Value = ovrQty;
+                else if (wsSheet.Cell(wsRow, WsColQty).TryGetValue(out double rawQty) && rawQty != 0)
+                    baseline.Cell(r, CsColQty1 + c).Value = rawQty;
             }
 
             // Refresh per-Type tariff % from Worksheet col L (canonical row). Broadcast to every
@@ -2379,6 +2406,15 @@ public static class CountsWorkbookService
                     wsSheet.Cell(wsRow, WsColAdder).TryGetValue(out double ad);
                     double sellEa = (uc * (1 + mk)) + ad;
                     if (sellEa != 0) e.SellEa = sellEa;
+
+                    // Re-capture the frozen effective qty for this cut-length SKU, mirroring the
+                    // non-token CsColQty reconcile: a Qty Override entered after the fresh export
+                    // (IF(V="",D,V)) replaces the Revit cut count so the locked bid matches what
+                    // the pricer is shipping. No override leaves the frozen cut count intact.
+                    if (ReadNumericCell(wsSheet.Cell(wsRow, WsColQtyOverride)) is double ovrQty)
+                        e.Qty = ovrQty;
+                    else if (wsSheet.Cell(wsRow, WsColQty).TryGetValue(out double rawQty) && rawQty != 0)
+                        e.Qty = rawQty;
                 }
                 baseline.Cell(r, CsColTokenFreeze).Value = JsonSerializer.Serialize(tokenEntries);
             }
@@ -3838,13 +3874,18 @@ public static class CountsWorkbookService
             ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
 
-            // Prev Qty — always the literal prior-update value. Prefer the previous Worksheet's
-            // cached Qty, else recompute from the prior pass's snapshotted CatalogQty rule + prev
-            // fixture Count/LinearLength (the Worksheet cache may be missing on 3rd+ passes —
-            // ClosedXML doesn't emit caches for rewritten formulas), else leave blank for types not
-            // previously present. The recompute uses the *historical* QtyX text frozen on the prior
-            // Counts sheet (read into prevFixture.CatalogQtys), so PrevQty reflects the rule in force
-            // last pass. The B12-driven "Compare to" baseline is consumed by Bid Compare, not here.
+            // Prev Qty — always the literal prior-update *raw Revit* value (prior col D), so the
+            // Δ column is a clean raw-Revit↔raw-Revit "did the model's count change since last
+            // export" signal. Deliberately NOT override-aware: col D is raw Revit, so folding the
+            // prior Qty Override into Prev would make Δ a perpetual currentRevit−priorOverride gap
+            // that never converges and buries real model changes. The override belongs to the
+            // *bid* comparison (Bid Compare baseline + ReconcileBaselinePricing), not here.
+            // Prefer the previous Worksheet's cached Qty, else recompute from the prior pass's
+            // snapshotted CatalogQty rule + prev fixture Count/LinearLength (the Worksheet cache may
+            // be missing on 3rd+ passes — ClosedXML doesn't emit caches for rewritten formulas),
+            // else leave blank for types not previously present. The recompute uses the *historical*
+            // QtyX text frozen on the prior Counts sheet (read into prevFixture.CatalogQtys), so
+            // PrevQty reflects the rule in force last pass.
             if (existing?.PrevQty.HasValue == true)
             {
                 ws.Cell(row, WsColPrevQty).Value = existing.PrevQty.Value;
