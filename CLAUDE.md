@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers eleven shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). Two more commands, TurboMask and TurboSetup, are compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
+TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers eleven shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). Three more commands, TurboMask, TurboSetup, and TurboSnoop, are compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
 
 ## Build Commands
 
@@ -136,6 +136,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
 | `TurboSuite.Mask` | TurboMask — masking region + per-fixture annotation stamps (gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`) |
 | `TurboSuite.Setup` | TurboSetup — new-project setup: copy levels from the linked arch model, create Floor/RCP views with firm templates, configure RVT link display (gated behind `ExperimentalCommandsEnabled`; **3D RVT-linked only**; link-graphics path is Revit 2025-only, 2024 sets up levels/views/templates and leaves links manual) |
+| `TurboSuite.Snoop` | TurboSnoop — read-only "which VG checkbox do I uncheck?" reporter: pick a linked arch family, list the Visibility/Graphics **Category → Subcategory** checkboxes its geometry draws under, split into Model geometry (one viewless `get_Geometry`) vs view-dependent/annotation (per-`ViewPlan` sweep + union — annotation is visibility-filtered, so a single view misses it). Reaches non-shared nested annotation by reading `GraphicsStyleId` off rendered geometry (no reference needed). Gated behind `ExperimentalCommandsEnabled`; **spike** — TaskDialog output, modeless WPF tree UI pending. Design/rejected-alternatives rationale in `Shim/Snoop/` headers |
 | `Guide/` | `Guide.md` — user-facing documentation |
 | `Updater/` | TurboSuiteUpdater — separate console app for applying auto-updates after Revit exits |
 | `Installer/` | TurboSuiteInstaller — standalone WPF installer for network share deployment |

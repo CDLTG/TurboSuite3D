@@ -69,6 +69,19 @@ public class TurboSuiteApplication : IExternalApplication
                 "Removes unused materials from the active family document and saves with the compact option to reduce file size.",
                 "TurboCompact");
 
+            // Gated like TurboMask/TurboSetup: compiled but unreachable until ready. Currently a spike —
+            // see TurboSuite.Snoop.SnoopCommand.
+            if (ExperimentalCommandsEnabled)
+            {
+                CreateButton(commandsPanel, assemblyPath,
+                    "TurboSnoop",
+                    "    Turbo    \n    Snoop    ",
+                    "TurboSuite.Snoop.SnoopCommand",
+                    "List the Visibility/Graphics checkboxes a linked family draws under",
+                    "Pick a linked architectural family to list the Visibility/Graphics Category → Subcategory checkboxes its geometry draws under (model geometry vs view-dependent annotation) — so you know which VG → RVT Links checkbox controls a clearance/path/egress line. Read-only.",
+                    "Blank");
+            }
+
             CreateButton(commandsPanel, assemblyPath,
                 "TurboTag",
                 "    Turbo    \n     Tag     ",
