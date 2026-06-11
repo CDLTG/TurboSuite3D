@@ -240,7 +240,7 @@ public static class CadRoomExtractorService
         };
     }
 
-    private static string StripCadFormatting(string text)
+    public static string StripCadFormatting(string text)
     {
         if (string.IsNullOrEmpty(text)) return text;
 

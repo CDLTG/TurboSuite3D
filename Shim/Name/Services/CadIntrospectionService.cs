@@ -21,6 +21,12 @@ public static class CadIntrospectionService
         public bool IsBlock;
         public string BlockName;
         public List<string> Tags = new();
+        /// <summary>
+        /// The clicked insert's attribute tag→value pairs, in as-drawn order (not sorted/deduped).
+        /// Lets the user tell which tag holds the room name vs. the ceiling height by reading the
+        /// actual values, instead of guessing from cryptic tag names.
+        /// </summary>
+        public List<KeyValuePair<string, string>> TagValues = new();
         public string Layer;
     }
 
@@ -109,6 +115,11 @@ public static class CadIntrospectionService
                     .Where(t => !string.IsNullOrEmpty(t))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                TagValues = nearest.Attributes
+                    .Where(a => !string.IsNullOrEmpty(a.Tag))
+                    .Select(a => new KeyValuePair<string, string>(
+                        a.Tag, CadRoomExtractorService.StripCadFormatting(a.Value ?? "").Trim()))
                     .ToList()
             };
         }

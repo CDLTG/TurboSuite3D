@@ -320,7 +320,15 @@ public class SettingsViewModel : ViewModelBase
                 if (AvailableTags.Count == 0 && result.Tags != null)
                     foreach (var t in result.Tags)
                         AvailableTags.Add(t);
-                DetectedText = $"Detected: Block \"{result.BlockName}\" on layer \"{layerName}\".";
+
+                // Surface the clicked room's tag=value pairs so the user can tell which tag holds
+                // the room name vs. the ceiling height by reading the values, then fill the fields.
+                string attrs = (result.TagValues != null && result.TagValues.Count > 0)
+                    ? "  →  " + string.Join(",  ",
+                        result.TagValues.Select(kv =>
+                            $"{(string.IsNullOrEmpty(kv.Value) ? "(empty)" : kv.Value)}={kv.Key}"))
+                    : "";
+                DetectedText = $"Detected: Block \"{result.BlockName}\" on layer \"{layerName}\".{attrs}";
             }
             else
             {
