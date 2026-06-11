@@ -1,8 +1,15 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Windows.Input;
+using ACadSharp;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using TurboSuite.Name.Services;
+using TurboSuite.Shared.Filters;
 using TurboSuite.Shared.Models;
 using TurboSuite.Shared.Services;
 using TurboSuite.Shared.ViewModels;
@@ -11,6 +18,13 @@ namespace TurboSuite.App.ViewModels;
 
 public class SettingsViewModel : ViewModelBase
 {
+    // CAD Room Source discovery (ACadSharp-backed; replaces hand-typing from AutoCAD)
+    private readonly UIDocument _uidoc;
+    private readonly Dictionary<string, CadDocument> _docCache = new(StringComparer.OrdinalIgnoreCase);
+    private bool _discoveryLoaded;
+    private readonly bool _canPick;
+    private string _detectedText;
+
     private string _wallSconceFamiliesText;
     private string _receptacleFamiliesText;
     private string _electricalVerticalFamiliesText;
@@ -92,7 +106,11 @@ public class SettingsViewModel : ViewModelBase
     public string BlockName
     {
         get => _blockName;
-        set => SetProperty(ref _blockName, value);
+        set
+        {
+            if (SetProperty(ref _blockName, value))
+                RefreshAvailableTags();
+        }
     }
 
     public string RoomNameTagsText
@@ -175,16 +193,214 @@ public class SettingsViewModel : ViewModelBase
 
     public ICommand SaveCommand { get; }
     public ICommand ResetDefaultsCommand { get; }
+    public ICommand PickFromViewCommand { get; }
 
     public Action<bool?> CloseAction { get; set; }
 
-    public SettingsViewModel(FamilyNameSettings familySettings, CadRoomSourceSettings cadSettings, GeneralSettings generalSettings)
+    /// <summary>
+    /// Set by <see cref="PickFromViewCommand"/>. PickObject cannot run reliably while the Settings
+    /// dialog's own modal ShowDialog loop is on the stack (the nested modal corrupts the dialog,
+    /// crashing Save and killing Cancel). So the command closes the dialog with this flag set;
+    /// SettingsCommand then runs <see cref="RunPick"/> in clean context and reopens the dialog bound
+    /// to this same ViewModel, preserving all in-progress edits.
+    /// </summary>
+    public bool PickRequested { get; set; }
+
+    // Discovery ItemsSources (alpha-sorted, exhaustive — the fallback to the pick).
+    public ObservableCollection<string> AvailableBlockNames { get; } = new();
+    public ObservableCollection<string> AvailableLayers { get; } = new();
+    public ObservableCollection<string> AvailableTags { get; } = new();
+
+    /// <summary>Confirmation text under the "Pick from view" button (e.g. Detected: Block "CDA_ROOM"...).</summary>
+    public string DetectedText
     {
+        get => _detectedText;
+        set => SetProperty(ref _detectedText, value);
+    }
+
+    public SettingsViewModel(FamilyNameSettings familySettings, CadRoomSourceSettings cadSettings,
+        GeneralSettings generalSettings, UIDocument uidoc)
+    {
+        _uidoc = uidoc;
         LoadFrom(familySettings);
         LoadCadSettings(cadSettings);
         LoadGeneralSettings(generalSettings);
         SaveCommand = new RelayCommand(OnSave);
         ResetDefaultsCommand = new RelayCommand(OnResetDefaults);
+        PickFromViewCommand = new RelayCommand(OnPickFromView, () => _canPick);
+
+        // The active view can't change while the modal dialog is up, so resolve "is the button
+        // usable" once instead of on every CommandManager requery tick.
+        try
+        {
+            _canPick = _uidoc != null
+                && CadLinkResolver.GetLinkedImports(_uidoc.Document, _uidoc.Document.ActiveView).Count > 0;
+        }
+        catch
+        {
+            _canPick = false;
+        }
+    }
+
+    private void OnPickFromView()
+    {
+        PickRequested = true;
+        CloseAction?.Invoke(null); // close (no save); SettingsCommand picks, then reopens this VM
+    }
+
+    /// <summary>
+    /// The pick itself: user clicks a room label in the linked CAD; we resolve the layer from
+    /// Revit's GraphicsStyle and the location from the pick point, then classify within that layer
+    /// via ACadSharp and fill the fields. Called by SettingsCommand between dialog showings, so no
+    /// modal dialog is on the stack and PickObject behaves normally.
+    /// </summary>
+    public void RunPick()
+    {
+        if (_uidoc == null) return;
+        var doc = _uidoc.Document;
+        var view = doc.ActiveView;
+
+        Reference reference;
+        try
+        {
+            reference = _uidoc.Selection.PickObject(
+                Autodesk.Revit.UI.Selection.ObjectType.PointOnElement,
+                new ImportInstanceSelectionFilter(_uidoc.Document),
+                "Click a room label in the linked CAD");
+        }
+        catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+        {
+            return; // Esc — leave everything as-is
+        }
+
+        try
+        {
+            if (doc.GetElement(reference.ElementId) is not ImportInstance import) return;
+
+            // Layer (Revit's deterministic half): geometry → GraphicsStyle → category name == DWG layer.
+            string layerName = null;
+            var geomObj = import.GetGeometryObjectFromReference(reference);
+            if (geomObj != null && doc.GetElement(geomObj.GraphicsStyleId) is GraphicsStyle style)
+                layerName = style.GraphicsStyleCategory?.Name;
+
+            if (string.IsNullOrEmpty(layerName))
+            {
+                DetectedText = "Detected: couldn't resolve a CAD layer here — use the dropdowns.";
+                return;
+            }
+
+            if (!CadLinkResolver.TryGetDwgPath(doc, import, out string dwgPath))
+            {
+                DetectedText = "Detected: linked DWG not found on disk — use the dropdowns.";
+                return;
+            }
+
+            var cadDoc = GetOrLoadCadDoc(dwgPath);
+            double unitToFeet = CadLinkResolver.GetUnitToFeetFactor(cadDoc.Header.InsUnits);
+
+            // Location: Revit global → import-local feet → DWG units.
+            XYZ local = import.GetTransform().Inverse.OfPoint(reference.GlobalPoint);
+            double dwgX = local.X / unitToFeet;
+            double dwgY = local.Y / unitToFeet;
+
+            var result = CadIntrospectionService.ResolveAtPoint(cadDoc, dwgX, dwgY, layerName);
+            if (result == null)
+            {
+                DetectedText = $"Detected: nothing on layer \"{layerName}\" here — use the dropdowns.";
+                return;
+            }
+
+            // Load the dropdowns now so the user has the full fallback after a pick.
+            EnsureDiscoveryLoaded();
+
+            if (result.IsBlock)
+            {
+                IsBlockMode = true;
+                BlockName = result.BlockName; // setter refreshes AvailableTags from the cached docs
+                if (AvailableTags.Count == 0 && result.Tags != null)
+                    foreach (var t in result.Tags)
+                        AvailableTags.Add(t);
+                DetectedText = $"Detected: Block \"{result.BlockName}\" on layer \"{layerName}\".";
+            }
+            else
+            {
+                IsTextMode = true;
+                RoomNameLayer = layerName;
+                DetectedText = $"Detected: Text on layer \"{layerName}\".";
+            }
+        }
+        catch (IOException ex)
+        {
+            DetectedText = ex.Message; // friendly "open in AutoCAD" message
+        }
+        catch (Exception)
+        {
+            DetectedText = "Detected: couldn't read the linked CAD here — use the dropdowns.";
+        }
+    }
+
+    /// <summary>
+    /// Lazily unions layers + referenced block names across every linked import in the active view,
+    /// caching each loaded DWG for the dialog lifetime. Runs on first dropdown open / first pick —
+    /// NOT on window open — to avoid a multi-second freeze when the CAD section isn't being touched.
+    /// </summary>
+    public void EnsureDiscoveryLoaded()
+    {
+        if (_discoveryLoaded) return;
+        _discoveryLoaded = true; // set first so a slow/locked DWG can't re-trigger the load on every retry
+
+        if (_uidoc == null) return;
+        var doc = _uidoc.Document;
+        var view = doc.ActiveView;
+
+        var layers = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var blocks = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var import in CadLinkResolver.GetLinkedImports(doc, view))
+        {
+            if (!CadLinkResolver.TryGetDwgPath(doc, import, out string path)) continue;
+
+            CadDocument cadDoc;
+            try { cadDoc = GetOrLoadCadDoc(path); }
+            catch { continue; } // locked/unreadable — skip; the other imports still populate
+
+            foreach (var l in CadIntrospectionService.GetLayers(cadDoc)) layers.Add(l);
+            foreach (var b in CadIntrospectionService.GetReferencedBlockNames(cadDoc)) blocks.Add(b);
+        }
+
+        AvailableLayers.Clear();
+        foreach (var l in layers) AvailableLayers.Add(l);
+        AvailableBlockNames.Clear();
+        foreach (var b in blocks) AvailableBlockNames.Add(b);
+
+        RefreshAvailableTags();
+    }
+
+    private CadDocument GetOrLoadCadDoc(string path)
+    {
+        if (!_docCache.TryGetValue(path, out var cadDoc))
+        {
+            cadDoc = CadLinkResolver.Load(path);
+            _docCache[path] = cadDoc;
+        }
+        return cadDoc;
+    }
+
+    private void RefreshAvailableTags()
+    {
+        AvailableTags.Clear();
+        if (!_discoveryLoaded) return;
+
+        string block = (BlockName ?? "").Trim();
+        if (block.Length == 0) return;
+
+        var tags = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cadDoc in _docCache.Values)
+            foreach (var t in CadIntrospectionService.GetAttributeTags(cadDoc, block))
+                tags.Add(t);
+
+        foreach (var t in tags)
+            AvailableTags.Add(t);
     }
 
     private void OnSave()

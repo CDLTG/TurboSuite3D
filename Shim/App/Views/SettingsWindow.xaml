@@ -74,6 +74,17 @@
                         <TextBlock Text="Configure how room names and ceiling heights are extracted from linked CAD files."
                                    Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
+                        <!-- Pick-from-view discovery (replaces hand-typing from AutoCAD) -->
+                        <StackPanel Margin="0,0,0,8">
+                            <Button Content="Pick from view…" HorizontalAlignment="Left"
+                                    Command="{Binding PickFromViewCommand}"
+                                    Style="{StaticResource RevitButtonStyle}"
+                                    Padding="12,5" MinWidth="120"
+                                    ToolTip="Hide Settings, then click a room label in the linked CAD. The block/text mode and layer are detected automatically. Disabled when the active view has no linked CAD."/>
+                            <TextBlock Text="{Binding DetectedText}" Foreground="#2B579A" FontSize="10"
+                                       Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+
                         <!-- Mode selection -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <RadioButton Content="Block Attributes" IsChecked="{Binding IsBlockMode}"
@@ -98,9 +109,12 @@
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Block Name:"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <TextBox Grid.Row="0" Grid.Column="1"
-                                         Text="{Binding BlockName, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,0,0,6"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          IsEditable="True" IsTextSearchEnabled="True"
+                                          ItemsSource="{Binding AvailableBlockNames}"
+                                          Text="{Binding BlockName, UpdateSourceTrigger=PropertyChanged}"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"
+                                          Margin="0,0,0,6"/>
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Room Name Tags:"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
@@ -110,8 +124,11 @@
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Tag:"
                                            VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Grid.Row="2" Grid.Column="1"
-                                         Text="{Binding CeilingHeightTag, UpdateSourceTrigger=PropertyChanged}"/>
+                                <ComboBox Grid.Row="2" Grid.Column="1"
+                                          IsEditable="True" IsTextSearchEnabled="True"
+                                          ItemsSource="{Binding AvailableTags}"
+                                          Text="{Binding CeilingHeightTag, UpdateSourceTrigger=PropertyChanged}"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"/>
                             </Grid>
                             <TextBlock Text="Room Name Tags: comma-separated, concatenated in order (e.g., 003, 002)"
                                        Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
@@ -134,21 +151,30 @@
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Room Name Layer:"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <TextBox Grid.Row="0" Grid.Column="1"
-                                         Text="{Binding RoomNameLayer, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,0,0,6"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          IsEditable="True" IsTextSearchEnabled="True"
+                                          ItemsSource="{Binding AvailableLayers}"
+                                          Text="{Binding RoomNameLayer, UpdateSourceTrigger=PropertyChanged}"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"
+                                          Margin="0,0,0,6"/>
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Ceiling Height Layer:"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <TextBox Grid.Row="1" Grid.Column="1"
-                                         Text="{Binding CeilingHeightLayer, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,0,0,6"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1"
+                                          IsEditable="True" IsTextSearchEnabled="True"
+                                          ItemsSource="{Binding AvailableLayers}"
+                                          Text="{Binding CeilingHeightLayer, UpdateSourceTrigger=PropertyChanged}"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"
+                                          Margin="0,0,0,6"/>
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Block:"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <TextBox Grid.Row="2" Grid.Column="1"
-                                         Text="{Binding CeilingHeightBlockName, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,0,0,6"/>
+                                <ComboBox Grid.Row="2" Grid.Column="1"
+                                          IsEditable="True" IsTextSearchEnabled="True"
+                                          ItemsSource="{Binding AvailableBlockNames}"
+                                          Text="{Binding CeilingHeightBlockName, UpdateSourceTrigger=PropertyChanged}"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"
+                                          Margin="0,0,0,6"/>
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Ceiling Height Tag:"
                                            VerticalAlignment="Center" Margin="0,0,8,0"/>

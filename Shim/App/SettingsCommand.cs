@@ -20,7 +20,8 @@ public class SettingsCommand : IExternalCommand
     {
         try
         {
-            var doc = commandData.Application.ActiveUIDocument?.Document;
+            var uidoc = commandData.Application.ActiveUIDocument;
+            var doc = uidoc?.Document;
             if (doc == null)
             {
                 TaskDialog.Show("TurboSuite Settings", "No active document found.");
@@ -30,11 +31,32 @@ public class SettingsCommand : IExternalCommand
             var familySettings = FamilyNameSettingsCache.Get(doc);
             var cadSettings = CadRoomSourceSettingsCache.Get(doc);
             var generalSettings = GeneralSettingsCache.Get(doc);
-            var viewModel = new SettingsViewModel(familySettings, cadSettings, generalSettings);
-            var window = new SettingsWindow { DataContext = viewModel };
-            var helper = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
+            var viewModel = new SettingsViewModel(familySettings, cadSettings, generalSettings, uidoc);
 
-            if (window.ShowDialog() == true)
+            // "Pick from view" can't run PickObject while the dialog's own modal ShowDialog loop is
+            // active (nested modal corrupts the dialog). So the dialog closes with PickRequested set;
+            // we run the pick here in clean context, then reopen a fresh window bound to the SAME
+            // ViewModel — all in-progress edits are preserved on the VM across the round-trip.
+            bool save = false;
+            while (true)
+            {
+                var window = new SettingsWindow { DataContext = viewModel };
+                new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
+
+                bool? result = window.ShowDialog();
+
+                if (viewModel.PickRequested)
+                {
+                    viewModel.PickRequested = false;
+                    viewModel.RunPick();
+                    continue; // reopen with the picked values filled in
+                }
+
+                save = result == true;
+                break;
+            }
+
+            if (save)
             {
                 FamilyNameSettingsStorageService.Save(doc, viewModel.ToFamilyModel());
                 FamilyNameSettingsCache.Invalidate();
