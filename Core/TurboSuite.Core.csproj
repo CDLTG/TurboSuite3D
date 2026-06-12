@@ -10,7 +10,7 @@
     <Company>CDLTG</Company>
     <Authors>CDLTG</Authors>
     <Product>TurboSuite</Product>
-    <Version>1.2.1</Version>
+    <Version>1.2.2</Version>
   </PropertyGroup>
   <ItemGroup>
     <!-- 0.105.0 rewrote the formula engine and now parses formulas when FormulaA1

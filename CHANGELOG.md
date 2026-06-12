@@ -7,6 +7,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-06-12
+
+### Fixed
+- Auto-update: a cold network share at Revit launch (SMB connect/auth can take ~30–60 s on first touch) made the version check time out at 3 s and silently skip the update for the whole session. The check now waits up to 30 s per attempt and retries up to 3× before giving up, distinguishing a transient miss from "already current". All waiting stays off the Revit UI thread.
+
 ## [1.2.1] — 2026-06-12
 
 ### Added
@@ -131,6 +136,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.2.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.2
 [1.2.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.1
 [1.2.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.0
 [1.1.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.1.0
