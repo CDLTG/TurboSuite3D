@@ -7,6 +7,29 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-06-12
+
+### Added
+- TurboRPS: rebuilt as a modeless staleness dashboard with an in-place driver-type corrector for batch-fixing stale circuit configs.
+- TurboRPS: Switch ID (Number) column with search, and right-click **Defer circuit** to flag an intentionally-"wrong" config (resurfaces as REVIEW if the snapshotted config later drifts).
+- TurboName: in-app CAD Room Source discovery in Settings — no AutoCAD required.
+- TurboName: Pick from view shows the picked room's `value=tag` attribute pairs.
+- TurboNumber: suffix co-circuit power supplies a/b/c by plan position.
+- Counts: `N @ft`/`N @in` Length mode for Catalog Qty (stock-cut quantities).
+- Counts: explode length-token catalogs into per-length rows on the Bid Compare sheet.
+
+### Changed
+- Counts: merged the Calc column into Catalog Qty.
+- Counts: flow Qty Override into the Bid Compare baseline; Worksheet Δ stays raw-vs-raw.
+- Unpinned ClosedXML to 0.105.0 and rewrote Counts IIFE LAMBDAs as LET.
+- Bumped ACadSharp to 3.6.12.
+
+### Fixed
+- TurboDriver: snap the first driver's Z to the view's display plane so annotation-only supplies stay visible.
+- TurboZones: persist room overrides per-circuit and fix region bleed.
+- TurboZones: sort circuits naturally in panel allocation (E1, E2, … E10).
+- Counts: fix Bid Compare ΔQty for CatalogQty slots.
+
 ## [1.2.0] — 2026-06-05
 
 ### Added
@@ -108,6 +131,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.2.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.1
 [1.2.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.0
 [1.1.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.1.0
 [1.0.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.0.3
