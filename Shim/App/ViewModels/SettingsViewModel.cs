@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows.Input;
 using ACadSharp;
 using Autodesk.Revit.DB;
@@ -51,7 +52,11 @@ public class SettingsViewModel : ViewModelBase
     private string _windowLayerNamesText;
     private string _regionTypeName;
 
-    public string VersionText { get; } = $"v{UpdateService.GetInstalledVersion().ToString(3)}";
+    // Report the actually-loaded assembly version, not the auto-update tracking file. version.txt is
+    // written only by the installer/updater (never by a dev post-build deploy), so it goes stale on a
+    // build box every time the version bumps; the loaded assembly is always the truth of what's running.
+    public string VersionText { get; } =
+        $"v{(Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0)).ToString(3)}";
 
     public string WallSconceFamiliesText
     {
