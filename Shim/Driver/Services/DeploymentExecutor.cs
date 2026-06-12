@@ -35,6 +35,79 @@ namespace TurboSuite.Driver.Services
         private const double SpacingFt = 9.5 / 12.0; // 9.5 inches in feet
 
         /// <summary>
+        /// Absolute elevation at which to drop annotation-only devices so they display in the
+        /// active plan view WITHOUT bleeding into the companion view. Placing at the cut plane
+        /// isn't safe: an RCP cut (e.g. +6') often falls inside a floor plan's range, so a driver
+        /// placed in one view shows up in the other. Instead we go to the range extreme that
+        /// points away from the companion view — RCPs look up, so the TOP clip plane (near the
+        /// ceiling, above a floor plan's top); floor plans look down, so the BOTTOM clip plane
+        /// (near the floor, below an RCP's bottom). Both are primary-range boundaries, so the
+        /// device is still guaranteed visible in its own view. Null for views with no resolvable
+        /// range (drafting/3D/section).
+        /// </summary>
+        private static double? GetDisplayElevation(Document doc, View view)
+        {
+            var plan = view as ViewPlan;
+            if (plan == null)
+                return null;
+
+            PlanViewPlane whichPlane = plan.ViewType == ViewType.CeilingPlan
+                ? PlanViewPlane.TopClipPlane
+                : PlanViewPlane.BottomClipPlane;
+
+            PlanViewRange range = plan.GetViewRange();
+
+            // The plane's level can be a real level OR one of Revit's "Level Above"/"Level Below"
+            // sentinel ids (e.g. an RCP with Top = Level Above, offset 0). Sentinels don't resolve
+            // via GetElement, so map them to the actual neighbouring level by elevation; otherwise
+            // we'd fall back to the picked Z and the device could land out of range.
+            ElementId levelId = range.GetLevelId(whichPlane);
+            Level level;
+            if (levelId.Equals(PlanViewRange.LevelAbove))
+                level = AdjacentLevel(doc, plan.GenLevel, above: true);
+            else if (levelId.Equals(PlanViewRange.LevelBelow))
+                level = AdjacentLevel(doc, plan.GenLevel, above: false);
+            else
+                level = doc.GetElement(levelId) as Level;
+
+            if (level == null)
+                return null;
+
+            return level.Elevation + range.GetOffset(whichPlane);
+        }
+
+        /// <summary>
+        /// The nearest level directly above (or below) the given level by elevation, or null if
+        /// there is none. Used to resolve view-range "Level Above"/"Level Below" sentinels.
+        /// </summary>
+        private static Level AdjacentLevel(Document doc, Level from, bool above)
+        {
+            if (from == null)
+                return null;
+
+            double baseElev = from.Elevation;
+            const double Tol = 1e-6;
+            Level best = null;
+            foreach (Element el in new FilteredElementCollector(doc).OfClass(typeof(Level)))
+            {
+                if (!(el is Level lvl))
+                    continue;
+                double e = lvl.Elevation;
+                if (above)
+                {
+                    if (e > baseElev + Tol && (best == null || e < best.Elevation))
+                        best = lvl;
+                }
+                else
+                {
+                    if (e < baseElev - Tol && (best == null || e > best.Elevation))
+                        best = lvl;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
         /// Execute the TurboDriver deployment: pick one point, place all power supplies in a column.
         /// </summary>
         public DeploymentResult Execute(UIDocument uidoc, DeploymentPlan plan)
@@ -62,8 +135,19 @@ namespace TurboSuite.Driver.Services
                 // User pressed Escape — fall back to picking a bare point
                 try
                 {
-                    origin = uidoc.Selection.PickPoint(
+                    var picked = uidoc.Selection.PickPoint(
                         $"Pick origin for {plan.TotalQuantity} power supplies");
+
+                    // PickPoint's Z is the active work plane elevation, which may sit outside the
+                    // view's primary range — so the device (only a connector + nested generic
+                    // annotation, no 3D geometry) vanishes while its view-owned tags still draw.
+                    // This bites in our standard RCP setup: the view is based on the floor level
+                    // (0') but the range is cut at +6' looking up at a +10' ceiling, so the level
+                    // itself is below the range. Snap Z to the active view's display elevation
+                    // (RCP top / floor-plan bottom — see GetDisplayElevation). Falls back to the
+                    // picked Z for views with no resolvable range (drafting/3D/section).
+                    double? displayZ = GetDisplayElevation(doc, doc.ActiveView);
+                    origin = new XYZ(picked.X, picked.Y, displayZ ?? picked.Z);
                 }
                 catch (Autodesk.Revit.Exceptions.OperationCanceledException)
                 {
