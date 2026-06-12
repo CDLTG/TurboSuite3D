@@ -7,39 +7,21 @@ using TurboSuite.Snoop.Models;
 namespace TurboSuite.Snoop.Services;
 
 /// <summary>
-/// Builds the TurboSnoop report for a picked linked element, organised to mirror the Visibility/Graphics
-/// dialog the user actually clicks: each section groups geometry by <b>Category → Subcategory</b> (both of
-/// which are real VG checkboxes), regardless of which nested family the geometry came from.
+/// Builds the TurboSnoop report for a picked linked element, grouped to mirror the Visibility/Graphics dialog:
+/// Category → Subcategory (both real VG checkboxes), regardless of which nested family the geometry came from
+/// (nesting is aggregated away — the user cares about the checkbox, not the family tree). Read-only throughout.
 ///
-/// Two sections, because the spike proved two content types exist:
-///   1. MODEL geometry (solids, model lines, nested model families) — one viewless pass is complete; model
-///      geometry is never view-culled. This is where "real geometry" lands: a glass pane on a Glass
-///      subcategory, an elevator's mechanical-part subcategories, etc.
-///   2. VIEW-DEPENDENT / annotation (detail items, masking regions, symbolic lines) — only appears through a
-///      view AND is visibility-filtered, so we sweep every plan view and keep the Category → Subcategory the
-///      model pass did NOT already have, with a per-subcategory view count. This is where the clearance lines
-///      (Detail Items → &lt;Hidden Lines&gt;) land.
+/// Two passes, because the two content types surface differently:
+///   1. MODEL geometry — never view-culled, so one viewless get_Geometry pass is complete.
+///   2. VIEW-DEPENDENT / annotation (detail items, masking, symbolic lines) — visibility-filtered per view, so
+///      a single view is unreliable (in testing a clearance line hid in 46 of 58 plan views). Sweep every plan
+///      view and union, keeping only checkboxes the model pass missed. Do NOT collapse this to one view.
 ///
-/// Geometry from nested families is aggregated into the same Category → Subcategory grouping (the nesting
-/// itself isn't shown — the user cares about the checkbox, not the family tree). All read-only; linked docs
-/// are read-only.
-///
-/// WHY SWEEP MANY VIEWS (do NOT "optimize" the annotation pass to a single view): get_Geometry(Options.View)
-/// returns only what is VISIBLE in that view, and annotation is visibility-filtered — in the validating test
-/// the clearance hid in 46 of 58 plan views and surfaced in only 12. A single "best view" is unreliable; the
-/// sweep-then-union is load-bearing. (The model pass needs no view and is complete in one extraction.)
-///
-/// REJECTED ALTERNATIVES — do NOT re-attempt. Spiked against a real arch link: a NON-shared nested
-/// "x_DI_Clearance" Detail Item drawing on "Detail Items → &lt;Hidden Lines&gt;" inside a PL_Sink. All fail for
-/// the same root cause — non-shared nested annotation has no element/reference identity:
-///   • Click-the-line (PickObject(LinkedElement) → CreateReferenceInLink → GetGeometryObjectFromReference):
-///     the pick returns REFERENCE_TYPE_NONE and resolves to the whole top element, never the line. No pick
-///     mode (incl. PointOnElement) can return a reference to something that has none.
-///   • GetSubComponentIds(): empty — the nest is non-shared.
-///   • EditFamily(): throws — linked documents are read-only.
-///   • RevitLookup "Snoop Linked Element": resolves the element exactly as we do and hits the same wall.
-/// Reading GraphicsStyleId off RENDERED geometry (what this builder does) is the ONLY mechanism that reaches
-/// such content, precisely because it never needs a reference.
+/// REJECTED ALTERNATIVES — do NOT re-attempt. The hard case is non-shared nested annotation (e.g. an
+/// "x_DI_Clearance" Detail Item nested in a PL_Sink): it has no element/reference identity, so PickObject
+/// (returns REFERENCE_TYPE_NONE → the whole top element), GetSubComponentIds (empty), and EditFamily (throws —
+/// linked docs are read-only) all fail. Reading GraphicsStyleId off RENDERED geometry (what this builder does)
+/// is the only mechanism that reaches it, precisely because it needs no reference.
 /// </summary>
 public sealed class LinkedGeometryTreeBuilder
 {
@@ -59,7 +41,8 @@ public sealed class LinkedGeometryTreeBuilder
     public SnoopNode BuildUnion(Element linkedElement, Document doc)
     {
         string rootCategory = linkedElement.Category?.Name;
-        var root = new SnoopNode(DescribeElement(linkedElement), SnoopNodeKind.Family);
+        // Root = the family's category (the family name/type goes in the window header), so the tree matches VG.
+        var root = new SnoopNode(rootCategory ?? "(no category)", SnoopNodeKind.Family);
 
         // ── 1. Model geometry: one viewless pass. ──
         var modelPairs = new HashSet<Checkbox>();
@@ -76,20 +59,18 @@ public sealed class LinkedGeometryTreeBuilder
         }
         catch { }
 
-        var modelSection = new SnoopNode(
-            "Model geometry (reliably present — solids, model lines, nested families):", SnoopNodeKind.Info);
+        var modelSection = new SnoopNode("Model geometry", SnoopNodeKind.Info);
         root.Children.Add(modelSection);
-        BuildGroupedSection(modelSection, modelPairs.Select(p => new KeyValuePair<Checkbox, int>(p, 0)), false);
+        BuildGroupedSection(modelSection, modelPairs);
 
         // ── 2. View-dependent / annotation: sweep plan views, keep only what the model pass missed. ──
-        var annoCounts = new Dictionary<Checkbox, int>();
+        var annoPairs = new HashSet<Checkbox>();
         var views = new FilteredElementCollector(doc)
             .OfClass(typeof(ViewPlan))
             .Cast<ViewPlan>()
             .Where(v => !v.IsTemplate)
             .ToList();
 
-        int scanned = 0;
         foreach (ViewPlan v in views)
         {
             try
@@ -102,32 +83,27 @@ public sealed class LinkedGeometryTreeBuilder
                 });
                 if (g == null) continue;
 
-                scanned++;
                 var viewPairs = new HashSet<Checkbox>();
                 CollectPairs(g, doc, rootCategory, viewPairs, 0);
                 foreach (Checkbox cb in viewPairs)
                     if (!modelPairs.Contains(cb))
-                        annoCounts[cb] = annoCounts.TryGetValue(cb, out int c) ? c + 1 : 1;
+                        annoPairs.Add(cb);
             }
             catch { }
         }
 
-        var annoSection = new SnoopNode(
-            $"View-dependent / annotation (in some of {scanned} views — detail items, masking, symbolic lines):",
-            SnoopNodeKind.Info);
+        var annoSection = new SnoopNode("View-dependent / annotation", SnoopNodeKind.Info);
         root.Children.Add(annoSection);
-        BuildGroupedSection(annoSection, annoCounts, true);
+        BuildGroupedSection(annoSection, annoPairs);
 
         return root;
     }
 
-    /// <summary>Groups checkboxes into Category nodes with Subcategory children. When <paramref name="showCounts"/>
-    /// is set, each subcategory is suffixed with the number of views it surfaced in.</summary>
-    private static void BuildGroupedSection(SnoopNode section,
-        IEnumerable<KeyValuePair<Checkbox, int>> entries, bool showCounts)
+    /// <summary>Groups checkboxes into Category nodes with Subcategory children, ordered by name.</summary>
+    private static void BuildGroupedSection(SnoopNode section, IEnumerable<Checkbox> checkboxes)
     {
-        var byCategory = entries
-            .GroupBy(e => e.Key.Category)
+        var byCategory = checkboxes
+            .GroupBy(cb => cb.Category)
             .OrderBy(g => g.Key);
 
         bool any = false;
@@ -137,12 +113,11 @@ public sealed class LinkedGeometryTreeBuilder
             var catNode = new SnoopNode(catGroup.Key, SnoopNodeKind.Category);
             section.Children.Add(catNode);
 
-            foreach (var entry in catGroup
-                         .Where(e => e.Key.Subcategory != null)
-                         .OrderBy(e => e.Key.Subcategory))
+            foreach (Checkbox cb in catGroup
+                         .Where(c => c.Subcategory != null)
+                         .OrderBy(c => c.Subcategory))
             {
-                string label = showCounts ? $"{entry.Key.Subcategory}   ({entry.Value}×)" : entry.Key.Subcategory;
-                catNode.Children.Add(new SnoopNode(label, SnoopNodeKind.Subcategory));
+                catNode.Children.Add(new SnoopNode(cb.Subcategory, SnoopNodeKind.Subcategory));
             }
         }
 
@@ -201,13 +176,14 @@ public sealed class LinkedGeometryTreeBuilder
         return contextCategory != null ? new Checkbox(contextCategory, null) : (Checkbox?)null;
     }
 
-    private static string DescribeElement(Element e)
+    /// <summary>The picked family's "FamilyName : Type" label for the window header (no category prefix —
+    /// the category is the tree's root node).</summary>
+    public static string DescribeFamily(Element e)
     {
         if (e == null)
             return "(null element)";
-        string cat = e.Category?.Name ?? "?";
         string fam = (e as FamilyInstance)?.Symbol?.FamilyName;
-        return fam != null ? $"{cat}: {fam} : {e.Name}" : $"{cat}: {e.Name}";
+        return fam != null ? $"{fam} : {e.Name}" : e.Name;
     }
 
     // GeometryInstance.Symbol was deprecated (Revit 2023+); resolve the owning symbol via the geometry id so

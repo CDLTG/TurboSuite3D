@@ -1,0 +1,79 @@
+<Window
+    x:Class="TurboSuite.Snoop.Views.TurboSnoopWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="clr-namespace:TurboSuite.Snoop.ViewModels;assembly=TurboSuite.Core"
+    Title="TurboSnoop"
+    Height="560" Width="520"
+    MinHeight="320" MinWidth="380"
+    WindowStartupLocation="CenterScreen"
+    ShowInTaskbar="True"
+    Topmost="False"
+    ShowActivated="False"
+    FontFamily="Segoe UI" FontSize="11"
+    KeyDown="Window_KeyDown">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource ContentBgBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
+            <TextBlock Text="TurboSnoop" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+        </Border>
+
+        <!-- Picked family (FamilyName : Type) — the tree below starts at its category. -->
+        <TextBlock Grid.Row="1" Margin="12,8,12,2" FontSize="13" FontWeight="SemiBold"
+                   TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}"
+                   Text="{Binding Header}"/>
+
+        <TreeView Grid.Row="2" Margin="8,4,8,6" BorderThickness="1"
+                  BorderBrush="{StaticResource SeparatorBrush}"
+                  ItemsSource="{Binding Roots}"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <TreeView.Resources>
+                <!-- Read-only viewer: no row selection, so the unreadable dark-blue highlight never paints. -->
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1A1A"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="Transparent"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#1A1A1A"/>
+
+                <HierarchicalDataTemplate DataType="{x:Type vm:SnoopNodeViewModel}"
+                                          ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal">
+                        <!-- Leaf VG checkboxes get a bullet — the row the user finds in the V/G dialog. -->
+                        <TextBlock Text="•" Margin="0,0,5,0" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Visibility="{Binding IsLeafCheckbox, Converter={StaticResource BoolToVisibility}}"/>
+                        <TextBlock Text="{Binding Label}" TextWrapping="NoWrap"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
+                </HierarchicalDataTemplate>
+            </TreeView.Resources>
+            <TreeView.ItemContainerStyle>
+                <Style TargetType="TreeViewItem">
+                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                    <!-- Only the expander chevrons are interactive; rows can't take selection focus. -->
+                    <Setter Property="Focusable" Value="False"/>
+                </Style>
+            </TreeView.ItemContainerStyle>
+        </TreeView>
+
+        <Border Grid.Row="3" Background="{StaticResource FooterBgBrush}"
+                BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0" Padding="10,8">
+            <Button HorizontalAlignment="Right" Content="Close"
+                    Style="{StaticResource RevitButtonStyle}" Click="Close_Click" MinWidth="70"/>
+        </Border>
+    </Grid>
+</Window>

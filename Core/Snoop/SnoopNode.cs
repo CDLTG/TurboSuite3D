@@ -8,7 +8,7 @@ namespace TurboSuite.Snoop.Models;
 /// </summary>
 public enum SnoopNodeKind
 {
-    /// <summary>The picked top-level linked element (report root).</summary>
+    /// <summary>Report root — labelled with the picked family's category.</summary>
     Family,
 
     /// <summary>A model/annotation Category — itself a VG checkbox, and the parent of its subcategories.</summary>
@@ -17,16 +17,13 @@ public enum SnoopNodeKind
     /// <summary>A VG subcategory checkbox, nested under its <see cref="Category"/>.</summary>
     Subcategory,
 
-    /// <summary>Diagnostic / status text (e.g. "no geometry for this view", depth cap).</summary>
+    /// <summary>Non-checkbox text: the two section headers and the "(none)" placeholder.</summary>
     Info,
 }
 
 /// <summary>
-/// One node in the TurboSnoop report tree: the picked family at the root, nested families beneath it
-/// (recursively), and Category → Subcategory leaves naming the VG checkbox each piece of geometry rides.
-///
-/// Pure data, no Revit types — the Revit-facing walk (Shim/Snoop) builds this; a future WPF TreeView
-/// binds it. For the current spike it is flattened to indented text by <see cref="SnoopTreeFormatter"/>.
+/// One node in the TurboSnoop report tree. Pure data, no Revit types — the Revit-facing walk (Shim/Snoop)
+/// builds it; the window binds it via <c>SnoopNodeViewModel</c>.
 /// </summary>
 public sealed class SnoopNode
 {

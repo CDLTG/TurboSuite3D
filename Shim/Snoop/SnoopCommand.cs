@@ -1,10 +1,13 @@
 #nullable disable
+using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 using TurboSuite.Snoop.Models;
 using TurboSuite.Snoop.Services;
+using TurboSuite.Snoop.ViewModels;
+using TurboSuite.Snoop.Views;
 using RvtOperationCanceled = Autodesk.Revit.Exceptions.OperationCanceledException;
 
 namespace TurboSuite.Snoop;
@@ -14,38 +17,38 @@ namespace TurboSuite.Snoop;
 ///
 /// PURPOSE: clearance / path / egress lines (and other content) ride inside deeply nested linked-model
 /// families, and finding the right Category/Subcategory to uncheck in VG → RVT Links → Custom by hand is slow
-/// trial-and-error. TurboSnoop picks a linked family and lists every VG checkbox its geometry draws under,
-/// grouped to mirror the VG dialog (Section → Category → Subcategory). The user does the single uncheck.
-///
-/// WORKFLOW: run → PickObject(LinkedElement) → resolve via reference.LinkedElementId +
-/// RevitLinkInstance.GetLinkDocument() → <see cref="LinkedGeometryTreeBuilder.BuildUnion"/> → TaskDialog dump.
+/// trial-and-error. TurboSnoop picks a linked family and lists every VG checkbox its geometry draws under. The
+/// user does the single uncheck — being modeless, the Revit view keeps its VG/VV keybind with the window open.
 ///
 /// STATE: gated SPIKE (ExperimentalCommandsEnabled, like TurboMask/TurboSetup) — compiled but unreachable in
-/// production. Output is a TaskDialog text dump; the v1 UI will be a modeless WPF TreeView binding the
-/// <c>SnoopNode</c> tree (its Family/Category/Subcategory/Info kinds already carry what it needs). Pure read,
-/// no transaction.
+/// production. The pick is synchronous here (before the window exists), so no external-event work queue.
 ///
-/// DELIBERATELY A FINDER, NOT A HIDER. There is no API to hide an individual linked element even in Revit
-/// 2025: View.SetElementOverrides takes only a host-doc ElementId (no linked overload), and the sole "hide"
-/// path is the async, non-transactional Reference.CreateLinkReference + PostCommand(HideElements) UI
-/// workaround. So TurboSnoop reports the checkbox and the user unchecks it.
-///
-/// OUT OF SCOPE (revisit when expanding): instance parameters / identity panel, RevitLookup-style full
-/// property snoop, programmatic hiding. Subcategory-toggle granularity (coincident geometry in the same
-/// subcategory toggles together) is accepted, not a problem to solve.
-///
-/// DESIGN REFERENCE ONLY (nothing vendored): RevitLookup + LookupEngine (both MIT) for the reflection / tree-UI
-/// pattern — re-build a small TurboSuite-native lookup rather than fork their DI/hosting-heavy app (referencing
-/// the design, not shipping the code, means no MIT-attribution obligation).
+/// DELIBERATELY A FINDER, NOT A HIDER — there is no API to flip the VG checkbox this tool names, so do NOT add
+/// an "Apply":
+///   • Individual linked ELEMENTS: View.SetElementOverrides takes only a host-doc ElementId (no linked
+///     overload); the sole "hide" path is the async Reference.CreateLinkReference + PostCommand(HideElements).
+///   • Per-link CATEGORY/subcategory overrides (VG → RVT Links → Custom): RevitLinkGraphicsSettings exposes
+///     only whole-link knobs (ObjectStyles/ColorFill/ViewRange/LinkedViewId) — no per-category setter — and
+///     Custom isn't even settable in the 2024 API. Host-view View.SetCategoryHidden can drive a link under
+///     ObjectStyles=ByHostView, but only for categories that exist in the HOST doc, and host-view-wide; the
+///     link-DEFINED subcategories this tool exists to find (e.g. a nested "x_DI_Clearance") aren't reachable.
 /// </summary>
 [Transaction(TransactionMode.ReadOnly)]
 public class SnoopCommand : IExternalCommand
 {
+    private static TurboSnoopWindow _activeWindow;
+
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
-        UIDocument uidoc = commandData.Application.ActiveUIDocument;
-        Document doc = uidoc.Document;
+        UIApplication uiapp = commandData.Application;
+        UIDocument uidoc = uiapp.ActiveUIDocument;
+        if (uidoc?.Document == null)
+        {
+            TaskDialog.Show("TurboSnoop", "No active document found.");
+            return Result.Failed;
+        }
 
+        Document doc = uidoc.Document;
         Reference reference;
         try
         {
@@ -78,19 +81,23 @@ public class SnoopCommand : IExternalCommand
             return Result.Cancelled;
         }
 
+        string header = LinkedGeometryTreeBuilder.DescribeFamily(linkedElement);
         SnoopNode root = new LinkedGeometryTreeBuilder().BuildUnion(linkedElement, linkedDoc);
-        string dump = SnoopTreeFormatter.ToIndentedText(root);
+        SnoopNodeViewModel rootVm = SnoopNodeViewModel.BuildTree(root);
 
-        var td = new TaskDialog("TurboSnoop (spike)")
+        // One window at a time — a fresh pick replaces the previous report.
+        _activeWindow?.Close();
+
+        var window = new TurboSnoopWindow { DataContext = new SnoopMainViewModel(header, rootVm) };
+        new WindowInteropHelper(window) { Owner = uiapp.MainWindowHandle };
+        window.Closed += (s, e) =>
         {
-            MainInstruction = "Visibility/Graphics checkboxes for this linked element",
-            MainContent = "Two sections: Model geometry (reliable, hierarchical — glass, parts, nested "
-                + "families) and View-dependent / annotation (detail items, masking, symbolic lines). Each "
-                + "'•' is a Category → Subcategory to uncheck in VG → RVT Links → Custom.",
-            ExpandedContent = dump,
+            if (ReferenceEquals(_activeWindow, window))
+                _activeWindow = null;
         };
-        td.Show();
 
+        _activeWindow = window;
+        window.Show();
         return Result.Succeeded;
     }
 }
