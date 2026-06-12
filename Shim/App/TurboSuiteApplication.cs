@@ -18,7 +18,7 @@ public class TurboSuiteApplication : IExternalApplication
     // Gates experimental commands (e.g., TurboMask) so they ship compiled but unreachable
     // until they're ready. `static readonly` (not `const`) so the compiler doesn't flag the
     // gated branch as unreachable (CS0162).
-    private static readonly bool ExperimentalCommandsEnabled = true;
+    private static readonly bool ExperimentalCommandsEnabled = false;
 
     private static bool _updateAccepted;
 
