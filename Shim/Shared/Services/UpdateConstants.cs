@@ -17,7 +17,11 @@ namespace TurboSuite.Shared.Services;
 /// </remarks>
 public static class UpdateConstants
 {
-    public const int CheckTimeoutMs = 3000;
+    // Per-attempt wait for the server version check. Generous because the first touch of a cold SMB
+    // share at Revit launch pays the full Windows SMB connect/auth cost (~30-60s worst case); a short
+    // window made the check lose the race and silently skip updates. Off the UI thread, so it never
+    // blocks Revit. The caller also retries (see OnIdlingCheckForUpdate), so this is the per-try ceiling.
+    public const int CheckTimeoutMs = 30000;
 
     /// <summary>The running Revit version ("2024", "2025", …). Set once in OnStartup.</summary>
     public static string? RevitVersion { get; set; }

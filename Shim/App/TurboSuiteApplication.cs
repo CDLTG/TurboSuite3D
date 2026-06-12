@@ -223,28 +223,48 @@ public class TurboSuiteApplication : IExternalApplication
     private static string? _pendingUpdateVersion;
     private static bool _showUpdateNotification;
 
+    // A cold SMB share can take longer than a single check window to wake up at launch, so one
+    // timed-out check must not silently skip the update for the whole session. Retry a few times,
+    // spaced out, before giving up. All waiting is off the UI thread (async + Task.Delay).
+    private const int UpdateCheckMaxAttempts = 3;
+    private static readonly TimeSpan UpdateRetryDelay = TimeSpan.FromSeconds(10);
+
     private static async void OnIdlingCheckForUpdate(object? sender, IdlingEventArgs e)
     {
         if (sender is not UIApplication uiApp) return;
 
-        // One-shot: unhook immediately
+        // One-shot idling handler — the retry loop below handles re-attempts internally.
         uiApp.Idling -= OnIdlingCheckForUpdate;
 
         try
         {
+            // A previously staged (e.g. skipped) update takes priority — no server round-trip.
             if (UpdateService.HasStagedUpdate())
             {
                 _pendingUpdateVersion = UpdateService.GetStagedVersion();
             }
             else
             {
-                using var cts = new CancellationTokenSource(UpdateConstants.CheckTimeoutMs);
-                var newVersion = await UpdateService.CheckForUpdateAsync(cts.Token);
+                for (int attempt = 1; attempt <= UpdateCheckMaxAttempts; attempt++)
+                {
+                    using var cts = new CancellationTokenSource(UpdateConstants.CheckTimeoutMs);
+                    var result = await UpdateService.CheckForUpdateAsync(cts.Token);
 
-                if (newVersion is null) return;
+                    if (result.Status == UpdateCheckStatus.UpdateAvailable)
+                    {
+                        await Task.Run(() => UpdateService.StageUpdate());
+                        _pendingUpdateVersion = result.NewVersion;
+                        break;
+                    }
 
-                await Task.Run(() => UpdateService.StageUpdate());
-                _pendingUpdateVersion = newVersion;
+                    // Reached the server and we're already current — nothing to do.
+                    if (result.Status == UpdateCheckStatus.UpToDate)
+                        break;
+
+                    // Unavailable (cold share / IO) — wait and retry unless this was the last attempt.
+                    if (attempt < UpdateCheckMaxAttempts)
+                        await Task.Delay(UpdateRetryDelay);
+                }
             }
 
             if (_pendingUpdateVersion is not null)

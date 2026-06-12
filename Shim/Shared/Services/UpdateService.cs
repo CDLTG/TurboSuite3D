@@ -7,6 +7,23 @@ using System.Threading.Tasks;
 
 namespace TurboSuite.Shared.Services;
 
+/// <summary>Outcome of a single server update check.</summary>
+public enum UpdateCheckStatus
+{
+    /// <summary>The server was reached and advertises a newer version (see <see cref="UpdateCheckResult.NewVersion"/>).</summary>
+    UpdateAvailable,
+    /// <summary>The server was reached and the local install is already current.</summary>
+    UpToDate,
+    /// <summary>
+    /// The server could not be reached in time (cold SMB share still connecting, IO error, or no
+    /// configured path). Transient — worth retrying on a later attempt rather than giving up.
+    /// </summary>
+    Unavailable
+}
+
+/// <summary>Result of <see cref="UpdateService.CheckForUpdateAsync"/>.</summary>
+public readonly record struct UpdateCheckResult(UpdateCheckStatus Status, string? NewVersion);
+
 /// <summary>
 /// Checks the configured server share for a newer <c>version.txt</c> on Revit launch, stages new files
 /// to <c>%LOCALAPPDATA%\TurboSuite\Staging\</c>, and prompts the user. Accepted updates are applied
@@ -24,10 +41,11 @@ public static class UpdateService
     private static string UpdaterExePath => Path.Combine(LocalAppData, "TurboSuiteUpdater.exe");
 
     /// <summary>
-    /// Checks whether a newer version is available on the server.
-    /// Returns the new version string if an update is available, or null if not (or on any error).
+    /// Checks whether a newer version is available on the server. Returns a status that distinguishes
+    /// "newer version found", "already current", and "couldn't reach the server in time" — the last is
+    /// transient (a cold share still connecting) and the caller is expected to retry rather than give up.
     /// </summary>
-    public static async Task<string?> CheckForUpdateAsync(CancellationToken ct)
+    public static async Task<UpdateCheckResult> CheckForUpdateAsync(CancellationToken ct)
     {
         // Why: File.Exists / File.ReadAllText on a half-responsive SMB share can block
         // for the full Windows SMB timeout (~30-60s) regardless of CancellationToken.
@@ -37,26 +55,33 @@ public static class UpdateService
         {
             try
             {
-                if (string.IsNullOrEmpty(UpdateConstants.ServerPath)) return null;
+                if (string.IsNullOrEmpty(UpdateConstants.ServerPath))
+                    return new UpdateCheckResult(UpdateCheckStatus.Unavailable, null);
 
                 var serverVersionFile = Path.Combine(UpdateConstants.ServerPath, "version.txt");
-                if (!File.Exists(serverVersionFile)) return null;
+                if (!File.Exists(serverVersionFile))
+                    return new UpdateCheckResult(UpdateCheckStatus.Unavailable, null);
 
                 var serverVersionText = File.ReadAllText(serverVersionFile).Trim();
-                if (!Version.TryParse(serverVersionText, out var serverVersion)) return null;
+                if (!Version.TryParse(serverVersionText, out var serverVersion))
+                    return new UpdateCheckResult(UpdateCheckStatus.Unavailable, null);
 
                 var localVersion = GetInstalledVersion();
-                return serverVersion.CompareTo(localVersion) > 0 ? serverVersionText : null;
+                return serverVersion.CompareTo(localVersion) > 0
+                    ? new UpdateCheckResult(UpdateCheckStatus.UpdateAvailable, serverVersionText)
+                    : new UpdateCheckResult(UpdateCheckStatus.UpToDate, null);
             }
             catch
             {
-                return null;
+                return new UpdateCheckResult(UpdateCheckStatus.Unavailable, null);
             }
         });
 
         var timeoutTask = Task.Delay(Timeout.Infinite, ct);
         var winner = await Task.WhenAny(workTask, timeoutTask);
-        return winner == workTask ? await workTask : null;
+        return winner == workTask
+            ? await workTask
+            : new UpdateCheckResult(UpdateCheckStatus.Unavailable, null);
     }
 
     /// <summary>
