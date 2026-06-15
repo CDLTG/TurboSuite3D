@@ -59,6 +59,10 @@ public class ScheduleWriterService : IScheduleWriter
                         {
                             continue; // don't SetValueString("") — leave field dirty
                         }
+                        else if (p.StorageType == StorageType.Integer && int.TryParse(fw.Value, out var iv))
+                        {
+                            ok = p.Set(iv); // Yes/No ("1"/"0") and plain integers — no unit parsing
+                        }
                         else
                         {
                             ok = p.SetValueString(fw.Value); // parses display + units

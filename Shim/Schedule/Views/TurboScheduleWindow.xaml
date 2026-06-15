@@ -4,8 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="clr-namespace:TurboSuite.Schedule.Models;assembly=TurboSuite.Core"
     Title="TurboSchedule"
-    Width="1010" SizeToContent="Height"
-    MinWidth="1010"
+    Width="1130" SizeToContent="Height"
+    MinWidth="1130"
     WindowStartupLocation="CenterScreen"
     FontFamily="Segoe UI" FontSize="11"
     TextOptions.TextFormattingMode="Display"
@@ -52,7 +52,8 @@
                     <Ellipse Grid.Column="0" Width="6" Height="6" VerticalAlignment="Center" HorizontalAlignment="Center"
                              Fill="{StaticResource HeaderBlueBrush}"
                              Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}"/>
-                    <Grid Grid.Column="1">
+                    <!-- Text editor: every non-boolean field. -->
+                    <Grid Grid.Column="1" Visibility="{Binding ShowTextEditor, Converter={StaticResource BoolToVisibility}}">
                         <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                  IsReadOnly="{Binding IsLocked}"
                                  VerticalContentAlignment="Center" Height="20">
@@ -88,6 +89,10 @@
                                    MouseLeftButtonUp="UrlGlyph_Click"
                                    Visibility="{Binding ShowUrlButton, Converter={StaticResource BoolToVisibility}}"/>
                     </Grid>
+                    <!-- Checkbox editor: Yes/No params. Disabled (greyed) when read-only or n/a. -->
+                    <CheckBox Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="2,0,0,0"
+                              IsChecked="{Binding BoolValue}" IsEnabled="{Binding IsEditable}"
+                              Visibility="{Binding IsBoolean, Converter={StaticResource BoolToVisibility}}"/>
                 </Grid>
             </DataTemplate>
 
@@ -140,14 +145,14 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="90"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="14"/>
-                        <ColumnDefinition Width="88"/>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="80"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding Number.Label}" VerticalAlignment="Center"
                                Foreground="{StaticResource TextSecondaryBrush}"/>
                     <ContentControl Grid.Column="1" Content="{Binding Number}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
-                    <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center" HorizontalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock Grid.Column="2" Text="Qty:" VerticalAlignment="Center" HorizontalAlignment="Right"
+                               Margin="0,0,4,0" Foreground="{StaticResource TextSecondaryBrush}"/>
                     <ContentControl Grid.Column="3" Content="{Binding Qty}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
                 </Grid>
             </DataTemplate>

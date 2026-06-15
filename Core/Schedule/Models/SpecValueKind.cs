@@ -10,5 +10,8 @@ namespace TurboSuite.Schedule.Models;
 public enum SpecValueKind
 {
     Text,
-    Numeric
+    Numeric,
+
+    /// <summary>A Yes/No (Integer) param: rendered as a checkbox; value carried as "1"/"0".</summary>
+    Boolean
 }

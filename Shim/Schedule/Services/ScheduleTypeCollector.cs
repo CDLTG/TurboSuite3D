@@ -93,7 +93,10 @@ public static class ScheduleTypeCollector
             return field;
         }
 
-        field.ValueKind = storageTypes[0] == StorageType.String ? SpecValueKind.Text : SpecValueKind.Numeric;
+        field.ValueKind =
+            storageTypes[0] == StorageType.String ? SpecValueKind.Text
+            : storageTypes[0] == StorageType.Integer && IsYesNo(prms[0]) ? SpecValueKind.Boolean
+            : SpecValueKind.Numeric;
         field.IsReadOnly = prms.Any(p => p.IsReadOnly);
 
         var values = prms.Select(ReadDisplay).ToList();
@@ -121,6 +124,10 @@ public static class ScheduleTypeCollector
         }
         return symbol.LookupParameter(paramKey);
     }
+
+    /// <summary>True when an Integer param is a Yes/No (boolean) — rendered as a checkbox.</summary>
+    private static bool IsYesNo(Parameter p) =>
+        p.Definition is InternalDefinition def && def.GetDataType() == SpecTypeId.Boolean.YesNo;
 
     private static string ReadDisplay(Parameter p)
     {

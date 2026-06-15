@@ -66,6 +66,7 @@ public class SpecField : ViewModelBase
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(ShowPlaceholder));
             OnPropertyChanged(nameof(ShowUrlButton));
+            OnPropertyChanged(nameof(BoolValue));
             DirtyChanged?.Invoke(this);
         }
     }
@@ -83,6 +84,19 @@ public class SpecField : ViewModelBase
     /// <summary>Click-to-open glyph shows only on a URL field that currently has a value.</summary>
     public bool ShowUrlButton => Def.IsUrl && !string.IsNullOrWhiteSpace(_value);
 
+    /// <summary>True for a Yes/No param — the form renders a checkbox instead of a text box.</summary>
+    public bool IsBoolean => ValueKind == SpecValueKind.Boolean;
+
+    /// <summary>Inverse of <see cref="IsBoolean"/>: the text editor shows for every non-boolean field.</summary>
+    public bool ShowTextEditor => !IsBoolean;
+
+    /// <summary>Checkbox state for a boolean field, persisted through <see cref="Value"/> as "1"/"0".</summary>
+    public bool BoolValue
+    {
+        get => _value == "1";
+        set => Value = value ? "1" : "0";
+    }
+
     /// <summary>Raised whenever dirtiness may have changed; arg is this field.</summary>
     public event Action<SpecField> DirtyChanged;
 
@@ -96,6 +110,7 @@ public class SpecField : ViewModelBase
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(ShowPlaceholder));
         OnPropertyChanged(nameof(ShowUrlButton));
+        OnPropertyChanged(nameof(BoolValue));
     }
 
     /// <summary>Paste a clipboard value as a user edit (marks dirty); no-op on locked fields.</summary>
@@ -115,6 +130,7 @@ public class SpecField : ViewModelBase
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(ShowPlaceholder));
         OnPropertyChanged(nameof(ShowUrlButton));
+        OnPropertyChanged(nameof(BoolValue));
         DirtyChanged?.Invoke(this);
     }
 

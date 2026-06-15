@@ -102,7 +102,6 @@ public class FieldDef
         // ── Electrical ──
         list.Add(new FieldDef("Power", SpecSection.Electrical, ParameterNames.Power, SpecKinds.Both));
         list.Add(new FieldDef("Power/Length", SpecSection.Electrical, ParameterNames.PowerPerLength, SpecKinds.Fixture));
-        list.Add(new FieldDef("Linear Power", SpecSection.Electrical, ParameterNames.LinearPower, SpecKinds.Fixture));
         list.Add(new FieldDef("Voltage", SpecSection.Electrical, ParameterNames.Voltage, SpecKinds.Both));
         list.Add(new FieldDef("Dimming Protocol", SpecSection.Electrical, ParameterNames.DimmingProtocol, SpecKinds.Both));
         list.Add(new FieldDef("Dimming Range", SpecSection.Electrical, ParameterNames.DimmingRange, SpecKinds.Both));
