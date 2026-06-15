@@ -209,6 +209,13 @@
                             <TextBlock DockPanel.Dock="Top" Text="Room Order" FontWeight="SemiBold" Margin="8,8,8,4"
                                        Foreground="{StaticResource TextPrimaryBrush}"/>
 
+                            <!-- Live filter on the room list — only shown while reordering -->
+                            <TextBox DockPanel.Dock="Top" Margin="8,0,8,6" Height="24"
+                                     VerticalContentAlignment="Center"
+                                     Visibility="{Binding KeypadTab.IsReordering, Converter={StaticResource BoolToVisibility}}"
+                                     Text="{Binding KeypadTab.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                     ToolTip="Filter rooms by name"/>
+
                             <!-- Bottom buttons: Reset + Reorder (normal), Apply + Cancel (reorder mode) -->
                             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="4,4"
                                        HorizontalAlignment="Center">

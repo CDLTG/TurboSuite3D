@@ -18,7 +18,7 @@ Panel schedule slot management for the selected panel.
 Lists all Lighting Devices whose family name contains "keypad".
 
 - Editable **Switch ID** column
-- **Drag-drop room ordering** sidebar (persisted per-document) controls sort order
+- **Drag-drop room ordering** sidebar (persisted per-document) controls sort order; while in **Reorder** mode a live name filter narrows the list (filters the view only — click-order and Apply still use the full room list)
 - **Auto-number** assigns sequential Switch IDs in sort order
 
 ## Tab 3 — Power Supplies

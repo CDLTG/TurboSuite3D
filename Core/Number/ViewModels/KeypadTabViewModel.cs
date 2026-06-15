@@ -60,8 +60,25 @@ namespace TurboSuite.Number.ViewModels
         private bool _isReordering;
         private int _nextClickOrder;
         private Dictionary<string, int> _reorderSnapshot;
+        private string _searchText = string.Empty;
 
         public ObservableCollection<RoomOrderItem> RoomOrder { get; } = new ObservableCollection<RoomOrderItem>();
+
+        /// <summary>
+        /// Live substring filter (case-insensitive) on the Room Order list. Only surfaced
+        /// in the UI during reorder mode; it filters the visible list only — click-order and
+        /// Apply read the full <see cref="RoomOrder"/> collection, so a filtered-out room
+        /// keeps its number and still lands in the applied order.
+        /// </summary>
+        public string SearchText
+        {
+            get => _searchText;
+            set
+            {
+                if (SetProperty(ref _searchText, value ?? string.Empty))
+                    CollectionViewSource.GetDefaultView(RoomOrder).Refresh();
+            }
+        }
 
         public bool IsSidebarVisible
         {
@@ -129,6 +146,15 @@ namespace TurboSuite.Number.ViewModels
             {
                 ApplyDefaultSort();
             }
+
+            CollectionViewSource.GetDefaultView(RoomOrder).Filter = RoomMatchesSearch;
+        }
+
+        private bool RoomMatchesSearch(object obj)
+        {
+            if (string.IsNullOrEmpty(_searchText)) return true;
+            return obj is RoomOrderItem item &&
+                   item.Name.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private void ToggleSidebar()
@@ -192,6 +218,7 @@ namespace TurboSuite.Number.ViewModels
 
         private void StartReorder()
         {
+            SearchText = string.Empty;
             _reorderSnapshot = RoomOrder.ToDictionary(r => r.Name, r => r.ClickOrder);
             _nextClickOrder = RoomOrder.Count > 0 ? RoomOrder.Max(r => r.ClickOrder) : 0;
             foreach (var item in RoomOrder)
@@ -240,12 +267,14 @@ namespace TurboSuite.Number.ViewModels
 
             _reorderSnapshot = null;
             IsReordering = false;
+            SearchText = string.Empty;
             ApplyCustomSort();
             SaveRoomOrder();
         }
 
         private void CancelReorder()
         {
+            SearchText = string.Empty;
             if (_reorderSnapshot != null)
             {
                 foreach (var item in RoomOrder)
