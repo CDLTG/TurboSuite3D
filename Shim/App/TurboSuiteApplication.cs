@@ -115,7 +115,7 @@ public class TurboSuiteApplication : IExternalApplication
                     "TurboSuite.Setup.SetupCommand",
                     "Set up a new project from the linked architectural model",
                     "Copies levels from the linked architectural model, creates Floor Plan and RCP views per level with firm view templates, and wires each view's link graphics to a chosen architectural view. 3D RVT-linked projects only.",
-                    "TurboSetup");
+                    "Blank");
             }
 
             CreateButton(utilitiesPanel, assemblyPath,
