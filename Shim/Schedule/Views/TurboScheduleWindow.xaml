@@ -1,0 +1,360 @@
+<Window
+    x:Class="TurboSuite.Schedule.Views.TurboScheduleWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="clr-namespace:TurboSuite.Schedule.Models;assembly=TurboSuite.Core"
+    Title="TurboSchedule"
+    Width="1010" SizeToContent="Height"
+    MinWidth="1010"
+    WindowStartupLocation="CenterScreen"
+    FontFamily="Segoe UI" FontSize="11"
+    Closing="Window_Closing">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- The field box is wrapped in a ContentControl; keep that wrapper out of the tab order
+                 so a single Tab lands directly in the editable TextBox (not the wrapper's focus rect). -->
+            <Style TargetType="ContentControl">
+                <Setter Property="Focusable" Value="False"/>
+            </Style>
+
+            <!-- Section field lists are containers, not editors — keep them out of the tab order so
+                 Tab never lands a dotted focus rect on a whole section (e.g. Catalog #/Qty). Implicit
+                 ItemsControl styles match by exact type, so the Type ComboBox is unaffected. -->
+            <Style TargetType="ItemsControl">
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="IsTabStop" Value="False"/>
+                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            </Style>
+
+            <!-- Nav arrow fill follows its button's enabled state (greys out at list ends). -->
+            <Style x:Key="NavArrowStyle" TargetType="Path">
+                <Setter Property="Fill" Value="#444444"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsEnabled, RelativeSource={RelativeSource AncestorType=Button}}" Value="False">
+                        <Setter Property="Fill" Value="#BBBBBB"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- The reusable input box: dot column + textbox with ⟨varies⟩/n/a overlay + 🔒 glyph. -->
+            <DataTemplate x:Key="SpecBoxTemplate" DataType="{x:Type models:SpecField}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Ellipse Grid.Column="0" Width="6" Height="6" VerticalAlignment="Center" HorizontalAlignment="Center"
+                             Fill="{StaticResource HeaderBlueBrush}"
+                             Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}"/>
+                    <Grid Grid.Column="1">
+                        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                 IsReadOnly="{Binding IsLocked}"
+                                 VerticalContentAlignment="Center" Padding="3,0" Height="20"
+                                 ToolTip="{Binding Value}">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Background" Value="White"/>
+                                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsLocked}" Value="True">
+                                            <Setter Property="Background" Value="#F0F0F0"/>
+                                            <Setter Property="Foreground" Value="#888888"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <TextBlock Text="{Binding Placeholder}" IsHitTestVisible="False" FontStyle="Italic"
+                                   Foreground="#999999" VerticalAlignment="Center" Margin="6,0,0,0"
+                                   Visibility="{Binding ShowPlaceholder, Converter={StaticResource BoolToVisibility}}"/>
+                        <TextBlock Text="🔒" IsHitTestVisible="False" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#999999" FontSize="9"
+                                   Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVisibility}}"/>
+                    </Grid>
+                </Grid>
+            </DataTemplate>
+
+            <!-- A labeled field row (label + box). -->
+            <DataTemplate x:Key="SpecFieldTemplate" DataType="{x:Type models:SpecField}">
+                <Grid Margin="0,1" Height="23">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="124"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                    <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
+                </Grid>
+            </DataTemplate>
+
+            <!-- Photometric uses a narrower label column (its labels are short) so the column can
+                 be compressed, freeing width for Identity. -->
+            <DataTemplate x:Key="SpecFieldNarrowTemplate" DataType="{x:Type models:SpecField}">
+                <Grid Margin="0,1" Height="23">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="62"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                    <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
+                </Grid>
+            </DataTemplate>
+
+            <!-- Catalog #/Qty paired inline. -->
+            <DataTemplate x:Key="CatalogRowTemplate" DataType="{x:Type models:CatalogRow}">
+                <Grid Margin="0,1" Height="23">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="124"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="14"/>
+                        <ColumnDefinition Width="88"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Number.Label}" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <ContentControl Grid.Column="1" Content="{Binding Number}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
+                    <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center" HorizontalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <ContentControl Grid.Column="3" Content="{Binding Qty}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
+                </Grid>
+            </DataTemplate>
+
+            <!-- A schedule-note full-width row. -->
+            <DataTemplate x:Key="NoteRowTemplate" DataType="{x:Type models:SpecField}">
+                <Grid Margin="0,1" Height="23">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="42"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
+                </Grid>
+            </DataTemplate>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="10" IsEnabled="{Binding IsEnabled}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── Top nav bar ── -->
+        <Grid Grid.Row="0" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0"
+                       FontSize="14" FontWeight="SemiBold"/>
+            <ComboBox Grid.Column="1" Width="190" Height="28" FontSize="14" VerticalContentAlignment="Center"
+                      ItemsSource="{Binding Pages}" SelectedItem="{Binding CurrentPage}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource HeaderBlueBrush}"
+                                     Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}"/>
+                            <TextBlock Text="{Binding TypeMark}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <Button Grid.Column="2" Width="28" Height="24" Margin="6,0,2,0" Padding="0"
+                    Style="{StaticResource RevitButtonStyle}" Command="{Binding PrevCommand}" ToolTip="Previous type">
+                <Path Data="M 7,0 L 0,6 L 7,12 Z" Stretch="Uniform" Width="7" Height="11" Style="{StaticResource NavArrowStyle}"/>
+            </Button>
+            <Button Grid.Column="3" Width="28" Height="24" Margin="0,0,8,0" Padding="0"
+                    Style="{StaticResource RevitButtonStyle}" Command="{Binding NextCommand}" ToolTip="Next type">
+                <Path Data="M 0,0 L 7,6 L 0,12 Z" Stretch="Uniform" Width="7" Height="11" Style="{StaticResource NavArrowStyle}"/>
+            </Button>
+            <TextBlock Grid.Column="4" Text="{Binding PagePositionText}" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+
+            <Menu Grid.Column="6" Background="Transparent" VerticalAlignment="Center" Margin="0,0,6,0">
+                <MenuItem Header="Copy ▾" Height="24">
+                    <MenuItem Header="Copy Type" Command="{Binding CopyTypeCommand}"/>
+                    <Separator/>
+                    <MenuItem Header="Copy Identity" Command="{Binding CopySectionCommand}"
+                              CommandParameter="{x:Static models:SpecSection.Identity}"/>
+                    <MenuItem Header="Copy Electrical" Command="{Binding CopySectionCommand}"
+                              CommandParameter="{x:Static models:SpecSection.Electrical}"/>
+                    <MenuItem Header="Copy Mechanical" Command="{Binding CopySectionCommand}"
+                              CommandParameter="{x:Static models:SpecSection.Mechanical}"/>
+                    <MenuItem Header="Copy Photometric" Command="{Binding CopySectionCommand}"
+                              CommandParameter="{x:Static models:SpecSection.Photometric}"/>
+                    <MenuItem Header="Copy Notes" Command="{Binding CopySectionCommand}"
+                              CommandParameter="{x:Static models:SpecSection.Notes}"/>
+                </MenuItem>
+            </Menu>
+            <Button Grid.Column="7" Content="Paste" Width="72" Height="24" Margin="0,0,12,0" Padding="8,4"
+                    Style="{StaticResource RevitButtonStyle}" Command="{Binding PasteCommand}"/>
+
+            <TextBlock Grid.Column="8" Text="{Binding UnsavedBadge}" VerticalAlignment="Center"
+                       Foreground="{StaticResource HeaderBlueBrush}" FontWeight="SemiBold"/>
+        </Grid>
+
+        <Border Grid.Row="1" Height="1" Background="{StaticResource SeparatorBrush}" Margin="0,0,0,6"/>
+
+        <!-- ── Body (3 zones + notes), DataContext = current page ── -->
+        <!-- Columns row stretches (*): the three GroupBoxes fill it so their bottoms line up. At the
+             window's initial (content-fit) height there's no slack; growing the window taller stretches
+             the columns (acceptable whitespace) while Notes + the action bar stay anchored at the bottom. -->
+        <Grid Grid.Row="2" DataContext="{Binding CurrentPage}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="400"/>
+                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="165"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Identity -->
+            <GroupBox Grid.Row="0" Grid.Column="0" Margin="0,0,8,0">
+                <GroupBox.Header>
+                    <TextBlock Text="IDENTITY" FontWeight="SemiBold">
+                        <TextBlock.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy Identity"
+                                          Command="{Binding DataContext.CopySectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="{x:Static models:SpecSection.Identity}"/>
+                                <MenuItem Header="Paste Identity"
+                                          Command="{Binding DataContext.PasteSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="{x:Static models:SpecSection.Identity}"/>
+                            </ContextMenu>
+                        </TextBlock.ContextMenu>
+                    </TextBlock>
+                </GroupBox.Header>
+                <StackPanel Margin="4">
+                    <ItemsControl ItemsSource="{Binding IdentityFields}" ItemTemplate="{StaticResource SpecFieldTemplate}"/>
+                    <Grid Margin="0,6,0,2">
+                        <TextBlock Text="Catalog # / Qty" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock HorizontalAlignment="Right"
+                                   Visibility="{Binding IsFixture, Converter={StaticResource BoolToVisibility}}">
+                            <Hyperlink NavigateUri="https://cdltg.github.io/TurboSuite3D/" RequestNavigate="Hyperlink_RequestNavigate">
+                                Counts syntax ↗
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding CatalogRows}" ItemTemplate="{StaticResource CatalogRowTemplate}"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Electrical + Mechanical stacked; Mechanical fills the remaining height so its bottom
+                 aligns with the Identity and Photometric columns. -->
+            <Grid Grid.Row="0" Grid.Column="1" Margin="0,0,8,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <GroupBox Grid.Row="0">
+                    <GroupBox.Header>
+                        <TextBlock Text="ELECTRICAL" FontWeight="SemiBold">
+                            <TextBlock.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Copy Electrical"
+                                              Command="{Binding DataContext.CopySectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{x:Static models:SpecSection.Electrical}"/>
+                                    <MenuItem Header="Paste Electrical"
+                                              Command="{Binding DataContext.PasteSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{x:Static models:SpecSection.Electrical}"/>
+                                </ContextMenu>
+                            </TextBlock.ContextMenu>
+                        </TextBlock>
+                    </GroupBox.Header>
+                    <ItemsControl Margin="4" ItemsSource="{Binding ElectricalFields}" ItemTemplate="{StaticResource SpecFieldTemplate}"/>
+                </GroupBox>
+                <GroupBox Grid.Row="1" Margin="0,8,0,0">
+                    <GroupBox.Header>
+                        <TextBlock Text="MECHANICAL" FontWeight="SemiBold">
+                            <TextBlock.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Copy Mechanical"
+                                              Command="{Binding DataContext.CopySectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{x:Static models:SpecSection.Mechanical}"/>
+                                    <MenuItem Header="Paste Mechanical"
+                                              Command="{Binding DataContext.PasteSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{x:Static models:SpecSection.Mechanical}"/>
+                                </ContextMenu>
+                            </TextBlock.ContextMenu>
+                        </TextBlock>
+                    </GroupBox.Header>
+                    <ItemsControl Margin="4" ItemsSource="{Binding MechanicalFields}" ItemTemplate="{StaticResource SpecFieldTemplate}"/>
+                </GroupBox>
+            </Grid>
+
+            <!-- Photometric (fixtures only; column reserved so driver pages don't reflow) -->
+            <GroupBox Grid.Row="0" Grid.Column="2"
+                      Visibility="{Binding HasPhotometric, Converter={StaticResource BoolToVisibility}}">
+                <GroupBox.Header>
+                    <TextBlock Text="PHOTOMETRIC" FontWeight="SemiBold">
+                        <TextBlock.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy Photometric"
+                                          Command="{Binding DataContext.CopySectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="{x:Static models:SpecSection.Photometric}"/>
+                                <MenuItem Header="Paste Photometric"
+                                          Command="{Binding DataContext.PasteSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="{x:Static models:SpecSection.Photometric}"/>
+                            </ContextMenu>
+                        </TextBlock.ContextMenu>
+                    </TextBlock>
+                </GroupBox.Header>
+                <ItemsControl Margin="4" ItemsSource="{Binding PhotometricFields}" ItemTemplate="{StaticResource SpecFieldNarrowTemplate}"/>
+            </GroupBox>
+
+            <!-- Schedule Notes band -->
+            <GroupBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                <GroupBox.Header>
+                    <TextBlock Text="SCHEDULE NOTES" FontWeight="SemiBold">
+                        <TextBlock.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy Notes"
+                                          Command="{Binding DataContext.CopySectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="{x:Static models:SpecSection.Notes}"/>
+                                <MenuItem Header="Paste Notes"
+                                          Command="{Binding DataContext.PasteSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="{x:Static models:SpecSection.Notes}"/>
+                            </ContextMenu>
+                        </TextBlock.ContextMenu>
+                    </TextBlock>
+                </GroupBox.Header>
+                <ItemsControl Margin="4" ItemsSource="{Binding NoteFields}" ItemTemplate="{StaticResource NoteRowTemplate}"/>
+            </GroupBox>
+        </Grid>
+
+        <Border Grid.Row="3" Height="1" Background="{StaticResource SeparatorBrush}" Margin="0,8,0,0"/>
+
+        <!-- ── Action bar ── -->
+        <Grid Grid.Row="4" Margin="0,8,0,0">
+            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Discard" Width="90" Height="28" Margin="0,0,8,0"
+                        Style="{StaticResource RevitButtonStyle}" Command="{Binding DiscardCommand}"/>
+                <Button Content="{Binding SaveLabel}" Width="110" Height="28"
+                        Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SaveCommand}"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

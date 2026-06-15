@@ -18,7 +18,7 @@ public class TurboSuiteApplication : IExternalApplication
     // Gates experimental commands (e.g., TurboMask) so they ship compiled but unreachable
     // until they're ready. `static readonly` (not `const`) so the compiler doesn't flag the
     // gated branch as unreachable (CS0162).
-    private static readonly bool ExperimentalCommandsEnabled = false;
+    private static readonly bool ExperimentalCommandsEnabled = true;
 
     private static bool _updateAccepted;
 
@@ -125,6 +125,17 @@ public class TurboSuiteApplication : IExternalApplication
                 "Assign CAD room names to filled regions",
                 "Opens a window to assign room names from linked DWG files to Room Region filled regions and place TextNotes. Also provides region generation (under construction).",
                 "TurboName");
+
+            if (ExperimentalCommandsEnabled)
+            {
+                CreateButton(utilitiesPanel, assemblyPath,
+                    "TurboSchedule",
+                    "    Turbo    \n  Schedule   ",
+                    "TurboSuite.Schedule.ScheduleCommand",
+                    "Edit fixture and driver specs one type per page",
+                    "Opens a form-view editor for lighting fixture and driver type specifications — one Type Mark per page. Edits apply to every type instance and save in a single undo step.",
+                    "Blank");
+            }
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboZones",
