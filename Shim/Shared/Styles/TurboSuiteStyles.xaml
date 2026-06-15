@@ -9,6 +9,7 @@
 
     <!-- Core Brushes -->
     <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>
+    <SolidColorBrush x:Key="LinkBlueBrush" Color="#0066CC"/>
     <SolidColorBrush x:Key="ContentBgBrush" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="FooterBgBrush" Color="#F0F0F0"/>
     <SolidColorBrush x:Key="SeparatorBrush" Color="#CCCCCC"/>

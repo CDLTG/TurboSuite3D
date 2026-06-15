@@ -8,6 +8,7 @@
     MinWidth="1010"
     WindowStartupLocation="CenterScreen"
     FontFamily="Segoe UI" FontSize="11"
+    TextOptions.TextFormattingMode="Display"
     Closing="Window_Closing">
 
     <Window.Resources>
@@ -54,16 +55,20 @@
                     <Grid Grid.Column="1">
                         <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                  IsReadOnly="{Binding IsLocked}"
-                                 VerticalContentAlignment="Center" Padding="3,0" Height="20"
-                                 ToolTip="{Binding Value}">
+                                 VerticalContentAlignment="Center" Height="20">
                             <TextBox.Style>
                                 <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="White"/>
                                     <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                    <Setter Property="Padding" Value="3,0"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsLocked}" Value="True">
                                             <Setter Property="Background" Value="#F0F0F0"/>
                                             <Setter Property="Foreground" Value="#888888"/>
+                                        </DataTrigger>
+                                        <!-- Reserve room at the right so the value never runs under the ↗ glyph. -->
+                                        <DataTrigger Binding="{Binding ShowUrlButton}" Value="True">
+                                            <Setter Property="Padding" Value="3,0,16,0"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -75,6 +80,13 @@
                         <TextBlock Text="🔒" IsHitTestVisible="False" HorizontalAlignment="Right"
                                    VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#999999" FontSize="9"
                                    Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVisibility}}"/>
+                        <!-- Click-to-open glyph for URL fields: launches the default browser (no copy/paste),
+                             mirroring native Revit's URL parameter button. Pinned right like the lock glyph,
+                             colored to match the Counts syntax link. -->
+                        <TextBlock Text="↗" Cursor="Hand" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   Margin="0,0,4,0" FontSize="11" Foreground="{StaticResource LinkBlueBrush}"
+                                   MouseLeftButtonUp="UrlGlyph_Click"
+                                   Visibility="{Binding ShowUrlButton, Converter={StaticResource BoolToVisibility}}"/>
                     </Grid>
                 </Grid>
             </DataTemplate>
@@ -84,6 +96,22 @@
                 <Grid Margin="0,1" Height="23">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="124"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                    <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
+                </Grid>
+            </DataTemplate>
+
+            <!-- Identity reuses the row layout but with a tighter label column: its labels are short
+                 (longest is "Data Sheet URL"), so the shared 124px reserve leaves dead space between
+                 label and field. 90px fits the labels and lets the field start closer to them. Kept in
+                 sync with CatalogRowTemplate's label column so the field left edges line up. -->
+            <DataTemplate x:Key="SpecFieldIdentityTemplate" DataType="{x:Type models:SpecField}">
+                <Grid Margin="0,1" Height="23">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
@@ -110,7 +138,7 @@
             <DataTemplate x:Key="CatalogRowTemplate" DataType="{x:Type models:CatalogRow}">
                 <Grid Margin="0,1" Height="23">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="124"/>
+                        <ColumnDefinition Width="90"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="14"/>
                         <ColumnDefinition Width="88"/>
@@ -246,12 +274,13 @@
                     </TextBlock>
                 </GroupBox.Header>
                 <StackPanel Margin="4">
-                    <ItemsControl ItemsSource="{Binding IdentityFields}" ItemTemplate="{StaticResource SpecFieldTemplate}"/>
+                    <ItemsControl ItemsSource="{Binding IdentityFields}" ItemTemplate="{StaticResource SpecFieldIdentityTemplate}"/>
                     <Grid Margin="0,6,0,2">
                         <TextBlock Text="Catalog # / Qty" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
                         <TextBlock HorizontalAlignment="Right"
                                    Visibility="{Binding IsFixture, Converter={StaticResource BoolToVisibility}}">
-                            <Hyperlink NavigateUri="https://cdltg.github.io/TurboSuite3D/" RequestNavigate="Hyperlink_RequestNavigate">
+                            <Hyperlink NavigateUri="https://cdltg.github.io/TurboSuite3D/" RequestNavigate="Hyperlink_RequestNavigate"
+                                       Foreground="{StaticResource LinkBlueBrush}">
                                 Counts syntax ↗
                             </Hyperlink>
                         </TextBlock>

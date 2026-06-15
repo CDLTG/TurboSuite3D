@@ -1,7 +1,9 @@
 #nullable disable
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Navigation;
+using TurboSuite.Schedule.Models;
 using TurboSuite.Schedule.ViewModels;
 
 namespace TurboSuite.Schedule.Views
@@ -22,6 +24,13 @@ namespace TurboSuite.Schedule.Views
         {
             MinHeight = ActualHeight;
             SizeToContent = SizeToContent.Manual;
+
+            // WindowStartupLocation="CenterScreen" positions the window before SizeToContent="Height"
+            // has resolved the final height, so it lands too high. Re-center against the work area now
+            // that ActualWidth/Height are known.
+            var area = SystemParameters.WorkArea;
+            Left = area.Left + (area.Width - ActualWidth) / 2;
+            Top = area.Top + (area.Height - ActualHeight) / 2;
         }
 
         // Close-time guard: prompt when dirty. Yes saves (async) and keeps the window open so the
@@ -54,6 +63,24 @@ namespace TurboSuite.Schedule.Views
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
             e.Handled = true;
+        }
+
+        // The ↗ glyph on a URL field opens the value in the default browser. Bare values (no scheme)
+        // get https:// prepended; a malformed URL is swallowed rather than thrown at the user.
+        private void UrlGlyph_Click(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            if ((sender as FrameworkElement)?.DataContext is not SpecField field)
+                return;
+
+            var url = field.Value?.Trim();
+            if (string.IsNullOrEmpty(url))
+                return;
+            if (!url.Contains("://"))
+                url = "https://" + url;
+
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            catch { /* malformed/unsupported URL — ignore */ }
         }
     }
 }

@@ -51,8 +51,11 @@ public class FieldDef
     public int Slot { get; }
     public int MaxChars { get; }
 
+    /// <summary>True for URL-valued fields — the form shows a click-to-open glyph that launches the browser.</summary>
+    public bool IsUrl { get; }
+
     public FieldDef(string label, SpecSection section, string paramKey, SpecKinds kinds,
-        bool isBuiltIn = false, FieldRole role = FieldRole.Normal, int slot = 0, int maxChars = 0)
+        bool isBuiltIn = false, FieldRole role = FieldRole.Normal, int slot = 0, int maxChars = 0, bool isUrl = false)
     {
         Label = label;
         Section = section;
@@ -62,6 +65,7 @@ public class FieldDef
         Role = role;
         Slot = slot;
         MaxChars = maxChars;
+        IsUrl = isUrl;
     }
 
     public bool AppliesTo(PageKind kind)
@@ -87,8 +91,8 @@ public class FieldDef
         list.Add(new FieldDef("Manufacturer", SpecSection.Identity, "ALL_MODEL_MANUFACTURER", SpecKinds.Both, isBuiltIn: true, maxChars: 30));
         list.Add(new FieldDef("Description 1", SpecSection.Identity, "ALL_MODEL_DESCRIPTION", SpecKinds.Both, isBuiltIn: true, maxChars: 40));
         list.Add(new FieldDef("Description 2", SpecSection.Identity, ParameterNames.Description2, SpecKinds.Both, maxChars: 40));
-        list.Add(new FieldDef("URL", SpecSection.Identity, "ALL_MODEL_URL", SpecKinds.Both, isBuiltIn: true));
-        list.Add(new FieldDef("Data Sheet URL", SpecSection.Identity, ParameterNames.DataSheetUrl, SpecKinds.Both));
+        list.Add(new FieldDef("URL", SpecSection.Identity, "ALL_MODEL_URL", SpecKinds.Both, isBuiltIn: true, isUrl: true));
+        list.Add(new FieldDef("Data Sheet URL", SpecSection.Identity, ParameterNames.DataSheetUrl, SpecKinds.Both, isUrl: true));
         for (int c = 1; c <= 6; c++)
         {
             list.Add(new FieldDef($"Catalog #{c}", SpecSection.Identity, $"Catalog Number{c}", SpecKinds.Both, role: FieldRole.CatalogNumber, slot: c, maxChars: 60));

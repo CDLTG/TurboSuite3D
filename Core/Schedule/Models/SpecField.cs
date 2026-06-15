@@ -65,6 +65,7 @@ public class SpecField : ViewModelBase
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(ShowPlaceholder));
+            OnPropertyChanged(nameof(ShowUrlButton));
             DirtyChanged?.Invoke(this);
         }
     }
@@ -79,6 +80,9 @@ public class SpecField : ViewModelBase
     public string Placeholder => IsNa ? "n/a" : IsVaries ? "⟨varies⟩" : "";
     public bool ShowPlaceholder => (IsNa || IsVaries) && string.IsNullOrEmpty(_value);
 
+    /// <summary>Click-to-open glyph shows only on a URL field that currently has a value.</summary>
+    public bool ShowUrlButton => Def.IsUrl && !string.IsNullOrWhiteSpace(_value);
+
     /// <summary>Raised whenever dirtiness may have changed; arg is this field.</summary>
     public event Action<SpecField> DirtyChanged;
 
@@ -91,6 +95,7 @@ public class SpecField : ViewModelBase
         OnPropertyChanged(nameof(Value));
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(ShowPlaceholder));
+        OnPropertyChanged(nameof(ShowUrlButton));
     }
 
     /// <summary>Paste a clipboard value as a user edit (marks dirty); no-op on locked fields.</summary>
@@ -109,6 +114,7 @@ public class SpecField : ViewModelBase
         OnPropertyChanged(nameof(Value));
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(ShowPlaceholder));
+        OnPropertyChanged(nameof(ShowUrlButton));
         DirtyChanged?.Invoke(this);
     }
 
