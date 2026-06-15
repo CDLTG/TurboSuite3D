@@ -48,7 +48,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(settingsPanel, assemblyPath,
                 "TurboTab",
-                "    Turbo    \n     Tab     ",
+                "     Tab     ",
                 "TurboSuite.Tab.TabCommand",
                 "Toggle document tab coloring",
                 "Colors each open document tab with a distinct background color for easy visual identification. State persists across sessions.",
@@ -63,7 +63,7 @@ public class TurboSuiteApplication : IExternalApplication
             // ── Commands panel ──
             CreateButton(commandsPanel, assemblyPath,
                 "TurboCompact",
-                "    Turbo    \n   Compact   ",
+                "   Compact   ",
                 "TurboSuite.Compact.CompactCommand",
                 "Suggested shortcut: Ctrl+Shft+S\nClean and compact the active family",
                 "Removes unused materials from the active family document and saves with the compact option to reduce file size.",
@@ -75,7 +75,7 @@ public class TurboSuiteApplication : IExternalApplication
             {
                 CreateButton(commandsPanel, assemblyPath,
                     "TurboSnoop",
-                    "    Turbo    \n    Snoop    ",
+                    "    Snoop    ",
                     "TurboSuite.Snoop.SnoopCommand",
                     "List the Visibility/Graphics checkboxes a linked family draws under",
                     "Pick a linked architectural family to list the Visibility/Graphics Category → Subcategory checkboxes its geometry draws under (model geometry vs view-dependent annotation) — so you know which VG → RVT Links checkbox controls a clearance/path/egress line. Read-only.",
@@ -84,7 +84,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(commandsPanel, assemblyPath,
                 "TurboTag",
-                "    Turbo    \n     Tag     ",
+                "     Tag     ",
                 "TurboSuite.Tag.TagCommand",
                 "Suggested shortcut: TT\nAuto-place lighting fixture type tags",
                 "Places type tags on selected lighting fixtures with configurable direction. Supports point-based, line-based, and face-based fixtures.",
@@ -92,7 +92,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(commandsPanel, assemblyPath,
                 "TurboWire",
-                "    Turbo    \n    Wire     ",
+                "    Wire     ",
                 "TurboSuite.Wire.WireCommand",
                 "Suggested shortcut: WW\nCreate wire connections between fixtures",
                 "Creates arc wires between lighting fixtures. Supports pre-selected circuits, multiple fixtures by proximity, and wall sconce spline routing.",
@@ -100,7 +100,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(commandsPanel, assemblyPath,
                 "TurboBubble",
-                "    Turbo    \n   Bubble    ",
+                "   Bubble    ",
                 "TurboSuite.Bubble.BubbleCommand",
                 "Suggested shortcut: TB\nCreate switchleg tag and wire for a lighting fixture",
                 "Creates a switchleg tag and wire connection for the selected lighting fixture tag. Works in floor plan and ceiling plan views.",
@@ -111,7 +111,7 @@ public class TurboSuiteApplication : IExternalApplication
             {
                 CreateButton(utilitiesPanel, assemblyPath,
                     "TurboSetup",
-                    "    Turbo    \n    Setup    ",
+                    "    Setup    ",
                     "TurboSuite.Setup.SetupCommand",
                     "Set up a new project from the linked architectural model",
                     "Copies levels from the linked architectural model, creates Floor Plan and RCP views per level with firm view templates, and wires each view's link graphics to a chosen architectural view. 3D RVT-linked projects only.",
@@ -120,7 +120,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboName",
-                "    Turbo    \n    Name     ",
+                "    Name     ",
                 "TurboSuite.Name.NameCommand",
                 "Assign CAD room names to filled regions",
                 "Opens a window to assign room names from linked DWG files to Room Region filled regions and place TextNotes. Also provides region generation (under construction).",
@@ -130,7 +130,7 @@ public class TurboSuiteApplication : IExternalApplication
             {
                 CreateButton(utilitiesPanel, assemblyPath,
                     "TurboSchedule",
-                    "    Turbo    \n  Schedule   ",
+                    "  Schedule   ",
                     "TurboSuite.Schedule.ScheduleCommand",
                     "Edit fixture and driver specs one type per page",
                     "Opens a form-view editor for lighting fixture and driver type specifications — one Type Mark per page. Edits apply to every type instance and save in a single undo step.",
@@ -139,7 +139,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboZones",
-                "    Turbo    \n    Zones    ",
+                "    Zones    ",
                 "TurboSuite.Zones.ZonesCommand",
                 "Update load names based on rooms and comments.",
                 "Updates the Load Name parameter for every Electrical Circuit using the room location of the first lighting fixture and the circuit Comments or Load Classification.",
@@ -147,7 +147,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboNumber",
-                "    Turbo    \n   Number    ",
+                "   Number    ",
                 "TurboSuite.Number.NumberCommand",
                 "Update numbering for switchlegs, keypads, and power supplies.",
                 "Opens a window to view and renumber electrical circuit numbers, device marks, and switch IDs for Keypad and Power Supply lighting devices.",
@@ -155,7 +155,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboRPS",
-                "    Turbo    \n     RPS     ",
+                "     RPS     ",
                 "TurboSuite.Driver.RPSCommand",
                 "Review power supply assignments for RPS circuits",
                 "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.",
@@ -163,7 +163,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboDocs",
-                "    Turbo    \n    Docs     ",
+                "    Docs     ",
                 "TurboSuite.Docs.DocsCommand",
                 "Generate fixture documentation PDFs",
                 "Opens a tabbed utility for generating cut sheet and fixture schedule PDFs from lighting fixture types in the active document.",
@@ -171,7 +171,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             CreateButton(commandsPanel, assemblyPath,
                 "TurboDriver",
-                "    Turbo    \n   Driver    ",
+                "   Driver    ",
                 "TurboSuite.Driver.DriverCommand",
                 "Suggested shortcut: TD\nDeploy power supplies for selected fixtures",
                 "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.",
@@ -181,7 +181,7 @@ public class TurboSuiteApplication : IExternalApplication
             {
                 CreateButton(commandsPanel, assemblyPath,
                     "TurboMask",
-                    "    Turbo    \n    Mask     ",
+                    "    Mask     ",
                     "TurboSuite.Mask.MaskCommand",
                     "Mask selected elements while preserving fixture graphics",
                     "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
