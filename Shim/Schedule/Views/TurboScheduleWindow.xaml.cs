@@ -59,6 +59,33 @@ namespace TurboSuite.Schedule.Views
             // No → fall through and close, discarding edits.
         }
 
+        // Esc closes the window (matching TurboZones/TurboNumber). The dirty-guard in Window_Closing
+        // still runs, so an Esc with unsaved edits prompts Save/Discard/Cancel rather than losing work.
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+                Close();
+        }
+
+        // Discard wipes all unsaved edits straight from the ViewModel — they were never committed to
+        // the model, so Revit's Undo can't bring them back. Confirm before firing (the button is only
+        // enabled when dirty, so DirtyCount is always > 0 here).
+        private void DiscardButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is not ScheduleMainViewModel vm || !vm.DiscardCommand.CanExecute(null))
+                return;
+
+            var choice = MessageBox.Show(
+                $"Discard unsaved changes on {vm.DirtyCount} type(s)?\n\nThis can't be undone.",
+                "TurboSchedule",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning,
+                MessageBoxResult.Cancel);
+
+            if (choice == MessageBoxResult.OK && vm.DiscardCommand.CanExecute(null))
+                vm.DiscardCommand.Execute(null);
+        }
+
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });

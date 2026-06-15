@@ -9,6 +9,7 @@
     WindowStartupLocation="CenterScreen"
     FontFamily="Segoe UI" FontSize="11"
     TextOptions.TextFormattingMode="Display"
+    KeyDown="Window_KeyDown"
     Closing="Window_Closing">
 
     <Window.Resources>
@@ -385,7 +386,8 @@
                        Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Discard" Width="90" Height="28" Margin="0,0,8,0"
-                        Style="{StaticResource RevitButtonStyle}" Command="{Binding DiscardCommand}"/>
+                        Style="{StaticResource RevitButtonStyle}" Click="DiscardButton_Click"
+                        IsEnabled="{Binding HasUnsavedChanges}"/>
                 <Button Content="{Binding SaveLabel}" Width="110" Height="28"
                         Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SaveCommand}"/>
             </StackPanel>
