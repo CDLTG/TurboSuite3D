@@ -79,6 +79,11 @@ internal static class ViewGenerationService
             if (template != null)
                 view.ApplyViewTemplateParameters(template);
 
+            // Turn the host Toposolid category off on the view itself. The template hide already
+            // covers this via ApplyViewTemplateParameters, but setting it per-view guarantees the
+            // linked Toposolid is suppressed even if the template didn't carry model-category visibility.
+            ToposolidVisibilityService.HideOn(view);
+
             created.Add(new CreatedView { View = view, Planned = planned });
             existingNames.Add(planned.ViewName);
         }

@@ -14,6 +14,17 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Neutralize row/cell selection: the only interactive element is the combo box,
+                 so the blue highlight (which also whitened the "New view" label) adds nothing. -->
+            <Style TargetType="DataGridRow">
+                <Style.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="Transparent"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
+                </Style.Resources>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -34,17 +45,29 @@
                   CanUserDeleteRows="False"
                   HeadersVisibility="Column"
                   GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="#E5E5E5"
+                  BorderBrush="#CCCCCC"
+                  BorderThickness="1,1,1,0"
+                  RowHeight="32"
                   MaxHeight="380">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="New view" Width="*" IsReadOnly="True"
-                    Binding="{Binding ViewName}"/>
+                    Binding="{Binding ViewName}">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                            <Setter Property="Margin" Value="6,0,0,0"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
                 <DataGridTemplateColumn Header="Linked view" Width="2*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox ItemsSource="{Binding AvailableLinkedViews}"
                                       SelectedItem="{Binding SelectedLinkedView, UpdateSourceTrigger=PropertyChanged}"
                                       DisplayMemberPath="DisplayName"
-                                      Margin="2"/>
+                                      Margin="2"
+                                      VerticalContentAlignment="Center"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

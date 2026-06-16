@@ -81,23 +81,22 @@ public class TurboSetupLinkLevelViewModel : ViewModelBase
         {
             var row = new LevelRowViewModel(level.Id, level.Name, level.Elevation);
             row.MainRequested += OnMainRequested;
+            row.PropertyChanged += OnLevelRowChanged;
             Levels.Add(row);
         }
 
-        ApplyDefaultMain();
+        // No auto-seeded Main. Elevation can't recover which level is "Main" — arch models set
+        // levels to real-world/survey elevations, so an "above grade = elevation >= 0" rule just
+        // lands on the lowest/highest level in the stack, not the main floor. Forcing a conscious
+        // pick (the radio gates Next) is correct rather than seeding a misleading default.
+        OnPropertyChanged(nameof(ShowMainHint));
     }
 
-    // Default Main = lowest above-grade (elevation >= 0) included level; if none above grade,
-    // the highest included level. Seeds the radio only — the user can override.
-    private void ApplyDefaultMain()
+    private void OnLevelRowChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        var included = Levels.Where(l => l.IsIncluded).ToList();
-        if (included.Count == 0)
-            return;
-
-        var aboveGrade = included.Where(l => l.Elevation >= 0).OrderBy(l => l.Elevation).ToList();
-        var main = aboveGrade.Count > 0 ? aboveGrade.First() : included.OrderBy(l => l.Elevation).Last();
-        main.IsMain = true;
+        if (e.PropertyName == nameof(LevelRowViewModel.IsIncluded) ||
+            e.PropertyName == nameof(LevelRowViewModel.IsMain))
+            OnPropertyChanged(nameof(ShowMainHint));
     }
 
     private void OnMainRequested(LevelRowViewModel chosen)
@@ -107,7 +106,15 @@ public class TurboSetupLinkLevelViewModel : ViewModelBase
                 row.ClearMainSilently();
     }
 
-    private bool CanOk() => Levels.Any(l => l.IsIncluded);
+    /// <summary>
+    /// Shown beneath the grid when levels are included but none of the included ones is marked
+    /// Main — i.e. Next is blocked specifically on the Main pick. Hidden once a Main is chosen.
+    /// </summary>
+    public bool ShowMainHint =>
+        Levels.Any(l => l.IsIncluded) && !Levels.Any(l => l.IsIncluded && l.IsMain);
+
+    // Next requires at least one included level AND a Main that is itself included.
+    private bool CanOk() => Levels.Any(l => l.IsIncluded && l.IsMain);
 
     private void ExecuteOk()
     {
@@ -116,23 +123,13 @@ public class TurboSetupLinkLevelViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// The included levels, sorted by elevation, with the chosen Main resolved. If no row is
-    /// marked Main, the single included level (or the default rule) applies.
+    /// The included levels, sorted by elevation, with the chosen Main resolved. Confirmation is
+    /// gated on an included Main (see <see cref="CanOk"/>), so the Main is always present here.
     /// </summary>
     public IReadOnlyList<LevelRowViewModel> GetSelectedLevels(out int mainIndex)
     {
         var selected = Levels.Where(l => l.IsIncluded).OrderBy(l => l.Elevation).ToList();
-
-        int idx = selected.FindIndex(l => l.IsMain);
-        if (idx < 0)
-        {
-            // No explicit Main among the included set — fall back to the default rule.
-            var aboveGrade = selected.Where(l => l.Elevation >= 0).ToList();
-            var fallback = aboveGrade.Count > 0 ? aboveGrade.First() : selected.LastOrDefault();
-            idx = fallback != null ? selected.IndexOf(fallback) : 0;
-        }
-
-        mainIndex = selected.Count == 0 ? 0 : idx;
+        mainIndex = System.Math.Max(0, selected.FindIndex(l => l.IsMain));
         return selected;
     }
 }

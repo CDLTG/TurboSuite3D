@@ -26,6 +26,11 @@ namespace TurboSuite.Setup
                 LinkedViewId = linkedViewId,
 
                 // Graphics come from the host model's object styles (the firm standard).
+                // NOTE: ObjectStyles = Custom is NOT settable — verified on Revit 2025, not just 2024.
+                // The "Model categories" dropdown maps to this property; setting it to Custom requires
+                // per-category override data the API can't supply, so SetLinkOverrides rejects the whole
+                // settings object and the link falls back off Custom (Basics tab included). Flipping that
+                // dropdown to <Custom> to re-style the firm's 4 working categories stays a manual step.
                 ObjectStyles = LinkVisibility.ByHostView,
                 ColorFill = LinkVisibility.ByHostView,
                 ViewFilterType = LinkVisibility.ByHostView,

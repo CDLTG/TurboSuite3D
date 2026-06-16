@@ -117,13 +117,19 @@
                    Text="Main is numbered 01. Levels above step up (02, 03…); levels below step down (00, -01…)."/>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Cancel" Width="80" Margin="0,0,8,0"
-                    Style="{StaticResource RevitButtonStyle}"
-                    Click="CancelButton_Click" IsCancel="True"/>
-            <Button Content="Next" Width="80"
-                    Style="{StaticResource RevitButtonStyle}"
-                    Command="{Binding OkCommand}" IsDefault="True"/>
-        </StackPanel>
+        <Grid Grid.Row="4" Margin="0,12,0,0">
+            <TextBlock HorizontalAlignment="Left" VerticalAlignment="Center"
+                       Foreground="#B05000" FontStyle="Italic"
+                       Text="Select a Main level to continue."
+                       Visibility="{Binding ShowMainHint, Converter={StaticResource BoolToVisibility}}"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" Width="80" Margin="0,0,8,0"
+                        Style="{StaticResource RevitButtonStyle}"
+                        Click="CancelButton_Click" IsCancel="True"/>
+                <Button Content="Next" Width="80"
+                        Style="{StaticResource RevitButtonStyle}"
+                        Command="{Binding OkCommand}" IsDefault="True"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

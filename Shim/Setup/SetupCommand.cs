@@ -156,7 +156,11 @@ public class SetupCommand : IExternalCommand
                     foreach (var v in candidates)
                         row.AvailableLinkedViews.Add(new TurboSetupViewMappingViewModel.LinkedViewOption(v.Id, v.Name));
 
-                    row.SelectedLinkedView = PreselectByName(row.AvailableLinkedViews, pv.LevelName, none);
+                    // No auto-preselect: every row defaults to "(none)". Name similarity between a
+                    // linked view and a level is a coincidence, not a signal of which view the
+                    // lighting set should base from — a confident-looking default would just get
+                    // rubber-stamped. The designer must consciously choose the source view per row.
+                    row.SelectedLinkedView = none;
                     return row;
                 }).ToList();
 
@@ -257,6 +261,17 @@ public class SetupCommand : IExternalCommand
                     t.Commit();
                 }
                 result.LevelsCopied = sourceToHostLevel.Count;
+
+                // 1b. Turn the host Toposolid category off on the firm templates BEFORE creating views,
+                //     so each view inherits "Toposolid off" when ApplyViewTemplateParameters runs. The
+                //     2022-origin templates can't express this; the running 2024+ job can. The linked
+                //     Toposolid follows the host category, suppressing it in the lighting set.
+                using (var t = new Transaction(doc, "Hide Toposolid on templates"))
+                {
+                    t.Start();
+                    ToposolidVisibilityService.HideOnTemplates(doc);
+                    t.Commit();
+                }
 
                 // 2. Create views and bake in the firm templates (one-shot, so the views stay free
                 //    to take link overrides in step 5).
@@ -373,26 +388,4 @@ public class SetupCommand : IExternalCommand
             .ToList();
     }
 
-    // Preselect the linked view whose name best matches the level name: exact (case-insensitive)
-    // first, then a contains-match, else "(none)".
-    private static TurboSetupViewMappingViewModel.LinkedViewOption PreselectByName(
-        IEnumerable<TurboSetupViewMappingViewModel.LinkedViewOption> options,
-        string levelName,
-        TurboSetupViewMappingViewModel.LinkedViewOption none)
-    {
-        var named = options.Where(o => !o.IsNone).ToList();
-
-        var exact = named.FirstOrDefault(o =>
-            string.Equals(o.DisplayName, levelName, StringComparison.OrdinalIgnoreCase));
-        if (exact != null) return exact;
-
-        if (!string.IsNullOrWhiteSpace(levelName))
-        {
-            var contains = named.FirstOrDefault(o =>
-                o.DisplayName.IndexOf(levelName, StringComparison.OrdinalIgnoreCase) >= 0);
-            if (contains != null) return contains;
-        }
-
-        return none;
-    }
 }
