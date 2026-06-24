@@ -20,8 +20,8 @@ namespace TurboSuite.Snoop;
 /// trial-and-error. TurboSnoop picks a linked family and lists every VG checkbox its geometry draws under. The
 /// user does the single uncheck — being modeless, the Revit view keeps its VG/VV keybind with the window open.
 ///
-/// STATE: gated SPIKE (ExperimentalCommandsEnabled, like TurboMask/TurboSetup) — compiled but unreachable in
-/// production. The pick is synchronous here (before the window exists), so no external-event work queue.
+/// STATE: shipped (ribbon still uses the `Blank` placeholder icon pending a dedicated one). The pick is
+/// synchronous here (before the window exists), so no external-event work queue.
 ///
 /// DELIBERATELY A FINDER, NOT A HIDER — there is no API to flip the VG checkbox this tool names, so do NOT add
 /// an "Apply":
