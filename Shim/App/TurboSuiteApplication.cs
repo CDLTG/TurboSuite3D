@@ -177,16 +177,13 @@ public class TurboSuiteApplication : IExternalApplication
                 "Select lighting fixtures with Remote Power Supply, then deploy recommended power supplies. Creates an electrical circuit if one doesn't exist.",
                 "TurboDriver");
 
-            if (ExperimentalCommandsEnabled)
-            {
-                CreateButton(commandsPanel, assemblyPath,
-                    "TurboMask",
-                    "    Mask     ",
-                    "TurboSuite.Mask.MaskCommand",
-                    "Mask selected elements while preserving fixture graphics",
-                    "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
-                    "Blank");
-            }
+            CreateButton(commandsPanel, assemblyPath,
+                "TurboMask",
+                "    Mask     ",
+                "TurboSuite.Mask.MaskCommand",
+                "Mask selected elements while preserving fixture graphics",
+                "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
+                "Blank");
 
             // Auto-update check (two handlers: one checks/stages, one shows the dialog on next idle)
             application.Idling += OnIdlingCheckForUpdate;

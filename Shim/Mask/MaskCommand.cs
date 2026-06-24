@@ -12,7 +12,7 @@ namespace TurboSuite.Mask;
 /// <summary>
 /// TurboMask — places a project-level masking region under the selected elements and overlays a
 /// view-level "stamp" (extracted from each fixture family's nested Generic Annotation) at every
-/// selected fixture so the visible footprint graphics survive the mask. See Specs/TurboMask-Plan.md.
+/// selected fixture so the visible footprint graphics survive the mask.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class MaskCommand : IExternalCommand

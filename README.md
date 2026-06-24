@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024 and 2025**, built for electrical/lighting designers working on luxury architectural lighting projects. Eleven commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET 8.0-windows for Revit 2025, .NET Framework 4.8 for Revit 2024), x64.
+A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024 and 2025**, built for electrical/lighting designers working on luxury architectural lighting projects. Twelve commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET 8.0-windows for Revit 2025, .NET Framework 4.8 for Revit 2024), x64.
 
 ## Installation
 
@@ -47,6 +47,7 @@ The "TurboSuite" ribbon tab has three panels:
 | [TurboWire](Shim/Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
 | [TurboBubble](Shim/Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
 | [TurboDriver](Shim/Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
+| [TurboMask](Shim/Mask/README.md) | | Mask selected elements while preserving fixture footprint graphics |
 
 ### Utilities Panel
 
@@ -76,10 +77,10 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 
 | Category | Used By |
 |----------|---------|
-| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs |
-| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs |
-| Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones |
-| Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones |
+| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs, TurboMask |
+| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs, TurboMask |
+| Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones, TurboMask |
+| Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones, TurboMask |
 
 ### Common Custom Parameters
 
