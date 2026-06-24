@@ -60,8 +60,6 @@ public class FixtureTypeSpec : ViewModelBase
 
     public bool IsFixture => Kind == PageKind.Fixture;
     public bool HasPhotometric => Kind == PageKind.Fixture && PhotometricFields.Count > 0;
-    public string KindBadge => Kind == PageKind.Fixture ? "Fixture" : "Driver";
-    public string DropdownLabel => $"{TypeMark}  [{KindBadge}]";
 
     public bool IsDirty => AllFields.Any(f => f.IsDirty);
 
@@ -71,7 +69,6 @@ public class FixtureTypeSpec : ViewModelBase
     private void RaiseDirty()
     {
         OnPropertyChanged(nameof(IsDirty));
-        OnPropertyChanged(nameof(DropdownLabel));
         DirtyChanged?.Invoke(this);
     }
 

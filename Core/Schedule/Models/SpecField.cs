@@ -22,6 +22,7 @@ public class SpecField : ViewModelBase
     private string _value = "";
     private bool _userEdited;
     private bool _isVaries;
+    private bool _originalVaries;
 
     public SpecField(FieldDef def)
     {
@@ -47,6 +48,10 @@ public class SpecField : ViewModelBase
         get => _isVaries;
         set
         {
+            // Remember the load-time varies state (before any user edit) so Discard can restore it.
+            // The only setter callers are the collector at load and the Value setter on first edit; the
+            // latter sets _userEdited first, so an edit (or a Discard restore) never re-captures wrongly.
+            if (!_userEdited) _originalVaries = value;
             if (SetProperty(ref _isVaries, value))
                 OnPropertyChanged(nameof(ShowPlaceholder));
         }
@@ -66,7 +71,7 @@ public class SpecField : ViewModelBase
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(ShowPlaceholder));
             OnPropertyChanged(nameof(ShowUrlButton));
-            OnPropertyChanged(nameof(BoolValue));
+            OnPropertyChanged(nameof(BoolValueNullable));
             DirtyChanged?.Invoke(this);
         }
     }
@@ -90,11 +95,15 @@ public class SpecField : ViewModelBase
     /// <summary>Inverse of <see cref="IsBoolean"/>: the text editor shows for every non-boolean field.</summary>
     public bool ShowTextEditor => !IsBoolean;
 
-    /// <summary>Checkbox state for a boolean field, persisted through <see cref="Value"/> as "1"/"0".</summary>
-    public bool BoolValue
+    /// <summary>Tri-state checkbox state for a boolean field. Null renders the native indeterminate dash
+    /// for an unresolved ⟨varies⟩ field (symbols disagree); the first click resolves it to a definite
+    /// true/false, persisted through <see cref="Value"/> as "1"/"0" and applied to every symbol on Save.
+    /// The checkbox is two-state (IsThreeState stays false), so it can <i>display</i> null but never set
+    /// it back — the user can't re-enter the indeterminate state once resolved.</summary>
+    public bool? BoolValueNullable
     {
-        get => _value == "1";
-        set => Value = value ? "1" : "0";
+        get => (IsVaries && !_userEdited) ? (bool?)null : _value == "1";
+        set => Value = value == true ? "1" : "0";
     }
 
     /// <summary>Raised whenever dirtiness may have changed; arg is this field.</summary>
@@ -110,7 +119,7 @@ public class SpecField : ViewModelBase
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(ShowPlaceholder));
         OnPropertyChanged(nameof(ShowUrlButton));
-        OnPropertyChanged(nameof(BoolValue));
+        OnPropertyChanged(nameof(BoolValueNullable));
     }
 
     /// <summary>Paste a clipboard value as a user edit (marks dirty); no-op on locked fields.</summary>
@@ -120,17 +129,20 @@ public class SpecField : ViewModelBase
         Value = value;
     }
 
-    /// <summary>Discard: revert to the read value and clear the edited flag.</summary>
+    /// <summary>Discard: revert to the read value, clear the edited flag, and restore the load-time
+    /// ⟨varies⟩/indeterminate state so a discarded varies field shows its placeholder/dash again
+    /// (not a blank/unchecked box).</summary>
     public void ResetToOriginal()
     {
         if (_value == OriginalValue && !_userEdited) return;
         _value = OriginalValue;
         _userEdited = false;
+        IsVaries = _originalVaries; // restore the ⟨varies⟩ placeholder / checkbox dash
         OnPropertyChanged(nameof(Value));
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(ShowPlaceholder));
         OnPropertyChanged(nameof(ShowUrlButton));
-        OnPropertyChanged(nameof(BoolValue));
+        OnPropertyChanged(nameof(BoolValueNullable));
         DirtyChanged?.Invoke(this);
     }
 
@@ -139,6 +151,7 @@ public class SpecField : ViewModelBase
     {
         OriginalValue = _value;
         _userEdited = false;
+        _originalVaries = false; // saved → the value is now uniform across symbols; no longer ⟨varies⟩
         OnPropertyChanged(nameof(IsDirty));
         DirtyChanged?.Invoke(this);
     }

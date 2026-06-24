@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024 and 2025**, built for electrical/lighting designers working on luxury architectural lighting projects. Thirteen commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET 8.0-windows for Revit 2025, .NET Framework 4.8 for Revit 2024), x64.
+A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024 and 2025**, built for electrical/lighting designers working on luxury architectural lighting projects. Fourteen commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET 8.0-windows for Revit 2025, .NET Framework 4.8 for Revit 2024), x64.
 
 ## Installation
 
@@ -55,6 +55,7 @@ The "TurboSuite" ribbon tab has three panels:
 | Button | Description |
 |--------|-------------|
 | [TurboName](Shim/Name/README.md) | Assign CAD room names and ceiling heights to filled regions |
+| [TurboSchedule](Shim/Schedule/README.md) | Edit lighting fixture and driver type specs, one Type Mark per page |
 | [TurboZones](Shim/Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Shim/Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
 | [TurboRPS](Shim/Driver/README.md) | Flag stale power-supply selections across all RPS circuits and batch-fix them in place |

@@ -90,9 +90,12 @@
                                    MouseLeftButtonUp="UrlGlyph_Click"
                                    Visibility="{Binding ShowUrlButton, Converter={StaticResource BoolToVisibility}}"/>
                     </Grid>
-                    <!-- Checkbox editor: Yes/No params. Disabled (greyed) when read-only or n/a. -->
+                    <!-- Checkbox editor: Yes/No params. Disabled (greyed) when read-only or n/a. Bound to
+                         the nullable BoolValueNullable so a mixed ⟨varies⟩ value shows the native
+                         indeterminate dash; IsThreeState stays false so a click resolves it to a definite
+                         state and the user can't set it back to indeterminate. -->
                     <CheckBox Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="2,0,0,0"
-                              IsChecked="{Binding BoolValue}" IsEnabled="{Binding IsEditable}"
+                              IsChecked="{Binding BoolValueNullable}" IsEnabled="{Binding IsEditable}"
                               Visibility="{Binding IsBoolean, Converter={StaticResource BoolToVisibility}}"/>
                 </Grid>
             </DataTemplate>
@@ -227,7 +230,7 @@
                 <MenuItem Header="Copy ▾" Height="24">
                     <MenuItem Header="Copy Type" Command="{Binding CopyTypeCommand}"/>
                     <Separator/>
-                    <MenuItem Header="Copy Identity" Command="{Binding CopySectionCommand}"
+                    <MenuItem Header="Copy Identity Data" Command="{Binding CopySectionCommand}"
                               CommandParameter="{x:Static models:SpecSection.Identity}"/>
                     <MenuItem Header="Copy Electrical" Command="{Binding CopySectionCommand}"
                               CommandParameter="{x:Static models:SpecSection.Electrical}"/>
@@ -235,7 +238,7 @@
                               CommandParameter="{x:Static models:SpecSection.Mechanical}"/>
                     <MenuItem Header="Copy Photometric" Command="{Binding CopySectionCommand}"
                               CommandParameter="{x:Static models:SpecSection.Photometric}"/>
-                    <MenuItem Header="Copy Notes" Command="{Binding CopySectionCommand}"
+                    <MenuItem Header="Copy Schedule Notes" Command="{Binding CopySectionCommand}"
                               CommandParameter="{x:Static models:SpecSection.Notes}"/>
                 </MenuItem>
             </Menu>
@@ -266,13 +269,13 @@
             <!-- Identity -->
             <GroupBox Grid.Row="0" Grid.Column="0" Margin="0,0,8,0">
                 <GroupBox.Header>
-                    <TextBlock Text="IDENTITY" FontWeight="SemiBold">
+                    <TextBlock Text="IDENTITY DATA" FontWeight="SemiBold">
                         <TextBlock.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Copy Identity"
+                                <MenuItem Header="Copy Identity Data"
                                           Command="{Binding DataContext.CopySectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                           CommandParameter="{x:Static models:SpecSection.Identity}"/>
-                                <MenuItem Header="Paste Identity"
+                                <MenuItem Header="Paste Identity Data"
                                           Command="{Binding DataContext.PasteSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                           CommandParameter="{x:Static models:SpecSection.Identity}"/>
                             </ContextMenu>
@@ -364,10 +367,10 @@
                     <TextBlock Text="SCHEDULE NOTES" FontWeight="SemiBold">
                         <TextBlock.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Copy Notes"
+                                <MenuItem Header="Copy Schedule Notes"
                                           Command="{Binding DataContext.CopySectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                           CommandParameter="{x:Static models:SpecSection.Notes}"/>
-                                <MenuItem Header="Paste Notes"
+                                <MenuItem Header="Paste Schedule Notes"
                                           Command="{Binding DataContext.PasteSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                           CommandParameter="{x:Static models:SpecSection.Notes}"/>
                             </ContextMenu>

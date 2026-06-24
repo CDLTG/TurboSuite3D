@@ -49,13 +49,12 @@ public class FieldDef
     public SpecKinds Kinds { get; }
     public FieldRole Role { get; }
     public int Slot { get; }
-    public int MaxChars { get; }
 
     /// <summary>True for URL-valued fields — the form shows a click-to-open glyph that launches the browser.</summary>
     public bool IsUrl { get; }
 
     public FieldDef(string label, SpecSection section, string paramKey, SpecKinds kinds,
-        bool isBuiltIn = false, FieldRole role = FieldRole.Normal, int slot = 0, int maxChars = 0, bool isUrl = false)
+        bool isBuiltIn = false, FieldRole role = FieldRole.Normal, int slot = 0, bool isUrl = false)
     {
         Label = label;
         Section = section;
@@ -64,7 +63,6 @@ public class FieldDef
         Kinds = kinds;
         Role = role;
         Slot = slot;
-        MaxChars = maxChars;
         IsUrl = isUrl;
     }
 
@@ -86,16 +84,16 @@ public class FieldDef
         var list = new List<FieldDef>();
 
         // ── Identity (both kinds, identical) ──
-        list.Add(new FieldDef("Classification", SpecSection.Identity, ParameterNames.Classification, SpecKinds.Both, maxChars: 24));
-        list.Add(new FieldDef("Model", SpecSection.Identity, "ALL_MODEL_MODEL", SpecKinds.Both, isBuiltIn: true, maxChars: 40));
-        list.Add(new FieldDef("Manufacturer", SpecSection.Identity, "ALL_MODEL_MANUFACTURER", SpecKinds.Both, isBuiltIn: true, maxChars: 30));
-        list.Add(new FieldDef("Description 1", SpecSection.Identity, "ALL_MODEL_DESCRIPTION", SpecKinds.Both, isBuiltIn: true, maxChars: 40));
-        list.Add(new FieldDef("Description 2", SpecSection.Identity, ParameterNames.Description2, SpecKinds.Both, maxChars: 40));
+        list.Add(new FieldDef("Classification", SpecSection.Identity, ParameterNames.Classification, SpecKinds.Both));
+        list.Add(new FieldDef("Model", SpecSection.Identity, "ALL_MODEL_MODEL", SpecKinds.Both, isBuiltIn: true));
+        list.Add(new FieldDef("Manufacturer", SpecSection.Identity, "ALL_MODEL_MANUFACTURER", SpecKinds.Both, isBuiltIn: true));
+        list.Add(new FieldDef("Description 1", SpecSection.Identity, "ALL_MODEL_DESCRIPTION", SpecKinds.Both, isBuiltIn: true));
+        list.Add(new FieldDef("Description 2", SpecSection.Identity, ParameterNames.Description2, SpecKinds.Both));
         list.Add(new FieldDef("URL", SpecSection.Identity, "ALL_MODEL_URL", SpecKinds.Both, isBuiltIn: true, isUrl: true));
         list.Add(new FieldDef("Data Sheet URL", SpecSection.Identity, ParameterNames.DataSheetUrl, SpecKinds.Both, isUrl: true));
         for (int c = 1; c <= 6; c++)
         {
-            list.Add(new FieldDef($"Catalog #{c}", SpecSection.Identity, $"Catalog Number{c}", SpecKinds.Both, role: FieldRole.CatalogNumber, slot: c, maxChars: 60));
+            list.Add(new FieldDef($"Catalog #{c}", SpecSection.Identity, $"Catalog Number{c}", SpecKinds.Both, role: FieldRole.CatalogNumber, slot: c));
             list.Add(new FieldDef($"Qty {c}", SpecSection.Identity, $"Catalog Qty{c}", SpecKinds.Both, role: FieldRole.CatalogQty, slot: c));
         }
 
@@ -111,10 +109,10 @@ public class FieldDef
         list.Add(new FieldDef("Derating Factor", SpecSection.Electrical, ParameterNames.DeratingFactor, SpecKinds.Driver));
 
         // ── Mechanical (driver drops Ceiling Thickness) ──
-        list.Add(new FieldDef("Listings & Ratings", SpecSection.Mechanical, ParameterNames.ListingsAndRatings, SpecKinds.Both, maxChars: 15));
+        list.Add(new FieldDef("Listings & Ratings", SpecSection.Mechanical, ParameterNames.ListingsAndRatings, SpecKinds.Both));
         list.Add(new FieldDef("Finish 1", SpecSection.Mechanical, ParameterNames.Finish1, SpecKinds.Both));
         list.Add(new FieldDef("Finish 2", SpecSection.Mechanical, ParameterNames.Finish2, SpecKinds.Both));
-        list.Add(new FieldDef("Mounting", SpecSection.Mechanical, ParameterNames.Mounting, SpecKinds.Both, maxChars: 20));
+        list.Add(new FieldDef("Mounting", SpecSection.Mechanical, ParameterNames.Mounting, SpecKinds.Both));
         list.Add(new FieldDef("Ceiling Thickness", SpecSection.Mechanical, ParameterNames.CeilingThickness, SpecKinds.Fixture));
 
         // ── Photometric (fixtures only) ──
@@ -130,7 +128,7 @@ public class FieldDef
 
         // ── Schedule Notes (both kinds) ──
         for (int n = 1; n <= 6; n++)
-            list.Add(new FieldDef($"Note {n}", SpecSection.Notes, $"Schedule Notes{n}", SpecKinds.Both, role: FieldRole.Note, slot: n, maxChars: 80));
+            list.Add(new FieldDef($"Note {n}", SpecSection.Notes, $"Schedule Notes{n}", SpecKinds.Both, role: FieldRole.Note, slot: n));
 
         return list;
     }

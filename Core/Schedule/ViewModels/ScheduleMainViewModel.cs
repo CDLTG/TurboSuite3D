@@ -207,11 +207,11 @@ public class ScheduleMainViewModel : ViewModelBase
 
     private static string SectionName(SpecSection s) => s switch
     {
-        SpecSection.Identity => "Identity",
+        SpecSection.Identity => "Identity Data",
         SpecSection.Electrical => "Electrical",
         SpecSection.Mechanical => "Mechanical",
         SpecSection.Photometric => "Photometric",
-        SpecSection.Notes => "Notes",
+        SpecSection.Notes => "Schedule Notes",
         _ => s.ToString()
     };
 
