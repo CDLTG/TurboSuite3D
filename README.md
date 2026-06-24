@@ -144,7 +144,7 @@ Platform target is **x64**. Requires the .NET 8.0 SDK and a local install of the
 
 ## License
 
-Released under the [GNU General Public License v3.0](LICENSE). Contributions welcome — please open an issue or pull request on [GitHub](https://github.com/CDLTG/TurboSuite3D).
+Released under the [GNU General Public License v3.0](LICENSE).
 
 ## Acknowledgments
 
