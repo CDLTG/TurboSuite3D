@@ -47,7 +47,7 @@ The "TurboSuite" ribbon tab has three panels:
 | [TurboWire](Shim/Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
 | [TurboBubble](Shim/Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
 | [TurboDriver](Shim/Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
-| [TurboMask](Shim/Mask/README.md) | | Mask selected elements while preserving fixture footprint graphics |
+| [TurboMask](Shim/Mask/README.md) | `BB` | Mask selected elements while preserving fixture footprint graphics |
 
 ### Utilities Panel
 

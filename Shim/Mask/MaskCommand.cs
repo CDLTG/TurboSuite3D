@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Mask.Services;
 using TurboSuite.Shared.Helpers;
+using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
 
 namespace TurboSuite.Mask;
 
@@ -120,6 +121,9 @@ public class MaskCommand : IExternalCommand
                     }
                 }
 
+                var wireOverlayIds = DrawWireOverlays(doc, activeView, fixtures);
+                groupMemberIds.AddRange(wireOverlayIds);
+
                 RaiseTagsAboveStamps(doc, activeView, fixtures);
 
                 if (groupMemberIds.Count > 1)
@@ -177,6 +181,7 @@ public class MaskCommand : IExternalCommand
     {
         var typeIdsToDelete = new List<ElementId>();
         var memberStampIds = new List<ElementId>();
+        var memberDetailIds = new List<ElementId>();
 
         foreach (var element in selectedElements)
         {
@@ -186,15 +191,20 @@ public class MaskCommand : IExternalCommand
                 var memberIds = group.UngroupMembers();
                 foreach (var id in memberIds)
                 {
-                    if (doc.GetElement(id) is FamilyInstance fi
+                    var member = doc.GetElement(id);
+                    if (member is FamilyInstance fi
                         && fi.Symbol?.Family?.Name?.StartsWith("Stamp_") == true)
                         memberStampIds.Add(id);
+                    else if (member is CurveElement ce && ce.ViewSpecific)
+                        memberDetailIds.Add(id); // wire-overlay detail lines
                 }
             }
         }
 
         if (memberStampIds.Count > 0)
             doc.Delete(memberStampIds);
+        if (memberDetailIds.Count > 0)
+            doc.Delete(memberDetailIds);
         if (typeIdsToDelete.Count > 0)
             doc.Delete(typeIdsToDelete);
     }
@@ -384,5 +394,99 @@ public class MaskCommand : IExternalCommand
         var copyOpts = new CopyPasteOptions();
         ElementTransformUtils.CopyElements(view, tagIds, view, Transform.Identity, copyOpts);
         doc.Delete(tagIds);
+    }
+
+    /// <summary>
+    /// Draws detail-line copies of every wire connected to the masked devices, on top of the
+    /// masking region, so the still-connected (now hidden) wires stay visible. The real wires are
+    /// never modified — these overlays are view-only stand-ins, like the fixture stamps, and join
+    /// the TurboMask group. Returns the new detail-curve ids. Must run inside the active
+    /// Transaction, after the masking region is created so the overlays draw on top.
+    /// </summary>
+    private static List<ElementId> DrawWireOverlays(Document doc, View view, List<FamilyInstance> devices)
+    {
+        var overlayIds = new List<ElementId>();
+
+        var wireIds = new HashSet<ElementId>();
+        foreach (var device in devices)
+        {
+            var connector = GeometryHelper.GetElectricalConnector(device);
+            if (connector == null) continue;
+            foreach (Connector connectedRef in connector.AllRefs)
+            {
+                if (connectedRef.Owner is ElectricalWire wire)
+                    wireIds.Add(wire.Id);
+            }
+        }
+        if (wireIds.Count == 0) return overlayIds;
+
+        var wireStyle = FindWireLineStyle(doc);
+        var options = new Options { View = view };
+
+        foreach (var wireId in wireIds)
+        {
+            if (doc.GetElement(wireId) is not ElectricalWire wire) continue;
+
+            var geometry = wire.get_Geometry(options);
+            if (geometry == null) continue;
+
+            foreach (GeometryObject go in geometry)
+            {
+                // Arc wires (e.g. fixture-to-fixture) come back as Curve objects; chamfer wires
+                // (e.g. the driver-to-driver wires from TurboDriver) come back as a single
+                // PolyLine. Handle both by emitting a detail curve per straight segment.
+                switch (go)
+                {
+                    case Curve curve:
+                        AddWireDetailCurve(doc, view, curve, wireStyle, overlayIds);
+                        break;
+                    case PolyLine polyLine:
+                        var coords = polyLine.GetCoordinates();
+                        for (int i = 1; i < coords.Count; i++)
+                        {
+                            if (coords[i - 1].DistanceTo(coords[i]) < doc.Application.ShortCurveTolerance)
+                                continue;
+                            AddWireDetailCurve(doc, view,
+                                Line.CreateBound(coords[i - 1], coords[i]), wireStyle, overlayIds);
+                        }
+                        break;
+                }
+            }
+        }
+        return overlayIds;
+    }
+
+    private static void AddWireDetailCurve(
+        Document doc, View view, Curve curve, GraphicsStyle? wireStyle, List<ElementId> overlayIds)
+    {
+        DetailCurve detail;
+        try { detail = doc.Create.NewDetailCurve(view, curve); }
+        catch { return; } // non-planar or degenerate segment — skip
+        if (detail == null) return;
+
+        if (wireStyle != null)
+            detail.LineStyle = wireStyle;
+
+        overlayIds.Add(detail.Id);
+    }
+
+    private const string WireLineStyleName = "Wiring";
+
+    /// <summary>
+    /// Returns the "Wiring" Lines subcategory style (ships with the firm template) so the overlay
+    /// detail lines resemble the real wires. Returns null when it doesn't exist, in which case the
+    /// overlays use the view's default line style.
+    /// </summary>
+    private static GraphicsStyle? FindWireLineStyle(Document doc)
+    {
+        var linesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
+        if (linesCategory == null) return null;
+
+        foreach (Category sub in linesCategory.SubCategories)
+        {
+            if (sub.Name.Equals(WireLineStyleName, StringComparison.OrdinalIgnoreCase))
+                return sub.GetGraphicsStyle(GraphicsStyleType.Projection);
+        }
+        return null;
     }
 }

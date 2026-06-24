@@ -181,7 +181,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboMask",
                 "    Mask     ",
                 "TurboSuite.Mask.MaskCommand",
-                "Mask selected elements while preserving fixture graphics",
+                "Suggested shortcut: BB\nMask selected elements while preserving fixture graphics",
                 "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
                 "Blank");
 

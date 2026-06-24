@@ -2,11 +2,13 @@
 
 Places a masking region under selected elements and overlays a view-level annotation "stamp" at each lighting fixture, so the fixture's visible footprint graphics stay readable on top of the mask.
 
+**Suggested shortcut:** `BB`
+
 ## Usage
 
 1. Select the elements to mask (lighting fixtures, devices, electrical fixtures/equipment, and any other elements whose bounds should be covered) in a floor plan, RCP, or drafting view.
 2. Run TurboMask.
-3. A white **Masking Region** is drawn over the combined bounds of the selection (extended outward by a fixed margin), a stamp is placed at each fixture to redraw its footprint on top of the mask, and the region plus stamps are grouped together as `TurboMask N`.
+3. A white **Masking Region** is drawn over the combined bounds of the selection (extended outward by a fixed margin), a stamp is placed at each fixture to redraw its footprint on top of the mask, any wires connected to the masked devices are redrawn as **detail lines** on top of the mask, and the region, stamps, and wire overlays are grouped together as `TurboMask N`.
 
 Existing TurboMask stamps and masking regions covering the same fixtures are cleaned up before new ones are placed, and any tags on the masked fixtures are raised above the stamps so they remain visible. Re-selecting a `TurboMask N` group and re-running refreshes it in place.
 
@@ -40,9 +42,11 @@ Any other selected element contributes to the masked bounds but is not stamped.
 | At least one **Filled Region** type | Duplicated to create the `Masking Region` type (solid white, masking) on first run |
 | A solid-fill **drafting** pattern | Background fill for the masking region |
 | Line subcategory `Lighting Fixture` (optional) | Applied to the masking-region boundary when present |
+| Line subcategory `Wiring` (optional) | Applied to wire-overlay detail lines when present |
 | Active **floor plan, RCP, or drafting view** | TurboMask is view-based |
 
 ## Notes
 
 - The masking region, stamps, and group are created in a single undo step. The extracted `Stamp_*` families are loaded outside that step, so they remain in the project after an undo (and are reused on the next run).
 - The masked bounds come from each element's view bounding box. Geometry that is hidden in certain family types (e.g. internal masking regions in a tag family) can still widen the box; adjust the family or resize the region afterward if needed.
+- **Wire overlays are visual stand-ins.** The real wires are never modified — they stay fully connected, just hidden under the mask, and a detail-line copy is drawn on top so they remain visible. The overlay uses the `Wiring` line style (ships with the firm template) if present, otherwise the default. It does not carry wire tick marks, home-run arrows, or wire tags, and it won't follow the wire if the wire later moves — re-run TurboMask to refresh.
