@@ -69,7 +69,7 @@ All commands work in both:
 
 ## Documentation
 
-- **[Counts Cheat Sheet](https://cdltg.github.io/TurboSuite3D/)** — quick reference for authoring TurboDocs **Counts** parameters: Catalog Number length tokens (`max=` / `sizes=` / `pool=`) and Catalog Qty modes (`N`, `1/N`, `N @type`, and the stock-cut `N @ft` / `N @in`). Served via GitHub Pages from `docs/index.html` (enable under **Settings → Pages → Deploy from branch → `main` / `/docs`**).
+- **[Counts Cheat Sheet](https://cdltg.github.io/TurboSuite3D/)** — quick reference for authoring TurboDocs **Counts** parameters: Catalog Number length tokens (`max=` / `sizes=` / `pool=`) and Catalog Qty modes (`N`, `1/N`, `N @type`, and the stock-cut `N @ft` / `N @in`). Served via GitHub Pages from `docs/index.html`.
 
 ## Revit Project Dependencies
 
