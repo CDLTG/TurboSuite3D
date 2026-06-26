@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using TurboSuite.Dmx.Input;
+using TurboSuite.Dmx.Persistence;
 using TurboSuite.Dmx.ViewModels;
 using Xunit;
 
@@ -93,6 +94,71 @@ namespace TurboSuite.Tests.Dmx
 
             Assert.True(vm.Bill.IsError);
             Assert.False(vm.Bill.HasResult);
+        }
+
+        // ── Persistence (BuildPlan Phase 2: declarations survive reopen via the doc-side ES bundle) ────
+
+        [Fact]
+        public void DeclarationChangesFirePersistWithCurrentState()
+        {
+            DmxModuleState? captured = null;
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2") }), persist: s => captured = s);
+
+            Assert.Null(captured); // initial load + Run must NOT write the model back to itself
+
+            vm.ReservedChannels = 3;
+            vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec6").IsSelected = false;
+            vm.AddLoopCommand.Execute(null);
+            vm.Loops[0].Name = "House";
+            vm.Loops[0].Zones.Single(z => z.ZoneName == "Z1").IsAssigned = true;
+
+            Assert.NotNull(captured);
+            Assert.Equal(3, captured.Settings.ReservedChannels);
+            Assert.Equal(new[] { "dec4" }, captured.Settings.DecoderTypeIds); // dec6 unticked
+            var loop = Assert.Single(captured.Loops);
+            Assert.Equal("House", loop.Name);
+            Assert.Equal(new[] { "Z1" }, loop.ZoneValues);
+        }
+
+        [Fact]
+        public void SavedStateRestoresOnReopen()
+        {
+            var saved = new DmxModuleState
+            {
+                Settings = new DmxSettingsDto
+                {
+                    Profile = "Lutron",
+                    ReservedChannels = 5,
+                    MaxDevicesPerSegment = 16,
+                    DecoderTypeIds = new List<string> { "dec6" }, // only the 6ch curated
+                    DriverTypeIds = new List<string> { "md" },
+                },
+                Loops = new List<DmxLoopDto>
+                {
+                    new DmxLoopDto { Name = "L1", Order = 0, ZoneValues = new List<string> { "Z1", "Z2" } },
+                },
+            };
+
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3") }), state: saved);
+
+            Assert.Equal(5, vm.ReservedChannels);
+            Assert.Equal(16, vm.MaxDevicesPerSegment);
+            Assert.False(vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec4").IsSelected);
+            Assert.True(vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec6").IsSelected);
+
+            var loop = Assert.Single(vm.Loops);
+            Assert.Equal("L1", loop.Name);
+            Assert.Equal(new[] { "Z1", "Z2" }, loop.AssignedZoneNames);
+        }
+
+        [Fact]
+        public void EmptyCuratedListRestoresToAllSelectedDefault()
+        {
+            // A never-curated save (empty TypeId lists) must reopen with the all-discovered default, not "none".
+            var saved = new DmxModuleState { Settings = new DmxSettingsDto() };
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1") }), state: saved);
+            Assert.True(vm.DecoderRows.All(r => r.IsSelected));
+            Assert.True(vm.DriverRows.All(r => r.IsSelected));
         }
     }
 }

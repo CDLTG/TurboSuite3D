@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TurboSuite.Dmx;
 using TurboSuite.Dmx.Input;
+using TurboSuite.Dmx.Persistence;
 using Xunit;
 
 namespace TurboSuite.Tests.Dmx
@@ -13,8 +14,11 @@ namespace TurboSuite.Tests.Dmx
     /// </summary>
     public class DmxZoneBuilderTests
     {
-        private static DmxFixtureReading Fix(string zone, int ch, double len, double wpf = 5.2) =>
-            new DmxFixtureReading { ControlZone = zone, Channels = ch, LengthFt = len, WattsPerFt = wpf };
+        private static DmxFixtureReading Fix(string zone, int ch, double len, double wpf = 5.2, long id = 0) =>
+            new DmxFixtureReading { ElementId = id, ControlZone = zone, Channels = ch, LengthFt = len, WattsPerFt = wpf };
+
+        private static DmxClusterDto Cluster(string name, string zone, params long[] runs) =>
+            new DmxClusterDto { ClusterId = name, Name = name, ZoneValue = zone, RunElementIds = runs.ToList() };
 
         [Fact]
         public void GroupsFixturesByControlZoneValue()
@@ -73,6 +77,60 @@ namespace TurboSuite.Tests.Dmx
 
             Assert.Equal(2, bill.Zones.Count);
             Assert.True(bill.TotalDecoders >= 2);
+        }
+
+        // ── Cluster sub-builder (§8d): per-zone partition by fixture ElementId ───────────────────────
+
+        [Fact]
+        public void ClustersPartitionZoneIntoNamedClustersPlusResidual()
+        {
+            var fixtures = new[] { Fix("Z1", 4, 10, id: 1), Fix("Z1", 4, 10, id: 2), Fix("Z1", 4, 10, id: 3) };
+            var clusters = new[] { Cluster("East", "Z1", 1, 2) };
+
+            var zone = DmxZoneBuilder.Build(fixtures, clusters).Zones.Single();
+
+            Assert.Equal(2, zone.Clusters.Count);                 // East + residual
+            Assert.Equal("East", zone.Clusters[0].Name);
+            Assert.Equal(2, zone.Clusters[0].Runs.Count);
+            Assert.Equal(DmxZoneBuilder.ResidualClusterName, zone.Clusters[1].Name);
+            Assert.Single(zone.Clusters[1].Runs);                 // run 3 unclustered
+        }
+
+        [Fact]
+        public void RunListedInTwoClustersBindsToTheLast()
+        {
+            var fixtures = new[] { Fix("Z1", 4, 10, id: 1), Fix("Z1", 4, 10, id: 2) };
+            var clusters = new[] { Cluster("A", "Z1", 1, 2), Cluster("B", "Z1", 2) };  // run 2 in both
+
+            var zone = DmxZoneBuilder.Build(fixtures, clusters).Zones.Single();
+
+            Assert.Single(zone.Clusters.Single(c => c.Name == "A").Runs);  // run 1 only
+            Assert.Single(zone.Clusters.Single(c => c.Name == "B").Runs);  // run 2 (last wins)
+            Assert.DoesNotContain(zone.Clusters, c => c.Name == DmxZoneBuilder.ResidualClusterName);
+        }
+
+        [Fact]
+        public void ClusterRunIdsNotInTheZoneAreIgnored()
+        {
+            var fixtures = new[] { Fix("Z1", 4, 10, id: 1), Fix("Z1", 4, 10, id: 2) };
+            var clusters = new[] { Cluster("A", "Z1", 1, 99) };   // 99 isn't a fixture in this zone
+
+            var zone = DmxZoneBuilder.Build(fixtures, clusters).Zones.Single();
+
+            Assert.Single(zone.Clusters.Single(c => c.Name == "A").Runs);          // only run 1
+            Assert.Single(zone.Clusters.Single(c => c.Name == DmxZoneBuilder.ResidualClusterName).Runs); // run 2
+        }
+
+        [Fact]
+        public void ClustersForAnotherZoneDontAffectThisOne()
+        {
+            var fixtures = new[] { Fix("Z1", 4, 10, id: 1), Fix("Z1", 4, 10, id: 2) };
+            var clusters = new[] { Cluster("X", "Z2", 1, 2) };    // wrong zone
+
+            var zone = DmxZoneBuilder.Build(fixtures, clusters).Zones.Single();
+
+            Assert.Single(zone.Clusters);                          // flat — the Z2 cluster is irrelevant
+            Assert.Equal(2, zone.Clusters[0].Runs.Count);
         }
     }
 }

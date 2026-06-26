@@ -52,14 +52,20 @@ namespace TurboSuite.Dmx.ViewModels
         public ObservableCollection<DmxBomLineViewModel> DecoderBom { get; } = new ObservableCollection<DmxBomLineViewModel>();
         public ObservableCollection<DmxBomLineViewModel> DriverBom { get; } = new ObservableCollection<DmxBomLineViewModel>();
 
+        /// <summary>Lock-aware REVIEW verdicts (§8c) — locked-zone changes that would mislabel an issued
+        /// DEC #. Empty unless Locked and a change collides; shown as an amber list, never a popup.</summary>
+        public ObservableCollection<string> Reviews { get; } = new ObservableCollection<string>();
+        public bool NeedsReview => Reviews.Count > 0;
+
         /// <summary>The standing empty state before the first Run / when there's nothing to solve.</summary>
         public static DmxBillViewModel Empty(string guidance) => new DmxBillViewModel(false, false, guidance);
 
         /// <summary>A pre-solve gate refusal (UnmappableTape / OverCapRuns / OverCapLoops / bad loop).</summary>
         public static DmxBillViewModel Error(string message) => new DmxBillViewModel(false, true, message);
 
-        /// <summary>A successful solve — the deterministic bill (TurboDMX-UI-Structure §2).</summary>
-        public static DmxBillViewModel FromBill(DmxBill bill, int channelCeiling)
+        /// <summary>A successful solve — the deterministic bill (TurboDMX-UI-Structure §2). Lock-aware REVIEW
+        /// verdicts (§8c) ride along when supplied.</summary>
+        public static DmxBillViewModel FromBill(DmxBill bill, int channelCeiling, IEnumerable<string>? reviews = null)
         {
             var vm = new DmxBillViewModel(true, false, "OK")
             {
@@ -82,6 +88,9 @@ namespace TurboSuite.Dmx.ViewModels
                 vm.DecoderBom.Add(new DmxBomLineViewModel(kv.Key, kv.Value));
             foreach (var kv in bill.DriversByType.OrderBy(k => k.Key))
                 vm.DriverBom.Add(new DmxBomLineViewModel(kv.Key, kv.Value));
+
+            if (reviews != null)
+                foreach (var r in reviews) vm.Reviews.Add(r);
 
             return vm;
         }

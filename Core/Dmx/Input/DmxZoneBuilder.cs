@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TurboSuite.Dmx.Input;
+using TurboSuite.Dmx.Persistence;
 
 namespace TurboSuite.Dmx
 {
@@ -29,20 +30,27 @@ namespace TurboSuite.Dmx
 
     /// <summary>
     /// Groups <see cref="DmxFixtureReading"/>s by their native <c>Control Zone</c> value into engine
-    /// <see cref="ZoneDesign"/>s. Phase 1 uses the FLAT default — one cluster per zone (correct for
-    /// single-location zones, the common case); the in-window cluster sub-builder that splits a
-    /// location-spanning zone into multiple clusters is a later refinement (TurboDMX-BuildPlan Phase 1
-    /// "cluster derivation"). Fixtures with no zone are counted, not solved. Pure / Revit-free.
+    /// <see cref="ZoneDesign"/>s. Default is FLAT — one cluster per zone (correct for single-location zones,
+    /// the common case). When the designer has split a location-spanning zone with the in-window cluster
+    /// sub-builder (§8d), the per-zone <see cref="DmxClusterDto"/> assignments (keyed by fixture ElementId)
+    /// partition that zone's runs into named clusters, with any unassigned runs gathered into a visible
+    /// "(unclustered)" residual. Packing per cluster is what produces the realizable decoder count (§8d's
+    /// 9-vs-8 effect). Fixtures with no zone are counted, not solved. Pure / Revit-free.
     /// </summary>
     public static class DmxZoneBuilder
     {
-        public static DmxZoneBuildResult Build(IReadOnlyList<DmxFixtureReading> fixtures)
+        /// <summary>The residual cluster name for a zone's runs not assigned to any declared cluster.</summary>
+        public const string ResidualClusterName = "(unclustered)";
+
+        public static DmxZoneBuildResult Build(IReadOnlyList<DmxFixtureReading> fixtures,
+                                               IReadOnlyList<DmxClusterDto>? clusters = null)
         {
             if (fixtures == null) throw new ArgumentNullException(nameof(fixtures));
 
             int unassigned = 0;
             var order = new List<string>();
-            var byZone = new Dictionary<string, List<TapeRun>>(StringComparer.OrdinalIgnoreCase);
+            // Keep the fixture ElementId alongside each run so cluster assignments can bind by id.
+            var byZone = new Dictionary<string, List<(long Id, TapeRun Run)>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var f in fixtures)
             {
@@ -51,15 +59,57 @@ namespace TurboSuite.Dmx
 
                 if (!byZone.TryGetValue(zone, out var runs))
                 {
-                    runs = new List<TapeRun>();
+                    runs = new List<(long, TapeRun)>();
                     byZone[zone] = runs;
                     order.Add(zone);
                 }
-                runs.Add(new TapeRun(f.LengthFt, f.WattsPerFt, f.Channels));
+                runs.Add((f.ElementId, new TapeRun(f.LengthFt, f.WattsPerFt, f.Channels)));
             }
 
-            var zones = order.Select(name => new ZoneDesign(name, byZone[name])).ToList();
+            var clustersByZone = (clusters ?? new List<DmxClusterDto>())
+                .GroupBy(c => (c.ZoneValue ?? "").Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+            var zones = order
+                .Select(name => BuildZone(name, byZone[name],
+                                          clustersByZone.TryGetValue(name, out var zc) ? zc : null))
+                .ToList();
             return new DmxZoneBuildResult(zones, order, unassigned);
+        }
+
+        private static ZoneDesign BuildZone(string zone, List<(long Id, TapeRun Run)> runs,
+                                            List<DmxClusterDto>? zoneClusters)
+        {
+            // No declared clusters ⇒ flat (one cluster per zone).
+            if (zoneClusters == null || zoneClusters.Count == 0)
+                return new ZoneDesign(zone, runs.Select(r => r.Run).ToList());
+
+            // Bind each run to its cluster (last declaration wins, so a reassign just re-lists the run).
+            var runToCluster = new Dictionary<long, int>();
+            for (int ci = 0; ci < zoneClusters.Count; ci++)
+                foreach (var id in zoneClusters[ci].RunElementIds ?? new List<long>())
+                    runToCluster[id] = ci;
+
+            var clusterRuns = new List<TapeRun>[zoneClusters.Count];
+            for (int i = 0; i < clusterRuns.Length; i++) clusterRuns[i] = new List<TapeRun>();
+            var residual = new List<TapeRun>();
+
+            foreach (var (id, run) in runs)
+            {
+                if (runToCluster.TryGetValue(id, out var ci)) clusterRuns[ci].Add(run);
+                else residual.Add(run);
+            }
+
+            var built = new List<RunCluster>();
+            for (int ci = 0; ci < zoneClusters.Count; ci++)
+                if (clusterRuns[ci].Count > 0)
+                    built.Add(new RunCluster(zoneClusters[ci].Name, clusterRuns[ci]));
+            if (residual.Count > 0)
+                built.Add(new RunCluster(ResidualClusterName, residual));
+
+            // A zone with fixtures always yields ≥1 cluster; guard the degenerate all-empty case.
+            return built.Count > 0 ? new ZoneDesign(zone, built)
+                                   : new ZoneDesign(zone, runs.Select(r => r.Run).ToList());
         }
     }
 }

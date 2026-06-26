@@ -48,6 +48,22 @@
             <TextBlock Text="TurboDMX" FontSize="16" FontWeight="SemiBold"
                        Foreground="{StaticResource TextPrimaryBrush}"/>
             <TextBlock Text="{Binding SummaryText}" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+            <!-- Numbering-lock banner (§8c) — amber when Locked -->
+            <Border Margin="0,6,0,0" Padding="6,3">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{StaticResource FooterBgBrush}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsLocked}" Value="True">
+                                <Setter Property="Background" Value="#FFF3CD"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding LockStateText}" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+            </Border>
         </StackPanel>
 
         <!-- Body: declarations | bill -->
@@ -184,6 +200,61 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Clusters (§8d) — optional per-zone split for location-spanning zones -->
+                    <TextBlock Text="Clusters (optional)" Style="{StaticResource SectionHeader}"/>
+                    <TextBlock Text="Select tape runs in the model, then '+ from selection' to split a zone that spans locations. Default is one cluster per zone."
+                               Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,2"/>
+                    <TextBlock Text="{Binding ClusterStatus}" Foreground="{StaticResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" Margin="0,0,0,2"/>
+                    <ItemsControl ItemsSource="{Binding ZoneClusterGroups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="1"
+                                        Padding="6" Margin="0,2">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}">
+                                                <Run Text="{Binding ZoneName, Mode=OneWay}" FontWeight="SemiBold"/>
+                                                <Run Text="  "/>
+                                                <Run Text="{Binding ResidualText, Mode=OneWay}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            </TextBlock>
+                                            <Button Grid.Column="1" Content="+ from selection" Padding="6,2"
+                                                    Command="{Binding NewClusterCommand}"/>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding Clusters}" Margin="0,4,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,1">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBox Grid.Column="0" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding RunCount}" Margin="6,0"
+                                                                   VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                        <Button Grid.Column="2" Content="Verify" Padding="6,1" Margin="2,0"
+                                                                Command="{Binding VerifyCommand}"/>
+                                                        <Button Grid.Column="3" Content="+Sel" Padding="6,1" Margin="2,0"
+                                                                Command="{Binding AddSelectionCommand}"/>
+                                                        <Button Grid.Column="4" Content="✕" Padding="6,1" Margin="2,0"
+                                                                Command="{Binding RemoveCommand}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </ScrollViewer>
 
@@ -212,6 +283,19 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </Border>
+
+                    <!-- REVIEW verdicts (§8c) — amber list, shown only when Locked + a conflict exists -->
+                    <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Bill.Reviews}"
+                                  Visibility="{Binding Bill.NeedsReview, Converter={StaticResource BoolToVisibility}}"
+                                  Margin="0,0,0,8">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#FFF3CD" Padding="6" Margin="0,0,0,4">
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="#7A5B00"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
@@ -275,12 +359,25 @@
         <!-- Lifecycle bar -->
         <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{StaticResource SeparatorBrush}"
                 Padding="12,8" Margin="0,8,0,0">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Refresh" Command="{Binding RefreshCommand}" MinWidth="80" Padding="10,3" Margin="0,0,8,0"/>
-                <Button Content="Run" Command="{Binding RunCommand}" MinWidth="90" Padding="10,3" Margin="0,0,8,0"/>
-                <Button Content="Place" IsEnabled="False" MinWidth="90" Padding="10,3"
-                        ToolTip="Placement arrives in Phase 2 (this phase is read-only)."/>
-            </StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding PlacementStatus}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Margin="0,0,12,0"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="{Binding LockButtonText}" Command="{Binding LockCommand}" MinWidth="68" Padding="8,3" Margin="0,0,6,0"
+                            ToolTip="Lock: snapshot the current numbering as the issued baseline (§8c) — re-runs then preserve issued DEC #s and flag conflicts as REVIEW. Press again while Locked to re-baseline (re-issue) without renumbering — confirmed."/>
+                    <Button Content="Unlock" Command="{Binding UnlockCommand}" MinWidth="68" Padding="8,3" Margin="0,0,12,0"
+                            ToolTip="Return to free renumbering (clobber) — confirmed."/>
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}" MinWidth="72" Padding="8,3" Margin="0,0,6,0"/>
+                    <Button Content="Run" Command="{Binding RunCommand}" MinWidth="80" Padding="10,3" Margin="0,0,6,0"/>
+                    <Button Content="Place" Command="{Binding PlaceCommand}" MinWidth="80" Padding="10,3"
+                            ToolTip="Run first, then click-to-place each loop's decoders + drivers in the model."/>
+                </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </Window>

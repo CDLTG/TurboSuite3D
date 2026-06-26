@@ -16,13 +16,14 @@ namespace TurboSuite.Dmx;
 /// generation). The Revit-coupled front end of the pure engine in <c>Core/Dmx/</c>.
 ///
 /// STATE: experimental — registered only when <c>ExperimentalCommandsEnabled</c> is set
-/// (App/TurboSuiteApplication.cs), ribbon still uses the <c>Blank</c> placeholder icon. Phase 1 is
-/// READ-ONLY: it reads the model into a snapshot, opens the modeless window, and shows a live bill off the
-/// declarations. No model writes (those start in Phase 2).
+/// (App/TurboSuiteApplication.cs), ribbon still uses the <c>Blank</c> placeholder icon. The model READ is
+/// still read-only (no element creation/modification — that's Phase 2 placement, pending); Phase 2 adds the
+/// first writes as doc-side ExtensibleStorage persistence of the declarations (settings, curated part pools,
+/// declared loops) so the window reopens where the designer left it.
 ///
-/// MODELESS (TurboNumber/TurboZones pattern): the initial read happens here before the window opens; the
-/// Refresh re-read routes through an <see cref="Autodesk.Revit.UI.IExternalEventHandler"/>-backed work
-/// queue so it runs on the Revit API thread.
+/// MODELESS (TurboNumber/TurboZones pattern): the initial read + state load happen here before the window
+/// opens; the Refresh re-read and the coalesced state save both route through an
+/// <see cref="Autodesk.Revit.UI.IExternalEventHandler"/>-backed work queue so they run on the Revit API thread.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class DmxCommand : IExternalCommand
@@ -55,10 +56,27 @@ public class DmxCommand : IExternalCommand
 
             var reader = new DmxModelReader(doc);
             var snapshot = reader.Read();
+            var state = DmxStorageService.Load(doc);
 
-            // Read-only phase, but the Refresh re-read still goes through the Revit thread.
+            // The Refresh re-read AND the doc-side state save (Phase 2 loop persistence) both go through the
+            // Revit API thread via the shared work queue; the persister coalesces save bursts into one tx.
             var workQueue = new RevitWorkQueue("TurboDMX Error", "TurboDMX Work Queue");
-            var viewModel = new DmxMainViewModel(snapshot, workQueue, reader);
+            var persister = new DmxStatePersister(workQueue, doc);
+            var placement = new DmxPlacementService(uidoc);
+            var selection = new DmxModelSelection(uidoc);
+
+            // Yes/No gate for the destructive numbering-lock actions (Re-lock / Unlock, §8c).
+            System.Func<string, bool> confirm = msg =>
+                new TaskDialog("TurboDMX")
+                {
+                    MainInstruction = "Numbering lock",
+                    MainContent = msg,
+                    CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+                    DefaultButton = TaskDialogResult.No,
+                }.Show() == TaskDialogResult.Yes;
+
+            var viewModel = new DmxMainViewModel(snapshot, state, workQueue, reader,
+                                                 persister.Save, placement, confirm, selection);
 
             var window = new TurboDmxWindow { DataContext = viewModel };
             new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };

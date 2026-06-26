@@ -35,26 +35,45 @@ namespace TurboSuite.Dmx.Persistence
 
         /// <summary>Last solve snapshot (Phase 3 — lock-aware re-run safety). Null until first solved.</summary>
         public DmxSnapshotDto? Snapshot { get; set; }
+
+        /// <summary>Placement registry (Phase 3 Option-A cleanup): every placed decoder's DEC # + its decoder
+        /// and paired-driver element ids, so a re-Place can delete an orphaned pair exactly. Grows on Place,
+        /// pruned when an orphan is removed.</summary>
+        public List<DmxPlacedPairDto> Placed { get; set; } = new List<DmxPlacedPairDto>();
     }
 
-    /// <summary>Module settings — Profile selection + Kind-2 job policy + the curated part pools.
-    /// Profile pre-fills these; fields stay overridable (TurboDMX-UI-Structure §1).</summary>
+    /// <summary>One placed decoder+driver pair in the registry, keyed by DEC #.</summary>
+    public sealed class DmxPlacedPairDto
+    {
+        public int Dec { get; set; }
+        public long DecoderId { get; set; }
+        public long DriverId { get; set; }   // 0 ⇒ no paired driver
+    }
+
+    /// <summary>Module settings — Profile selection + Kind-2 job policy + the curated part pools. Mirrors
+    /// the live <c>DmxJobSettings</c> (the editable panel knobs) one-to-one, plus the selected profile and
+    /// the curated part-pool ticks. Defaults match <c>DmxJobSettings</c>'s so a never-saved state round-trips
+    /// to the same sensible values the window opens with (TurboDMX-UI-Structure §1, BuildPlan Phase 2).</summary>
     public sealed class DmxSettingsDto
     {
         public string Profile { get; set; } = "Lutron";
 
-        // Kind-2 job policy (breaker / inrush / segmenting / addressing). Defaults are profile-seeded at
-        // author time; 0/empty here means "fall back to the profile default" until Phase 1 wires the panel.
-        public double BreakerAmps { get; set; }
-        public double BreakerVolts { get; set; }
-        public double DeratingFactor { get; set; }
-        public int MaxDriversPerBreaker { get; set; }
-        public int DevicesPerSegment { get; set; }
-        public int BitDepth { get; set; }
+        // Kind-2 job policy (breaker / inrush / segmenting). Defaults mirror DmxJobSettings so applying a
+        // fresh (never-saved) DTO is a no-op rather than zeroing the window's seeded values.
+        public double SystemVolts { get; set; } = 24.0;
+        public double BreakerAmps { get; set; } = 20.0;
+        public double FeedVolts { get; set; } = 120.0;
+        public double BreakerContinuousDerate { get; set; } = 0.8;
+        public int MaxDriversPerBreaker { get; set; }          // 0 = no inrush count cap
+        public int MaxDevicesPerSegment { get; set; } = 32;    // D4
         public int ReservedChannels { get; set; }
 
+        /// <summary>Breaker pack basis (<c>ConnectedLoad</c> / <c>DriverRating</c>) — stored as the enum name.</summary>
+        public string BreakerBasis { get; set; } = "ConnectedLoad";
+
         /// <summary>Curated decoder family types (Q10) — the job's kit, ticked from discovery. Stored as
-        /// stable type identifiers (UniqueId strings) resolved back to symbols at read time.</summary>
+        /// stable type identifiers (UniqueId strings) resolved back to symbols at read time. EMPTY ⇒ never
+        /// curated ⇒ the window's default "all discovered selected" (a valid solve always has ≥1 ticked).</summary>
         public List<string> DecoderTypeIds { get; set; } = new List<string>();
 
         /// <summary>Curated driver family types — same gesture/storage as decoders.</summary>
@@ -93,22 +112,34 @@ namespace TurboSuite.Dmx.Persistence
         public string ControlSystem { get; set; } = "";
     }
 
-    /// <summary>Solve snapshot for re-run safety + one-line generation (Phase 3/4). Shape intentionally
-    /// thin in Phase 0 — Phase 3 fills the placed-decoder/driver identity + issued numbering it needs to
-    /// pack only the unbuilt remainder and keep locked numbers fixed.</summary>
+    /// <summary>Solve snapshot for re-run safety (Phase 3 numbering lock, §8c). The lock baseline is
+    /// **Control-Zone-anchored** (decision 2026-06-26): per zone, the issued Interface # + ordered DEC #s +
+    /// decoder type at the moment of Lock. A locked re-run pins each zone to its baseline numbers; additive
+    /// decoders append past the high-water mark; a zone whose decoder TYPE or Interface # changed surfaces as
+    /// REVIEW (its issued DEC #s would mislabel installed hardware) — never a silent renumber.</summary>
     public sealed class DmxSnapshotDto
     {
-        /// <summary>Numbering lifecycle: Unlocked → Locked → Re-locked (TurboDMX-Design §8c).</summary>
+        /// <summary>Numbering lifecycle (TurboDMX-Design §8c). Persisted values: "Unlocked" / "Locked"
+        /// (a Re-lock just re-captures <see cref="Zones"/> while staying Locked).</summary>
         public string NumberingState { get; set; } = "Unlocked";
 
-        /// <summary>Reserved for the per-decoder/driver issued-identity records Phase 3 will snapshot.</summary>
-        public List<DmxSnapshotItemDto> Items { get; set; } = new List<DmxSnapshotItemDto>();
+        /// <summary>The frozen per-zone numbering baseline captured at Lock — empty while Unlocked.</summary>
+        public List<DmxSnapshotZoneDto> Zones { get; set; } = new List<DmxSnapshotZoneDto>();
     }
 
-    /// <summary>Placeholder for one snapshotted, placed device's stable identity + issued number (Phase 3).</summary>
-    public sealed class DmxSnapshotItemDto
+    /// <summary>One zone's issued numbering in the lock baseline, keyed by Control Zone value.</summary>
+    public sealed class DmxSnapshotZoneDto
     {
-        public long ElementId { get; set; }
-        public string IssuedNumber { get; set; } = "";
+        /// <summary>The Control Zone VALUE — the stable, designer-assigned anchor (not an ElementId).</summary>
+        public string ZoneValue { get; set; } = "";
+
+        /// <summary>The interface (loop) this zone was addressed onto when locked.</summary>
+        public int InterfaceNumber { get; set; }
+
+        /// <summary>The decoder type name driving this zone when locked (a change ⇒ REVIEW).</summary>
+        public string DecoderType { get; set; } = "";
+
+        /// <summary>The issued DEC numbers for this zone's decoders, in pack order.</summary>
+        public List<int> DecIds { get; set; } = new List<int>();
     }
 }
