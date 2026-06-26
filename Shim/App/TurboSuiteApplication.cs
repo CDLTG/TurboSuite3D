@@ -153,6 +153,19 @@ public class TurboSuiteApplication : IExternalApplication
                 "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.",
                 "TurboRPS");
 
+            // Experimental — gated so it ships compiled but unreachable until ready. Positioned between
+            // RPS and Docs in the Utilities panel order.
+            if (ExperimentalCommandsEnabled)
+            {
+                CreateButton(utilitiesPanel, assemblyPath,
+                    "TurboDMX",
+                    "     DMX     ",
+                    "TurboSuite.Dmx.DmxCommand",
+                    "Automate DMX-controlled RGBW LED tape systems",
+                    "Opens the TurboDMX window to declare DMX loops and control zones, solve decoder/driver packing and addressing, and generate the one-line diagram. Experimental — under construction.",
+                    "Blank");
+            }
+
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboDocs",
                 "    Docs     ",

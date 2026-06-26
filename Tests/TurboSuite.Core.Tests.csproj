@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Oracle suite for the pure DMX engine ported into Core/Dmx/ (TurboDMX BuildPlan Phase 0).
+       The suite's only automated tests — justified because the engine is pure and was already
+       fully test-covered as a standalone spike. net8.0-windows matches Core's net8 TFM so the
+       multi-targeted Core reference resolves without a platform-compat warning; the engine logic
+       under test is identical across Core's net48 and net8 builds. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>TurboSuite.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Core\TurboSuite.Core.csproj" />
+  </ItemGroup>
+</Project>
