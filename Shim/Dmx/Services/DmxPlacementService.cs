@@ -57,7 +57,8 @@ namespace TurboSuite.Dmx.Services
             _doc = uidoc.Document;
         }
 
-        public DmxPlacementResult Place(DmxPlacementPlan plan, bool locked, IReadOnlyList<DmxPlacedPair> registry)
+        public DmxPlacementResult Place(DmxPlacementPlan plan, bool locked, IReadOnlyList<DmxPlacedPair> registry,
+                                        int? onlyInterfaceNumber = null)
         {
             var result = new DmxPlacementResult();
             if (plan == null || plan.LoopCount == 0) return result;
@@ -77,6 +78,9 @@ namespace TurboSuite.Dmx.Services
 
             foreach (var loop in plan.Loops)
             {
+                // Per-loop Place (loop-centric): only the targeted interface is picked + placed this run.
+                if (onlyInterfaceNumber.HasValue && loop.InterfaceNumber != onlyInterfaceNumber.Value) continue;
+
                 var todo = loop.Devices
                     .Where(d => string.IsNullOrEmpty(d.SwitchId) || !existing.Contains(d.SwitchId))
                     .ToList();

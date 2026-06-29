@@ -40,6 +40,17 @@ namespace TurboSuite.Dmx.Persistence
         /// and paired-driver element ids, so a re-Place can delete an orphaned pair exactly. Grows on Place,
         /// pruned when an orphan is removed.</summary>
         public List<DmxPlacedPairDto> Placed { get; set; } = new List<DmxPlacedPairDto>();
+
+        /// <summary>One-line view registry (Phase 4): interface # → the owned Drafting View's element id, so a
+        /// re-draw finds + wipes the same view (the program owns it). Written on Draw.</summary>
+        public List<DmxOneLineViewDto> OneLineViews { get; set; } = new List<DmxOneLineViewDto>();
+    }
+
+    /// <summary>One loop's owned one-line Drafting View, keyed by its interface #.</summary>
+    public sealed class DmxOneLineViewDto
+    {
+        public int InterfaceNumber { get; set; }
+        public long ViewId { get; set; }
     }
 
     /// <summary>One placed decoder+driver pair in the registry, keyed by DEC #.</summary>

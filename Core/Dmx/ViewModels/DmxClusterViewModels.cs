@@ -29,7 +29,7 @@ namespace TurboSuite.Dmx.ViewModels
             set => SetProperty(ref _name, value);
         }
 
-        /// <summary>Mutable so the owning group can reassign/remove runs across clusters before re-solving.</summary>
+        /// <summary>Mutable so the owning zone can reassign/remove runs across clusters before re-solving.</summary>
         public List<long> RunIds { get; }
 
         public int RunCount => RunIds.Count;
@@ -41,11 +41,16 @@ namespace TurboSuite.Dmx.ViewModels
         public void RaiseRunCountChanged() => OnPropertyChanged(nameof(RunCount));
     }
 
-    /// <summary>One zone's cluster editor (§8d): its declared clusters plus the visible "(unclustered)"
-    /// residual count. Only shown for zones the designer chooses to split — the flat default needs no UI.</summary>
-    public sealed class DmxZoneClusterGroupViewModel : ViewModelBase
+    /// <summary>
+    /// One zone as it lives inside a loop (the loop-centric tree's middle tier): the zone name + run count,
+    /// a "← (to pool)" action to unassign it, and — for a location-spanning zone (≥2 runs) — its nested
+    /// cluster sub-builder (§8d) with the visible "(unclustered)" residual. A single-run zone shows no
+    /// cluster UI (the flat default needs none). Clusters are keyed by zone value in ExtensibleStorage,
+    /// independent of which loop the zone sits in, so moving a zone pool→loop→pool preserves them.
+    /// </summary>
+    public sealed class DmxLoopZoneViewModel : ViewModelBase
     {
-        public DmxZoneClusterGroupViewModel(string zoneName, int totalRuns)
+        public DmxLoopZoneViewModel(string zoneName, int totalRuns)
         {
             ZoneName = zoneName;
             TotalRuns = totalRuns;
@@ -54,6 +59,11 @@ namespace TurboSuite.Dmx.ViewModels
 
         public string ZoneName { get; }
         public int TotalRuns { get; }
+
+        public string Header => $"{ZoneName}  ({TotalRuns} run{(TotalRuns == 1 ? "" : "s")})";
+
+        /// <summary>Only a zone with ≥2 runs can be split — single-run zones never show the cluster sub-builder.</summary>
+        public bool CanSplit => TotalRuns >= 2;
 
         public ObservableCollection<DmxClusterRowViewModel> Clusters { get; }
 
@@ -65,7 +75,8 @@ namespace TurboSuite.Dmx.ViewModels
         /// <summary>True once the zone has ≥1 declared cluster (so it packs per cluster, not flat).</summary>
         public bool HasClusters => Clusters.Count > 0;
 
-        public ICommand? NewClusterCommand { get; set; }
+        public ICommand? NewClusterCommand { get; set; }       // + from selection
+        public ICommand? RemoveFromLoopCommand { get; set; }   // ← return this zone to the pool
 
         public void RaiseResidualChanged()
         {

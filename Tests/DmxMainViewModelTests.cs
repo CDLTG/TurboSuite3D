@@ -61,24 +61,51 @@ namespace TurboSuite.Tests.Dmx
             Assert.Contains("decoder", vm.Bill.StatusMessage);
         }
 
+        // Select the named pool zones and pull them into a new loop (the "+ New loop from selection" gesture).
+        private static DmxLoopRowViewModel NewLoop(DmxMainViewModel vm, params string[] zones)
+        {
+            foreach (var z in zones) vm.ZonePool.Single(p => p.ZoneName == z).IsSelected = true;
+            vm.NewLoopFromSelectionCommand.Execute(null);
+            return vm.Loops[vm.Loops.Count - 1];
+        }
+
+        [Fact]
+        public void AllZonesStartInThePoolWithNoLoops()
+        {
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3") }));
+            Assert.Equal(3, vm.ZonePool.Count);
+            Assert.Empty(vm.Loops);
+        }
+
         [Fact]
         public void DeclaringLoopsSplitsZonesAcrossMoreInterfaces()
         {
             // 4 zones × 4ch = 16ch — auto-packs into ONE interface (≤ 32 ceiling).
             var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3"), Fix("Z4") }));
-            int autoInterfaces = vm.Bill.InterfaceCount;
-            Assert.Equal(1, autoInterfaces);
+            Assert.Equal(1, vm.Bill.InterfaceCount);
 
-            // Force a 2-loop split → two interfaces.
-            vm.AddLoopCommand.Execute(null);
-            vm.AddLoopCommand.Execute(null);
-            vm.Loops[0].Zones.Single(z => z.ZoneName == "Z1").IsAssigned = true;
-            vm.Loops[0].Zones.Single(z => z.ZoneName == "Z2").IsAssigned = true;
-            vm.Loops[1].Zones.Single(z => z.ZoneName == "Z3").IsAssigned = true;
-            vm.Loops[1].Zones.Single(z => z.ZoneName == "Z4").IsAssigned = true;
-            vm.Run();
+            // Force a 2-loop split by pulling zones from the pool → two interfaces.
+            NewLoop(vm, "Z1", "Z2");
+            NewLoop(vm, "Z3", "Z4");
 
             Assert.Equal(2, vm.Bill.InterfaceCount);
+            Assert.Empty(vm.ZonePool);   // every zone now assigned
+        }
+
+        [Fact]
+        public void AssigningAZoneToALoopRemovesItFromThePool_ReturningRestoresIt()
+        {
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2") }));
+            var loop = NewLoop(vm, "Z1");
+
+            Assert.DoesNotContain(vm.ZonePool, p => p.ZoneName == "Z1");
+            Assert.Contains(vm.ZonePool, p => p.ZoneName == "Z2");
+            Assert.Equal(new[] { "Z1" }, loop.AssignedZoneNames);
+
+            // ← return Z1 to the pool.
+            loop.Zones.Single(z => z.ZoneName == "Z1").RemoveFromLoopCommand!.Execute(null);
+            Assert.Contains(vm.ZonePool, p => p.ZoneName == "Z1");
+            Assert.Empty(loop.Zones);
         }
 
         [Fact]
@@ -88,12 +115,31 @@ namespace TurboSuite.Tests.Dmx
             var fixtures = Enumerable.Range(1, 9).Select(i => Fix($"Z{i}"));
             var vm = new DmxMainViewModel(Snapshot(fixtures));
 
-            vm.AddLoopCommand.Execute(null);
-            foreach (var z in vm.Loops[0].Zones) z.IsAssigned = true;
-            vm.Run();
+            NewLoop(vm, vm.ZonePool.Select(p => p.ZoneName).ToArray());   // all nine into one loop
 
             Assert.True(vm.Bill.IsError);
             Assert.False(vm.Bill.HasResult);
+        }
+
+        // ── Per-loop placement state (loop-centric): derived from numbering + the persisted registry ────
+
+        [Fact]
+        public void EmptyLoopIsUnsolved()
+        {
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1") }));
+            vm.NewEmptyLoopCommand.Execute(null);
+            var loop = vm.Loops.Single();
+            Assert.Equal(0, loop.InterfaceNumber);
+            Assert.Equal(DmxLoopPlacementState.Unsolved, loop.PlacementState);
+        }
+
+        [Fact]
+        public void SolvedLoopWithNothingPlacedIsUnplaced()
+        {
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2") }));
+            var loop = NewLoop(vm, "Z1");
+            Assert.True(loop.InterfaceNumber > 0);   // resolved to an interface in the last solve
+            Assert.Equal(DmxLoopPlacementState.Unplaced, loop.PlacementState);
         }
 
         // ── Persistence (BuildPlan Phase 2: declarations survive reopen via the doc-side ES bundle) ────
@@ -108,9 +154,9 @@ namespace TurboSuite.Tests.Dmx
 
             vm.ReservedChannels = 3;
             vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec6").IsSelected = false;
-            vm.AddLoopCommand.Execute(null);
+            vm.ZonePool.Single(p => p.ZoneName == "Z1").IsSelected = true;
+            vm.NewLoopFromSelectionCommand.Execute(null);
             vm.Loops[0].Name = "House";
-            vm.Loops[0].Zones.Single(z => z.ZoneName == "Z1").IsAssigned = true;
 
             Assert.NotNull(captured);
             Assert.Equal(3, captured.Settings.ReservedChannels);

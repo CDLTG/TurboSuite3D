@@ -63,6 +63,7 @@ public class DmxCommand : IExternalCommand
             var workQueue = new RevitWorkQueue("TurboDMX Error", "TurboDMX Work Queue");
             var persister = new DmxStatePersister(workQueue, doc);
             var placement = new DmxPlacementService(uidoc);
+            var oneLine = new DmxOneLineService(uidoc);
             var selection = new DmxModelSelection(uidoc);
 
             // Yes/No gate for the destructive numbering-lock actions (Re-lock / Unlock, §8c).
@@ -76,7 +77,7 @@ public class DmxCommand : IExternalCommand
                 }.Show() == TaskDialogResult.Yes;
 
             var viewModel = new DmxMainViewModel(snapshot, state, workQueue, reader,
-                                                 persister.Save, placement, confirm, selection);
+                                                 persister.Save, placement, confirm, selection, oneLine);
 
             var window = new TurboDmxWindow { DataContext = viewModel };
             new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };

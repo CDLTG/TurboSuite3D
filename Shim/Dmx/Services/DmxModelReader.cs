@@ -113,6 +113,7 @@ namespace TurboSuite.Dmx.Services
                 {
                     TypeId = x.Symbol.UniqueId,
                     Name = SymbolName(x.Symbol),
+                    TypeMark = StringOf(x.Symbol.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_MARK)) ?? "",
                     RatedWatts = ParameterHelper.GetDriverPower(x.Symbol),
                     OperatingVolts = x.Volts,
                     DeratingFactorRaw = ParameterHelper.GetDeratingFactor(x.Symbol),

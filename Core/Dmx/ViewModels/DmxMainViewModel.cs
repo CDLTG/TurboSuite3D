@@ -8,6 +8,7 @@ using System.ComponentModel;
 using TurboSuite.Abstractions;
 using TurboSuite.Dmx.Input;
 using TurboSuite.Dmx.Lock;
+using TurboSuite.Dmx.OneLine;
 using TurboSuite.Dmx.Persistence;
 using TurboSuite.Dmx.Placement;
 using TurboSuite.Dmx.Services;
@@ -16,17 +17,21 @@ using TurboSuite.Shared.ViewModels;
 namespace TurboSuite.Dmx.ViewModels
 {
     /// <summary>
-    /// The TurboDMX window's ViewModel (TurboDMX-UI-Structure): the left "declarations" surface (profile,
-    /// Kind-2 settings, curated decoder/driver pools, declared loops) and the right always-on "bill". The
-    /// solve is the pure <see cref="DmxSolver"/> — Phase 1 makes ZERO model changes: the only Revit touch
-    /// is the read (snapshot at open + optional Refresh through the work queue). Run is idempotent and
-    /// recomputes the bill from current declarations; pre-solve gate refusals land in the bill as errors.
+    /// The TurboDMX window's ViewModel — the loop-centric build surface. The designer sets the declarations
+    /// (profile, Kind-2 settings, curated decoder/driver pools), then works the model loop by loop: zones
+    /// start in the <see cref="ZonePool"/> (the engine auto-packs them), and the designer pulls them into
+    /// declared <see cref="Loops"/> — each a tree node owning its assigned zones (and each zone its cluster
+    /// sub-builder, §8d). The right-hand bill is the always-on whole-system roll-up (interfaces / links /
+    /// processors / breakers — only complete once every loop is declared). Placement is the loop: each loop
+    /// carries its own Place action + placement state. The solve stays whole-system under the hood (DEC #s
+    /// are system-wide 1..N), so per-loop placement just stamps the numbers the solve already assigned.
     /// </summary>
     public sealed class DmxMainViewModel : ViewModelBase
     {
         private readonly IRevitWorkQueue? _workQueue;
         private readonly IDmxModelReader? _reader;
         private readonly IDmxPlacementService? _placement;
+        private readonly IDmxOneLineService? _oneLine;
         private readonly IDmxModelSelection? _selection;
         private readonly Action<DmxModuleState>? _persist;
         private readonly Func<string, bool>? _confirm;   // shim Yes/No gate for the destructive lock actions
@@ -34,6 +39,8 @@ namespace TurboSuite.Dmx.ViewModels
 
         // Fixture ElementId → its Control Zone, so a model selection can be filtered to one zone's runs (§8d).
         private Dictionary<long, string> _zoneByFixtureId = new Dictionary<long, string>();
+        // Zone value → run (fixture) count — drives the pool's "(N)" and a zone's cluster splittability.
+        private Dictionary<string, int> _runsByZone = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private int _clusterSeq;
 
         // The last successful solve + its lock-aware numbering — kept so Place stamps the same DEC #s the bill
@@ -43,8 +50,8 @@ namespace TurboSuite.Dmx.ViewModels
         private bool _placing;   // guard against re-entrant Place while a pick is open
 
         // The last-loaded module state — preserved so a save round-trips the overlays this VM does NOT yet
-        // manage (clusters, control-system tags, the solve snapshot); BuildState() overwrites only Settings
-        // + Loops and carries the rest through untouched.
+        // manage (control-system tags, the solve snapshot); BuildState() overwrites Settings + Loops and
+        // carries the rest through untouched. Clusters + the placement registry are managed here.
         private DmxModuleState _loadedState = new DmxModuleState();
 
         private IReadOnlyList<DmxFixtureReading> _fixtures;
@@ -64,11 +71,13 @@ namespace TurboSuite.Dmx.ViewModels
                                 Action<DmxModuleState>? persist = null,
                                 IDmxPlacementService? placement = null,
                                 Func<string, bool>? confirm = null,
-                                IDmxModelSelection? selection = null)
+                                IDmxModelSelection? selection = null,
+                                IDmxOneLineService? oneLine = null)
         {
             _workQueue = workQueue;
             _reader = reader;
             _placement = placement;
+            _oneLine = oneLine;
             _selection = selection;
             _persist = persist;
             _confirm = confirm;
@@ -79,16 +88,15 @@ namespace TurboSuite.Dmx.ViewModels
             DecoderRows = new ObservableCollection<DmxDecoderRowViewModel>();
             DriverRows = new ObservableCollection<DmxDriverRowViewModel>();
             Loops = new ObservableCollection<DmxLoopRowViewModel>();
-            ZoneClusterGroups = new ObservableCollection<DmxZoneClusterGroupViewModel>();
+            ZonePool = new ObservableCollection<DmxZonePoolItemViewModel>();
             ZoneNames = new List<string>();
             _bill = DmxBillViewModel.Empty("Run to compute the bill.");
             _fixtures = new List<DmxFixtureReading>();
 
             RunCommand = new RelayCommand(Run);
-            AddLoopCommand = new RelayCommand(AddLoop, () => ZoneNames.Count > 0);
-            RemoveLoopCommand = new RelayCommand<DmxLoopRowViewModel>(RemoveLoop);
+            NewEmptyLoopCommand = new RelayCommand(NewEmptyLoop);
+            NewLoopFromSelectionCommand = new RelayCommand(NewLoopFromSelection);
             RefreshCommand = new RelayCommand(Refresh, () => _workQueue != null && _reader != null);
-            PlaceCommand = new RelayCommand(Place, CanPlace);
             // One button does both: Lock (first time) and Re-lock (re-baseline when already Locked).
             LockCommand = new RelayCommand(Lock, () => _lastNumbering != null);
             UnlockCommand = new RelayCommand(Unlock, () => IsLocked);
@@ -118,16 +126,22 @@ namespace TurboSuite.Dmx.ViewModels
         public int MaxDevicesPerSegment { get => _settings.MaxDevicesPerSegment; set { _settings.MaxDevicesPerSegment = value; OnPropertyChanged(); Persist(); } }
         public int ReservedChannels { get => _settings.ReservedChannels; set { _settings.ReservedChannels = value; OnPropertyChanged(); Persist(); } }
 
-        // ── Declarations: curated part pools + loops ────────────────────────────────────────────────
+        // ── Declarations: curated part pools ────────────────────────────────────────────────────────
         public ObservableCollection<DmxDecoderRowViewModel> DecoderRows { get; }
         public ObservableCollection<DmxDriverRowViewModel> DriverRows { get; }
+
+        // ── The loop-centric work surface: a pool of unassigned zones + declared loops ───────────────
+        /// <summary>Zones not yet pulled into a loop — the engine auto-packs these (the "(unassigned)"
+        /// residual). The multi-select source for the assignment gesture.</summary>
+        public ObservableCollection<DmxZonePoolItemViewModel> ZonePool { get; }
+
+        /// <summary>The declared loops (tree roots) — each owns its assigned zones (and each zone its cluster
+        /// sub-builder), plus its own Place action + placement state.</summary>
         public ObservableCollection<DmxLoopRowViewModel> Loops { get; }
 
-        // ── Cluster sub-builder (§8d) — one editor group per zone, residual visible ─────────────────
-        public ObservableCollection<DmxZoneClusterGroupViewModel> ZoneClusterGroups { get; }
-
-        private string _clusterStatus = "";
-        public string ClusterStatus { get => _clusterStatus; private set => SetProperty(ref _clusterStatus, value); }
+        private string _builderStatus = "";
+        /// <summary>Status line for the loop/cluster builder (assignment + clustering feedback).</summary>
+        public string BuilderStatus { get => _builderStatus; private set => SetProperty(ref _builderStatus, value); }
 
         /// <summary>Whether the cluster sub-builder can act (needs the Revit selection seam + work queue).</summary>
         public bool CanCluster => _selection != null && _workQueue != null;
@@ -149,7 +163,7 @@ namespace TurboSuite.Dmx.ViewModels
         private DmxBillViewModel _bill;
         public DmxBillViewModel Bill { get => _bill; private set => SetProperty(ref _bill, value); }
 
-        // ── Placement status (right of the bill / footer) ───────────────────────────────────────────
+        // ── Placement status (footer) ────────────────────────────────────────────────────────────────
         private string _placementStatus = "";
         public string PlacementStatus { get => _placementStatus; private set => SetProperty(ref _placementStatus, value); }
 
@@ -166,72 +180,111 @@ namespace TurboSuite.Dmx.ViewModels
 
         // ── Commands ─────────────────────────────────────────────────────────────────────────────────
         public ICommand RunCommand { get; }
-        public ICommand AddLoopCommand { get; }
-        public ICommand RemoveLoopCommand { get; }
+        public ICommand NewEmptyLoopCommand { get; }
+        public ICommand NewLoopFromSelectionCommand { get; }
         public ICommand RefreshCommand { get; }
-        public ICommand PlaceCommand { get; }
         public ICommand LockCommand { get; }
         public ICommand UnlockCommand { get; }
 
-        /// <summary>The pure solve (TurboDMX-Design §1.5 pipeline). Idempotent — safe to call constantly.</summary>
+        /// <summary>The pure solve (TurboDMX-Design §1.5 pipeline). Idempotent — safe to call constantly.
+        /// On every exit it refreshes each loop's placement state + the Place buttons' enabled state.</summary>
         public void Run()
         {
             _lastBill = null; _lastNumbering = null;   // invalidate the placement plan until a clean solve below
-
-            var zoneResult = DmxZoneBuilder.Build(_fixtures, _loadedState.Clusters);
-            if (zoneResult.Zones.Count == 0)
-            {
-                Bill = DmxBillViewModel.Empty("No DMX fixtures with a Control Zone assigned.");
-                RaisePlaceCanExecute();
-                return;
-            }
-
-            var decoders = DecoderRows.Where(r => r.IsSelected).Select(r => r.Candidate).ToList();
-            if (decoders.Count == 0) { Bill = DmxBillViewModel.Empty("Tick at least one decoder type."); RaisePlaceCanExecute(); return; }
-
-            var drivers = DriverRows.Where(r => r.IsSelected).Select(r => r.Candidate).ToList();
-            if (drivers.Count == 0) { Bill = DmxBillViewModel.Empty("Tick at least one driver type."); RaisePlaceCanExecute(); return; }
-
-            var contract = DmxContractBuilder.Build(SelectedProfile, _settings, decoders, drivers);
-            var loops = Loops.Select(l => l.ToDeclaration()).Where(d => d != null).Cast<LoopDeclaration>().ToList();
-
             try
             {
-                var bill = DmxSolver.Solve(contract, zoneResult.Zones, loops);
-                _lastBill = bill;
+                var zoneResult = DmxZoneBuilder.Build(_fixtures, _loadedState.Clusters);
+                if (zoneResult.Zones.Count == 0)
+                {
+                    Bill = DmxBillViewModel.Empty("No DMX fixtures with a Control Zone assigned.");
+                    return;
+                }
 
-                // Lock-aware numbering (§8c): Unlocked ⇒ fresh 1..N; Locked ⇒ pin to the snapshot baseline,
-                // append additive decoders, flag type/interface drift as REVIEW.
-                var solved = DmxBillFlattener.Flatten(bill);
-                _lastNumbering = DmxLockReconciler.Reconcile(solved, _loadedState.Snapshot, IsLocked);
-                Bill = DmxBillViewModel.FromBill(bill, SelectedProfile.ChannelCeiling,
-                                                 _lastNumbering.Reviews.Select(r => r.Message));
+                var decoders = DecoderRows.Where(r => r.IsSelected).Select(r => r.Candidate).ToList();
+                if (decoders.Count == 0) { Bill = DmxBillViewModel.Empty("Tick at least one decoder type."); return; }
+
+                var drivers = DriverRows.Where(r => r.IsSelected).Select(r => r.Candidate).ToList();
+                if (drivers.Count == 0) { Bill = DmxBillViewModel.Empty("Tick at least one driver type."); return; }
+
+                var contract = DmxContractBuilder.Build(SelectedProfile, _settings, decoders, drivers);
+                var loops = Loops.Select(l => l.ToDeclaration()).Where(d => d != null).Cast<LoopDeclaration>().ToList();
+
+                try
+                {
+                    var bill = DmxSolver.Solve(contract, zoneResult.Zones, loops);
+                    _lastBill = bill;
+
+                    // Lock-aware numbering (§8c): Unlocked ⇒ fresh 1..N; Locked ⇒ pin to the snapshot baseline,
+                    // append additive decoders, flag type/interface drift as REVIEW.
+                    var solved = DmxBillFlattener.Flatten(bill);
+                    _lastNumbering = DmxLockReconciler.Reconcile(solved, _loadedState.Snapshot, IsLocked);
+                    Bill = DmxBillViewModel.FromBill(bill, SelectedProfile.ChannelCeiling,
+                                                     _lastNumbering.Reviews.Select(r => r.Message));
+                }
+                catch (UnmappableTapeException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
+                catch (OverCapRunsException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
+                catch (OverCapLoopsException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
+                catch (LoopDeclarationException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
+                // Catch-all so a bad declaration can NEVER escape onto Revit's UI thread (an unhandled
+                // exception there is a fatal Revit crash, not a dialog). Covers the engine's other refusals —
+                // a mixed-channel zone (ArgumentException), a breaker cap too small for a driver
+                // (InvalidOperationException), a non-positive cap (ArgumentOutOfRangeException) — and anything
+                // unforeseen. The bill shows the message as a red verdict; the window stays alive.
+                catch (Exception ex) { Bill = DmxBillViewModel.Error(ex.Message); }
             }
-            catch (UnmappableTapeException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
-            catch (OverCapRunsException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
-            catch (OverCapLoopsException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
-            catch (LoopDeclarationException ex) { Bill = DmxBillViewModel.Error(ex.Message); }
-            // Catch-all so a bad declaration can NEVER escape onto Revit's UI thread (an unhandled
-            // exception there is a fatal Revit crash, not a dialog). Covers the engine's other refusals —
-            // a mixed-channel zone (ArgumentException), a breaker cap too small for a driver
-            // (InvalidOperationException), a non-positive cap (ArgumentOutOfRangeException) — and anything
-            // unforeseen. The bill shows the message as a red verdict; the window stays alive.
-            catch (Exception ex) { Bill = DmxBillViewModel.Error(ex.Message); }
-
-            RaisePlaceCanExecute();
+            finally
+            {
+                UpdateLoopPlacementStates();
+                RaisePlaceCanExecute();
+            }
         }
 
-        // ── Place (BuildPlan Phase 2: loop-by-loop click-to-place of the solved system) ──────────────
-        private bool CanPlace() =>
-            _placement != null && _workQueue != null && !_placing
-            && _lastBill != null && _lastNumbering != null && _lastBill.TotalDecoders > 0;
+        // ── Per-loop placement (BuildPlan Phase 2/3: the loop is the placement unit) ──────────────────
 
-        /// <summary>Build the placement plan off the last solve and hand it to the shim through the work
-        /// queue (picks + writes run on the Revit API thread). The decoder/driver type NAMES are mapped back
-        /// to the curated pool's loaded-family identities so the shim drops the exact ticked types.</summary>
-        private void Place()
+        /// <summary>Refresh each loop's interface # (from the last solve) and placement state (derived from the
+        /// numbering + the persisted registry — no model scan). Sets all loops Unsolved when there's no clean
+        /// solve. Called after every Run and after every Place.</summary>
+        private void UpdateLoopPlacementStates()
         {
-            if (!CanPlace()) return;
+            var placed = new HashSet<int>(_loadedState.Placed.Select(p => p.Dec));
+            var ifaceByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (_lastBill != null)
+                foreach (var i in _lastBill.Interfaces)
+                    if (i.Interface.LoopName != null) ifaceByName[i.Interface.LoopName] = i.Interface.InterfaceNumber;
+
+            foreach (var loop in Loops)
+            {
+                if (_lastNumbering == null || _lastBill == null)
+                {
+                    loop.InterfaceNumber = 0;
+                    loop.PlacementState = DmxLoopPlacementState.Unsolved;
+                    continue;
+                }
+
+                loop.InterfaceNumber = ifaceByName.TryGetValue(loop.Name, out var n) ? n : 0;
+
+                var expected = new HashSet<int>();
+                foreach (var zn in loop.AssignedZoneNames)
+                    if (_lastNumbering.DecIdsByZone.TryGetValue(zn, out var ids))
+                        foreach (var d in ids) expected.Add(d);
+
+                if (loop.InterfaceNumber == 0 || expected.Count == 0) loop.PlacementState = DmxLoopPlacementState.Unsolved;
+                else if (expected.All(placed.Contains)) loop.PlacementState = DmxLoopPlacementState.Placed;
+                else if (expected.Any(placed.Contains)) loop.PlacementState = DmxLoopPlacementState.Partial;
+                else loop.PlacementState = DmxLoopPlacementState.Unplaced;
+            }
+        }
+
+        private bool CanPlaceLoop(DmxLoopRowViewModel loop) =>
+            _placement != null && _workQueue != null && !_placing
+            && _lastBill != null && _lastNumbering != null && loop.InterfaceNumber > 0;
+
+        /// <summary>Place just this loop: build the full system plan off the last solve (so DEC #s + orphan
+        /// validity stay whole-system), then hand the shim only this loop's interface # to pick + place. One
+        /// pick lands this loop's decoders + drivers; orphan cleanup still reconciles against the full solve.</summary>
+        private void PlaceLoop(DmxLoopRowViewModel loop)
+        {
+            if (!CanPlaceLoop(loop)) return;
 
             var decoderMap = DecoderRows.Where(r => r.IsSelected)
                 .GroupBy(r => r.Candidate.Name).ToDictionary(g => g.Key, g => g.First().Candidate.TypeId);
@@ -242,13 +295,15 @@ namespace TurboSuite.Dmx.ViewModels
             var registry = _loadedState.Placed
                 .Select(p => new DmxPlacedPair(p.Dec, p.DecoderId, p.DriverId)).ToList();
             bool locked = IsLocked;
+            int iface = loop.InterfaceNumber;
+            string label = loop.Name;
 
             _placing = true;
             RaisePlaceCanExecute();
-            PlacementStatus = "Placing… pick a point for each loop in the model (Esc to stop).";
+            PlacementStatus = $"Placing loop \"{label}\"… pick a point in the model (Esc to cancel).";
 
             _workQueue!.Enqueue(
-                () => _placement!.Place(plan, locked, registry),
+                () => _placement!.Place(plan, locked, registry, iface),
                 result =>
                 {
                     _placing = false;
@@ -256,6 +311,7 @@ namespace TurboSuite.Dmx.ViewModels
                     {
                         MergeRegistry(r);
                         PlacementStatus = r.Summary;
+                        UpdateLoopPlacementStates();
                     }
                     else PlacementStatus = "Placement failed.";
                     RaisePlaceCanExecute();
@@ -282,6 +338,58 @@ namespace TurboSuite.Dmx.ViewModels
                 Dec = p.Dec, DecoderId = p.DecoderId, DriverId = p.DriverId,
             }));
             _loadedState.Placed = kept;
+            Persist();
+        }
+
+        // ── Per-loop one-line (Phase 4): draw/redraw this loop's owned Drafting View ──────────────────
+        private bool _drawing;
+        private bool CanDrawOneLine(DmxLoopRowViewModel loop) =>
+            _oneLine != null && _workQueue != null && !_drawing
+            && _lastBill != null && _lastNumbering != null && loop.InterfaceNumber > 0;
+
+        /// <summary>Draw just this loop's one-line: plan ALL loops' drawings off the last solve (so DEC #s match
+        /// placement), then hand the shim this loop's interface # to wipe-and-redraw its owned view. The
+        /// returned view id is folded into the persisted registry so the next draw reuses the same view.</summary>
+        private void DrawOneLine(DmxLoopRowViewModel loop)
+        {
+            if (!CanDrawOneLine(loop)) return;
+
+            var driverMarks = DriverRows
+                .GroupBy(r => r.Candidate.Name)
+                .ToDictionary(g => g.Key, g => g.First().Candidate.TypeMark);
+            var drawings = DmxOneLinePlanner.Build(_lastBill!, _lastNumbering!, driverMarks);
+            var registry = _loadedState.OneLineViews.ToDictionary(v => v.InterfaceNumber, v => v.ViewId);
+            int iface = loop.InterfaceNumber;
+            string label = loop.Name;
+
+            _drawing = true;
+            RaisePlaceCanExecute();
+            PlacementStatus = $"Drawing one-line for loop \"{label}\"…";
+
+            _workQueue!.Enqueue(
+                () => _oneLine!.Draw(drawings, SystemName, iface, registry),
+                result =>
+                {
+                    _drawing = false;
+                    if (result is DmxOneLineResult r)
+                    {
+                        if (r.Ok) RegisterOneLineView(iface, r.ViewId);
+                        PlacementStatus = r.Summary;
+                    }
+                    else PlacementStatus = "One-line draw failed.";
+                    RaisePlaceCanExecute();
+                });
+        }
+
+        /// <summary>The Control System label seeding the owned view names. One system per window today.</summary>
+        public string SystemName { get; set; } = "DMX";
+
+        /// <summary>Record this loop's owned one-line view id (last-wins by interface #), then persist.</summary>
+        private void RegisterOneLineView(int interfaceNumber, long viewId)
+        {
+            var kept = _loadedState.OneLineViews.Where(v => v.InterfaceNumber != interfaceNumber).ToList();
+            kept.Add(new DmxOneLineViewDto { InterfaceNumber = interfaceNumber, ViewId = viewId });
+            _loadedState.OneLineViews = kept;
             Persist();
         }
 
@@ -328,37 +436,112 @@ namespace TurboSuite.Dmx.ViewModels
             RaisePlaceCanExecute();
         }
 
-        private void AddLoop()
+        // ── Loop assignment (the pool → loop gesture; destination owns the button) ────────────────────
+
+        private List<string> SelectedPoolZones() =>
+            ZonePool.Where(z => z.IsSelected).Select(z => z.ZoneName).ToList();
+
+        private void NewEmptyLoop()
         {
-            if (ZoneNames.Count == 0) return;
-            var loop = new DmxLoopRowViewModel($"Loop {++_loopSeq}", ZoneNames);
-            WireLoop(loop);
+            var loop = WireLoop(new DmxLoopRowViewModel($"Loop {++_loopSeq}"));
             Loops.Add(loop);
+            BuilderStatus = $"Added empty loop \"{loop.Name}\".";
+            Persist();              // no zones ⇒ no solve change, but persist the new loop
+            RaisePlaceCanExecute();
+        }
+
+        private void NewLoopFromSelection()
+        {
+            var sel = SelectedPoolZones();
+            var loop = WireLoop(new DmxLoopRowViewModel($"Loop {++_loopSeq}"));
+            Loops.Add(loop);
+            foreach (var zn in sel) loop.Zones.Add(MakeLoopZone(loop, zn));
+            BuilderStatus = sel.Count > 0
+                ? $"New loop \"{loop.Name}\" with {sel.Count} zone(s)."
+                : $"Added empty loop \"{loop.Name}\" — select pool zones to fill it.";
+            AfterAssignmentEdit();
+        }
+
+        private void AddSelectionToLoop(DmxLoopRowViewModel loop)
+        {
+            var sel = SelectedPoolZones();
+            if (sel.Count == 0) { BuilderStatus = "Select zone(s) in the pool first, then '+ Add'."; return; }
+            int added = 0;
+            foreach (var zn in sel)
+            {
+                if (loop.Zones.Any(z => string.Equals(z.ZoneName, zn, StringComparison.OrdinalIgnoreCase))) continue;
+                loop.Zones.Add(MakeLoopZone(loop, zn));
+                added++;
+            }
+            BuilderStatus = $"Added {added} zone(s) to \"{loop.Name}\".";
+            AfterAssignmentEdit();
+        }
+
+        private void RemoveLoop(DmxLoopRowViewModel loop)
+        {
+            if (!Loops.Remove(loop)) return;
+            BuilderStatus = $"Removed \"{loop.Name}\" — its zones returned to the pool.";
+            AfterAssignmentEdit();
+        }
+
+        private void RemoveZoneFromLoop(DmxLoopRowViewModel loop, DmxLoopZoneViewModel zone)
+        {
+            if (!loop.Zones.Remove(zone)) return;
+            BuilderStatus = $"\"{zone.ZoneName}\" returned to the pool.";
+            AfterAssignmentEdit();
+        }
+
+        /// <summary>After any zone↔loop change: recompute the pool from current loop membership, re-solve
+        /// (interfaces shifted), and persist.</summary>
+        private void AfterAssignmentEdit()
+        {
+            RebuildPool();
+            Run();
             Persist();
         }
 
-        private void RemoveLoop(DmxLoopRowViewModel? loop)
+        private DmxLoopRowViewModel WireLoop(DmxLoopRowViewModel loop)
         {
-            if (loop != null && Loops.Remove(loop)) { Run(); Persist(); }
+            loop.PropertyChanged += (_, __) => Persist();       // name edits
+            loop.AddSelectedCommand = new RelayCommand(() => AddSelectionToLoop(loop));
+            loop.RemoveCommand = new RelayCommand(() => RemoveLoop(loop));
+            loop.PlaceCommand = new RelayCommand(() => PlaceLoop(loop), () => CanPlaceLoop(loop));
+            loop.DrawOneLineCommand = new RelayCommand(() => DrawOneLine(loop), () => CanDrawOneLine(loop));
+            return loop;
         }
 
-        /// <summary>Re-read the model on the Revit thread (work queue), then rebuild + re-solve. No-op when
-        /// constructed without a reader (e.g. unit tests).</summary>
-        public void Refresh()
+        /// <summary>Build a zone node inside a loop: its run count (splittability) + cluster sub-builder + the
+        /// "← (to pool)" action.</summary>
+        private DmxLoopZoneViewModel MakeLoopZone(DmxLoopRowViewModel loop, string zoneName)
         {
-            if (_workQueue == null || _reader == null) return;
-            _workQueue.Enqueue(
-                () => _reader.Read(),
-                result => { LoadSnapshot((DmxModelSnapshot)result); Run(); });
+            _runsByZone.TryGetValue(zoneName, out int total);
+            var z = new DmxLoopZoneViewModel(zoneName, total);
+            z.RemoveFromLoopCommand = new RelayCommand(() => RemoveZoneFromLoop(loop, z));
+            z.NewClusterCommand = new RelayCommand(() => NewClusterFromSelection(z), () => CanCluster);
+            RefreshClusterRows(z);
+            return z;
+        }
+
+        private void RebuildPool()
+        {
+            var assigned = new HashSet<string>(
+                Loops.SelectMany(l => l.Zones.Select(z => z.ZoneName)), StringComparer.OrdinalIgnoreCase);
+
+            ZonePool.Clear();
+            foreach (var zone in ZoneNames)
+            {
+                if (assigned.Contains(zone)) continue;
+                _runsByZone.TryGetValue(zone, out int rc);
+                ZonePool.Add(new DmxZonePoolItemViewModel(zone, rc));
+            }
         }
 
         // ── Persistence (doc-side ExtensibleStorage via the injected save callback) ─────────────────
         //
         // Every persisted declaration — profile, Kind-2 settings, curated part-pool ticks, declared loops —
         // funnels through Persist() on change. The injected callback (shim-side) coalesces and writes the
-        // bundle to the DMX schema on the Revit thread (BuildPlan Phase 2 loop-persistence). No-op until the
-        // constructor finishes (_loaded) so the initial load doesn't write the model back to itself, and a
-        // no-op when constructed without a persister (unit tests).
+        // bundle to the DMX schema on the Revit thread. No-op until the constructor finishes (_loaded) so the
+        // initial load doesn't write the model back to itself, and a no-op when constructed without a persister.
 
         /// <summary>Restore the saved declarations onto the window before the model read. Consumed once;
         /// the saved curation/loops are stashed for the first <see cref="LoadSnapshot"/> to apply.</summary>
@@ -387,10 +570,11 @@ namespace TurboSuite.Dmx.ViewModels
         }
 
         /// <summary>Build the current declarations into a <see cref="DmxModuleState"/>, carrying through the
-        /// overlays this VM doesn't manage yet (clusters, control-system tags, snapshot) from the last load.</summary>
+        /// overlays this VM doesn't manage (control-system tags, snapshot) from the last load. Loops persist
+        /// as their assigned zones (chain order); the pool is derived, not stored.</summary>
         private DmxModuleState BuildState()
         {
-            var state = _loadedState;   // preserve PayloadVersion + the unmanaged overlays
+            var state = _loadedState;   // preserve PayloadVersion + the unmanaged overlays + clusters + registry
             state.Settings = new DmxSettingsDto
             {
                 Profile = _selectedProfile.Name,
@@ -428,13 +612,14 @@ namespace TurboSuite.Dmx.ViewModels
             return row;
         }
 
-        /// <summary>Subscribe a loop's name + its zone ticks to persistence.</summary>
-        private DmxLoopRowViewModel WireLoop(DmxLoopRowViewModel loop)
+        /// <summary>Re-read the model on the Revit thread (work queue), then rebuild + re-solve. No-op when
+        /// constructed without a reader (e.g. unit tests).</summary>
+        public void Refresh()
         {
-            loop.PropertyChanged += (_, __) => Persist();
-            foreach (var z in loop.Zones)
-                z.PropertyChanged += (_, __) => Persist();
-            return loop;
+            if (_workQueue == null || _reader == null) return;
+            _workQueue.Enqueue(
+                () => _reader.Read(),
+                result => { LoadSnapshot((DmxModelSnapshot)result); Run(); });
         }
 
         // ── Snapshot load (preserving selections + loops across a refresh) ──────────────────────────
@@ -445,6 +630,10 @@ namespace TurboSuite.Dmx.ViewModels
             _zoneByFixtureId = _fixtures
                 .GroupBy(f => f.ElementId)
                 .ToDictionary(g => g.Key, g => (g.First().ControlZone ?? "").Trim());
+            _runsByZone = _zoneByFixtureId.Values
+                .Where(z => z.Length > 0)
+                .GroupBy(z => z, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
 
             var zoneResult = DmxZoneBuilder.Build(_fixtures, _loadedState.Clusters);
             ZoneNames = zoneResult.ZoneNames;
@@ -468,26 +657,44 @@ namespace TurboSuite.Dmx.ViewModels
             foreach (var c in snapshot.DriverCandidates)
                 DriverRows.Add(WireRow(new DmxDriverRowViewModel(c, keepDrivers?.Contains(c.TypeId) ?? true)));
 
-            // Rebuild loops against the (possibly changed) zone set, preserving name + assignments by zone
-            // name. On FIRST load they come from the saved loops (_initialLoops, consumed once); thereafter
-            // from the live rows so a Refresh keeps in-progress edits.
-            var prior = _initialLoops != null
-                ? _initialLoops.OrderBy(l => l.Order)
-                    .Select(l => (l.Name, Assigned: (IEnumerable<string>)l.ZoneValues)).ToList()
-                : Loops.Select(l => (l.Name, Assigned: (IEnumerable<string>)l.AssignedZoneNames)).ToList();
-            _initialLoops = null;
-
-            Loops.Clear();
-            foreach (var p in prior)
-                Loops.Add(WireLoop(new DmxLoopRowViewModel(p.Name, ZoneNames, p.Assigned)));
-            _loopSeq = Math.Max(_loopSeq, Loops.Count);
-
             PruneClusters();
-            RebuildClusterGroups();
+            RebuildLoopsAndPool();
 
             OnPropertyChanged(nameof(FixtureCount));
             OnPropertyChanged(nameof(ZoneCount));
             OnPropertyChanged(nameof(SummaryText));
+        }
+
+        /// <summary>Rebuild the loop tree + pool against the (possibly changed) zone set. On FIRST load the loop
+        /// definitions come from the saved loops (consumed once); thereafter from the live rows so a Refresh
+        /// keeps in-progress edits. Dropped zones fall out; a zone named in two loops sticks to the first
+        /// (single-membership); leftovers form the pool.</summary>
+        private void RebuildLoopsAndPool()
+        {
+            var defs = _initialLoops != null
+                ? _initialLoops.OrderBy(l => l.Order)
+                    .Select(l => (l.Name, Zones: (IEnumerable<string>)(l.ZoneValues ?? new List<string>()))).ToList()
+                : Loops.Select(l => (l.Name, Zones: (IEnumerable<string>)l.AssignedZoneNames)).ToList();
+            _initialLoops = null;
+
+            var zoneSet = new HashSet<string>(ZoneNames, StringComparer.OrdinalIgnoreCase);
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            Loops.Clear();
+            foreach (var d in defs)
+            {
+                var loop = WireLoop(new DmxLoopRowViewModel(d.Name));
+                foreach (var zn in d.Zones)
+                {
+                    if (!zoneSet.Contains(zn) || used.Contains(zn)) continue;   // dropped or already in a loop
+                    used.Add(zn);
+                    loop.Zones.Add(MakeLoopZone(loop, zn));
+                }
+                Loops.Add(loop);
+            }
+            _loopSeq = Math.Max(_loopSeq, Loops.Count);
+
+            RebuildPool();
         }
 
         // ── Cluster sub-builder (§8d): selection-driven, persisted by fixture ElementId ──────────────
@@ -504,40 +711,26 @@ namespace TurboSuite.Dmx.ViewModels
             _loadedState.Clusters = _loadedState.Clusters.Where(c => c.RunElementIds.Count > 0).ToList();
         }
 
-        private void RebuildClusterGroups()
+        /// <summary>(Re)populate a zone node's cluster rows from the persisted cluster DTOs for that zone.</summary>
+        private void RefreshClusterRows(DmxLoopZoneViewModel z)
         {
-            ZoneClusterGroups.Clear();
-            _clusterSeq = 0;
-            var runsByZone = _zoneByFixtureId.Values
-                .Where(z => z.Length > 0)
-                .GroupBy(z => z, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
-
-            foreach (var zone in ZoneNames)
+            z.Clusters.Clear();
+            foreach (var c in _loadedState.Clusters.Where(c =>
+                         string.Equals(c.ZoneValue, z.ZoneName, StringComparison.OrdinalIgnoreCase)))
             {
-                runsByZone.TryGetValue(zone, out int total);
-                if (total < 2) continue;   // a single-run zone can't be split — no cluster UI (flat default)
-
-                var group = new DmxZoneClusterGroupViewModel(zone, total);
-                group.NewClusterCommand = new RelayCommand(() => NewClusterFromSelection(group), () => CanCluster);
-
-                foreach (var c in _loadedState.Clusters.Where(c =>
-                             string.Equals(c.ZoneValue, zone, StringComparison.OrdinalIgnoreCase)))
-                {
-                    var row = new DmxClusterRowViewModel(c.ClusterId, c.Name, c.RunElementIds);
-                    WireClusterRow(group, row);
-                    group.Clusters.Add(row);
-                    _clusterSeq = Math.Max(_clusterSeq, ExtractSeq(c.Name));
-                }
-                ZoneClusterGroups.Add(group);
+                var row = new DmxClusterRowViewModel(c.ClusterId, c.Name, c.RunElementIds);
+                WireClusterRow(z, row);
+                z.Clusters.Add(row);
+                _clusterSeq = Math.Max(_clusterSeq, ExtractSeq(c.Name));
             }
+            z.RaiseResidualChanged();
         }
 
-        private void WireClusterRow(DmxZoneClusterGroupViewModel group, DmxClusterRowViewModel row)
+        private void WireClusterRow(DmxLoopZoneViewModel z, DmxClusterRowViewModel row)
         {
             row.VerifyCommand = new RelayCommand(() => Verify(row), () => CanCluster);
-            row.AddSelectionCommand = new RelayCommand(() => AddSelectionToCluster(group, row), () => CanCluster);
-            row.RemoveCommand = new RelayCommand(() => RemoveCluster(group, row), () => CanCluster);
+            row.AddSelectionCommand = new RelayCommand(() => AddSelectionToCluster(z, row), () => CanCluster);
+            row.RemoveCommand = new RelayCommand(() => RemoveCluster(z, row), () => CanCluster);
             row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(DmxClusterRowViewModel.Name)) RenameCluster(row); };
         }
 
@@ -547,44 +740,44 @@ namespace TurboSuite.Dmx.ViewModels
             return int.TryParse(digits, out var n) ? n : 0;
         }
 
-        private void NewClusterFromSelection(DmxZoneClusterGroupViewModel group)
+        private void NewClusterFromSelection(DmxLoopZoneViewModel z)
         {
             WithSelection(ids =>
             {
-                var (mine, ignored) = FilterToZone(ids, group.ZoneName);
-                if (mine.Count == 0) { ClusterStatus = $"Nothing in zone \"{group.ZoneName}\" selected ({ignored} ignored)."; return; }
+                var (mine, ignored) = FilterToZone(ids, z.ZoneName);
+                if (mine.Count == 0) { BuilderStatus = $"Nothing in zone \"{z.ZoneName}\" selected ({ignored} ignored)."; return; }
 
                 var dto = new DmxClusterDto
                 {
                     ClusterId = Guid.NewGuid().ToString("N"),
                     Name = $"Cluster {++_clusterSeq}",
-                    ZoneValue = group.ZoneName,
+                    ZoneValue = z.ZoneName,
                     RunElementIds = new List<long>(),
                 };
                 _loadedState.Clusters.Add(dto);
-                AssignRuns(group.ZoneName, dto.ClusterId, mine);
-                ClusterStatus = $"New cluster: {mine.Count} run(s) in \"{group.ZoneName}\"" + IgnoredText(ignored);
-                AfterClusterEdit();
+                AssignRuns(z.ZoneName, dto.ClusterId, mine);
+                BuilderStatus = $"New cluster: {mine.Count} run(s) in \"{z.ZoneName}\"" + IgnoredText(ignored);
+                AfterClusterEdit(z);
             });
         }
 
-        private void AddSelectionToCluster(DmxZoneClusterGroupViewModel group, DmxClusterRowViewModel row)
+        private void AddSelectionToCluster(DmxLoopZoneViewModel z, DmxClusterRowViewModel row)
         {
             WithSelection(ids =>
             {
-                var (mine, ignored) = FilterToZone(ids, group.ZoneName);
-                if (mine.Count == 0) { ClusterStatus = $"Nothing in zone \"{group.ZoneName}\" selected ({ignored} ignored)."; return; }
-                AssignRuns(group.ZoneName, row.ClusterId, mine);
-                ClusterStatus = $"Added {mine.Count} run(s) to \"{row.Name}\"" + IgnoredText(ignored);
-                AfterClusterEdit();
+                var (mine, ignored) = FilterToZone(ids, z.ZoneName);
+                if (mine.Count == 0) { BuilderStatus = $"Nothing in zone \"{z.ZoneName}\" selected ({ignored} ignored)."; return; }
+                AssignRuns(z.ZoneName, row.ClusterId, mine);
+                BuilderStatus = $"Added {mine.Count} run(s) to \"{row.Name}\"" + IgnoredText(ignored);
+                AfterClusterEdit(z);
             });
         }
 
-        private void RemoveCluster(DmxZoneClusterGroupViewModel group, DmxClusterRowViewModel row)
+        private void RemoveCluster(DmxLoopZoneViewModel z, DmxClusterRowViewModel row)
         {
             _loadedState.Clusters.RemoveAll(c => c.ClusterId == row.ClusterId);
-            ClusterStatus = $"Removed \"{row.Name}\" — its runs returned to (unclustered).";
-            AfterClusterEdit();
+            BuilderStatus = $"Removed \"{row.Name}\" — its runs returned to (unclustered).";
+            AfterClusterEdit(z);
         }
 
         private void RenameCluster(DmxClusterRowViewModel row)
@@ -643,9 +836,10 @@ namespace TurboSuite.Dmx.ViewModels
                                result => onIds((IReadOnlyList<long>)(result ?? new List<long>())));
         }
 
-        private void AfterClusterEdit()
+        /// <summary>After a cluster edit: repopulate the zone's rows, re-solve, persist.</summary>
+        private void AfterClusterEdit(DmxLoopZoneViewModel z)
         {
-            RebuildClusterGroups();
+            RefreshClusterRows(z);
             Run();
             Persist();
         }

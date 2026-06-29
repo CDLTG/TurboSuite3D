@@ -160,20 +160,28 @@ namespace TurboSuite.Dmx
         public int DriverCount => DecoderCount;
     }
 
-    /// <summary>Per-interface (loop) result inside the bill: addressed zones + its segmentation.</summary>
+    /// <summary>Per-interface (loop) result inside the bill: addressed zones + its segmentation + 120 V feeds.</summary>
     public sealed class InterfaceSolution
     {
-        public InterfaceSolution(DmxInterface dmxInterface, int deviceCount, LoopSegmentation segmentation)
+        public InterfaceSolution(DmxInterface dmxInterface, int deviceCount, LoopSegmentation segmentation,
+                                 IReadOnlyList<BreakerLoad> feeds)
         {
             Interface = dmxInterface;
             DeviceCount = deviceCount;
             Segmentation = segmentation;
+            Feeds = feeds;
         }
 
         public DmxInterface Interface { get; }
         public int DeviceCount { get; }
         public LoopSegmentation Segmentation { get; }
         public int RepeaterCount => Segmentation.RepeaterCount;
+
+        /// <summary>This interface's 120 V feeds (§0c) — one <see cref="BreakerLoad"/> per feed, drivers in
+        /// DEC order (next-fit, never spanning interfaces). The one-line draws these as the "120V FEED"
+        /// blocks; <c>bill.Breakers</c> is these flattened across interfaces, so the count and the drawing
+        /// agree by construction.</summary>
+        public IReadOnlyList<BreakerLoad> Feeds { get; }
     }
 
     /// <summary>The complete deterministic bill for one Control System solve.</summary>
@@ -281,23 +289,30 @@ namespace TurboSuite.Dmx
             //    each become one interface (in declaration order); the rest auto-pack (§0d).
             var packed = InterfacePacker.Pack(zoneInputs, contract.ChannelCeiling, contract.ReservedChannels, loops);
 
-            // 3. Segments: each interface's loop = its decoders; split by D4.
+            // 3. Per interface: split the loop by D4 (segments) AND pack its drivers onto 120 V feeds (§0c).
+            //    Feeds pack PER INTERFACE in DEC-walk order (next-fit) so a feed is consecutive DEC#s and
+            //    never spans interfaces — the §0c count then equals the one-line's drawn "120V FEED" blocks
+            //    (gap closed). Per-driver watts are connected load OR full nameplate, per the contract basis.
+            var byZone = zoneSolutions.ToDictionary(z => z.ZoneName);
             var interfaceSolutions = new List<InterfaceSolution>(packed.Interfaces.Count);
             foreach (var iface in packed.Interfaces)
             {
                 int deviceCount = iface.Zones.Sum(z => decoderCountByZone[z.ZoneName]);
                 var segmentation = LoopSegmenter.Segment(deviceCount, contract.MaxDevicesPerSegment);
-                interfaceSolutions.Add(new InterfaceSolution(iface, deviceCount, segmentation));
+
+                var ifaceDriverWatts = iface.Zones
+                    .SelectMany(z => byZone[z.ZoneName].Decoders)     // DEC-walk order: zones → clusters → decoders
+                    .Select(d => contract.BreakerBasis == BreakerBasis.DriverRating
+                                     ? d.Driver.RatedWatts            // nameplate: worst-case / inrush-sized
+                                     : d.Decoder.TotalWatts)          // connected load: actual draw
+                    .ToList();
+                var feeds = BreakerPacker.Pack(ifaceDriverWatts, contract.BreakerCapWatts, contract.MaxDriversPerBreaker);
+
+                interfaceSolutions.Add(new InterfaceSolution(iface, deviceCount, segmentation, feeds));
             }
 
-            // 4. Feeds (§0c): pack the drivers onto 120 V branch breakers (watt cap + inrush count). The
-            // per-driver watts are its connected load OR its full nameplate, per the contract basis.
-            var driverFeed = zoneSolutions.SelectMany(z => z.Decoders)
-                .Select(d => contract.BreakerBasis == BreakerBasis.DriverRating
-                                 ? d.Driver.RatedWatts        // nameplate: worst-case / inrush-sized
-                                 : d.Decoder.TotalWatts)      // connected load: actual draw
-                .ToList();
-            var breakers = BreakerPacker.Pack(driverFeed, contract.BreakerCapWatts, contract.MaxDriversPerBreaker);
+            // 4. Feeds roll up to the bill: bill.Breakers = the per-interface feeds, flattened in order.
+            var breakers = interfaceSolutions.SelectMany(i => i.Feeds).ToList();
 
             // 5. Roll-up (§8b/Q8, report-only): pack interfaces onto control links (legs + device caps),
             //    then links → processors. Sized & reported; never a solve stop, never provisioned.

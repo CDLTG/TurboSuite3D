@@ -50,6 +50,19 @@ namespace TurboSuite.Tests.Dmx
         }
 
         [Fact]
+        public void Pack_IsOrderPreservingNextFit_KeepingConsecutiveGroups()
+        {
+            // [10,9,8,7] under an 18 W cap: next-fit (order-preserving) ⇒ [10],[9,8],[7] = 3 feeds, each a
+            // run of CONSECUTIVE drivers. A reordering FFD would pack [10+8],[9+7] = 2 but scramble DEC
+            // order — the one-line needs consecutive feed blocks, so the looser next-fit count is deliberate.
+            var bins = BreakerPacker.Pack(new[] { 10.0, 9, 8, 7 }, cap: 18, maxPerBreaker: 0);
+            Assert.Equal(3, bins.Count);
+            Assert.Equal(new[] { 10.0 }, bins[0].DriverWatts);
+            Assert.Equal(new[] { 9.0, 8.0 }, bins[1].DriverWatts);
+            Assert.Equal(new[] { 7.0 }, bins[2].DriverWatts);
+        }
+
+        [Fact]
         public void NoCountCap_IsPurelyWattBound()
         {
             var loads = Enumerable.Repeat(52.0, 30).ToList(); // 1560 W ≤ 1920, no inrush limit ⇒ 1 breaker

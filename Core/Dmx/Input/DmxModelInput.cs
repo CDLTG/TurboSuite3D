@@ -45,6 +45,11 @@ namespace TurboSuite.Dmx.Input
     {
         public string TypeId { get; set; } = "";
         public string Name { get; set; } = "";
+
+        /// <summary>The family's Type Mark (e.g. "CV"/"MD"/"ME") — the label the one-line driver box shows.
+        /// Distinct from <see cref="Name"/> ("Family : Type"); empty if the family carries no Type Mark.</summary>
+        public string TypeMark { get; set; } = "";
+
         public double RatedWatts { get; set; }
         public double OperatingVolts { get; set; }
         public double DeratingFactorRaw { get; set; }

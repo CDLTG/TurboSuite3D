@@ -33,8 +33,11 @@ namespace TurboSuite.Dmx
     /// under TWO co-equal limits — the watt cap (amps × volts × continuous-derate) AND a max-drivers-per-
     /// breaker count cap (inrush). For a few large drivers watts bind; for many small drivers the count
     /// binds (a 52 W driver draws 52 W, so dozens "fit" by watts but their combined surge would trip).
-    /// Atomic FFD: a driver sits on exactly one breaker. The engine emits the COUNT; circuit creation +
-    /// the one-line feed are the deferred Revit half.
+    /// A driver sits on exactly one breaker. The packing is <b>order-preserving next-fit</b>, run once
+    /// PER INTERFACE by the solver (a feed never spans interfaces), so a feed is a run of consecutive
+    /// drivers and the §0c breaker COUNT == the one-line's drawn "120V FEED" blocks (the gap is closed —
+    /// the drawing groups the same decoders, in DEC order, into the same feeds). The slightly looser
+    /// count vs. a system-wide FFD min is the conservative, actually-buildable figure.
     /// </summary>
     public static class BreakerPacker
     {
@@ -45,9 +48,12 @@ namespace TurboSuite.Dmx
             => breakerAmps * feedVolts * DeratingFactor.Normalize(continuousDerateRaw);
 
         /// <summary>
-        /// Pack driver load watts onto breakers (First-Fit-Decreasing) under the watt cap AND the
-        /// per-breaker count cap (<paramref name="maxPerBreaker"/> ≤ 0 ⇒ no count limit). A single driver
-        /// whose load exceeds the cap throws — the breaker is too small for the driver pool.
+        /// Pack driver load watts onto branch feeds in the GIVEN order (next-fit — no reorder) under the
+        /// watt cap AND the per-breaker count cap (<paramref name="maxPerBreaker"/> ≤ 0 ⇒ no count limit).
+        /// Order-preserving so each feed is a run of CONSECUTIVE drivers (DEC order), which is what makes
+        /// the count match the one-line's feed blocks. Call once per interface so feeds don't span
+        /// interfaces. A single driver whose load exceeds the cap throws — the breaker is too small for
+        /// the driver pool.
         /// </summary>
         public static IReadOnlyList<BreakerLoad> Pack(IReadOnlyList<double> driverLoadWatts, double cap, int maxPerBreaker)
         {
@@ -55,22 +61,19 @@ namespace TurboSuite.Dmx
             if (cap <= 0) throw new ArgumentOutOfRangeException(nameof(cap), "Breaker watt cap must be positive.");
 
             var breakers = new List<BreakerLoad>();
-            foreach (double w in driverLoadWatts.OrderByDescending(x => x))
+            BreakerLoad? current = null;
+            foreach (double w in driverLoadWatts)   // in the given order — next-fit, never reordered
             {
                 if (w > cap + Eps)
                     throw new InvalidOperationException(
                         $"Driver load {w:F0} W exceeds the breaker cap {cap:F0} W — the breaker is too small "
                         + "for the driver pool. Raise the breaker amps or lower the driver size.");
 
-                BreakerLoad? target = null;
-                foreach (var b in breakers)
-                {
-                    bool wattsFit = w <= b.Remaining(cap) + Eps;
-                    bool countFits = maxPerBreaker <= 0 || b.DriverCount < maxPerBreaker;
-                    if (wattsFit && countFits) { target = b; break; }
-                }
-                if (target == null) { target = new BreakerLoad(); breakers.Add(target); }
-                target.Add(w);
+                bool fits = current != null
+                            && w <= current.Remaining(cap) + Eps
+                            && (maxPerBreaker <= 0 || current.DriverCount < maxPerBreaker);
+                if (!fits) { current = new BreakerLoad(); breakers.Add(current); }
+                current!.Add(w);
             }
             return breakers;
         }

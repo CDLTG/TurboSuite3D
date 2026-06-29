@@ -79,6 +79,33 @@ namespace TurboSuite.Tests.Dmx
             Assert.Equal(1800.0, bill.Breakers.Sum(b => b.TotalWatts), precision: 0);
         }
 
+        [Fact]
+        public void Feeds_PackPerInterface_NotSystemWide_SoTheCountMatchesTheOneLine()
+        {
+            // Two declared loops ⇒ two interfaces, each a single 300 W driver. Packed PER INTERFACE the
+            // §0c count is 2 feeds (one per column); a system-wide pack would have merged 600 W onto ONE
+            // 1920 W breaker (count 1). Per-interface is the buildable figure the one-line draws, so the
+            // breaker COUNT == the drawn "120V FEED" blocks (gap closed, §0c / Phase 4).
+            var zones = new[]
+            {
+                new ZoneDesign("Z1", new[] { new TapeRun(300.0 / 5.2, 5.2, 4) }),
+                new ZoneDesign("Z2", new[] { new TapeRun(300.0 / 5.2, 5.2, 4) }),
+            };
+            var loops = new[]
+            {
+                new LoopDeclaration("A", new[] { "Z1" }),
+                new LoopDeclaration("B", new[] { "Z2" }),
+            };
+
+            var bill = DmxSolver.Solve(Contract(1.0), zones, loops);
+
+            Assert.Equal(2, bill.InterfaceCount);
+            Assert.Equal(2, bill.RequiredBreakers);                        // per-interface: 2 (system-wide would be 1)
+            Assert.All(bill.Interfaces, i => Assert.Single(i.Feeds));      // one feed per interface column
+            Assert.Equal(bill.Interfaces.Sum(i => i.Feeds.Count), bill.Breakers.Count); // flatten invariant
+            Assert.All(bill.Breakers, b => Assert.Equal(300.0, b.TotalWatts, precision: 0));
+        }
+
         // --- Decoder-type selection by channel need ---
 
         [Fact]
