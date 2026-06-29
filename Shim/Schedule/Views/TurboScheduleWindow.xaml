@@ -161,16 +161,31 @@
                 </Grid>
             </DataTemplate>
 
-            <!-- A schedule-note full-width row. -->
+            <!-- A schedule-note full-width row, with a live char-count budget pinned right (red at the limit). -->
             <DataTemplate x:Key="NoteRowTemplate" DataType="{x:Type models:SpecField}">
                 <Grid Margin="0,1" Height="23">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="42"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="32"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
                                Foreground="{StaticResource TextSecondaryBrush}"/>
                     <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource SpecBoxTemplate}"/>
+                    <TextBlock Grid.Column="2" Text="{Binding CharCount}" VerticalAlignment="Center"
+                               HorizontalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsOverCharLimit}" Value="True">
+                                        <Setter Property="Foreground" Value="#CC0000"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
             </DataTemplate>
         </ResourceDictionary>

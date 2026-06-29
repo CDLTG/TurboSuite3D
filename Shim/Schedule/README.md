@@ -47,4 +47,5 @@ An in-app clipboard (not the OS clipboard) copies a whole type or a single secti
 - **Save is by Type Mark, re-resolved at save time.** The writer re-collects symbols by Type Mark + category when you Save, so it writes the current model membership. A value Revit can't parse (`SetValueString` fails) is skipped, reported in the status line, and left dirty — it doesn't abort the rest of the batch.
 - **Discard can't be undone by Revit.** Discarded edits were never committed to the model, so Revit's Undo can't bring them back. Discard restores each field to its loaded value — including the ⟨varies⟩ placeholder/dash for fields that started mixed.
 - **Catalog # / Qty** fields accept the same Counts grammar used by TurboDocs — the **Counts syntax ↗** link on the page opens the cheat sheet.
+- **Schedule Notes** rows show a live character count to the right of each field, turning red at 80 characters to flag entries that may overrun the schedule column.
 - The Fixture and Driver pages share most sections but diverge: Photometric is fixtures-only; Sub-Driver Power / Maximum Fixtures / Derating Factor are drivers-only.

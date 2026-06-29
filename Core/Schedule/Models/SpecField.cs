@@ -19,6 +19,9 @@ namespace TurboSuite.Schedule.Models;
 /// </summary>
 public class SpecField : ViewModelBase
 {
+    /// <summary>Schedule-note column ceiling: at/after this length the live count turns red.</summary>
+    public const int NoteCharLimit = 80;
+
     private string _value = "";
     private bool _userEdited;
     private bool _isVaries;
@@ -72,6 +75,8 @@ public class SpecField : ViewModelBase
             OnPropertyChanged(nameof(ShowPlaceholder));
             OnPropertyChanged(nameof(ShowUrlButton));
             OnPropertyChanged(nameof(BoolValueNullable));
+            OnPropertyChanged(nameof(CharCount));
+            OnPropertyChanged(nameof(IsOverCharLimit));
             DirtyChanged?.Invoke(this);
         }
     }
@@ -88,6 +93,12 @@ public class SpecField : ViewModelBase
 
     /// <summary>Click-to-open glyph shows only on a URL field that currently has a value.</summary>
     public bool ShowUrlButton => Def.IsUrl && !string.IsNullOrWhiteSpace(_value);
+
+    /// <summary>Live length of the current value — surfaced beside schedule-note rows as a column-fit budget.</summary>
+    public int CharCount => _value.Length;
+
+    /// <summary>True once the value reaches the <see cref="NoteCharLimit"/> ceiling; turns the count red.</summary>
+    public bool IsOverCharLimit => CharCount >= NoteCharLimit;
 
     /// <summary>True for a Yes/No param — the form renders a checkbox instead of a text box.</summary>
     public bool IsBoolean => ValueKind == SpecValueKind.Boolean;
@@ -120,6 +131,8 @@ public class SpecField : ViewModelBase
         OnPropertyChanged(nameof(ShowPlaceholder));
         OnPropertyChanged(nameof(ShowUrlButton));
         OnPropertyChanged(nameof(BoolValueNullable));
+        OnPropertyChanged(nameof(CharCount));
+        OnPropertyChanged(nameof(IsOverCharLimit));
     }
 
     /// <summary>Paste a clipboard value as a user edit (marks dirty); no-op on locked fields.</summary>
@@ -143,6 +156,8 @@ public class SpecField : ViewModelBase
         OnPropertyChanged(nameof(ShowPlaceholder));
         OnPropertyChanged(nameof(ShowUrlButton));
         OnPropertyChanged(nameof(BoolValueNullable));
+        OnPropertyChanged(nameof(CharCount));
+        OnPropertyChanged(nameof(IsOverCharLimit));
         DirtyChanged?.Invoke(this);
     }
 
