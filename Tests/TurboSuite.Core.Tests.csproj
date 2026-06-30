@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Oracle suite for the pure DMX engine ported into Core/Dmx/ (TurboDMX BuildPlan Phase 0).
-       The suite's only automated tests — justified because the engine is pure and was already
-       fully test-covered as a standalone spike. net8.0-windows matches Core's net8 TFM so the
-       multi-targeted Core reference resolves without a platform-compat warning; the engine logic
-       under test is identical across Core's net48 and net8 builds. -->
+  <!-- Automated oracle suites for the pure, Revit-free logic in Core/ (and Abstractions/).
+       References Core ONLY — no Revit/shim refs — so it covers anything testable without Revit:
+       the Core/Dmx/ engine (packing, addressing, wire numbering) and the Core/Driver/
+       StaleClassifier, with more added as pure Core logic lands. (Revit-coupled shim code is
+       validated by manual in-Revit testing instead.) net8.0-windows matches Core's net8 TFM so the
+       multi-targeted Core reference resolves without a platform-compat warning; the logic under
+       test is identical across Core's net48 and net8 builds. -->
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <LangVersion>latest</LangVersion>
