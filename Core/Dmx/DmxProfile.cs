@@ -14,7 +14,7 @@ namespace TurboSuite.Dmx
     ///
     /// What a profile does NOT own: the Kind-2 job policy (breaker amps/volts/derate, inrush, D4,
     /// reserved channels) — those are job settings with their own defaults, profile-seeded then
-    /// overridable (TurboDMX-UI-Structure §1). And it does not own conventions (color → channels), which
+    /// overridable (the window's Settings panel). And it does not own conventions (color → channels), which
     /// have no v1 UI (the even split is the silent default).
     /// </summary>
     public sealed class DmxProfile

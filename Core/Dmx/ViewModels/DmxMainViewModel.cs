@@ -9,6 +9,7 @@ using TurboSuite.Abstractions;
 using TurboSuite.Dmx.Input;
 using TurboSuite.Dmx.Lock;
 using TurboSuite.Dmx.OneLine;
+using TurboSuite.Dmx.Overlay;
 using TurboSuite.Dmx.Persistence;
 using TurboSuite.Dmx.Placement;
 using TurboSuite.Dmx.Services;
@@ -32,6 +33,7 @@ namespace TurboSuite.Dmx.ViewModels
         private readonly IDmxModelReader? _reader;
         private readonly IDmxPlacementService? _placement;
         private readonly IDmxOneLineService? _oneLine;
+        private readonly IDmxZoneColorService? _zoneColor;
         private readonly IDmxModelSelection? _selection;
         private readonly Action<DmxModuleState>? _persist;
         private readonly Func<string, bool>? _confirm;   // shim Yes/No gate for the destructive lock actions
@@ -72,12 +74,14 @@ namespace TurboSuite.Dmx.ViewModels
                                 IDmxPlacementService? placement = null,
                                 Func<string, bool>? confirm = null,
                                 IDmxModelSelection? selection = null,
-                                IDmxOneLineService? oneLine = null)
+                                IDmxOneLineService? oneLine = null,
+                                IDmxZoneColorService? zoneColor = null)
         {
             _workQueue = workQueue;
             _reader = reader;
             _placement = placement;
             _oneLine = oneLine;
+            _zoneColor = zoneColor;
             _selection = selection;
             _persist = persist;
             _confirm = confirm;
@@ -105,6 +109,7 @@ namespace TurboSuite.Dmx.ViewModels
             LoadSnapshot(snapshot);
             Run();
             _loaded = true;   // any later mutation now persists
+            ApplyZoneColors();   // Phase 5: color the active view by Control Zone while the window is open
         }
 
         // ── Declarations: profile ───────────────────────────────────────────────────────────────────
@@ -619,7 +624,30 @@ namespace TurboSuite.Dmx.ViewModels
             if (_workQueue == null || _reader == null) return;
             _workQueue.Enqueue(
                 () => _reader.Read(),
-                result => { LoadSnapshot((DmxModelSnapshot)result); Run(); });
+                result => { LoadSnapshot((DmxModelSnapshot)result); Run(); ApplyZoneColors(); });
+        }
+
+        // ── Phase 5: Control-Zone color overlay (active view, live only while the window is open) ──────
+        /// <summary>Color the active view's DMX fixtures by Control Zone. Best-effort: no-op when there's no
+        /// overlay service, no zones, or the view is template-locked (the shim returns a notice). Re-run on
+        /// open and after each Refresh so the palette tracks the current zone set.</summary>
+        private void ApplyZoneColors()
+        {
+            if (_zoneColor == null || _workQueue == null) return;
+            var palette = DmxZonePalette.Build(ZoneNames);
+            if (palette.Count == 0) return;
+            _workQueue.Enqueue(
+                () => _zoneColor.Apply(palette),
+                result => { if (result is string s && s.Length > 0) PlacementStatus = s; });
+        }
+
+        /// <summary>Revert the overlay (window close). Invokes <paramref name="onComplete"/> on the UI thread
+        /// once the Revit-side removal has run, so the shim can DEFER the actual window close until the view
+        /// is clean. Calls back immediately when there's nothing to revert.</summary>
+        public void RevertZoneColors(Action? onComplete = null)
+        {
+            if (_zoneColor == null || _workQueue == null) { onComplete?.Invoke(); return; }
+            _workQueue.Enqueue(() => _zoneColor.Revert(), _ => onComplete?.Invoke());
         }
 
         // ── Snapshot load (preserving selections + loops across a refresh) ──────────────────────────

@@ -17,7 +17,7 @@ namespace TurboSuite.Dmx.ViewModels
     }
 
     /// <summary>
-    /// The always-on Bill dashboard (TurboDMX-UI-Structure §2 "the dashboard IS the bill"). Either an
+    /// The always-on Bill dashboard (the dashboard IS the bill). Either an
     /// empty/error verdict state (the static factories) or the deterministic counts of a solved
     /// <see cref="DmxBill"/>. Recomputed on every Run; never mutates the model.
     /// </summary>
@@ -63,7 +63,7 @@ namespace TurboSuite.Dmx.ViewModels
         /// <summary>A pre-solve gate refusal (UnmappableTape / OverCapRuns / OverCapLoops / bad loop).</summary>
         public static DmxBillViewModel Error(string message) => new DmxBillViewModel(false, true, message);
 
-        /// <summary>A successful solve — the deterministic bill (TurboDMX-UI-Structure §2). Lock-aware REVIEW
+        /// <summary>A successful solve — the deterministic bill. Lock-aware REVIEW
         /// verdicts (§8c) ride along when supplied.</summary>
         public static DmxBillViewModel FromBill(DmxBill bill, int channelCeiling, IEnumerable<string>? reviews = null)
         {

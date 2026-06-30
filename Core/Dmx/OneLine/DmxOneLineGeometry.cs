@@ -18,8 +18,9 @@ namespace TurboSuite.Dmx.OneLine
     }
 
     /// <summary>
-    /// The authored one-line symbol library's geometry (BuildPlan Phase 4), transcribed verbatim from
-    /// <c>Specs/_DMX/TurboDMX-FamilySpec-Form.txt</c> — family/type names, the instance label parameter
+    /// The authored one-line symbol library's geometry (BuildPlan Phase 4) — the SOURCE OF TRUTH for the
+    /// firm's authored families (the former <c>TurboDMX-FamilySpec-Form.txt</c> that collected these is
+    /// retired): family/type names, the instance label parameter
     /// names the renderer writes, box sizes, and the connection-point offsets (from each box's <b>center</b>
     /// origin) the line-drawing targets. All lengths are <b>model feet</b>; the families are Detail Items
     /// drawn at architectural size and read at the pinned view scale (1/4" = 1'-0"). The <see cref="Layout"/>

@@ -6,7 +6,7 @@ using TurboSuite.Dmx.Input;
 
 namespace TurboSuite.Dmx
 {
-    /// <summary>The editable Kind-2 job-policy knobs the Settings panel exposes (TurboDMX-UI-Structure §1).
+    /// <summary>The editable Kind-2 job-policy knobs the window's Settings panel exposes.
     /// Profile-seeded, overridable. Separate from <see cref="DmxProfile"/> (which supplies ceiling + link
     /// caps) so the panel can override policy without touching the profile.</summary>
     public sealed class DmxJobSettings

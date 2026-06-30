@@ -64,7 +64,7 @@ namespace TurboSuite.Dmx.Persistence
     /// <summary>Module settings — Profile selection + Kind-2 job policy + the curated part pools. Mirrors
     /// the live <c>DmxJobSettings</c> (the editable panel knobs) one-to-one, plus the selected profile and
     /// the curated part-pool ticks. Defaults match <c>DmxJobSettings</c>'s so a never-saved state round-trips
-    /// to the same sensible values the window opens with (TurboDMX-UI-Structure §1, BuildPlan Phase 2).</summary>
+    /// to the same sensible values the window opens with (BuildPlan Phase 2).</summary>
     public sealed class DmxSettingsDto
     {
         public string Profile { get; set; } = "Lutron";

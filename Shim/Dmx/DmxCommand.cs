@@ -65,6 +65,7 @@ public class DmxCommand : IExternalCommand
             var placement = new DmxPlacementService(uidoc);
             var oneLine = new DmxOneLineService(uidoc);
             var selection = new DmxModelSelection(uidoc);
+            var zoneColor = new DmxZoneColorService(uidoc);   // Phase 5 active-view zone overlay
 
             // Yes/No gate for the destructive numbering-lock actions (Re-lock / Unlock, §8c).
             System.Func<string, bool> confirm = msg =>
@@ -77,11 +78,20 @@ public class DmxCommand : IExternalCommand
                 }.Show() == TaskDialogResult.Yes;
 
             var viewModel = new DmxMainViewModel(snapshot, state, workQueue, reader,
-                                                 persister.Save, placement, confirm, selection, oneLine);
+                                                 persister.Save, placement, confirm, selection, oneLine, zoneColor);
 
             var window = new TurboDmxWindow { DataContext = viewModel };
             new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
 
+            // Phase 5: defer the close until the active-view zone overlay reverts on the API thread. The first
+            // Closing cancels and queues the revert; its completion (UI thread) re-issues Close, which passes.
+            bool reverted = false;
+            window.Closing += (s, e) =>
+            {
+                if (reverted) return;
+                e.Cancel = true;
+                viewModel.RevertZoneColors(() => { reverted = true; window.Close(); });
+            };
             window.Closed += (s, e) =>
             {
                 _activeWindow = null;
