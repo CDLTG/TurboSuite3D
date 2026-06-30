@@ -21,10 +21,15 @@ namespace TurboSuite.Dmx.OneLine
         /// ("CV"/"MD"/"ME"), so the driver box shows the Type Mark, not the family name. When the map lacks a
         /// driver (or is null — the unit tests), the box falls back to the engine Name.</param>
         public static IReadOnlyList<DmxOneLineDrawing> Build(DmxBill bill, DmxNumbering numbering,
-                                                             IReadOnlyDictionary<string, string>? driverTypeMarkByName = null)
+                                                             IReadOnlyDictionary<string, string>? driverTypeMarkByName = null,
+                                                             int pullUpSizes = 0)
         {
             var byZone = bill.Zones.ToDictionary(z => z.ZoneName);
-            return bill.Interfaces.Select(iface => BuildLoop(iface, byZone, numbering, driverTypeMarkByName)).ToList();
+            // One job-wide legend, shared across every loop, so wire numbers are consistent job-wide (Phase 6).
+            var legend = DmxWireLegend.ForBill(bill, pullUpSizes);
+            return bill.Interfaces
+                .Select(iface => BuildLoop(iface, byZone, numbering, driverTypeMarkByName, legend, pullUpSizes))
+                .ToList();
         }
 
         private readonly struct Row
@@ -42,7 +47,8 @@ namespace TurboSuite.Dmx.OneLine
         private static DmxOneLineDrawing BuildLoop(InterfaceSolution iface,
                                                    IReadOnlyDictionary<string, ZoneSolution> byZone,
                                                    DmxNumbering numbering,
-                                                   IReadOnlyDictionary<string, string>? driverTypeMarkByName)
+                                                   IReadOnlyDictionary<string, string>? driverTypeMarkByName,
+                                                   DmxWireLegend legend, int pullUpSizes)
         {
             // 1. Flatten this interface's decoders in DEC-walk order (zones → clusters → decoders), pairing
             //    each with its DEC # (numbering, lock-aware), zone address, driver type mark, channel count.
@@ -69,11 +75,13 @@ namespace TurboSuite.Dmx.OneLine
             // 2. Feed-block sizes from the interface's §0c feeds — one "120V FEED" per breaker, in DEC order.
             var feedSizes = iface.Feeds.Select(f => f.DriverCount).ToList();
 
-            return Compose(iface.Interface.InterfaceNumber, iface.Interface.LoopName, rows, feedSizes);
+            return Compose(iface.Interface.InterfaceNumber, iface.Interface.LoopName, rows, feedSizes,
+                           legend, pullUpSizes);
         }
 
         private static DmxOneLineDrawing Compose(int interfaceNumber, string? loopName,
-                                                 IReadOnlyList<Row> rows, IReadOnlyList<int> feedSizes)
+                                                 IReadOnlyList<Row> rows, IReadOnlyList<int> feedSizes,
+                                                 DmxWireLegend legend, int pullUpSizes)
         {
             var symbols = new List<DmxSymbolInstance>();
             var wires = new List<DmxWireSegment>();
@@ -83,7 +91,9 @@ namespace TurboSuite.Dmx.OneLine
             void Wire(XY a, XY b, bool dashed, DmxWireType? mark)
             {
                 wires.Add(new DmxWireSegment(a, b, dashed));
-                if (mark.HasValue) markers.Add(new DmxMarker(new XY((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0), mark.Value));
+                if (mark.HasValue)
+                    markers.Add(new DmxMarker(new XY((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0),
+                                              mark.Value, legend.NumberFor(mark.Value)));
             }
 
             // ── Coordinate frame ───────────────────────────────────────────────────────────────────────
@@ -155,14 +165,17 @@ namespace TurboSuite.Dmx.OneLine
                         [DmxOneLineGeometry.Decoder.AddressParam] = row.Address.ToString("D3"),
                     }));
 
-                // driver → decoder (24 V, ③)
+                // driver → decoder jumper (24 V) — #16-2, shared with a 1-channel homerun (Phase 6)
                 Wire(drvCenter.Plus(DmxOneLineGeometry.Driver.PowerOut),
-                     decCenter.Plus(DmxOneLineGeometry.Decoder.PowerIn), dashed: false, DmxWireType.Lv2);
+                     decCenter.Plus(DmxOneLineGeometry.Decoder.PowerIn), dashed: false, DmxWireType.Lv(2));
 
-                // decoder → tape: single leg + gauge marker (no per-leg text, §8a)
+                // decoder → tape: single leg + circled legend # marker, plus the actual #16-N gauge text at
+                // the leg end (BuildPlan Phase 6 — the post-pull-up conductor count annotated on each homerun).
                 var hrStart = decCenter.Plus(DmxOneLineGeometry.Decoder.HomerunOut);
-                Wire(hrStart, hrStart.Offset(DmxOneLineGeometry.Layout.HomerunLegLength, 0),
-                     dashed: false, DmxWireLegend.HomerunFor(row.Channels));
+                var hrEnd = hrStart.Offset(DmxOneLineGeometry.Layout.HomerunLegLength, 0);
+                var homerunType = DmxWireLegend.HomerunFor(row.Channels, pullUpSizes);
+                Wire(hrStart, hrEnd, dashed: false, homerunType);
+                notes.Add(new DmxNote(hrEnd, homerunType.Gauge, DmxTextAlign.Left));
 
                 // first driver of a feed: the 120V FEED stub (①) + label
                 if (feedFirst[r])

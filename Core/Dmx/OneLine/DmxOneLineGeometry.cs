@@ -106,12 +106,13 @@ namespace TurboSuite.Dmx.OneLine
             public static readonly XY DmxIn = XY.In(0, 7.5);   // top mid ← last decoder's DMX out
         }
 
-        /// <summary>Wire-type marker — Generic Annotation placed ON a wire; <c>WireMark</c> = legend # (1-7).</summary>
+        /// <summary>Wire-type marker — Generic Annotation placed ON a wire; <c>WireMark</c> = the per-job
+        /// legend # (Phase 6: dense, 1..N — the fixed 1–7 range is gone now that #16-N is uncapped).</summary>
         public static class Marker
         {
             public const string Family = "AL_Annotation_Wire Mark";
             public const string Type = "AL_Annotation_Wire Mark";
-            public const string NumberParam = "WireMark";   // instance, Text — generator writes "1".."7"
+            public const string NumberParam = "WireMark";   // instance, Text — generator writes the legend #
         }
 
         /// <summary>
@@ -148,6 +149,28 @@ namespace TurboSuite.Dmx.OneLine
 
             /// <summary>Horizontal length of the "120V FEED" stub into the first driver of a feed.</summary>
             public const double FeedStubLength = 18.0 / 12.0;    // 1'-6"
+        }
+
+        /// <summary>
+        /// The per-job wire-legend view's own layout (BuildPlan Phase 6) — a title over a vertical list of
+        /// rows, each a circled <see cref="Marker"/> number + the wire-type label. Model feet; same view
+        /// scale + text height as the one-line so the circled numbers match the wire markers exactly.
+        /// </summary>
+        public static class Legend
+        {
+            /// <summary>Circled-number column center X (the list origin).</summary>
+            public const double MarkerX = 0.0;
+
+            /// <summary>Label text left X — clear of the circle.</summary>
+            public const double LabelX = 9.0 / 12.0;    // 0'-9"
+
+            /// <summary>Center-to-center between legend rows.</summary>
+            public const double RowPitch = 9.0 / 12.0;  // 0'-9"
+
+            /// <summary>Drop from the "WIRE LEGEND" title down to the first row.</summary>
+            public const double TitleGap = 12.0 / 12.0; // 1'-0"
+
+            public const string Title = "WIRE LEGEND";
         }
     }
 }

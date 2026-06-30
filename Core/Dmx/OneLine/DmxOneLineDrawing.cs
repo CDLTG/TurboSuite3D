@@ -1,39 +1,183 @@
 #nullable enable
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace TurboSuite.Dmx.OneLine
 {
     /// <summary>The five drafted box symbols (Detail Items). Maps to a family/type in <see cref="DmxOneLineGeometry"/>.</summary>
     public enum DmxSymbolKind { Decoder, Driver, Interface, Processor, Terminator }
 
-    /// <summary>The wire legend (Screenshot_196). The value IS the circled marker number the generator
-    /// writes to the wire-mark annotation's <c>WireMark</c> param. ⑤ #16-6 is the LV homerun ceiling we
-    /// draw (RGBW); ② wall cord is smart-fixture only (deferred).</summary>
-    public enum DmxWireType
+    /// <summary>The canonical wire-type families a job draws (BuildPlan Phase 6). The first three are always
+    /// present and always numbered 1–2–3; low-voltage homeruns are <c>#16-N</c> for the computed conductor
+    /// count and are numbered <b>per-job</b> (4+, ascending by N — see <see cref="DmxWireLegend"/>).
+    /// <see cref="WallCord"/> is smart-fixture only (deferred, never drawn today).</summary>
+    public enum DmxWireCategory
     {
-        Hv = 1,        // #12-2 romex — 120 V breaker→driver feed AND the driver-to-driver daisy
-        WallCord = 2,  // manufacturer wall-plug cord (smart fixtures, deferred)
-        Lv2 = 3,       // #16-2 — driver→decoder (24 V), and a 1-channel homerun
-        Lv4 = 4,       // #16-4 — TW / RGB homerun (2–3 ch)
-        Lv6 = 5,       // #16-6 — RGBW homerun (4–5 ch)
-        Cat6 = 6,      // CAT6 — the DMX daisy chain
-        Comm = 7,      // Lutron comm — interface↔processor
+        LineVoltage,   // #12-2 Line Voltage — 120 V breaker→driver feed AND the driver-to-driver daisy
+        Cat6,          // CAT6 Network Cable — the DMX daisy chain
+        Comm,          // Control Communication Wire — interface↔processor
+        LowVoltage,    // #16-N Stranded Low Voltage — driver→decoder jumper (N=2) and the tape homeruns
+        WallCord,      // manufacturer wall-plug cord (smart fixtures, deferred)
     }
 
-    /// <summary>Legend lookups shared by the planner (and re-usable by the author-once legend view).</summary>
-    public static class DmxWireLegend
+    /// <summary>
+    /// One wire type on the one-line (BuildPlan Phase 6). Replaces the old fixed <c>Lv2/Lv4/Lv6</c> enum
+    /// buckets: low-voltage carries its actual conductor count (<c>#16-N</c>, uncapped — 2, 4, 6, 8, …) so a
+    /// 6-channel RGBATW tape correctly reads <c>#16-8</c> rather than the under-spec'd <c>#16-6</c> ceiling.
+    /// Value type with structural equality so distinct <c>#16-N</c> sizes are distinct legend rows.
+    /// </summary>
+    public readonly struct DmxWireType : IEquatable<DmxWireType>
     {
-        /// <summary>The homerun gauge by zone channel count → legend #: 1ch ⇒ ③, 2–3 ⇒ ④, ≥4 ⇒ ⑤ (RGBW ceiling).</summary>
-        public static DmxWireType HomerunFor(int channels)
+        private DmxWireType(DmxWireCategory category, int conductors)
         {
-            int conductors = WireSpec.StockConductors(channels);   // channels + 1 common, rounded to even
-            if (conductors <= 2) return DmxWireType.Lv2;
-            if (conductors <= 4) return DmxWireType.Lv4;
-            return DmxWireType.Lv6;
+            Category = category;
+            Conductors = conductors;
         }
 
-        /// <summary>The marker string the annotation carries ("1".."7").</summary>
-        public static string Mark(DmxWireType t) => ((int)t).ToString();
+        public DmxWireCategory Category { get; }
+
+        /// <summary>Conductor count — meaningful only for <see cref="DmxWireCategory.LowVoltage"/> (the N in
+        /// <c>#16-N</c>); 0 for the fixed categories.</summary>
+        public int Conductors { get; }
+
+        public static DmxWireType Hv => new DmxWireType(DmxWireCategory.LineVoltage, 0);
+        public static DmxWireType Cat6 => new DmxWireType(DmxWireCategory.Cat6, 0);
+        public static DmxWireType Comm => new DmxWireType(DmxWireCategory.Comm, 0);
+        public static DmxWireType WallCord => new DmxWireType(DmxWireCategory.WallCord, 0);
+
+        /// <summary>A <c>#16-N</c> stranded low-voltage cable carrying <paramref name="conductors"/> conductors.</summary>
+        public static DmxWireType Lv(int conductors) => new DmxWireType(DmxWireCategory.LowVoltage, conductors);
+
+        /// <summary>The full legend label (matches the firm's legend sample, <c>Specs/_DMX/Legend.txt</c>).</summary>
+        public string Label => Category switch
+        {
+            DmxWireCategory.LineVoltage => "#12-2 Line Voltage",
+            DmxWireCategory.Cat6 => "CAT6 Network Cable",
+            DmxWireCategory.Comm => "Control Communication Wire",
+            DmxWireCategory.LowVoltage => $"#16-{Conductors} Stranded Low Voltage",
+            DmxWireCategory.WallCord => "Wall Cord",
+            _ => "",
+        };
+
+        /// <summary>The short gauge tag stamped beside a homerun (e.g. <c>#16-6</c>, <c>#12-2</c>).</summary>
+        public string Gauge => Category switch
+        {
+            DmxWireCategory.LineVoltage => "#12-2",
+            DmxWireCategory.Cat6 => "CAT6",
+            DmxWireCategory.Comm => "COMM",
+            DmxWireCategory.LowVoltage => $"#16-{Conductors}",
+            _ => "",
+        };
+
+        public bool Equals(DmxWireType other) => Category == other.Category && Conductors == other.Conductors;
+        public override bool Equals(object? obj) => obj is DmxWireType o && Equals(o);
+        public override int GetHashCode() => ((int)Category * 397) ^ Conductors;
+        public static bool operator ==(DmxWireType a, DmxWireType b) => a.Equals(b);
+        public static bool operator !=(DmxWireType a, DmxWireType b) => !a.Equals(b);
+        public override string ToString() => Label;
+    }
+
+    /// <summary>One row of the generated wire legend: its job number + the wire type it names.</summary>
+    public sealed class DmxWireLegendEntry
+    {
+        public DmxWireLegendEntry(int number, DmxWireType type)
+        {
+            Number = number;
+            Type = type;
+        }
+
+        public int Number { get; }
+        public DmxWireType Type { get; }
+        public string Label => Type.Label;
+
+        /// <summary>"1  #16-2 Stranded Low Voltage" — the legend line.</summary>
+        public override string ToString() => $"{Number}  {Label}";
+    }
+
+    /// <summary>
+    /// The per-job wire legend (BuildPlan Phase 6). The firm numbers wire types <b>densely and per-job</b> —
+    /// only the types actually used appear, numbered sequentially in a fixed canonical order so an unused
+    /// size is skipped (their sample: <c>#16-4</c> absent ⇒ <c>#16-6</c> gets 5, not 6). The same number is
+    /// stamped on every wire of that type (the <c>WireMark</c> annotation) AND emitted into the legend, so
+    /// number↔type is exactly 1:1 within a job. Built once from the solved bill and shared across every loop.
+    /// </summary>
+    public sealed class DmxWireLegend
+    {
+        private readonly Dictionary<DmxWireType, int> _numbers;
+
+        private DmxWireLegend(IReadOnlyList<DmxWireLegendEntry> entries)
+        {
+            Entries = entries;
+            _numbers = entries.ToDictionary(e => e.Type, e => e.Number);
+        }
+
+        /// <summary>The legend rows, in canonical order (Line Voltage, CAT6, Comm, then #16-N ascending).</summary>
+        public IReadOnlyList<DmxWireLegendEntry> Entries { get; }
+
+        /// <summary>The job number for a wire type; 0 if the type isn't in this job's legend.</summary>
+        public int NumberFor(DmxWireType type) => _numbers.TryGetValue(type, out int n) ? n : 0;
+
+        /// <summary>The conductor count for one zone's homerun = channels + 1 common, rounded up to the next
+        /// even stock size, then bumped <paramref name="pullUpSizes"/> stock sizes (job-wide pull-up). Uncapped
+        /// — 2, 4, 6, 8, … as the channel count demands.</summary>
+        public static int HomerunConductors(int channels, int pullUpSizes)
+        {
+            int n = WireSpec.StockConductors(channels);
+            for (int i = 0; i < pullUpSizes && i >= 0; i++) n += 2;
+            return n;
+        }
+
+        /// <summary>The <c>#16-N</c> homerun wire type for a zone's channel count (with the job pull-up).</summary>
+        public static DmxWireType HomerunFor(int channels, int pullUpSizes = 0)
+            => DmxWireType.Lv(HomerunConductors(channels, pullUpSizes));
+
+        /// <summary>Build the legend from the wire types a job actually uses. The three fixed categories are
+        /// always emitted as 1–2–3 (decision 2026-06-29); distinct low-voltage conductor counts follow,
+        /// ascending, starting at 4. Duplicate types collapse to one row.</summary>
+        public static DmxWireLegend Build(IEnumerable<DmxWireType> usedTypes)
+        {
+            var entries = new List<DmxWireLegendEntry>
+            {
+                new DmxWireLegendEntry(1, DmxWireType.Hv),
+                new DmxWireLegendEntry(2, DmxWireType.Cat6),
+                new DmxWireLegendEntry(3, DmxWireType.Comm),
+            };
+
+            var lvCounts = (usedTypes ?? Enumerable.Empty<DmxWireType>())
+                .Where(t => t.Category == DmxWireCategory.LowVoltage)
+                .Select(t => t.Conductors)
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+
+            int next = 4;
+            foreach (int n in lvCounts)
+                entries.Add(new DmxWireLegendEntry(next++, DmxWireType.Lv(n)));
+
+            return new DmxWireLegend(entries);
+        }
+
+        /// <summary>Build the job legend straight off a solved bill: every zone's homerun gauge (with pull-up)
+        /// plus the always-present <c>#16-2</c> driver→decoder jumper (shared with a 1-channel homerun).</summary>
+        public static DmxWireLegend ForBill(DmxBill bill, int pullUpSizes = 0)
+        {
+            var used = new List<DmxWireType>();
+            if (bill != null)
+            {
+                bool anyDecoder = false;
+                foreach (var zone in bill.Zones)
+                {
+                    if (zone.DecoderCount <= 0) continue;
+                    anyDecoder = true;
+                    used.Add(HomerunFor(zone.Channels, pullUpSizes));
+                }
+                // The 24 V driver→decoder jumper is #16-2, present wherever a decoder is — and it shares its
+                // number with a 1-channel homerun (BuildPlan Phase 6).
+                if (anyDecoder) used.Add(DmxWireType.Lv(2));
+            }
+            return Build(used);
+        }
     }
 
     /// <summary>One placed box symbol: its kind/family/type, center position (model feet), and the instance
@@ -73,18 +217,21 @@ namespace TurboSuite.Dmx.OneLine
         public bool Dashed { get; }
     }
 
-    /// <summary>One wire-type marker (the Generic Annotation circled number) placed ON a wire.</summary>
+    /// <summary>One wire-type marker (the Generic Annotation circled number) placed ON a wire. The
+    /// <see cref="Number"/> is the per-job legend number resolved at plan time (BuildPlan Phase 6).</summary>
     public sealed class DmxMarker
     {
-        public DmxMarker(XY position, DmxWireType type)
+        public DmxMarker(XY position, DmxWireType type, int number)
         {
             Position = position;
             Type = type;
+            Number = number;
         }
 
         public XY Position { get; }
         public DmxWireType Type { get; }
-        public string Mark => DmxWireLegend.Mark(Type);
+        public int Number { get; }
+        public string Mark => Number.ToString();
     }
 
     public enum DmxTextAlign { Left, Center, Right }

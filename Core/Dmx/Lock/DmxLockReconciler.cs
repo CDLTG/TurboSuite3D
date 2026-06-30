@@ -19,8 +19,10 @@ namespace TurboSuite.Dmx.Lock
     ///     issued. Existing-zone extras are numbered before any new-zone decoders, so adding a zone later
     ///     never shifts an already-appended number.
     ///   - **Retired** decoders (a zone shrank / a zone removed) just drop their numbers — gaps, no renumber.
-    ///   - A zone whose **decoder type** or **interface #** changed still keeps its slot numbers, but the
-    ///     issued labels now mean something different in the field ⇒ surfaced as **REVIEW** (never silent).
+    ///   - A zone whose **interface #** changed still keeps its slot numbers, but its issued numbering now
+    ///     lives on a different loop ⇒ surfaced as **REVIEW** (never silent). A **decoder-type** change is
+    ///     NOT flagged (decision 2026-06-30): numbers are pinned by slot, so a same-count swap moves no
+    ///     number/address; the model/BOM delta is TurboDocs/Counts' job, not the numbering lock's.
     /// </summary>
     public static class DmxLockReconciler
     {
@@ -67,14 +69,14 @@ namespace TurboSuite.Dmx.Lock
                 for (int i = 0; i < z.DecoderCount; i++)
                     slots[i] = i < b.DecIds.Count ? b.DecIds[i] : nextAppend++;
 
-                if (z.DecoderType != b.DecoderType)
+                // A decoder-TYPE change is deliberately NOT a REVIEW (decision 2026-06-30): the DEC #s are
+                // pinned by slot, so a same-count type swap moves no number and shifts no address — only the
+                // physical decoder model differs, and that BOM/part-number change is already surfaced by
+                // TurboDocs/Counts. We only flag the one drift that actually relabels issued numbering:
+                if (z.InterfaceNumber != b.InterfaceNumber)
                     reviews.Add(new DmxReviewItem(z.ZoneValue,
-                        $"Zone \"{z.ZoneValue}\": decoder type changed ({b.DecoderType} → {z.DecoderType}); "
-                        + "issued DEC #s would mislabel installed hardware."));
-                else if (z.InterfaceNumber != b.InterfaceNumber)
-                    reviews.Add(new DmxReviewItem(z.ZoneValue,
-                        $"Zone \"{z.ZoneValue}\": moved to interface #{z.InterfaceNumber} (was #{b.InterfaceNumber}); "
-                        + "issued interface # changed."));
+                        $"Zone \"{z.ZoneValue}\": reassigned to interface #{z.InterfaceNumber} (was #{b.InterfaceNumber}) "
+                        + "since lock; its issued DEC #s now sit on a different DMX loop."));
             }
 
             // Pass 2 — new zones (not in baseline): append entirely after all baseline-zone extras.

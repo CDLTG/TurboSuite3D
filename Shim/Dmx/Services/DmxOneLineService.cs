@@ -73,8 +73,8 @@ namespace TurboSuite.Dmx.Services
                     if (!result.Created) WipeView(view);   // a brand-new view has nothing to wipe
                     DrawSymbols(view, drawing, symbols, result);
                     DrawWires(view, drawing, dashed, solid, result);
-                    DrawNotes(view, drawing, textType, result);
-                    DrawMarkers(view, drawing, marker, result);
+                    result.Notes += DrawNotes(view, drawing.Notes, textType, result.Warnings);
+                    result.Markers += DrawMarkers(view, drawing.Markers, marker, result.Warnings);
 
                     result.ViewId = view.Id.ToRef().Value;
                     opened = view;
@@ -96,17 +96,74 @@ namespace TurboSuite.Dmx.Services
             return result;
         }
 
+        // ── Per-job wire legend (BuildPlan Phase 6): one owned view, same wipe-and-redraw as the one-line ──
+        public DmxWireLegendResult DrawWireLegend(DmxWireLegendDrawing drawing, string systemName, long existingViewId)
+        {
+            var result = new DmxWireLegendResult();
+            if (drawing == null) { result.Warnings.Add("No solved wire legend to draw."); ReportWarnings(result); return result; }
+            if (string.IsNullOrWhiteSpace(systemName)) systemName = "DMX";
+
+            View opened = null;
+            using (var tx = new Transaction(_doc, "TurboDMX — Wire legend"))
+            {
+                tx.Start();
+                try
+                {
+                    var marker = ResolveSymbol(DmxOneLineGeometry.Marker.Family, DmxOneLineGeometry.Marker.Type);
+                    if (marker == null) result.Warnings.Add($"Wire-mark family \"{DmxOneLineGeometry.Marker.Family}\" not loaded — numbers skipped.");
+                    var textType = ResolveTextType();
+
+                    string name = drawing.ViewName(systemName);
+                    var view = FindOrCreateViewByIdOrName(name, existingViewId, result.Warnings, out bool created);
+                    if (view == null) { tx.RollBack(); ReportWarnings(result); return result; }
+                    result.Created = created;
+
+                    _doc.Regenerate();   // a just-created view / duplicated text type must be a valid draw target
+
+                    if (!created) WipeView(view);
+                    DrawNotes(view, drawing.Notes, textType, result.Warnings);
+                    result.Rows += DrawMarkers(view, drawing.Markers, marker, result.Warnings);
+
+                    result.ViewId = view.Id.ToRef().Value;
+                    opened = view;
+                    tx.Commit();
+                }
+                catch (Exception ex)
+                {
+                    result.Warnings.Add($"Wire-legend draw failed — {ex.Message}");
+                    if (tx.HasStarted()) tx.RollBack();
+                    result.ViewId = 0L;
+                }
+            }
+
+            if (opened != null)
+            {
+                try { _uidoc.ActiveView = opened; } catch { /* non-fatal */ }
+            }
+            ReportWarnings(result);
+            return result;
+        }
+
         // ── View ownership: registry id → by name → create ───────────────────────────────────────────
         private View FindOrCreateView(DmxOneLineDrawing drawing, string systemName,
                                       IReadOnlyDictionary<int, long> viewRegistry, DmxOneLineResult result)
         {
             string name = drawing.ViewName(systemName);
+            long vid = viewRegistry != null && viewRegistry.TryGetValue(drawing.InterfaceNumber, out long v) ? v : 0L;
+            var view = FindOrCreateViewByIdOrName(name, vid, result.Warnings, out bool created);
+            if (created) result.Created = true;
+            return view;
+        }
 
-            if (viewRegistry != null && viewRegistry.TryGetValue(drawing.InterfaceNumber, out long vid) && vid != 0L)
-            {
-                if (_doc.GetElement(new ElementRef(vid).ToElementId()) is ViewDrafting existing && !existing.IsTemplate)
-                    return existing;
-            }
+        // Shared owned-view resolver: persisted id → by name → create. Sets <paramref name="created"/> true
+        // only when a brand-new view was made (so the caller skips the wipe).
+        private View FindOrCreateViewByIdOrName(string name, long existingViewId, List<string> warnings, out bool created)
+        {
+            created = false;
+
+            if (existingViewId != 0L
+                && _doc.GetElement(new ElementRef(existingViewId).ToElementId()) is ViewDrafting byId && !byId.IsTemplate)
+                return byId;
 
             var byName = new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
                 .FirstOrDefault(v => !v.IsTemplate && string.Equals(v.Name, name, StringComparison.Ordinal));
@@ -114,12 +171,12 @@ namespace TurboSuite.Dmx.Services
 
             var vft = new FilteredElementCollector(_doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
                 .FirstOrDefault(v => v.ViewFamily == ViewFamily.Drafting);
-            if (vft == null) { result.Warnings.Add("No Drafting view type in the project — cannot create the one-line view."); return null; }
+            if (vft == null) { warnings.Add("No Drafting view type in the project — cannot create the view."); return null; }
 
             var view = ViewDrafting.Create(_doc, vft.Id);
             TrySetName(view, name);
             try { view.Scale = DmxOneLineGeometry.ViewScale; } catch { /* some templates lock scale */ }
-            result.Created = true;
+            created = true;
             return view;
         }
 
@@ -170,10 +227,11 @@ namespace TurboSuite.Dmx.Services
             }
         }
 
-        private void DrawNotes(View view, DmxOneLineDrawing drawing, ElementId textType, DmxOneLineResult result)
+        private int DrawNotes(View view, IReadOnlyList<DmxNote> notes, ElementId textType, List<string> warnings)
         {
-            if (textType == ElementId.InvalidElementId) { result.Warnings.Add("No text type — notes skipped."); return; }
-            foreach (var n in drawing.Notes)
+            if (textType == ElementId.InvalidElementId) { warnings.Add("No text type — notes skipped."); return 0; }
+            int drawn = 0;
+            foreach (var n in notes)
             {
                 var opts = new TextNoteOptions(textType)
                 {
@@ -181,21 +239,24 @@ namespace TurboSuite.Dmx.Services
                     Rotation = 0.0,
                 };
                 TextNote.Create(_doc, view.Id, Pt(n.Position), n.Text, opts);
-                result.Notes++;
+                drawn++;
             }
+            return drawn;
         }
 
-        private void DrawMarkers(View view, DmxOneLineDrawing drawing, FamilySymbol marker, DmxOneLineResult result)
+        private int DrawMarkers(View view, IReadOnlyList<DmxMarker> markers, FamilySymbol marker, List<string> warnings)
         {
-            if (marker == null) return;
+            if (marker == null) return 0;
             if (!marker.IsActive) { marker.Activate(); _doc.Regenerate(); }
-            foreach (var m in drawing.Markers)
+            int drawn = 0;
+            foreach (var m in markers)
             {
                 var inst = _doc.Create.NewFamilyInstance(Pt(m.Position), marker, view);
                 var p = inst.LookupParameter(DmxOneLineGeometry.Marker.NumberParam);
                 if (p != null && !p.IsReadOnly) p.Set(m.Mark);
-                result.Markers++;
+                drawn++;
             }
+            return drawn;
         }
 
         // ── Resolution helpers ───────────────────────────────────────────────────────────────────────
@@ -266,10 +327,13 @@ namespace TurboSuite.Dmx.Services
 
         private static XYZ Pt(XY p) => new XYZ(p.X, p.Y, 0.0);
 
-        private static void ReportWarnings(DmxOneLineResult result)
+        private static void ReportWarnings(DmxOneLineResult result) => ReportWarnings(result.Warnings);
+        private static void ReportWarnings(DmxWireLegendResult result) => ReportWarnings(result.Warnings);
+
+        private static void ReportWarnings(List<string> warnings)
         {
-            if (result.Warnings.Count == 0) return;
-            TaskDialog.Show("TurboDMX — One-line", string.Join("\n", result.Warnings.Take(12)));
+            if (warnings.Count == 0) return;
+            TaskDialog.Show("TurboDMX", string.Join("\n", warnings.Take(12)));
         }
     }
 }

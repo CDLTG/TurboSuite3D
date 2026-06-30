@@ -44,6 +44,10 @@ namespace TurboSuite.Dmx.Persistence
         /// <summary>One-line view registry (Phase 4): interface # → the owned Drafting View's element id, so a
         /// re-draw finds + wipes the same view (the program owns it). Written on Draw.</summary>
         public List<DmxOneLineViewDto> OneLineViews { get; set; } = new List<DmxOneLineViewDto>();
+
+        /// <summary>The single per-job wire-legend Drafting View's element id (Phase 6), so a re-draw finds +
+        /// wipes the same view. 0 ⇒ never drawn. One per job (not per loop).</summary>
+        public long WireLegendViewId { get; set; }
     }
 
     /// <summary>One loop's owned one-line Drafting View, keyed by its interface #.</summary>
@@ -78,6 +82,9 @@ namespace TurboSuite.Dmx.Persistence
         public int MaxDriversPerBreaker { get; set; }          // 0 = no inrush count cap
         public int MaxDevicesPerSegment { get; set; } = 32;    // D4
         public int ReservedChannels { get; set; }
+
+        /// <summary>Job-wide homerun pull-up (Phase 6): stock sizes to bump every LV homerun past exact. 0 = exact.</summary>
+        public int PullUpSizes { get; set; }
 
         /// <summary>Breaker pack basis (<c>ConnectedLoad</c> / <c>DriverRating</c>) — stored as the enum name.</summary>
         public string BreakerBasis { get; set; } = "ConnectedLoad";

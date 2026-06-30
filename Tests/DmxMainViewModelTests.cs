@@ -121,25 +121,23 @@ namespace TurboSuite.Tests.Dmx
             Assert.False(vm.Bill.HasResult);
         }
 
-        // ── Per-loop placement state (loop-centric): derived from numbering + the persisted registry ────
+        // ── Per-loop interface number (loop-centric): resolved from the last solve, gates Place/one-line ──
 
         [Fact]
-        public void EmptyLoopIsUnsolved()
+        public void EmptyLoopHasNoInterfaceNumber()
         {
             var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1") }));
             vm.NewEmptyLoopCommand.Execute(null);
             var loop = vm.Loops.Single();
-            Assert.Equal(0, loop.InterfaceNumber);
-            Assert.Equal(DmxLoopPlacementState.Unsolved, loop.PlacementState);
+            Assert.Equal(0, loop.InterfaceNumber);   // no zones ⇒ not in any solved interface
         }
 
         [Fact]
-        public void SolvedLoopWithNothingPlacedIsUnplaced()
+        public void SolvedLoopResolvesToAnInterfaceNumber()
         {
             var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2") }));
             var loop = NewLoop(vm, "Z1");
             Assert.True(loop.InterfaceNumber > 0);   // resolved to an interface in the last solve
-            Assert.Equal(DmxLoopPlacementState.Unplaced, loop.PlacementState);
         }
 
         // ── Persistence (BuildPlan Phase 2: declarations survive reopen via the doc-side ES bundle) ────

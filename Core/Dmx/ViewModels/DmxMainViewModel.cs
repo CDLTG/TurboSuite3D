@@ -93,6 +93,7 @@ namespace TurboSuite.Dmx.ViewModels
             DriverRows = new ObservableCollection<DmxDriverRowViewModel>();
             Loops = new ObservableCollection<DmxLoopRowViewModel>();
             ZonePool = new ObservableCollection<DmxZonePoolItemViewModel>();
+            WireLegend = new ObservableCollection<DmxWireLegendEntry>();
             ZoneNames = new List<string>();
             _bill = DmxBillViewModel.Empty("Run to compute the bill.");
             _fixtures = new List<DmxFixtureReading>();
@@ -104,6 +105,7 @@ namespace TurboSuite.Dmx.ViewModels
             // One button does both: Lock (first time) and Re-lock (re-baseline when already Locked).
             LockCommand = new RelayCommand(Lock, () => _lastNumbering != null);
             UnlockCommand = new RelayCommand(Unlock, () => IsLocked);
+            DrawWireLegendCommand = new RelayCommand(DrawWireLegend, CanDrawWireLegend);
 
             ApplyPersistedState(state);
             LoadSnapshot(snapshot);
@@ -130,6 +132,13 @@ namespace TurboSuite.Dmx.ViewModels
         public int MaxDriversPerBreaker { get => _settings.MaxDriversPerBreaker; set { _settings.MaxDriversPerBreaker = value; OnPropertyChanged(); Persist(); } }
         public int MaxDevicesPerSegment { get => _settings.MaxDevicesPerSegment; set { _settings.MaxDevicesPerSegment = value; OnPropertyChanged(); Persist(); } }
         public int ReservedChannels { get => _settings.ReservedChannels; set { _settings.ReservedChannels = value; OnPropertyChanged(); Persist(); } }
+
+        /// <summary>Job-wide homerun pull-up (Phase 6). Bumping it re-derives the wire legend, so refresh it.</summary>
+        public int PullUpSizes
+        {
+            get => _settings.PullUpSizes;
+            set { if (_settings.PullUpSizes == value) return; _settings.PullUpSizes = value < 0 ? 0 : value; OnPropertyChanged(); RefreshWireLegend(); Persist(); }
+        }
 
         // ── Declarations: curated part pools ────────────────────────────────────────────────────────
         public ObservableCollection<DmxDecoderRowViewModel> DecoderRows { get; }
@@ -168,6 +177,19 @@ namespace TurboSuite.Dmx.ViewModels
         private DmxBillViewModel _bill;
         public DmxBillViewModel Bill { get => _bill; private set => SetProperty(ref _bill, value); }
 
+        // ── Generated wire legend (Phase 6) — dense, per-job, rebuilt off the last solve + pull-up ─────
+        /// <summary>The per-job wire legend rows (number ↔ type), regenerated on each solve and when the
+        /// pull-up changes. The same numbers the planner stamps on the one-line's <c>WireMark</c> markers.</summary>
+        public ObservableCollection<DmxWireLegendEntry> WireLegend { get; }
+
+        private void RefreshWireLegend()
+        {
+            WireLegend.Clear();
+            if (_lastBill == null) return;
+            foreach (var entry in DmxWireLegend.ForBill(_lastBill, _settings.PullUpSizes).Entries)
+                WireLegend.Add(entry);
+        }
+
         // ── Placement status (footer) ────────────────────────────────────────────────────────────────
         private string _placementStatus = "";
         public string PlacementStatus { get => _placementStatus; private set => SetProperty(ref _placementStatus, value); }
@@ -190,6 +212,7 @@ namespace TurboSuite.Dmx.ViewModels
         public ICommand RefreshCommand { get; }
         public ICommand LockCommand { get; }
         public ICommand UnlockCommand { get; }
+        public ICommand DrawWireLegendCommand { get; }
 
         /// <summary>The pure solve (TurboDMX-Design §1.5 pipeline). Idempotent — safe to call constantly.
         /// On every exit it refreshes each loop's placement state + the Place buttons' enabled state.</summary>
@@ -239,45 +262,27 @@ namespace TurboSuite.Dmx.ViewModels
             }
             finally
             {
-                UpdateLoopPlacementStates();
+                RefreshWireLegend();
+                UpdateLoopInterfaceNumbers();
                 RaisePlaceCanExecute();
             }
         }
 
         // ── Per-loop placement (BuildPlan Phase 2/3: the loop is the placement unit) ──────────────────
 
-        /// <summary>Refresh each loop's interface # (from the last solve) and placement state (derived from the
-        /// numbering + the persisted registry — no model scan). Sets all loops Unsolved when there's no clean
-        /// solve. Called after every Run and after every Place.</summary>
-        private void UpdateLoopPlacementStates()
+        /// <summary>Refresh each loop's interface # from the last solve (0 when there's no clean solve), so the
+        /// per-loop Place / one-line / legend actions target the right interface. Called after every Run and
+        /// every Place. (Placement is idempotent via orphan cleanup, so no placed/unplaced state is tracked.)</summary>
+        private void UpdateLoopInterfaceNumbers()
         {
-            var placed = new HashSet<int>(_loadedState.Placed.Select(p => p.Dec));
             var ifaceByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             if (_lastBill != null)
                 foreach (var i in _lastBill.Interfaces)
                     if (i.Interface.LoopName != null) ifaceByName[i.Interface.LoopName] = i.Interface.InterfaceNumber;
 
             foreach (var loop in Loops)
-            {
-                if (_lastNumbering == null || _lastBill == null)
-                {
-                    loop.InterfaceNumber = 0;
-                    loop.PlacementState = DmxLoopPlacementState.Unsolved;
-                    continue;
-                }
-
-                loop.InterfaceNumber = ifaceByName.TryGetValue(loop.Name, out var n) ? n : 0;
-
-                var expected = new HashSet<int>();
-                foreach (var zn in loop.AssignedZoneNames)
-                    if (_lastNumbering.DecIdsByZone.TryGetValue(zn, out var ids))
-                        foreach (var d in ids) expected.Add(d);
-
-                if (loop.InterfaceNumber == 0 || expected.Count == 0) loop.PlacementState = DmxLoopPlacementState.Unsolved;
-                else if (expected.All(placed.Contains)) loop.PlacementState = DmxLoopPlacementState.Placed;
-                else if (expected.Any(placed.Contains)) loop.PlacementState = DmxLoopPlacementState.Partial;
-                else loop.PlacementState = DmxLoopPlacementState.Unplaced;
-            }
+                loop.InterfaceNumber = _lastNumbering != null && _lastBill != null
+                    && ifaceByName.TryGetValue(loop.Name, out var n) ? n : 0;
         }
 
         private bool CanPlaceLoop(DmxLoopRowViewModel loop) =>
@@ -316,7 +321,7 @@ namespace TurboSuite.Dmx.ViewModels
                     {
                         MergeRegistry(r);
                         PlacementStatus = r.Summary;
-                        UpdateLoopPlacementStates();
+                        UpdateLoopInterfaceNumbers();
                     }
                     else PlacementStatus = "Placement failed.";
                     RaisePlaceCanExecute();
@@ -362,7 +367,7 @@ namespace TurboSuite.Dmx.ViewModels
             var driverMarks = DriverRows
                 .GroupBy(r => r.Candidate.Name)
                 .ToDictionary(g => g.Key, g => g.First().Candidate.TypeMark);
-            var drawings = DmxOneLinePlanner.Build(_lastBill!, _lastNumbering!, driverMarks);
+            var drawings = DmxOneLinePlanner.Build(_lastBill!, _lastNumbering!, driverMarks, _settings.PullUpSizes);
             var registry = _loadedState.OneLineViews.ToDictionary(v => v.InterfaceNumber, v => v.ViewId);
             int iface = loop.InterfaceNumber;
             string label = loop.Name;
@@ -382,6 +387,39 @@ namespace TurboSuite.Dmx.ViewModels
                         PlacementStatus = r.Summary;
                     }
                     else PlacementStatus = "One-line draw failed.";
+                    RaisePlaceCanExecute();
+                });
+        }
+
+        // ── Per-job wire legend view (BuildPlan Phase 6) ─────────────────────────────────────────────
+        private bool CanDrawWireLegend() =>
+            _oneLine != null && _workQueue != null && !_drawing && _lastBill != null && WireLegend.Count > 0;
+
+        /// <summary>Draw the single per-job wire-legend view off the last solve's legend (the same numbers the
+        /// one-line stamps on every wire), then fold the owned view id into the persisted state.</summary>
+        private void DrawWireLegend()
+        {
+            if (!CanDrawWireLegend()) return;
+
+            var legend = DmxWireLegend.ForBill(_lastBill!, _settings.PullUpSizes);
+            var drawing = DmxWireLegendPlanner.Build(legend);
+            long existingId = _loadedState.WireLegendViewId;
+
+            _drawing = true;
+            RaisePlaceCanExecute();
+            PlacementStatus = "Drawing wire legend…";
+
+            _workQueue!.Enqueue(
+                () => _oneLine!.DrawWireLegend(drawing, SystemName, existingId),
+                result =>
+                {
+                    _drawing = false;
+                    if (result is DmxWireLegendResult r)
+                    {
+                        if (r.Ok) { _loadedState.WireLegendViewId = r.ViewId; Persist(); }
+                        PlacementStatus = r.Summary;
+                    }
+                    else PlacementStatus = "Wire-legend draw failed.";
                     RaisePlaceCanExecute();
                 });
         }
@@ -565,6 +603,7 @@ namespace TurboSuite.Dmx.ViewModels
             _settings.MaxDriversPerBreaker = s.MaxDriversPerBreaker;
             _settings.MaxDevicesPerSegment = s.MaxDevicesPerSegment;
             _settings.ReservedChannels = s.ReservedChannels;
+            _settings.PullUpSizes = s.PullUpSizes;
             _settings.BreakerBasis = Enum.TryParse<BreakerBasis>(s.BreakerBasis, out var basis)
                 ? basis : BreakerBasis.ConnectedLoad;
 
@@ -590,6 +629,7 @@ namespace TurboSuite.Dmx.ViewModels
                 MaxDriversPerBreaker = _settings.MaxDriversPerBreaker,
                 MaxDevicesPerSegment = _settings.MaxDevicesPerSegment,
                 ReservedChannels = _settings.ReservedChannels,
+                PullUpSizes = _settings.PullUpSizes,
                 BreakerBasis = _settings.BreakerBasis.ToString(),
                 DecoderTypeIds = DecoderRows.Where(r => r.IsSelected).Select(r => r.Candidate.TypeId).ToList(),
                 DriverTypeIds = DriverRows.Where(r => r.IsSelected).Select(r => r.Candidate.TypeId).ToList(),

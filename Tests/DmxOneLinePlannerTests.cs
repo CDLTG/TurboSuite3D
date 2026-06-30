@@ -118,11 +118,11 @@ namespace TurboSuite.Tests.Dmx
             var d = Assert.Single(Plan(bill));
 
             Assert.Equal(1, Feeds(d));
-            Assert.Equal(3, Markers(d, DmxWireType.Lv2));    // driver → decoder
+            Assert.Equal(3, Markers(d, DmxWireType.Lv(2)));  // driver → decoder
             Assert.Equal(4, Markers(d, DmxWireType.Cat6));   // DMX chain segments (n + 1)
             Assert.Equal(1, Markers(d, DmxWireType.Comm));   // interface ↔ processor
             Assert.Equal(3, Markers(d, DmxWireType.Hv));     // 1 feed stub + 2 driver-to-driver daisies
-            Assert.Equal(3, Markers(d, DmxWireType.Lv6));
+            Assert.Equal(3, Markers(d, DmxWireType.Lv(6)));  // #16-6 RGBW homerun (4 ch ⇒ 5 ⇒ 6)
         }
 
         [Fact]

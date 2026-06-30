@@ -98,17 +98,17 @@ namespace TurboSuite.Tests.Dmx
         }
 
         [Fact]
-        public void Locked_DecoderTypeChange_KeepsNumbersButFlagsReview()
+        public void Locked_DecoderTypeChange_SameCount_KeepsNumbersAndDoesNotReview()
         {
+            // Decision 2026-06-30: a same-count decoder-type swap is NOT a numbering REVIEW. Numbers are
+            // pinned by slot (moved nothing), so no address shifts; the model/BOM delta is TurboDocs/Counts'.
             var baseline = Baseline(("Z1", 1, "4ch", new[] { 1, 2 }));
-            var zones = new[] { Z("Z1", 1, "6ch", 2) };   // type 4ch → 6ch
+            var zones = new[] { Z("Z1", 1, "6ch", 2) };   // type 4ch → 6ch, SAME count (2)
 
             var n = DmxLockReconciler.Reconcile(zones, baseline, locked: true);
 
             Assert.Equal(new[] { 1, 2 }, Ids(n, "Z1"));   // numbers still pinned
-            var review = Assert.Single(n.Reviews);
-            Assert.Equal("Z1", review.ZoneValue);
-            Assert.Contains("decoder type changed", review.Message);
+            Assert.False(n.HasReviews);                   // type change alone no longer flags
         }
 
         [Fact]

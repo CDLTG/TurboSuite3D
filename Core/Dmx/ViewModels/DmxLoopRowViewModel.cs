@@ -35,21 +35,16 @@ namespace TurboSuite.Dmx.ViewModels
         public string Display => $"{ZoneName}  ({RunCount})";
     }
 
-    /// <summary>Per-loop placement state, derived from the reconciled numbering + the persisted placement
-    /// registry (no model scan): is every DEC # this loop owns already in the model?</summary>
-    public enum DmxLoopPlacementState { Unsolved, Unplaced, Partial, Placed }
-
     /// <summary>
     /// A designer-declared DMX Loop as a tree node (the loop-centric window): a name plus the Control Zones
     /// assigned to it (each a <see cref="DmxLoopZoneViewModel"/> carrying its own cluster sub-builder).
     /// Maps to an engine <see cref="LoopDeclaration"/>; assigning more channels than the interface ceiling is
-    /// the engine's third pre-solve gate, surfaced on Run. Carries its own per-loop Place action + placement
-    /// state (the loop is the placement unit — one pick lands just this loop's decoders + drivers).
+    /// the engine's third pre-solve gate, surfaced on Run. Carries its own per-loop Place action (the loop is
+    /// the placement unit — one pick lands just this loop's decoders + drivers).
     /// </summary>
     public sealed class DmxLoopRowViewModel : ViewModelBase
     {
         private string _name;
-        private DmxLoopPlacementState _placementState = DmxLoopPlacementState.Unsolved;
 
         public DmxLoopRowViewModel(string name)
         {
@@ -80,35 +75,6 @@ namespace TurboSuite.Dmx.ViewModels
         /// <summary>The interface # the last solve assigned this loop (0 = not yet solved / empty). Set by the
         /// ViewModel after each Run; the per-loop Place targets exactly this interface.</summary>
         public int InterfaceNumber { get; set; }
-
-        public DmxLoopPlacementState PlacementState
-        {
-            get => _placementState;
-            set
-            {
-                if (SetProperty(ref _placementState, value))
-                {
-                    OnPropertyChanged(nameof(StateGlyph));
-                    OnPropertyChanged(nameof(StateText));
-                }
-            }
-        }
-
-        public string StateGlyph => _placementState switch
-        {
-            DmxLoopPlacementState.Placed => "●",
-            DmxLoopPlacementState.Partial => "◑",
-            DmxLoopPlacementState.Unplaced => "○",
-            _ => "–",
-        };
-
-        public string StateText => _placementState switch
-        {
-            DmxLoopPlacementState.Placed => "placed",
-            DmxLoopPlacementState.Partial => "partial",
-            DmxLoopPlacementState.Unplaced => "unplaced",
-            _ => "—",
-        };
 
         // Wired by the owning ViewModel (it holds the pool selection + the solve/registry the actions need).
         public ICommand? AddSelectedCommand { get; set; }   // + Add selected pool zones to this loop

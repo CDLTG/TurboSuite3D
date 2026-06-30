@@ -21,5 +21,13 @@ namespace TurboSuite.Dmx.Services
         /// persisted state, so a re-draw finds the same view by id even if the user renamed it.</param>
         DmxOneLineResult Draw(IReadOnlyList<DmxOneLineDrawing> drawings, string systemName,
                               int onlyInterfaceNumber, IReadOnlyDictionary<int, long> viewRegistry);
+
+        /// <summary>Draw the single per-job wire legend into its own owned Drafting View (BuildPlan Phase 6) —
+        /// same wipe-and-redraw ownership as the one-line, but one view per job (not per loop).</summary>
+        /// <param name="drawing">The legend layout off the last solve's <see cref="DmxWireLegend"/>.</param>
+        /// <param name="systemName">The Control System label — seeds the owned view's deterministic name.</param>
+        /// <param name="existingViewId">The persisted legend view id (the Revit-free long), or 0 if never
+        /// drawn, so a re-draw finds the same view by id even if the user renamed it.</param>
+        DmxWireLegendResult DrawWireLegend(DmxWireLegendDrawing drawing, string systemName, long existingViewId);
     }
 }

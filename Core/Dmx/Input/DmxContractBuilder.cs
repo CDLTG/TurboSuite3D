@@ -19,6 +19,10 @@ namespace TurboSuite.Dmx
         public int MaxDevicesPerSegment { get; set; } = 32;    // D4
         public int ReservedChannels { get; set; } = 0;
         public BreakerBasis BreakerBasis { get; set; } = BreakerBasis.ConnectedLoad;
+
+        /// <summary>Job-wide homerun pull-up (BuildPlan Phase 6): bump every LV homerun this many stock sizes
+        /// past its exact required conductor count (#16-4 → #16-6 → #16-8). 0 = exact required conductors.</summary>
+        public int PullUpSizes { get; set; } = 0;
     }
 
     /// <summary>
