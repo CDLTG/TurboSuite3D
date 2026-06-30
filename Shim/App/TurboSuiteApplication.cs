@@ -75,7 +75,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Snoop.SnoopCommand",
                 "Suggested shortcut: TS\nList the Visibility/Graphics checkboxes a linked family draws under",
                 "Pick a linked architectural family to list the Visibility/Graphics Category → Subcategory checkboxes its geometry draws under (model geometry vs view-dependent annotation) — so you know which VG → RVT Links checkbox controls a clearance/path/egress line. Read-only.",
-                "Blank");
+                "TurboSnoop");
 
             CreateButton(commandsPanel, assemblyPath,
                 "TurboTag",
@@ -110,7 +110,7 @@ public class TurboSuiteApplication : IExternalApplication
                     "TurboSuite.Setup.SetupCommand",
                     "Set up a new project from the linked architectural model",
                     "Copies levels from the linked architectural model, creates Floor Plan and RCP views per level with firm view templates, and wires each view's link graphics to a chosen architectural view. 3D RVT-linked projects only.",
-                    "Blank");
+                    "TurboSetup");
             }
 
             CreateButton(utilitiesPanel, assemblyPath,
@@ -127,7 +127,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Schedule.ScheduleCommand",
                 "Edit fixture and driver specs one type per page",
                 "Opens a form-view editor for lighting fixture and driver type specifications — one Type Mark per page. Edits apply to every type instance and save in a single undo step.",
-                "Blank");
+                "TurboSchedule");
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboZones",
@@ -188,7 +188,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Mask.MaskCommand",
                 "Suggested shortcut: BB\nMask selected elements while preserving fixture graphics",
                 "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
-                "Blank");
+                "TurboMask");
 
             // Auto-update check (two handlers: one checks/stages, one shows the dialog on next idle)
             application.Idling += OnIdlingCheckForUpdate;
