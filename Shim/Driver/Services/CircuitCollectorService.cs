@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Dmx;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Helpers;
 
@@ -186,7 +187,26 @@ namespace TurboSuite.Driver.Services
                 DeviceId = instance.Id,
                 SwitchID = ParameterHelper.GetSwitchID(instance),
                 CurrentFamilyTypeId = typeId,
-                CurrentFamilyTypeName = typeName
+                CurrentFamilyTypeName = typeName,
+                // A LightingDevice whose type carries DMX Channels > 0 is a DMX decoder (TurboRPS-2).
+                DmxChannels = ReadDmxChannels(instance, instance?.Symbol)
+            };
+        }
+
+        /// <summary>Read the integer "DMX Channels" value, preferring the instance binding and falling
+        /// back to the type — the same convention the TurboDMX model reader uses. Returns 0 when absent.</summary>
+        private static int ReadDmxChannels(Element instance, FamilySymbol symbol)
+        {
+            var p = instance?.LookupParameter(DmxParameterNames.DmxChannels);
+            if (p == null || !p.HasValue)
+                p = symbol?.LookupParameter(DmxParameterNames.DmxChannels);
+            if (p == null || !p.HasValue)
+                return 0;
+            return p.StorageType switch
+            {
+                StorageType.Integer => p.AsInteger(),
+                StorageType.Double => (int)Math.Round(p.AsDouble()),
+                _ => 0
             };
         }
     }

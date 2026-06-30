@@ -35,6 +35,8 @@
                  STALE's "fixable / needs attention" tone — a deferral whose config has drifted. -->
             <SolidColorBrush x:Key="DeferredRowBrush" Color="#ECECEC"/>
             <SolidColorBrush x:Key="ReviewRowBrush" Color="#FFF3CD"/>
+            <!-- DMX: green — decoder-controlled, present & wired, not driver-managed (no action). -->
+            <SolidColorBrush x:Key="DmxRowBrush" Color="#D4EDDA"/>
 
             <Style x:Key="TableHeaderStyle" TargetType="TextBlock">
                 <Setter Property="FontWeight" Value="SemiBold"/>
@@ -157,6 +159,9 @@
                             </DataTrigger>
                             <DataTrigger Binding="{Binding StatusText}" Value="NO MATCH">
                                 <Setter Property="Background" Value="{StaticResource NoMatchRowBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusText}" Value="DMX">
+                                <Setter Property="Background" Value="{StaticResource DmxRowBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding StatusText}" Value="DEFERRED">
                                 <Setter Property="Background" Value="{StaticResource DeferredRowBrush}"/>

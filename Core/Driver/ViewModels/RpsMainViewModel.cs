@@ -113,6 +113,11 @@ namespace TurboSuite.Driver.ViewModels
         public int RebuildCount => Rows.Count(r => r.Status == RpsStatus.Rebuild && !r.IsDeferred);
         public int NewCount => Rows.Count(r => r.Status == RpsStatus.NotDeployed && !r.IsDeferred);
         public int NoMatchCount => Rows.Count(r => r.Status == RpsStatus.NoMatch && !r.IsDeferred);
+
+        /// <summary>DMX-decoder-controlled circuits — present &amp; wired, not driver-managed. Not an
+        /// open issue (no TurboRPS action), so excluded from the issue counts (TurboRPS-2).</summary>
+        public int DmxCount => Rows.Count(r => r.Status == RpsStatus.DmxManaged && !r.IsDeferred);
+
         public int DeferredCount => Rows.Count(r => r.IsDeferred && !r.DeferralConfigChanged);
         public int ReviewCount => Rows.Count(r => r.DeferralConfigChanged);
 
@@ -125,6 +130,7 @@ namespace TurboSuite.Driver.ViewModels
                 if (RebuildCount > 0) parts.Add($"{RebuildCount} rebuild");
                 if (NewCount > 0) parts.Add($"{NewCount} new");
                 if (NoMatchCount > 0) parts.Add($"{NoMatchCount} no match");
+                if (DmxCount > 0) parts.Add($"{DmxCount} DMX");
                 if (ReviewCount > 0) parts.Add($"{ReviewCount} review");
                 if (DeferredCount > 0) parts.Add($"{DeferredCount} deferred");
                 return string.Join(" · ", parts);
@@ -152,10 +158,13 @@ namespace TurboSuite.Driver.ViewModels
             if (item is not RpsCircuitRowViewModel row)
                 return false;
 
-            // "Issues" excludes Ok rows and accepted (non-drifted) deferrals; a drifted deferral
-            // (REVIEW) is still an open issue and stays visible.
+            // "Issues" excludes Ok rows, DMX-managed rows (present & wired, not driver-managed), and
+            // accepted (non-drifted) deferrals; a drifted deferral (REVIEW) is still an open issue and
+            // stays visible.
             if (_showOnlyIssues
-                && (row.Status == RpsStatus.Ok || (row.IsDeferred && !row.DeferralConfigChanged)))
+                && (row.Status == RpsStatus.Ok
+                    || row.Status == RpsStatus.DmxManaged
+                    || (row.IsDeferred && !row.DeferralConfigChanged)))
                 return false;
 
             if (!string.IsNullOrWhiteSpace(_searchText))
@@ -181,6 +190,7 @@ namespace TurboSuite.Driver.ViewModels
             OnPropertyChanged(nameof(RebuildCount));
             OnPropertyChanged(nameof(NewCount));
             OnPropertyChanged(nameof(NoMatchCount));
+            OnPropertyChanged(nameof(DmxCount));
             OnPropertyChanged(nameof(DeferredCount));
             OnPropertyChanged(nameof(ReviewCount));
             OnPropertyChanged(nameof(CountsSummary));

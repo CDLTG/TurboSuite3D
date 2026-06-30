@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using TurboSuite.Dmx;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
@@ -56,10 +57,18 @@ namespace TurboSuite.Driver.Services
                 bool isTbd = symbol.FamilyName != null
                     && symbol.FamilyName.IndexOf(TbdFamilyMarker, StringComparison.OrdinalIgnoreCase) >= 0;
 
+                // A DMX decoder (DMX Channels > 0) is a parallel class of power supply, NOT a
+                // wattage-sized driver — same rule TurboDMX's model reader uses to split decoders from
+                // drivers. Decoder families often also carry Power/Sub-Driver Power, which would
+                // otherwise make them masquerade as valid drivers: counted as placed supplies and packed
+                // into a wattage recommendation (the bogus "4 decoders → 2 drivers" repack). Exclude them
+                // from the driver pool so TurboRPS leaves DMX sizing to TurboDMX. See TurboRPS-2.
+                bool isDecoder = ReadDmxChannels(symbol) > 0;
+
                 bool isValid = false;
                 int subCount = 0;
 
-                if (power > 0 && subPower > 0)
+                if (!isDecoder && power > 0 && subPower > 0)
                 {
                     double remainder = power % subPower;
                     if (Math.Abs(remainder) < 0.01)
@@ -89,6 +98,21 @@ namespace TurboSuite.Driver.Services
             }
 
             return candidates;
+        }
+
+        /// <summary>Read the integer "DMX Channels" value off a device type. &gt; 0 marks it a DMX
+        /// decoder (matching the TurboDMX model reader). Returns 0 when absent.</summary>
+        private static int ReadDmxChannels(FamilySymbol symbol)
+        {
+            var p = symbol?.LookupParameter(DmxParameterNames.DmxChannels);
+            if (p == null || !p.HasValue)
+                return 0;
+            return p.StorageType switch
+            {
+                StorageType.Integer => p.AsInteger(),
+                StorageType.Double => (int)Math.Round(p.AsDouble()),
+                _ => 0
+            };
         }
     }
 }

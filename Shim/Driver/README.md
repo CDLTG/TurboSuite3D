@@ -36,6 +36,11 @@ and fixes the common case in place.
      is recommended (cross-family `Symbol` swap throws), or the placed supplies are mixed/ambiguous.
    - **NEW** — RPS fixtures but no supplies placed yet.
    - **NO MATCH** — no real driver fits.
+   - **DMX** — the circuit is DMX-decoder-controlled (a decoder device — `OST_LightingDevices` with
+     `DMX Channels` > 0 — is wired on it). Decoders are a parallel class of power supply TurboRPS doesn't
+     size, so the circuit is flagged green ("present & wired") with no wattage recommendation; decoder
+     sizing/packing belongs to TurboDMX. Decoders are also excluded from the driver candidate pool, so
+     they never inflate the placed count or feed a recommendation.
    - **DEFERRED** — a user has intentionally accepted a "mathematically wrong" config (see Usage); the
      real verdict is masked to neutral and excluded from the issue counts.
    - **REVIEW** — a deferred circuit whose config has drifted since it was deferred, re-surfaced for review.

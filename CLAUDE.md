@@ -128,7 +128,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 | `TurboSuite.Shared.Styles` | Shared WPF ResourceDictionary styles |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` |
 | `TurboSuite.Name` | TurboName — room name assignment from linked DWG files (MVVM) |
-| `TurboSuite.Driver` | TurboDriver (deploys power supplies, modal) + TurboRPS (staleness dashboard + batch in-place driver-type corrector, MVVM modeless). Right-click **Defer circuit** flags an intentionally-"wrong" config — stored in ExtensibleStorage **on the circuit element** (per-element entity, not the doc-singleton pattern), masking its verdict to DEFERRED and resurfacing as REVIEW if the snapshotted config later drifts |
+| `TurboSuite.Driver` | TurboDriver (deploys power supplies, modal) + TurboRPS (staleness dashboard + batch in-place driver-type corrector, MVVM modeless). Right-click **Defer circuit** flags an intentionally-"wrong" config — stored in ExtensibleStorage **on the circuit element** (per-element entity, not the doc-singleton pattern), masking its verdict to DEFERRED and resurfacing as REVIEW if the snapshotted config later drifts. DMX-decoder-controlled circuits (a decoder = `OST_LightingDevices` with `DMX Channels` > 0 wired on the circuit) are recognized and flagged green (DMX, "present & wired — not driver-managed"): decoders are excluded from the driver candidate pool so they never inflate the placed count or feed a wattage recommendation — DMX sizing belongs to TurboDMX |
 | `TurboSuite.Bubble` | TurboBubble — switchleg tags and wires |
 | `TurboSuite.Tag` | TurboTag — auto-places lighting fixture type tags |
 | `TurboSuite.Wire` | TurboWire — circuit creation and wire routing |

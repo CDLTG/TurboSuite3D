@@ -72,6 +72,7 @@ namespace TurboSuite.Driver.ViewModels
             RpsStatus.Rebuild => "REBUILD",
             RpsStatus.NotDeployed => "NEW",
             RpsStatus.NoMatch => "NO MATCH",
+            RpsStatus.DmxManaged => "DMX",
             _ => ""
         };
 
@@ -94,6 +95,13 @@ namespace TurboSuite.Driver.ViewModels
         {
             get
             {
+                // DMX-managed circuits show the wired decoder, not a (nonexistent) driver.
+                if (_data.Status == RpsStatus.DmxManaged)
+                {
+                    if (_data.DecoderCount == 0) return "—";
+                    string name = string.IsNullOrEmpty(_data.DecoderTypeName) ? "decoder" : _data.DecoderTypeName;
+                    return $"{name} ×{_data.DecoderCount}";
+                }
                 if (_data.PlacedCount == 0) return "—";
                 if (_data.DistinctPlacedTypeCount > 1) return $"mixed ({_data.PlacedCount})";
                 return $"{_data.PlacedTypeName} ×{_data.PlacedCount}";
@@ -121,6 +129,8 @@ namespace TurboSuite.Driver.ViewModels
                     return $"deferred config changed — review (was {BaseStatusText})";
                 if (_data.IsDeferred)
                     return $"deferred — was {BaseStatusText}";
+                if (_data.Status == RpsStatus.DmxManaged)
+                    return "DMX Decoder controlled";
                 if (_data.Status == RpsStatus.Rebuild)
                     return _data.RebuildReason;
                 if (_data.HasSplitSegments)
@@ -165,8 +175,9 @@ namespace TurboSuite.Driver.ViewModels
         public List<SubDriverAssignment> SubDriverAssignments =>
             _data.Recommendation?.SubDriverAssignments;
 
-        public string RecommendedHeader => string.IsNullOrEmpty(_data.RecommendedTypeName)
-            ? "No matching driver"
+        public string RecommendedHeader =>
+            _data.Status == RpsStatus.DmxManaged ? "DMX decoder — not driver-managed"
+            : string.IsNullOrEmpty(_data.RecommendedTypeName) ? "No matching driver"
             : RecommendedDisplay;
 
         /// <summary>After a successful in-place swap, flip this row to Ok and update the placed

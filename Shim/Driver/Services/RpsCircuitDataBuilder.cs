@@ -76,8 +76,27 @@ namespace TurboSuite.Driver.Services
                     ? validBySymbol[distinctTypeRefs[0]]
                     : null;
 
+                // DMX-decoder discriminator (TurboRPS-2): a wired decoder device (OST_LightingDevices
+                // with DMX Channels > 0) means the circuit is powered by the decoder, not a wattage-sized
+                // driver TurboRPS models. Decoder presence is authoritative — DMX sizing/packing belongs
+                // to TurboDMX, so a decoder-controlled circuit is never given a driver recommendation here
+                // and is flagged green ("present & wired"), regardless of fixture-param hygiene. (Decoders
+                // are also excluded from the driver candidate pool in FamilyTypeCollectorService, so they
+                // no longer inflate the placed count or feed a bogus repack.)
+                var decoders = circuit.DevicesByType.Values
+                    .SelectMany(list => list)
+                    .Where(d => d.IsDecoder)
+                    .ToList();
+                int decoderCount = decoders.Count;
+                string decoderTypeName = decoders
+                    .Select(d => d.CurrentFamilyTypeName)
+                    .Distinct()
+                    .Count() == 1 ? decoders[0].CurrentFamilyTypeName : string.Empty;
+
+                bool isDmxDecoderManaged = decoderCount > 0;
+
                 var classification = StaleClassifier.Classify(
-                    placedCount, distinctCount, placedCandidate, recommendation);
+                    placedCount, distinctCount, placedCandidate, recommendation, isDmxDecoderManaged);
 
                 bool hasSplit = recommendation?.SubDriverAssignments != null
                     && recommendation.SubDriverAssignments
@@ -111,6 +130,8 @@ namespace TurboSuite.Driver.Services
                     PlacedCount = placedCount,
                     DistinctPlacedTypeCount = distinctCount,
                     PlacedChannels = placedCandidate?.SubDriverCount ?? 0,
+                    DecoderCount = decoderCount,
+                    DecoderTypeName = decoderTypeName,
 
                     Recommendation = recommendation,
                     Status = classification.Status,

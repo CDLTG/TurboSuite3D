@@ -44,6 +44,14 @@ namespace TurboSuite.Driver.Models
         public int DistinctPlacedTypeCount { get; set; }
         public int PlacedChannels { get; set; }
 
+        /// <summary>Number of DMX decoder devices wired on this circuit (OST_LightingDevices whose type
+        /// carries DMX Channels &gt; 0). Drives the <see cref="RpsStatus.DmxManaged"/> "present &amp; wired"
+        /// verdict and the row's Current-column display. Zero on non-DMX circuits.</summary>
+        public int DecoderCount { get; set; }
+
+        /// <summary>Display name of the single decoder type wired on a DMX circuit; empty when none or mixed.</summary>
+        public string DecoderTypeName { get; set; }
+
         public DriverRecommendation Recommendation { get; set; }
         public RpsStatus Status { get; set; }
 

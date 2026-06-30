@@ -26,7 +26,13 @@ namespace TurboSuite.Driver.Services
         NotDeployed,
 
         /// <summary>No real driver fits the circuit (underspecified or no candidate matches).</summary>
-        NoMatch
+        NoMatch,
+
+        /// <summary>The circuit is DMX-decoder-controlled (channelized RPS fixtures + a decoder wired
+        /// on the circuit), not driven by a wattage-sized driver. TurboRPS doesn't model decoders, so
+        /// this is a terminal "present &amp; wired → OK / not driver-managed" outcome — no wattage
+        /// recommendation applies and no action is needed here (built in TurboDMX). See TurboRPS-2.</summary>
+        DmxManaged
     }
 
     /// <summary>Result of classification: the status plus, for <see cref="RpsStatus.Rebuild"/>,
@@ -62,13 +68,25 @@ namespace TurboSuite.Driver.Services
         /// <param name="placedCandidate">The single placed driver type's candidate info; null when
         /// none placed or the set is mixed.</param>
         /// <param name="recommendation">Fresh recommendation for the circuit's current fixtures.</param>
+        /// <param name="isDmxDecoderManaged">True when the circuit is DMX-decoder-controlled — its
+        /// RPS fixtures are channelized DMX fixtures and a decoder device is wired on the circuit. Such
+        /// a circuit rides a circuit (the tape has Remote Power Supply = Yes) but is powered by a decoder,
+        /// not a wattage-sized driver TurboRPS models, so it must NOT be flagged NEW. See TurboRPS-2.</param>
         public static RpsClassification Classify(
             int placedInstanceCount,
             int distinctPlacedTypeCount,
             DriverCandidateInfo placedCandidate,
-            DriverRecommendation recommendation)
+            DriverRecommendation recommendation,
+            bool isDmxDecoderManaged = false)
         {
             // Evaluate in the order documented in the plan.
+
+            // 0. DmxManaged — channelized fixtures driven by a wired decoder, not a wattage driver.
+            // Takes precedence over the count-based checks below: a decoder is invisible to the driver
+            // recommendation (no Sub-Driver Power), so placedInstanceCount is 0 and the circuit would
+            // otherwise mis-classify as NotDeployed even though it's fully developed.
+            if (isDmxDecoderManaged)
+                return new RpsClassification(RpsStatus.DmxManaged, null);
 
             // 1. NotDeployed — qualifying circuit with zero placed supplies.
             if (placedInstanceCount == 0)
