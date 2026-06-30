@@ -7,6 +7,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-06-30
+
+### Added
+- TurboSnoop: new read-only reporter that names the Visibility/Graphics Category → Subcategory checkboxes a linked arch family's geometry draws under, so you know which box to uncheck.
+- TurboMask: new command for masking regions + per-fixture annotation stamps, with view-only detail-line overlays of the masked devices' wires drawn above the mask (real wires stay connected/hidden underneath).
+- TurboSchedule: new page-per-Type-Mark form-view spec editor for lighting fixtures and drivers, unifying the two native spec schedules — with live Notes character count, Yes/No checkboxes, and clickable URL fields.
+- TurboNumber: live name filter for the Keypads Room Order sidebar.
+
+### Changed
+- Ribbon: dropped the "Turbo" prefix from button labels (one line each).
+- Settings: reports the loaded assembly version instead of a stale `version.txt`.
+- Icons: refreshed all ribbon icons.
+
 ## [1.2.2] — 2026-06-12
 
 ### Fixed
@@ -136,6 +149,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.3.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.3.0
 [1.2.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.2
 [1.2.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.1
 [1.2.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.0
