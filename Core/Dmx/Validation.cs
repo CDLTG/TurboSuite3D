@@ -214,7 +214,8 @@ namespace TurboSuite.Dmx
 
         /// <summary>
         /// Every declared loop whose member zones sum to more channels than the interface budget
-        /// (ceiling − reserved), with the minimum loop count — for a UI "re-declare these" list. Empty ⇒
+        /// (ceiling − the loop's own reserved), with the minimum loop count — for a UI "re-declare these"
+        /// list. Empty ⇒
         /// every declared loop fits one chain. Assumes integrity (run <see cref="CheckLoopIntegrity"/> first).
         /// </summary>
         public static IReadOnlyList<OverCapLoop> FindOverCapLoops(DmxContract contract,
@@ -224,7 +225,6 @@ namespace TurboSuite.Dmx
             if (zones == null) throw new ArgumentNullException(nameof(zones));
             if (loops == null) return new List<OverCapLoop>();
 
-            int budget = contract.ChannelCeiling - contract.ReservedChannels;
             var channelsByZone = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var zone in zones)
                 channelsByZone[zone.ZoneName] = zone.Runs.Count == 0 ? 0 : DecoderPacker.SingleChannelsOf(zone.Runs);
@@ -232,6 +232,7 @@ namespace TurboSuite.Dmx
             var violations = new List<OverCapLoop>();
             foreach (var loop in loops)
             {
+                int budget = contract.ChannelCeiling - loop.ReservedChannels;   // §3c: reservation is per-loop
                 int sum = 0;
                 foreach (var zn in loop.ZoneNames)
                     if (channelsByZone.TryGetValue(zn, out int c)) sum += c;

@@ -37,6 +37,12 @@ namespace TurboSuite.Dmx
     /// </summary>
     public static class LoopSegmenter
     {
+        /// <summary>The RS-485 unit-load limit: max DMX devices on one repeater-bounded segment (§6b).
+        /// The DMX512/RS-485 standard figure — a fixed hardware property of the bus, not a per-job knob,
+        /// so it's a Core constant rather than a UI setting. A loop denser than this is split by repeaters
+        /// (0 channels, 1 address). Change here (one-line) only if a gateway/decoder kit reliably drives more.</summary>
+        public const int DevicesPerSegment = 32;
+
         public static LoopSegmentation Segment(int deviceCount, int maxDevicesPerSegment)
         {
             if (deviceCount < 0) throw new ArgumentOutOfRangeException(nameof(deviceCount));

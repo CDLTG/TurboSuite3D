@@ -80,14 +80,13 @@ namespace TurboSuite.Dmx.Persistence
         public double FeedVolts { get; set; } = 120.0;
         public double BreakerContinuousDerate { get; set; } = 0.8;
         public int MaxDriversPerBreaker { get; set; }          // 0 = no inrush count cap
-        public int MaxDevicesPerSegment { get; set; } = 32;    // D4
-        public int ReservedChannels { get; set; }
 
         /// <summary>Job-wide homerun pull-up (Phase 6): stock sizes to bump every LV homerun past exact. 0 = exact.</summary>
         public int PullUpSizes { get; set; }
 
-        /// <summary>Breaker pack basis (<c>ConnectedLoad</c> / <c>DriverRating</c>) — stored as the enum name.</summary>
-        public string BreakerBasis { get; set; } = "ConnectedLoad";
+        /// <summary>Breaker pack basis (<c>ConnectedLoad</c> / <c>DriverRating</c>) — stored as the enum name.
+        /// Defaults to the "safe" nameplate basis for new jobs (and for pre-feature saves lacking the field).</summary>
+        public string BreakerBasis { get; set; } = "DriverRating";
 
         /// <summary>Curated decoder family types (Q10) — the job's kit, ticked from discovery. Stored as
         /// stable type identifiers (UniqueId strings) resolved back to symbols at read time. EMPTY ⇒ never
@@ -104,6 +103,9 @@ namespace TurboSuite.Dmx.Persistence
         public string LoopId { get; set; } = "";
         public string Name { get; set; } = "";
         public int Order { get; set; }
+
+        /// <summary>Smart-fixture channels reserved off this loop's interface budget (§3c). 0 = none.</summary>
+        public int ReservedChannels { get; set; }
 
         /// <summary>The Control Zone VALUES grouped into this loop (the native param values).</summary>
         public List<string> ZoneValues { get; set; } = new List<string>();

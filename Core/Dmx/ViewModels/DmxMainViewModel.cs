@@ -130,8 +130,35 @@ namespace TurboSuite.Dmx.ViewModels
         public double FeedVolts { get => _settings.FeedVolts; set { _settings.FeedVolts = value; OnPropertyChanged(); Persist(); } }
         public double BreakerContinuousDerate { get => _settings.BreakerContinuousDerate; set { _settings.BreakerContinuousDerate = value; OnPropertyChanged(); Persist(); } }
         public int MaxDriversPerBreaker { get => _settings.MaxDriversPerBreaker; set { _settings.MaxDriversPerBreaker = value; OnPropertyChanged(); Persist(); } }
-        public int MaxDevicesPerSegment { get => _settings.MaxDevicesPerSegment; set { _settings.MaxDevicesPerSegment = value; OnPropertyChanged(); Persist(); } }
-        public int ReservedChannels { get => _settings.ReservedChannels; set { _settings.ReservedChannels = value; OnPropertyChanged(); Persist(); } }
+
+        // ── Breaker-packing basis: the "safe" (nameplate) vs. "more control" (actual load) choice ──────
+        // Nameplate charges each driver its full rating — inrush-honest, so the Drv/brkr count cap is moot
+        // and disabled. Actual charges connected load (the tighter count) but leaves inrush to the designer,
+        // who sets the Drv/brkr cap by hand. Two bools back one enum so the pair drives mutually-exclusive
+        // RadioButtons cleanly. Changing it re-solves (breaker count / one-line feeds shift).
+        public bool PackByNameplate
+        {
+            get => _settings.BreakerBasis == BreakerBasis.DriverRating;
+            set { if (value) SetBreakerBasis(BreakerBasis.DriverRating); }
+        }
+        public bool PackByActualLoad
+        {
+            get => _settings.BreakerBasis == BreakerBasis.ConnectedLoad;
+            set { if (value) SetBreakerBasis(BreakerBasis.ConnectedLoad); }
+        }
+        /// <summary>The manual Drv/brkr inrush cap only applies to actual-load packing; nameplate ignores it.</summary>
+        public bool DriversPerBreakerEnabled => _settings.BreakerBasis == BreakerBasis.ConnectedLoad;
+
+        private void SetBreakerBasis(BreakerBasis basis)
+        {
+            if (_settings.BreakerBasis == basis) return;
+            _settings.BreakerBasis = basis;
+            OnPropertyChanged(nameof(PackByNameplate));
+            OnPropertyChanged(nameof(PackByActualLoad));
+            OnPropertyChanged(nameof(DriversPerBreakerEnabled));
+            Run();
+            Persist();
+        }
 
         /// <summary>Job-wide homerun pull-up (Phase 6). Bumping it re-derives the wire legend, so refresh it.</summary>
         public int PullUpSizes
@@ -545,7 +572,11 @@ namespace TurboSuite.Dmx.ViewModels
 
         private DmxLoopRowViewModel WireLoop(DmxLoopRowViewModel loop)
         {
-            loop.PropertyChanged += (_, __) => Persist();       // name edits
+            loop.PropertyChanged += (_, e) =>                   // name edits persist; reserved re-solves
+            {
+                if (e.PropertyName == nameof(DmxLoopRowViewModel.ReservedChannels)) Run();
+                Persist();
+            };
             loop.AddSelectedCommand = new RelayCommand(() => AddSelectionToLoop(loop));
             loop.RemoveCommand = new RelayCommand(() => RemoveLoop(loop));
             loop.PlaceCommand = new RelayCommand(() => PlaceLoop(loop), () => CanPlaceLoop(loop));
@@ -601,11 +632,9 @@ namespace TurboSuite.Dmx.ViewModels
             _settings.FeedVolts = s.FeedVolts;
             _settings.BreakerContinuousDerate = s.BreakerContinuousDerate;
             _settings.MaxDriversPerBreaker = s.MaxDriversPerBreaker;
-            _settings.MaxDevicesPerSegment = s.MaxDevicesPerSegment;
-            _settings.ReservedChannels = s.ReservedChannels;
             _settings.PullUpSizes = s.PullUpSizes;
             _settings.BreakerBasis = Enum.TryParse<BreakerBasis>(s.BreakerBasis, out var basis)
-                ? basis : BreakerBasis.ConnectedLoad;
+                ? basis : BreakerBasis.DriverRating;
 
             // Empty saved list ⇒ never curated ⇒ leave null so LoadSnapshot defaults to all-selected.
             _savedDecoderTypeIds = s.DecoderTypeIds?.Count > 0 ? new HashSet<string>(s.DecoderTypeIds) : null;
@@ -627,8 +656,6 @@ namespace TurboSuite.Dmx.ViewModels
                 FeedVolts = _settings.FeedVolts,
                 BreakerContinuousDerate = _settings.BreakerContinuousDerate,
                 MaxDriversPerBreaker = _settings.MaxDriversPerBreaker,
-                MaxDevicesPerSegment = _settings.MaxDevicesPerSegment,
-                ReservedChannels = _settings.ReservedChannels,
                 PullUpSizes = _settings.PullUpSizes,
                 BreakerBasis = _settings.BreakerBasis.ToString(),
                 DecoderTypeIds = DecoderRows.Where(r => r.IsSelected).Select(r => r.Candidate.TypeId).ToList(),
@@ -639,6 +666,7 @@ namespace TurboSuite.Dmx.ViewModels
                 LoopId = i.ToString(),
                 Name = l.Name,
                 Order = i,
+                ReservedChannels = l.ReservedChannels,
                 ZoneValues = l.AssignedZoneNames.ToList(),
             }).ToList();
             return state;
@@ -741,8 +769,8 @@ namespace TurboSuite.Dmx.ViewModels
         {
             var defs = _initialLoops != null
                 ? _initialLoops.OrderBy(l => l.Order)
-                    .Select(l => (l.Name, Zones: (IEnumerable<string>)(l.ZoneValues ?? new List<string>()))).ToList()
-                : Loops.Select(l => (l.Name, Zones: (IEnumerable<string>)l.AssignedZoneNames)).ToList();
+                    .Select(l => (l.Name, l.ReservedChannels, Zones: (IEnumerable<string>)(l.ZoneValues ?? new List<string>()))).ToList()
+                : Loops.Select(l => (l.Name, l.ReservedChannels, Zones: (IEnumerable<string>)l.AssignedZoneNames)).ToList();
             _initialLoops = null;
 
             var zoneSet = new HashSet<string>(ZoneNames, StringComparer.OrdinalIgnoreCase);
@@ -751,7 +779,7 @@ namespace TurboSuite.Dmx.ViewModels
             Loops.Clear();
             foreach (var d in defs)
             {
-                var loop = WireLoop(new DmxLoopRowViewModel(d.Name));
+                var loop = WireLoop(new DmxLoopRowViewModel(d.Name) { ReservedChannels = d.ReservedChannels });
                 foreach (var zn in d.Zones)
                 {
                     if (!zoneSet.Contains(zn) || used.Contains(zn)) continue;   // dropped or already in a loop

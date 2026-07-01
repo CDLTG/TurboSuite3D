@@ -25,7 +25,7 @@ namespace TurboSuite.Dmx
             sb.AppendLine(" TurboDMX — solve bill");
             sb.AppendLine(Rule);
             sb.AppendLine($" Contract: {Num(contract.SystemVolts)} V · ceiling {contract.ChannelCeiling} ch "
-                          + $"(reserved {contract.ReservedChannels}) · D4 = {contract.MaxDevicesPerSegment} devices/segment");
+                          + $"· D4 = {contract.MaxDevicesPerSegment} devices/segment");
             sb.AppendLine();
 
             sb.AppendLine(" TOTALS");

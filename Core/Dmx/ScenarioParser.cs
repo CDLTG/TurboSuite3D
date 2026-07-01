@@ -37,7 +37,7 @@ namespace TurboSuite.Dmx
             if (text == null) throw new ArgumentNullException(nameof(text));
 
             double volts = 24, wattsPerFt = 5.2;
-            int ceiling = 32, reserved = 0, d4 = 32;
+            int ceiling = 32, d4 = 32;
             double breakerAmps = 20, feedVolts = 120, breakerDerate = 0.8;
             int maxPerBreaker = 0;
             var breakerBasis = BreakerBasis.ConnectedLoad;
@@ -68,7 +68,6 @@ namespace TurboSuite.Dmx
                 {
                     case "volts": volts = D(val, lineNo); break;
                     case "ceiling": ceiling = I(val, lineNo); break;
-                    case "reserved": reserved = I(val, lineNo); break;
                     case "d4": d4 = I(val, lineNo); break;
                     case "wattsperft": wattsPerFt = D(val, lineNo); break;
                     case "breakeramps": breakerAmps = D(val, lineNo); break;
@@ -101,23 +100,25 @@ namespace TurboSuite.Dmx
                 zones.Add(new ZoneDesign(name, clusters));
             }
 
-            var contract = new DmxContract(decoders, drivers, volts, ceiling, reserved, d4,
+            var contract = new DmxContract(decoders, drivers, volts, ceiling, d4,
                                            breakerAmps, feedVolts, breakerDerate, maxPerBreaker, breakerBasis,
                                            linkChannels, linkDevices, linksPerProcessor);
             return new Scenario(contract, zones, loops);
         }
 
-        // loop = <loopName> | <zoneA>, <zoneB>, ...   (a designer-declared DMX Loop, §0d)
+        // loop = <loopName> | <zoneA>, <zoneB>, ...  [ | <reservedChannels> ]   (a declared DMX Loop, §0d)
         private static LoopDeclaration ParseLoopLine(string val, int lineNo)
         {
             var parts = val.Split('|');
-            if (parts.Length != 2)
-                throw new FormatException($"Line {lineNo}: loop needs 'name | zoneA, zoneB, ...'");
+            if (parts.Length != 2 && parts.Length != 3)
+                throw new FormatException($"Line {lineNo}: loop needs 'name | zoneA, zoneB, ...' (optionally '| reservedChannels')");
             string name = parts[0].Trim();
             if (name.Length == 0) throw new FormatException($"Line {lineNo}: loop needs a name");
             var zoneNames = parts[1].Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
             if (zoneNames.Count == 0) throw new FormatException($"Line {lineNo}: loop '{name}' lists no zones");
-            return new LoopDeclaration(name, zoneNames);
+            int reserved = 0;
+            if (parts.Length == 3 && parts[2].Trim().Length > 0) reserved = I(parts[2].Trim(), lineNo);
+            return new LoopDeclaration(name, zoneNames, reserved);
         }
 
         // decoder = <name...> outputs:N amps:A watts:W   (name = the tokens without a colon)

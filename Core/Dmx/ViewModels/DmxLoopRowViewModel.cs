@@ -45,6 +45,7 @@ namespace TurboSuite.Dmx.ViewModels
     public sealed class DmxLoopRowViewModel : ViewModelBase
     {
         private string _name;
+        private int _reservedChannels;
 
         public DmxLoopRowViewModel(string name)
         {
@@ -58,6 +59,14 @@ namespace TurboSuite.Dmx.ViewModels
             set => SetProperty(ref _name, value);
         }
 
+        /// <summary>Channels reserved off this loop's interface budget for smart fixtures (§3c). 0 = none.
+        /// Edge-case knob — most loops leave it 0. Changing it re-solves (the owning VM watches for it).</summary>
+        public int ReservedChannels
+        {
+            get => _reservedChannels;
+            set => SetProperty(ref _reservedChannels, value < 0 ? 0 : value);
+        }
+
         /// <summary>The zones assigned to this loop, in chain order, each with its nested cluster sub-builder.</summary>
         public ObservableCollection<DmxLoopZoneViewModel> Zones { get; }
 
@@ -69,7 +78,7 @@ namespace TurboSuite.Dmx.ViewModels
         public LoopDeclaration? ToDeclaration()
         {
             var zones = AssignedZoneNames;
-            return zones.Count == 0 ? null : new LoopDeclaration(Name, zones);
+            return zones.Count == 0 ? null : new LoopDeclaration(Name, zones, ReservedChannels);
         }
 
         /// <summary>The interface # the last solve assigned this loop (0 = not yet solved / empty). Set by the

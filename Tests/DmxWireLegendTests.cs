@@ -159,7 +159,7 @@ namespace TurboSuite.Tests.Dmx
         private static DmxContract Contract() => new DmxContract(
             decoderPool: new[] { DecoderSpec.Dmx4_5000_10A, DecoderSpec.Dmx6_22K },
             driverPool: new[] { new DriverType("320", 320.0, V, 0.0), new DriverType("600", 600.0, V, 0.0) },
-            systemVolts: V, channelCeiling: 512, reservedChannels: 0, maxDevicesPerSegment: 32,
+            systemVolts: V, channelCeiling: 512, maxDevicesPerSegment: 32,
             breakerAmps: 20, feedVolts: 120, breakerContinuousDerate: 0.8, maxDriversPerBreaker: 0);
 
         private static ZoneDesign Zone(string name, int channels) =>

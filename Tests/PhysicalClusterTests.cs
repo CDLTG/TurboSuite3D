@@ -16,7 +16,7 @@ namespace TurboSuite.Tests.Dmx
         private static DmxContract Contract() => new DmxContract(
             decoderPool: new[] { DecoderSpec.Dmx4_5000_10A },
             driverPool: new[] { new DriverType("MD", 480, V, 0.85), new DriverType("ME", 600, V, 0.85) },
-            systemVolts: V, channelCeiling: 512, reservedChannels: 0, maxDevicesPerSegment: 32);
+            systemVolts: V, channelCeiling: 512, maxDevicesPerSegment: 32);
 
         // TW (2-ch) sheets at 17.2 W each (wattsPerFt = 1 ⇒ length is watts).
         private static TapeRun[] Sheets(int n) => Enumerable.Range(0, n).Select(_ => new TapeRun(17.2, 1.0, 2)).ToArray();

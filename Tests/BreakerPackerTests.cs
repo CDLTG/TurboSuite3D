@@ -80,7 +80,7 @@ namespace TurboSuite.Tests.Dmx
             DecoderSpec[] pool = { DecoderSpec.Dmx4_5000_10A };
 
             DmxBill Solve(BreakerBasis b) => DmxSolver.Solve(new DmxContract(
-                pool, meOnly, 24.0, 512, 0, 32, 20, 120, 0.8, 0, b), zones);
+                pool, meOnly, 24.0, 512, 32, 20, 120, 0.8, 0, b), zones);
 
             Assert.Equal(1, Solve(BreakerBasis.ConnectedLoad).RequiredBreakers);
             Assert.Equal(3, Solve(BreakerBasis.DriverRating).RequiredBreakers);

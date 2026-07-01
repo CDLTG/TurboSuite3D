@@ -51,8 +51,7 @@ namespace TurboSuite.Tests.Dmx
         {
             var settings = new DmxJobSettings
             {
-                SystemVolts = 48, BreakerAmps = 15, ReservedChannels = 4,
-                MaxDevicesPerSegment = 24, BreakerBasis = BreakerBasis.DriverRating
+                SystemVolts = 48, BreakerAmps = 15, BreakerBasis = BreakerBasis.DriverRating
             };
             var contract = DmxContractBuilder.Build(
                 DmxProfile.Lutron, settings,
@@ -61,8 +60,7 @@ namespace TurboSuite.Tests.Dmx
 
             Assert.Equal(48, contract.SystemVolts);
             Assert.Equal(15, contract.BreakerAmps);
-            Assert.Equal(4, contract.ReservedChannels);
-            Assert.Equal(24, contract.MaxDevicesPerSegment);
+            Assert.Equal(LoopSegmenter.DevicesPerSegment, contract.MaxDevicesPerSegment); // fed by the Core const, not a setting
             Assert.Equal(BreakerBasis.DriverRating, contract.BreakerBasis);
         }
     }

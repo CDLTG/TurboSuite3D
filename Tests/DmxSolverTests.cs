@@ -21,14 +21,13 @@ namespace TurboSuite.Tests.Dmx
         };
 
         // Pool with both decoder tiers, unless a test overrides it.
-        private static DmxContract Contract(double derate, int ceiling = 32, int reserved = 0, int d4 = 32,
+        private static DmxContract Contract(double derate, int ceiling = 32, int d4 = 32,
                                             IReadOnlyList<DecoderSpec>? decoders = null) =>
             new DmxContract(
                 decoderPool: decoders ?? new[] { DecoderSpec.Dmx4_5000_10A, DecoderSpec.Dmx6_22K },
                 driverPool: Drivers(derate),
                 systemVolts: V,
                 channelCeiling: ceiling,
-                reservedChannels: reserved,
                 maxDevicesPerSegment: d4);
 
         [Fact]
@@ -67,7 +66,7 @@ namespace TurboSuite.Tests.Dmx
                 .ToArray();
             var contract = new DmxContract(
                 decoderPool: new[] { DecoderSpec.Dmx4_5000_10A, DecoderSpec.Dmx6_22K },
-                driverPool: Drivers(1.0), systemVolts: V, channelCeiling: 512, reservedChannels: 0,
+                driverPool: Drivers(1.0), systemVolts: V, channelCeiling: 512,
                 maxDevicesPerSegment: 32, breakerAmps: 20, feedVolts: 120, breakerContinuousDerate: 0.8,
                 maxDriversPerBreaker: 4);
 

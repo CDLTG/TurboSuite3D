@@ -6,13 +6,15 @@ namespace TurboSuite.Dmx
 {
     /// <summary>
     /// The full job contract (§1.5) as flat declared values — every knob the engine reads. Build one
-    /// by hand (decoder POOL, driver pool, voltage, ceiling, reserved, D4) and the bill is a pure
-    /// function of it plus the tagged zones. No part is named in code.
+    /// by hand (decoder POOL, driver pool, voltage, ceiling, D4) and the bill is a pure function of it
+    /// plus the tagged zones. No part is named in code. Smart-fixture channel reservation (§3c) is a
+    /// per-loop property (<see cref="LoopDeclaration.ReservedChannels"/>) — auto-packed interfaces
+    /// reserve nothing.
     /// </summary>
     public sealed class DmxContract
     {
         public DmxContract(IReadOnlyList<DecoderSpec> decoderPool, IReadOnlyList<DriverType> driverPool,
-                           double systemVolts, int channelCeiling, int reservedChannels, int maxDevicesPerSegment,
+                           double systemVolts, int channelCeiling, int maxDevicesPerSegment,
                            double breakerAmps = 20.0, double feedVolts = 120.0,
                            double breakerContinuousDerate = 0.8, int maxDriversPerBreaker = 0,
                            BreakerBasis breakerBasis = BreakerBasis.ConnectedLoad,
@@ -22,7 +24,6 @@ namespace TurboSuite.Dmx
             DriverPool = driverPool;
             SystemVolts = systemVolts;
             ChannelCeiling = channelCeiling;
-            ReservedChannels = reservedChannels;
             MaxDevicesPerSegment = maxDevicesPerSegment;
             BreakerAmps = breakerAmps;
             FeedVolts = feedVolts;
@@ -38,7 +39,6 @@ namespace TurboSuite.Dmx
         public IReadOnlyList<DriverType> DriverPool { get; }
         public double SystemVolts { get; }
         public int ChannelCeiling { get; }       // §1.6 profile: Lutron 32 / native 512
-        public int ReservedChannels { get; }     // §3c smart-fixture reservation
         public int MaxDevicesPerSegment { get; } // D4 (~32 default), an input
 
         // §0c 120 V feed pass: breaker = amps × volts × continuous-derate, plus an inrush count cap.
@@ -109,16 +109,22 @@ namespace TurboSuite.Dmx
     /// </summary>
     public sealed class LoopDeclaration
     {
-        public LoopDeclaration(string name, IReadOnlyList<string> zoneNames)
+        public LoopDeclaration(string name, IReadOnlyList<string> zoneNames, int reservedChannels = 0)
         {
             Name = name;
             ZoneNames = zoneNames;
+            ReservedChannels = reservedChannels < 0 ? 0 : reservedChannels;
         }
 
         public string Name { get; }
 
         /// <summary>The Control Zones (by name) this loop groups onto one interface, in chain order.</summary>
         public IReadOnlyList<string> ZoneNames { get; }
+
+        /// <summary>Channels reserved off this loop's interface budget for smart fixtures the tape packer
+        /// doesn't place (§3c). 0 = the whole ceiling is available to tape. Per-loop because the fixtures
+        /// that motivate a reservation live in a specific loop; auto-packed interfaces reserve nothing.</summary>
+        public int ReservedChannels { get; }
     }
 
     /// <summary>One physical cluster's power pack inside a zone solution: its name and its powered decoders.</summary>
@@ -287,7 +293,7 @@ namespace TurboSuite.Dmx
 
             // 2. Control: address zones and pack them into interfaces under the D1 budget. Declared loops
             //    each become one interface (in declaration order); the rest auto-pack (§0d).
-            var packed = InterfacePacker.Pack(zoneInputs, contract.ChannelCeiling, contract.ReservedChannels, loops);
+            var packed = InterfacePacker.Pack(zoneInputs, contract.ChannelCeiling, loops);
 
             // 3. Per interface: split the loop by D4 (segments) AND pack its drivers onto 120 V feeds (§0c).
             //    Feeds pack PER INTERFACE in DEC-walk order (next-fit) so a feed is consecutive DEC#s and
@@ -306,7 +312,12 @@ namespace TurboSuite.Dmx
                                      ? d.Driver.RatedWatts            // nameplate: worst-case / inrush-sized
                                      : d.Decoder.TotalWatts)          // connected load: actual draw
                     .ToList();
-                var feeds = BreakerPacker.Pack(ifaceDriverWatts, contract.BreakerCapWatts, contract.MaxDriversPerBreaker);
+                // The manual per-breaker count cap is the ConnectedLoad ("more control") knob — the designer
+                // owns inrush by hand there. Nameplate packing is already inrush-honest (surge scales with a
+                // supply's rated capacity, which is what it charges), so the count cap doesn't apply.
+                int effectiveMaxPerBreaker = contract.BreakerBasis == BreakerBasis.DriverRating
+                                                 ? 0 : contract.MaxDriversPerBreaker;
+                var feeds = BreakerPacker.Pack(ifaceDriverWatts, contract.BreakerCapWatts, effectiveMaxPerBreaker);
 
                 interfaceSolutions.Add(new InterfaceSolution(iface, deviceCount, segmentation, feeds));
             }

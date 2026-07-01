@@ -7,11 +7,13 @@ namespace TurboSuite.Dmx
     /// <summary>One interface (DMX gateway) and the zones addressed within its universe.</summary>
     public sealed class DmxInterface
     {
-        public DmxInterface(int interfaceNumber, IReadOnlyList<AddressedZone> zones, string? loopName = null)
+        public DmxInterface(int interfaceNumber, IReadOnlyList<AddressedZone> zones, string? loopName = null,
+                            int reservedChannels = 0)
         {
             InterfaceNumber = interfaceNumber;
             Zones = zones;
             LoopName = loopName;
+            ReservedChannels = reservedChannels;
         }
 
         /// <summary>1-based interface number (the "Interface #" on the one-line, §8a).</summary>
@@ -24,29 +26,26 @@ namespace TurboSuite.Dmx
         /// </summary>
         public string? LoopName { get; }
 
+        /// <summary>Smart-fixture (Topology B) channels held off this interface's budget (§3c). Carried
+        /// from the declared loop; auto-packed interfaces reserve nothing.</summary>
+        public int ReservedChannels { get; }
+
         public int ChannelsUsed => Zones.Sum(z => z.ChannelsConsumed);
     }
 
-    /// <summary>The result of packing zones into interfaces, with the budget context that produced it.</summary>
+    /// <summary>The result of packing zones into interfaces, with the ceiling context that produced it.</summary>
     public sealed class InterfacePackResult
     {
-        public InterfacePackResult(IReadOnlyList<DmxInterface> interfaces, int channelCeiling, int reservedChannels)
+        public InterfacePackResult(IReadOnlyList<DmxInterface> interfaces, int channelCeiling)
         {
             Interfaces = interfaces;
             ChannelCeiling = channelCeiling;
-            ReservedChannels = reservedChannels;
         }
 
         public IReadOnlyList<DmxInterface> Interfaces { get; }
 
         /// <summary>Profile channel ceiling (§1.6): Lutron QSE-CI-DMX = 32, native universe = 512.</summary>
         public int ChannelCeiling { get; }
-
-        /// <summary>Smart-fixture (Topology B) channels reserved off the budget before packing tape (§3c).</summary>
-        public int ReservedChannels { get; }
-
-        /// <summary>Channels available for tape zones per interface: ceiling − reserved.</summary>
-        public int ChannelBudget => ChannelCeiling - ReservedChannels;
 
         public int InterfaceCount => Interfaces.Count;
     }
@@ -68,24 +67,26 @@ namespace TurboSuite.Dmx
         public static int ChannelsOf(ZoneInput zone) => zone.Channels;
 
         public static InterfacePackResult Pack(IReadOnlyList<ZoneInput> zones, int channelCeiling,
-            int reservedChannels = 0, IReadOnlyList<LoopDeclaration>? declaredLoops = null)
+            IReadOnlyList<LoopDeclaration>? declaredLoops = null)
         {
             if (zones == null) throw new ArgumentNullException(nameof(zones));
-            if (reservedChannels < 0) throw new ArgumentOutOfRangeException(nameof(reservedChannels));
-            int budget = channelCeiling - reservedChannels;
-            if (budget <= 0)
-                throw new ArgumentException($"Reserved channels ({reservedChannels}) leave no budget under the ceiling ({channelCeiling}).");
 
             var byName = new Dictionary<string, ZoneInput>(StringComparer.OrdinalIgnoreCase);
             foreach (var z in zones) byName[z.ZoneName] = z;
 
             // Declared loops first, in declaration order — one interface each, branded with the loop name.
-            var groups = new List<(string? loopName, List<ZoneInput> zones)>();
+            // Each carries its OWN reserved-channel headroom (§3c), so its budget is ceiling − its reserved.
+            var groups = new List<(string? loopName, int reserved, List<ZoneInput> zones)>();
             var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (declaredLoops != null)
             {
                 foreach (var loop in declaredLoops)
                 {
+                    int loopBudget = channelCeiling - loop.ReservedChannels;
+                    if (loopBudget <= 0)
+                        throw new InvalidOperationException(
+                            $"Declared loop '{loop.Name}' reserves {loop.ReservedChannels} channels, leaving no budget under the ceiling ({channelCeiling}).");
+
                     var grp = new List<ZoneInput>(loop.ZoneNames.Count);
                     foreach (var zn in loop.ZoneNames)
                     {
@@ -95,40 +96,41 @@ namespace TurboSuite.Dmx
                         claimed.Add(zn);
                     }
                     int sum = grp.Sum(ChannelsOf);
-                    if (sum > budget)
+                    if (sum > loopBudget)
                         throw new InvalidOperationException(
-                            $"Declared loop '{loop.Name}' needs {sum} channels, more than one interface's budget ({budget}).");
-                    groups.Add((loop.Name, grp));
+                            $"Declared loop '{loop.Name}' needs {sum} channels, more than one interface's budget ({loopBudget}).");
+                    groups.Add((loop.Name, loop.ReservedChannels, grp));
                 }
             }
 
             // Remaining (undeclared) zones auto-pack by next-fit: fill the current interface, spill when full.
+            // Auto-packed interfaces reserve nothing — the full ceiling is the budget.
             var current = new List<ZoneInput>();
             int used = 0;
             foreach (var zone in zones)
             {
                 if (claimed.Contains(zone.ZoneName)) continue;
                 int zc = ChannelsOf(zone);
-                if (zc > budget)
+                if (zc > channelCeiling)
                     throw new InvalidOperationException(
-                        $"Zone '{zone.ZoneName}' needs {zc} channels, more than one interface's budget ({budget}).");
+                        $"Zone '{zone.ZoneName}' needs {zc} channels, more than one interface's budget ({channelCeiling}).");
 
-                if (used + zc > budget)
+                if (used + zc > channelCeiling)
                 {
-                    groups.Add((null, current));
+                    groups.Add((null, 0, current));
                     current = new List<ZoneInput>();
                     used = 0;
                 }
                 current.Add(zone);
                 used += zc;
             }
-            if (current.Count > 0) groups.Add((null, current));
+            if (current.Count > 0) groups.Add((null, 0, current));
 
             var interfaces = new List<DmxInterface>(groups.Count);
             for (int i = 0; i < groups.Count; i++)
-                interfaces.Add(new DmxInterface(i + 1, Addresser.Assign(groups[i].zones), groups[i].loopName));
+                interfaces.Add(new DmxInterface(i + 1, Addresser.Assign(groups[i].zones), groups[i].loopName, groups[i].reserved));
 
-            return new InterfacePackResult(interfaces, channelCeiling, reservedChannels);
+            return new InterfacePackResult(interfaces, channelCeiling);
         }
     }
 }

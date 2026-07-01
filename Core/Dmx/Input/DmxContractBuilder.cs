@@ -16,9 +16,7 @@ namespace TurboSuite.Dmx
         public double FeedVolts { get; set; } = 120.0;
         public double BreakerContinuousDerate { get; set; } = 0.8;
         public int MaxDriversPerBreaker { get; set; } = 0;     // 0 = no inrush count cap
-        public int MaxDevicesPerSegment { get; set; } = 32;    // D4
-        public int ReservedChannels { get; set; } = 0;
-        public BreakerBasis BreakerBasis { get; set; } = BreakerBasis.ConnectedLoad;
+        public BreakerBasis BreakerBasis { get; set; } = BreakerBasis.DriverRating;   // "safe" nameplate default
 
         /// <summary>Job-wide homerun pull-up (BuildPlan Phase 6): bump every LV homerun this many stock sizes
         /// past its exact required conductor count (#16-4 → #16-6 → #16-8). 0 = exact required conductors.</summary>
@@ -56,8 +54,7 @@ namespace TurboSuite.Dmx
                 decoderPool, driverPool,
                 systemVolts: settings.SystemVolts,
                 channelCeiling: profile.ChannelCeiling,
-                reservedChannels: settings.ReservedChannels,
-                maxDevicesPerSegment: settings.MaxDevicesPerSegment,
+                maxDevicesPerSegment: LoopSegmenter.DevicesPerSegment,   // §6b RS-485 unit-load limit (Core const, not a UI knob)
                 breakerAmps: settings.BreakerAmps,
                 feedVolts: settings.FeedVolts,
                 breakerContinuousDerate: settings.BreakerContinuousDerate,

@@ -18,7 +18,7 @@ namespace TurboSuite.Tests.Dmx
         private static DmxContract Contract(int ceiling = 32, int d4 = 32) => new DmxContract(
             decoderPool: new[] { DecoderSpec.Dmx4_5000_10A, DecoderSpec.Dmx6_22K },
             driverPool: new[] { new DriverType("MD", 480, V, 0.85), new DriverType("ME", 600, V, 0.85) },
-            systemVolts: V, channelCeiling: ceiling, reservedChannels: 0, maxDevicesPerSegment: d4);
+            systemVolts: V, channelCeiling: ceiling, maxDevicesPerSegment: d4);
 
         // A tiny single-decoder zone of the given channel count (wattsPerFt = 1 ⇒ length is watts).
         private static ZoneDesign Zone(string name, int channels, double watts = 5.0)
@@ -126,15 +126,15 @@ namespace TurboSuite.Tests.Dmx
         }
 
         [Fact]
-        public void Reserved_TightensTheLoopCeiling()
+        public void LoopReserved_TightensThatLoopsCeiling()
         {
-            // 8 × 4 = 32 fits a 32 ceiling, but with 4 reserved the budget is 28 ⇒ same loop now over.
+            // 8 × 4 = 32 fits a 32 ceiling, but the loop reserving 4 leaves a 28 budget ⇒ same loop now over.
             var zones = Zones(8, 4);
-            var loops = new[] { Loop("Full", zones.Select(z => z.ZoneName).ToArray()) };
+            var loops = new[] { new LoopDeclaration("Full", zones.Select(z => z.ZoneName).ToList(), reservedChannels: 4) };
             var contract = new DmxContract(
                 decoderPool: new[] { DecoderSpec.Dmx4_5000_10A },
                 driverPool: new[] { new DriverType("ME", 600, V, 0.85) },
-                systemVolts: V, channelCeiling: 32, reservedChannels: 4, maxDevicesPerSegment: 32);
+                systemVolts: V, channelCeiling: 32, maxDevicesPerSegment: 32);
 
             var ex = Assert.Throws<OverCapLoopsException>(() => DmxSolver.Solve(contract, zones, loops));
             var v = Assert.Single(ex.Violations);

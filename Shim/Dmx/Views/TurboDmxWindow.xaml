@@ -113,6 +113,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="System V" Style="{StaticResource FieldLabel}"/>
@@ -125,17 +126,27 @@
                             <TextBlock Grid.Row="1" Grid.Column="3" Text="Derate" Style="{StaticResource FieldLabel}"/>
                             <TextBox   Grid.Row="1" Grid.Column="4" Text="{Binding BreakerContinuousDerate}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Drv/brkr" Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding MaxDriversPerBreaker}"/>
-                            <TextBlock Grid.Row="2" Grid.Column="3" Text="Dev/seg" Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Row="2" Grid.Column="4" Text="{Binding MaxDevicesPerSegment}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Drv/brkr" Style="{StaticResource FieldLabel}"
+                                       IsEnabled="{Binding DriversPerBreakerEnabled}"
+                                       ToolTip="Manual per-breaker inrush cap — applies only to actual-load packing. Nameplate ignores it."/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding MaxDriversPerBreaker}"
+                                       IsEnabled="{Binding DriversPerBreakerEnabled}"
+                                       ToolTip="Manual per-breaker inrush cap — applies only to actual-load packing. Nameplate ignores it."/>
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Reserved" Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding ReservedChannels}"/>
                             <TextBlock Grid.Row="3" Grid.Column="3" Text="Pull-up" Style="{StaticResource FieldLabel}"
                                        ToolTip="Bump every #16-N homerun this many stock sizes past exact (0 = exact)."/>
                             <TextBox   Grid.Row="3" Grid.Column="4" Text="{Binding PullUpSizes}"
                                        ToolTip="Bump every #16-N homerun this many stock sizes past exact (0 = exact)."/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Packing" Style="{StaticResource FieldLabel}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,4,0,0">
+                                <RadioButton Content="Nameplate (safe)" IsChecked="{Binding PackByNameplate}"
+                                             GroupName="BreakerBasis" VerticalAlignment="Center"
+                                             ToolTip="Pack breakers by each driver's full rated wattage. Inrush-honest, so the Drv/brkr cap is unneeded and ignored."/>
+                                <RadioButton Content="Actual load" IsChecked="{Binding PackByActualLoad}"
+                                             GroupName="BreakerBasis" VerticalAlignment="Center" Margin="14,0,0,0"
+                                             ToolTip="Pack breakers by the connected DMX-fixture wattage — the tighter count. You manage inrush by setting the Drv/brkr cap."/>
+                            </StackPanel>
                         </Grid>
                     </StackPanel>
 
@@ -220,7 +231,7 @@
                                     <Border BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="1"
                                             Padding="6" Margin="0,0,0,6">
                                         <StackPanel>
-                                            <!-- Loop header: name · +Add · Place · One-line · ✕ -->
+                                            <!-- Loop header: name · Rsv · +Add · Place · One-line · ✕ -->
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -228,19 +239,27 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <TextBox Grid.Column="0" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                                                          VerticalAlignment="Center"/>
-                                                <Button Grid.Column="1" Content="+ Add" Padding="6,2" Margin="6,0,0,0"
+                                                <TextBlock Grid.Column="1" Text="Rsv" VerticalAlignment="Center" Margin="8,0,3,0"
+                                                           Style="{StaticResource FieldLabel}"
+                                                           ToolTip="Channels reserved on this loop's interface for smart fixtures (§3c). 0 = none. Edge case — leave 0 unless this loop has DMX-addressable fixtures the tape packer doesn't place."/>
+                                                <TextBox Grid.Column="2" Width="34" VerticalAlignment="Center"
+                                                         Text="{Binding ReservedChannels, UpdateSourceTrigger=LostFocus}"
+                                                         ToolTip="Channels reserved on this loop's interface for smart fixtures (§3c). 0 = none. Edge case — leave 0 unless this loop has DMX-addressable fixtures the tape packer doesn't place."/>
+                                                <Button Grid.Column="3" Content="+ Add" Padding="6,2" Margin="6,0,0,0"
                                                         Command="{Binding AddSelectedCommand}"
                                                         ToolTip="Add the zones selected in the pool to this loop."/>
-                                                <Button Grid.Column="2" Content="Place ▸" Padding="6,2" Margin="4,0,0,0"
+                                                <Button Grid.Column="4" Content="Place ▸" Padding="6,2" Margin="4,0,0,0"
                                                         Command="{Binding PlaceCommand}"
                                                         ToolTip="Pick a point and place this loop's decoders + drivers."/>
-                                                <Button Grid.Column="3" Content="One-line ▸" Padding="6,2" Margin="4,0,0,0"
+                                                <Button Grid.Column="5" Content="One-line ▸" Padding="6,2" Margin="4,0,0,0"
                                                         Command="{Binding DrawOneLineCommand}"
                                                         ToolTip="Draw/redraw this loop's one-line on its own Drafting View."/>
-                                                <Button Grid.Column="4" Content="✕" Padding="6,2" Margin="4,0,0,0"
+                                                <Button Grid.Column="6" Content="✕" Padding="6,2" Margin="4,0,0,0"
                                                         Command="{Binding RemoveCommand}"
                                                         ToolTip="Delete this loop — its zones return to the pool."/>
                                             </Grid>

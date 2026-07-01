@@ -23,7 +23,7 @@ namespace TurboSuite.Tests.Dmx
         private static DmxContract Contract(double derate) => new DmxContract(
             decoderPool: new[] { DecoderSpec.Dmx4_5000_10A, DecoderSpec.Dmx6_22K },
             driverPool: Drivers(derate),
-            systemVolts: V, channelCeiling: 32, reservedChannels: 0, maxDevicesPerSegment: 32);
+            systemVolts: V, channelCeiling: 32, maxDevicesPerSegment: 32);
 
         [Fact]
         public void OverCapRun_AbortsTheSolve_WithRedrawFlag()

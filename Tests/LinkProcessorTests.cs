@@ -58,7 +58,7 @@ namespace TurboSuite.Tests.Dmx
         private static DmxContract SmallLinkContract() => new DmxContract(
             decoderPool: new[] { DecoderSpec.Dmx4_5000_10A },
             driverPool: new[] { new DriverType("ME", 600, V, 0.85) },
-            systemVolts: V, channelCeiling: 4, reservedChannels: 0, maxDevicesPerSegment: 32,
+            systemVolts: V, channelCeiling: 4, maxDevicesPerSegment: 32,
             linkChannelCapacity: 8, linkDeviceCapacity: 99, linksPerProcessor: 2);
 
         private static ZoneDesign Zone(string name) => new ZoneDesign(name, new[] { new TapeRun(5.0, 1.0, 4) });
@@ -84,7 +84,7 @@ namespace TurboSuite.Tests.Dmx
             var contract = new DmxContract(
                 decoderPool: new[] { DecoderSpec.Dmx4_5000_10A },
                 driverPool: new[] { new DriverType("ME", 600, V, 0.85) },
-                systemVolts: V, channelCeiling: 32, reservedChannels: 0, maxDevicesPerSegment: 32);
+                systemVolts: V, channelCeiling: 32, maxDevicesPerSegment: 32);
             // defaults: 512 legs / 99 devices / 2 links per processor
 
             var bill = DmxSolver.Solve(contract, new[] { Zone("A"), Zone("B") });

@@ -150,17 +150,17 @@ namespace TurboSuite.Tests.Dmx
 
             Assert.Null(captured); // initial load + Run must NOT write the model back to itself
 
-            vm.ReservedChannels = 3;
             vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec6").IsSelected = false;
             vm.ZonePool.Single(p => p.ZoneName == "Z1").IsSelected = true;
             vm.NewLoopFromSelectionCommand.Execute(null);
             vm.Loops[0].Name = "House";
+            vm.Loops[0].ReservedChannels = 3;
 
             Assert.NotNull(captured);
-            Assert.Equal(3, captured.Settings.ReservedChannels);
             Assert.Equal(new[] { "dec4" }, captured.Settings.DecoderTypeIds); // dec6 unticked
             var loop = Assert.Single(captured.Loops);
             Assert.Equal("House", loop.Name);
+            Assert.Equal(3, loop.ReservedChannels);
             Assert.Equal(new[] { "Z1" }, loop.ZoneValues);
         }
 
@@ -172,26 +172,23 @@ namespace TurboSuite.Tests.Dmx
                 Settings = new DmxSettingsDto
                 {
                     Profile = "Lutron",
-                    ReservedChannels = 5,
-                    MaxDevicesPerSegment = 16,
                     DecoderTypeIds = new List<string> { "dec6" }, // only the 6ch curated
                     DriverTypeIds = new List<string> { "md" },
                 },
                 Loops = new List<DmxLoopDto>
                 {
-                    new DmxLoopDto { Name = "L1", Order = 0, ZoneValues = new List<string> { "Z1", "Z2" } },
+                    new DmxLoopDto { Name = "L1", Order = 0, ReservedChannels = 5, ZoneValues = new List<string> { "Z1", "Z2" } },
                 },
             };
 
             var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3") }), state: saved);
 
-            Assert.Equal(5, vm.ReservedChannels);
-            Assert.Equal(16, vm.MaxDevicesPerSegment);
             Assert.False(vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec4").IsSelected);
             Assert.True(vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec6").IsSelected);
 
             var loop = Assert.Single(vm.Loops);
             Assert.Equal("L1", loop.Name);
+            Assert.Equal(5, loop.ReservedChannels);
             Assert.Equal(new[] { "Z1", "Z2" }, loop.AssignedZoneNames);
         }
 

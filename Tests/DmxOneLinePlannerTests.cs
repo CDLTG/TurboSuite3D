@@ -24,7 +24,7 @@ namespace TurboSuite.Tests.Dmx
             driverPool: new[] { new DriverType("320", 320.0, V, 0.0),
                                 new DriverType("480", 480.0, V, 0.0),
                                 new DriverType("600", 600.0, V, 0.0) },
-            systemVolts: V, channelCeiling: 512, reservedChannels: 0, maxDevicesPerSegment: 32,
+            systemVolts: V, channelCeiling: 512, maxDevicesPerSegment: 32,
             breakerAmps: 20, feedVolts: 120, breakerContinuousDerate: 0.8, maxDriversPerBreaker: maxPerBreaker);
 
         private static ZoneDesign Zone(string name, int decoders) =>

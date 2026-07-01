@@ -6,9 +6,10 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Step 7 oracle — packing zones into interfaces under the D1 budget (ceiling − reserved).
-    /// The 26-vs-2 interface counts are the §6a / §1.6 extremes; reserved-channel subtraction is
-    /// §3c. CONFIDENCE: Tier A arithmetic, with the 32/512 ceilings as Tier-B profile values.
+    /// Step 7 oracle — packing zones into interfaces under the D1 budget. Auto-packed interfaces get the
+    /// full ceiling; a declared loop's budget is ceiling − its OWN reserved (§3c, per-loop). The 26-vs-2
+    /// interface counts are the §6a / §1.6 extremes. CONFIDENCE: Tier A arithmetic, with the 32/512
+    /// ceilings as Tier-B profile values.
     /// </summary>
     public class InterfacePackerTests
     {
@@ -17,6 +18,10 @@ namespace TurboSuite.Tests.Dmx
 
         private static ZoneInput[] RgbwZones(int n) =>
             Enumerable.Range(1, n).Select(i => new ZoneInput($"z{i}", channels: 4, decoderCount: 1)).ToArray();
+
+        // A declared loop grouping the given zones onto one interface, reserving some channels off its budget.
+        private static LoopDeclaration Loop(ZoneInput[] zones, int reserved) =>
+            new LoopDeclaration("L", zones.Select(z => z.ZoneName).ToList(), reserved);
 
         // --- The two §6a / §1.6 extremes: same 832 channels, different ceilings ---
 
@@ -39,24 +44,43 @@ namespace TurboSuite.Tests.Dmx
             Assert.Equal(2, result.InterfaceCount);
         }
 
-        // --- Reserved smart-fixture channels shrink the budget (§3c) ---
+        // --- A declared loop's own reserved channels shrink ITS budget (§3c, per-loop) ---
 
         [Fact]
-        public void ReservedChannels_AreSubtractedFromBudget()
+        public void LoopReservedChannels_ShrinkThatLoopsBudget()
         {
-            // Ceiling 32, reserve 5 (downlights) ⇒ budget 27 ⇒ 6 RGBW zones (24 ch) fit, a 7th (28) spills.
-            var fits = InterfacePacker.Pack(RgbwZones(6), Lutron, reservedChannels: 5);
-            var spills = InterfacePacker.Pack(RgbwZones(7), Lutron, reservedChannels: 5);
+            // Ceiling 32, the loop reserves 5 (downlights) ⇒ budget 27. 6 RGBW zones (24 ch) fit one interface,
+            // which carries the reservation; the zones as a group don't spill — a loop is exactly one interface.
+            var zones = RgbwZones(6);
+            var fits = InterfacePacker.Pack(zones, Lutron, new[] { Loop(zones, reserved: 5) });
 
             Assert.Equal(1, fits.InterfaceCount);
-            Assert.Equal(2, spills.InterfaceCount);
-            Assert.Equal(27, fits.ChannelBudget);
+            Assert.Equal(5, fits.Interfaces[0].ReservedChannels);
         }
 
         [Fact]
-        public void ReservedExceedingCeiling_Throws()
+        public void LoopOverItsReservedBudget_Throws()
         {
-            Assert.Throws<ArgumentException>(() => InterfacePacker.Pack(RgbwZones(1), Lutron, reservedChannels: 32));
+            // 7 RGBW zones = 28 ch, but the loop reserving 5 leaves only 27 ⇒ over budget, the §0d gate.
+            var zones = RgbwZones(7);
+            Assert.Throws<InvalidOperationException>(() =>
+                InterfacePacker.Pack(zones, Lutron, new[] { Loop(zones, reserved: 5) }));
+        }
+
+        [Fact]
+        public void LoopReservingWholeCeiling_Throws()
+        {
+            var zones = RgbwZones(1);
+            Assert.Throws<InvalidOperationException>(() =>
+                InterfacePacker.Pack(zones, Lutron, new[] { Loop(zones, reserved: 32) }));
+        }
+
+        [Fact]
+        public void AutoPackedInterfaces_ReserveNothing()
+        {
+            // Undeclared zones auto-pack against the full ceiling — no reservation applies.
+            var result = InterfacePacker.Pack(RgbwZones(6), Lutron);
+            Assert.All(result.Interfaces, i => Assert.Equal(0, i.ReservedChannels));
         }
 
         // --- Per-interface universe: addresses restart at 1 ---
@@ -80,12 +104,12 @@ namespace TurboSuite.Tests.Dmx
         public void EveryZoneLandsOnExactlyOneInterface_AndBudgetIsRespected()
         {
             var zones = RgbwZones(50);
-            var result = InterfacePacker.Pack(zones, Lutron, reservedChannels: 4);
+            var result = InterfacePacker.Pack(zones, Lutron);
 
             var placedNames = result.Interfaces.SelectMany(i => i.Zones).Select(z => z.ZoneName).ToArray();
             Assert.Equal(zones.Length, placedNames.Length);          // none dropped
             Assert.Equal(zones.Length, placedNames.Distinct().Count()); // none duplicated/split
-            Assert.All(result.Interfaces, i => Assert.True(i.ChannelsUsed <= result.ChannelBudget));
+            Assert.All(result.Interfaces, i => Assert.True(i.ChannelsUsed <= result.ChannelCeiling));
         }
     }
 }
