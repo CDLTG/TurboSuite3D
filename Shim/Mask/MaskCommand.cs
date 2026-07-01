@@ -4,6 +4,7 @@ using System.Linq;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Mask.Helpers;
 using TurboSuite.Mask.Services;
 using TurboSuite.Shared.Helpers;
 using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
@@ -76,6 +77,10 @@ public class MaskCommand : IExternalCommand
             {
                 tx.Start();
 
+                var failureOptions = tx.GetFailureHandlingOptions();
+                failureOptions.SetFailuresPreprocessor(new MaskFailurePreprocessor());
+                tx.SetFailureHandlingOptions(failureOptions);
+
                 UngroupSelectedTurboMaskGroups(doc, selectedElements);
 
                 var maskingRegionType = FindOrCreateMaskingRegionType(doc);
@@ -131,6 +136,10 @@ public class MaskCommand : IExternalCommand
                     var group = doc.Create.NewGroup(groupMemberIds);
                     group.GroupType.Name = NextTurboMaskGroupName(doc);
                 }
+
+                // Last creation wins the draw order — raise the user's own selected detail lines
+                // above the mask (and the overlays) so they survive under the region.
+                RaiseSelectedDetailLinesAboveMask(doc, activeView, selectedElements);
 
                 tx.Commit();
             }
@@ -397,6 +406,31 @@ public class MaskCommand : IExternalCommand
     }
 
     /// <summary>
+    /// Copy-in-place then delete the user's own selected view-specific detail lines so the copies
+    /// land at the top of the view's draw order and stay visible over the masking region (draw
+    /// order follows creation order). These are the user's linework — deliberately kept OUT of the
+    /// TurboMask group so a later re-mask/ungroup (which deletes group member detail lines) never
+    /// destroys them. Only the original selection is considered, so the freshly-drawn wire overlays
+    /// and prior-group members (represented in the selection by their Group element, not their
+    /// members) are never swept up.
+    /// </summary>
+    private static void RaiseSelectedDetailLinesAboveMask(
+        Document doc, View view, List<Element> selectedElements)
+    {
+        var detailLineIds = selectedElements
+            .OfType<CurveElement>()
+            .Where(ce => ce.ViewSpecific && ce.OwnerViewId == view.Id)
+            .Select(ce => ce.Id)
+            .ToList();
+
+        if (detailLineIds.Count == 0) return;
+
+        var copyOpts = new CopyPasteOptions();
+        ElementTransformUtils.CopyElements(view, detailLineIds, view, Transform.Identity, copyOpts);
+        doc.Delete(detailLineIds);
+    }
+
+    /// <summary>
     /// Draws detail-line copies of every wire connected to the masked devices, on top of the
     /// masking region, so the still-connected (now hidden) wires stay visible. The real wires are
     /// never modified — these overlays are view-only stand-ins, like the fixture stamps, and join
@@ -427,6 +461,11 @@ public class MaskCommand : IExternalCommand
         {
             if (doc.GetElement(wireId) is not ElectricalWire wire) continue;
 
+            // Mirror the wire's own in-view appearance: if a V/G filter restyles it (e.g. DMX
+            // wires shown as Dot by Wire Type), stamp that same override onto the overlay so the
+            // stand-in matches the real wire rather than falling back to plain "Wiring".
+            var overrides = ResolveWireViewOverrides(doc, view, wire);
+
             var geometry = wire.get_Geometry(options);
             if (geometry == null) continue;
 
@@ -438,7 +477,7 @@ public class MaskCommand : IExternalCommand
                 switch (go)
                 {
                     case Curve curve:
-                        AddWireDetailCurve(doc, view, curve, wireStyle, overlayIds);
+                        AddWireDetailCurve(doc, view, curve, wireStyle, overrides, overlayIds);
                         break;
                     case PolyLine polyLine:
                         var coords = polyLine.GetCoordinates();
@@ -447,7 +486,7 @@ public class MaskCommand : IExternalCommand
                             if (coords[i - 1].DistanceTo(coords[i]) < doc.Application.ShortCurveTolerance)
                                 continue;
                             AddWireDetailCurve(doc, view,
-                                Line.CreateBound(coords[i - 1], coords[i]), wireStyle, overlayIds);
+                                Line.CreateBound(coords[i - 1], coords[i]), wireStyle, overrides, overlayIds);
                         }
                         break;
                 }
@@ -457,7 +496,8 @@ public class MaskCommand : IExternalCommand
     }
 
     private static void AddWireDetailCurve(
-        Document doc, View view, Curve curve, GraphicsStyle? wireStyle, List<ElementId> overlayIds)
+        Document doc, View view, Curve curve, GraphicsStyle? wireStyle,
+        OverrideGraphicSettings? overrides, List<ElementId> overlayIds)
     {
         DetailCurve detail;
         try { detail = doc.Create.NewDetailCurve(view, curve); }
@@ -467,7 +507,46 @@ public class MaskCommand : IExternalCommand
         if (wireStyle != null)
             detail.LineStyle = wireStyle;
 
+        // Filter override sits on top of the "Wiring" line style, so the wire-type styling wins.
+        if (overrides != null)
+            view.SetElementOverrides(detail.Id, overrides);
+
         overlayIds.Add(detail.Id);
+    }
+
+    /// <summary>
+    /// Returns the graphic override the active view applies to this wire via V/G filters, or null
+    /// if no filter matches. Takes the first (highest-priority — filters resolve top-down) filter
+    /// whose category set includes the wire's category and whose rules the wire passes; the whole
+    /// override is reused so line pattern, weight, and color all carry over. When two filters set
+    /// different properties on the same wire, only the top one is honored (per-property merging is
+    /// deliberately not replicated).
+    /// </summary>
+    private static OverrideGraphicSettings? ResolveWireViewOverrides(Document doc, View view, ElectricalWire wire)
+    {
+        var wireCategoryId = wire.Category?.Id;
+        if (wireCategoryId == null) return null;
+
+        foreach (ElementId filterId in view.GetFilters())
+        {
+            switch (doc.GetElement(filterId))
+            {
+                case ParameterFilterElement pfe:
+                    if (!pfe.GetCategories().Contains(wireCategoryId)) continue;
+                    try
+                    {
+                        var elementFilter = pfe.GetElementFilter();
+                        if (elementFilter == null || !elementFilter.PassesFilter(wire)) continue;
+                    }
+                    catch { continue; } // filter rule can't be evaluated against this wire — skip
+                    return view.GetFilterOverrides(filterId);
+
+                case SelectionFilterElement sfe:
+                    if (!sfe.GetElementIds().Contains(wire.Id)) continue;
+                    return view.GetFilterOverrides(filterId);
+            }
+        }
+        return null;
     }
 
     private const string WireLineStyleName = "Wiring";
