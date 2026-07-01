@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
+using System.Windows.Data;
 using System.ComponentModel;
 using TurboSuite.Abstractions;
 using TurboSuite.Dmx.Input;
@@ -91,6 +92,18 @@ namespace TurboSuite.Dmx.ViewModels
 
             DecoderRows = new ObservableCollection<DmxDecoderRowViewModel>();
             DriverRows = new ObservableCollection<DmxDriverRowViewModel>();
+
+            // Two views per kit over the same source: the default list shows only the ticked (curated) kit;
+            // the Edit-popup shows every discovered type, filtered live by the search box.
+            _decoderKit = new CollectionViewSource { Source = DecoderRows };
+            _decoderKit.Filter += (_, e) => e.Accepted = e.Item is DmxDecoderRowViewModel r && r.IsSelected;
+            _decoderPick = new CollectionViewSource { Source = DecoderRows };
+            _decoderPick.Filter += (_, e) => e.Accepted = e.Item is DmxDecoderRowViewModel r && MatchesFilter(r.Name, _decoderFilter);
+            _driverKit = new CollectionViewSource { Source = DriverRows };
+            _driverKit.Filter += (_, e) => e.Accepted = e.Item is DmxDriverRowViewModel r && r.IsSelected;
+            _driverPick = new CollectionViewSource { Source = DriverRows };
+            _driverPick.Filter += (_, e) => e.Accepted = e.Item is DmxDriverRowViewModel r && MatchesFilter(r.Name, _driverFilter);
+
             Loops = new ObservableCollection<DmxLoopRowViewModel>();
             ZonePool = new ObservableCollection<DmxZonePoolItemViewModel>();
             WireLegend = new ObservableCollection<DmxWireLegendEntry>();
@@ -106,6 +119,8 @@ namespace TurboSuite.Dmx.ViewModels
             LockCommand = new RelayCommand(Lock, () => _lastNumbering != null);
             UnlockCommand = new RelayCommand(Unlock, () => IsLocked);
             DrawWireLegendCommand = new RelayCommand(DrawWireLegend, CanDrawWireLegend);
+            EditDecoderKitCommand = new RelayCommand(() => DecoderPickerOpen = !DecoderPickerOpen);
+            EditDriverKitCommand = new RelayCommand(() => DriverPickerOpen = !DriverPickerOpen);
 
             ApplyPersistedState(state);
             LoadSnapshot(snapshot);
@@ -128,7 +143,15 @@ namespace TurboSuite.Dmx.ViewModels
         public double SystemVolts { get => _settings.SystemVolts; set { _settings.SystemVolts = value; OnPropertyChanged(); Persist(); } }
         public double BreakerAmps { get => _settings.BreakerAmps; set { _settings.BreakerAmps = value; OnPropertyChanged(); Persist(); } }
         public double FeedVolts { get => _settings.FeedVolts; set { _settings.FeedVolts = value; OnPropertyChanged(); Persist(); } }
-        public double BreakerContinuousDerate { get => _settings.BreakerContinuousDerate; set { _settings.BreakerContinuousDerate = value; OnPropertyChanged(); Persist(); } }
+        public double BreakerContinuousDerate { get => _settings.BreakerContinuousDerate; set { _settings.BreakerContinuousDerate = value; OnPropertyChanged(); OnPropertyChanged(nameof(DeratePercent)); Persist(); } }
+
+        /// <summary>The continuous derate shown as a percentage (80 = the stored 0.8 factor). Reshapes the
+        /// 0..1 field for a friendlier box; persistence still stores the factor. Rounded to shed float noise.</summary>
+        public double DeratePercent
+        {
+            get => Math.Round(_settings.BreakerContinuousDerate * 100.0, 2);
+            set { _settings.BreakerContinuousDerate = value / 100.0; OnPropertyChanged(); OnPropertyChanged(nameof(BreakerContinuousDerate)); Persist(); }
+        }
         public int MaxDriversPerBreaker { get => _settings.MaxDriversPerBreaker; set { _settings.MaxDriversPerBreaker = value; OnPropertyChanged(); Persist(); } }
 
         // ── Breaker-packing basis: the "safe" (nameplate) vs. "more control" (actual load) choice ──────
@@ -168,8 +191,39 @@ namespace TurboSuite.Dmx.ViewModels
         }
 
         // ── Declarations: curated part pools ────────────────────────────────────────────────────────
+        // The full discovered lists (feed the Edit popups); the default panel shows only the ticked kit.
         public ObservableCollection<DmxDecoderRowViewModel> DecoderRows { get; }
         public ObservableCollection<DmxDriverRowViewModel> DriverRows { get; }
+
+        private readonly CollectionViewSource _decoderKit;   // ticked-only → curated default list
+        private readonly CollectionViewSource _decoderPick;  // all discovered, search-filtered → popup
+        private readonly CollectionViewSource _driverKit;
+        private readonly CollectionViewSource _driverPick;
+
+        /// <summary>The curated kit shown by default — only the ticked types.</summary>
+        public ICollectionView SelectedDecoderRows => _decoderKit.View;
+        public ICollectionView SelectedDriverRows => _driverKit.View;
+        /// <summary>The full discovered list shown in the Edit popup, filtered by the search box.</summary>
+        public ICollectionView DecoderPickRows => _decoderPick.View;
+        public ICollectionView DriverPickRows => _driverPick.View;
+
+        /// <summary>Whether any type is ticked — drives the "click Edit…" empty-kit placeholder.</summary>
+        public bool AnyDecoderSelected => DecoderRows.Any(r => r.IsSelected);
+        public bool AnyDriverSelected => DriverRows.Any(r => r.IsSelected);
+
+        private bool _decoderPickerOpen;
+        public bool DecoderPickerOpen { get => _decoderPickerOpen; set => SetProperty(ref _decoderPickerOpen, value); }
+        private bool _driverPickerOpen;
+        public bool DriverPickerOpen { get => _driverPickerOpen; set => SetProperty(ref _driverPickerOpen, value); }
+
+        private string _decoderFilter = "";
+        public string DecoderFilter { get => _decoderFilter; set { if (SetProperty(ref _decoderFilter, value ?? "")) _decoderPick.View.Refresh(); } }
+        private string _driverFilter = "";
+        public string DriverFilter { get => _driverFilter; set { if (SetProperty(ref _driverFilter, value ?? "")) _driverPick.View.Refresh(); } }
+
+        private static bool MatchesFilter(string name, string filter) =>
+            string.IsNullOrWhiteSpace(filter) ||
+            (name != null && name.IndexOf(filter.Trim(), StringComparison.OrdinalIgnoreCase) >= 0);
 
         // ── The loop-centric work surface: a pool of unassigned zones + declared loops ───────────────
         /// <summary>Zones not yet pulled into a loop — the engine auto-packs these (the "(unassigned)"
@@ -240,6 +294,8 @@ namespace TurboSuite.Dmx.ViewModels
         public ICommand LockCommand { get; }
         public ICommand UnlockCommand { get; }
         public ICommand DrawWireLegendCommand { get; }
+        public ICommand EditDecoderKitCommand { get; }
+        public ICommand EditDriverKitCommand { get; }
 
         /// <summary>The pure solve (TurboDMX-Design §1.5 pipeline). Idempotent — safe to call constantly.
         /// On every exit it refreshes each loop's placement state + the Place buttons' enabled state.</summary>
@@ -636,7 +692,7 @@ namespace TurboSuite.Dmx.ViewModels
             _settings.BreakerBasis = Enum.TryParse<BreakerBasis>(s.BreakerBasis, out var basis)
                 ? basis : BreakerBasis.DriverRating;
 
-            // Empty saved list ⇒ never curated ⇒ leave null so LoadSnapshot defaults to all-selected.
+            // Empty saved list ⇒ never curated ⇒ leave null so LoadSnapshot defaults to none-selected.
             _savedDecoderTypeIds = s.DecoderTypeIds?.Count > 0 ? new HashSet<string>(s.DecoderTypeIds) : null;
             _savedDriverTypeIds = s.DriverTypeIds?.Count > 0 ? new HashSet<string>(s.DriverTypeIds) : null;
             _initialLoops = _loadedState.Loops?.Count > 0 ? _loadedState.Loops : null;
@@ -678,11 +734,23 @@ namespace TurboSuite.Dmx.ViewModels
             _persist(BuildState());
         }
 
-        /// <summary>Subscribe a part-pool row's tick to persistence.</summary>
+        /// <summary>Subscribe a part-pool row's tick: drop/add it from the curated view, re-solve, persist.</summary>
         private T WireRow<T>(T row) where T : INotifyPropertyChanged
         {
-            row.PropertyChanged += (_, __) => Persist();
+            row.PropertyChanged += (_, __) => OnKitRowChanged();
             return row;
+        }
+
+        /// <summary>A kit tick changed (popup checkbox or a curated-row ✕). Refresh the curated lists so the
+        /// row appears/disappears, re-run the solve so the bill tracks live, and persist the new curation.</summary>
+        private void OnKitRowChanged()
+        {
+            _decoderKit.View.Refresh();
+            _driverKit.View.Refresh();
+            OnPropertyChanged(nameof(AnyDecoderSelected));
+            OnPropertyChanged(nameof(AnyDriverSelected));
+            if (_loaded) Run();
+            Persist();
         }
 
         /// <summary>Re-read the model on the Revit thread (work queue), then rebuild + re-solve. No-op when
@@ -736,8 +804,9 @@ namespace TurboSuite.Dmx.ViewModels
             UnassignedFixtures = zoneResult.UnassignedFixtures;
 
             // Preserve the designer's ticks across a refresh (by TypeId). On FIRST load, seed from the saved
-            // curation if any (else all-selected so a Run works out of the box — the designer then unticks
-            // what's not this job's kit). _savedDecoderTypeIds is consumed once, then refresh preserves live.
+            // curation if any; a never-curated job starts with NOTHING ticked (?? false) so the designer must
+            // pick this job's kit before a bill solves. _savedDecoderTypeIds is consumed once, then refresh
+            // preserves live.
             var keepDecoders = DecoderRows.Count == 0
                 ? _savedDecoderTypeIds
                 : new HashSet<string>(DecoderRows.Where(r => r.IsSelected).Select(r => r.Candidate.TypeId));
@@ -747,11 +816,11 @@ namespace TurboSuite.Dmx.ViewModels
 
             DecoderRows.Clear();
             foreach (var c in snapshot.DecoderCandidates)
-                DecoderRows.Add(WireRow(new DmxDecoderRowViewModel(c, keepDecoders?.Contains(c.TypeId) ?? true)));
+                DecoderRows.Add(WireRow(new DmxDecoderRowViewModel(c, keepDecoders?.Contains(c.TypeId) ?? false)));
 
             DriverRows.Clear();
             foreach (var c in snapshot.DriverCandidates)
-                DriverRows.Add(WireRow(new DmxDriverRowViewModel(c, keepDrivers?.Contains(c.TypeId) ?? true)));
+                DriverRows.Add(WireRow(new DmxDriverRowViewModel(c, keepDrivers?.Contains(c.TypeId) ?? false)));
 
             PruneClusters();
             RebuildLoopsAndPool();

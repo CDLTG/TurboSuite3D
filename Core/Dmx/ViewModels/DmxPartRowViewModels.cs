@@ -20,9 +20,9 @@ namespace TurboSuite.Dmx.ViewModels
         public DmxDecoderCandidate Candidate { get; }
         public string Name => Candidate.Name;
 
-        /// <summary>e.g. "4 out · 10 A/ch · 960 W".</summary>
+        /// <summary>e.g. "4 ch · 10 A/ch · 960 W".</summary>
         public string Detail =>
-            string.Format(CultureInfo.InvariantCulture, "{0} out · {1:0.#} A/ch · {2:0} W",
+            string.Format(CultureInfo.InvariantCulture, "{0} ch · {1:0.#} A/ch · {2:0} W",
                 Candidate.MaxOutputs, Candidate.MaxAmpsPerOutput, Candidate.MaxWatts);
 
         public bool IsSelected

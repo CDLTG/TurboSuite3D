@@ -136,7 +136,14 @@ namespace TurboSuite.Dmx.Services
             return WattsOf(ResolveIT(fi, DmxParameterNames.Power));
         }
 
-        private static string SymbolName(FamilySymbol s) => $"{s.FamilyName} : {s.Name}";
+        // Label row = the Catalog Number1 parameter (not the family name), then the type name.
+        // Falls back to the family name if it's unset, so a row never renders as " : Type".
+        private static string SymbolName(FamilySymbol s)
+        {
+            string catalog = StringOf(s.LookupParameter(ParameterNames.CatalogNumber1));
+            if (string.IsNullOrWhiteSpace(catalog)) catalog = s.FamilyName;
+            return $"{catalog} : {s.Name}";
+        }
 
         // ── Element readers (used for decoder/driver TYPE symbols — read the symbol directly) ─────────
         private static int ReadInt(Element e, string name) => IntOf(e?.LookupParameter(name));

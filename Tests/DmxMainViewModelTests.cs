@@ -31,6 +31,15 @@ namespace TurboSuite.Tests.Dmx
         private static DmxFixtureReading Fix(string zone, int ch = 4, double len = 10) =>
             new DmxFixtureReading { ControlZone = zone, Channels = ch, LengthFt = len, WattsPerFt = 5.2 };
 
+        // The kit defaults to NOTHING ticked, so a solve needs an explicit kit — tick the whole discovered pool.
+        private static DmxMainViewModel SolvableVm(IEnumerable<DmxFixtureReading> fixtures)
+        {
+            var vm = new DmxMainViewModel(Snapshot(fixtures));
+            foreach (var r in vm.DecoderRows) r.IsSelected = true;
+            foreach (var r in vm.DriverRows) r.IsSelected = true;
+            return vm;
+        }
+
         [Fact]
         public void EmptyModelShowsGuidanceNotAResult()
         {
@@ -41,14 +50,22 @@ namespace TurboSuite.Tests.Dmx
         }
 
         [Fact]
-        public void CleanModelSolvesOnConstructionWithDefaultAllSelected()
+        public void FreshModelStartsWithNoKitTickedAndNoResult()
         {
             var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3") }));
-            Assert.True(vm.Bill.HasResult);
             Assert.Equal(3, vm.ZoneCount);
             Assert.Equal(3, vm.FixtureCount);
+            Assert.False(vm.Bill.HasResult);                    // nothing ticked ⇒ guidance, not a bill
+            Assert.All(vm.DecoderRows, r => Assert.False(r.IsSelected));
+            Assert.All(vm.DriverRows, r => Assert.False(r.IsSelected));
+        }
+
+        [Fact]
+        public void TickingTheKitProducesAResult()
+        {
+            var vm = SolvableVm(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3") });
+            Assert.True(vm.Bill.HasResult);
             Assert.True(vm.Bill.Decoders >= 3);
-            Assert.True(vm.DecoderRows.All(r => r.IsSelected)); // default kit = all discovered
         }
 
         [Fact]
@@ -81,7 +98,7 @@ namespace TurboSuite.Tests.Dmx
         public void DeclaringLoopsSplitsZonesAcrossMoreInterfaces()
         {
             // 4 zones × 4ch = 16ch — auto-packs into ONE interface (≤ 32 ceiling).
-            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3"), Fix("Z4") }));
+            var vm = SolvableVm(new[] { Fix("Z1"), Fix("Z2"), Fix("Z3"), Fix("Z4") });
             Assert.Equal(1, vm.Bill.InterfaceCount);
 
             // Force a 2-loop split by pulling zones from the pool → two interfaces.
@@ -113,7 +130,7 @@ namespace TurboSuite.Tests.Dmx
         {
             // 9 zones × 4ch = 36ch in one declared loop > 32 ceiling ⇒ OverCapLoops gate.
             var fixtures = Enumerable.Range(1, 9).Select(i => Fix($"Z{i}"));
-            var vm = new DmxMainViewModel(Snapshot(fixtures));
+            var vm = SolvableVm(fixtures);
 
             NewLoop(vm, vm.ZonePool.Select(p => p.ZoneName).ToArray());   // all nine into one loop
 
@@ -135,7 +152,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void SolvedLoopResolvesToAnInterfaceNumber()
         {
-            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1"), Fix("Z2") }));
+            var vm = SolvableVm(new[] { Fix("Z1"), Fix("Z2") });
             var loop = NewLoop(vm, "Z1");
             Assert.True(loop.InterfaceNumber > 0);   // resolved to an interface in the last solve
         }
@@ -150,14 +167,14 @@ namespace TurboSuite.Tests.Dmx
 
             Assert.Null(captured); // initial load + Run must NOT write the model back to itself
 
-            vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec6").IsSelected = false;
+            vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec4").IsSelected = true;
             vm.ZonePool.Single(p => p.ZoneName == "Z1").IsSelected = true;
             vm.NewLoopFromSelectionCommand.Execute(null);
             vm.Loops[0].Name = "House";
             vm.Loops[0].ReservedChannels = 3;
 
             Assert.NotNull(captured);
-            Assert.Equal(new[] { "dec4" }, captured.Settings.DecoderTypeIds); // dec6 unticked
+            Assert.Equal(new[] { "dec4" }, captured.Settings.DecoderTypeIds); // only dec4 ticked
             var loop = Assert.Single(captured.Loops);
             Assert.Equal("House", loop.Name);
             Assert.Equal(3, loop.ReservedChannels);
@@ -193,13 +210,14 @@ namespace TurboSuite.Tests.Dmx
         }
 
         [Fact]
-        public void EmptyCuratedListRestoresToAllSelectedDefault()
+        public void EmptyCuratedListRestoresToNoneSelectedDefault()
         {
-            // A never-curated save (empty TypeId lists) must reopen with the all-discovered default, not "none".
+            // A never-curated save (empty TypeId lists) reopens with NOTHING ticked — the designer must
+            // pick this job's kit before a bill solves.
             var saved = new DmxModuleState { Settings = new DmxSettingsDto() };
             var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1") }), state: saved);
-            Assert.True(vm.DecoderRows.All(r => r.IsSelected));
-            Assert.True(vm.DriverRows.All(r => r.IsSelected));
+            Assert.All(vm.DecoderRows, r => Assert.False(r.IsSelected));
+            Assert.All(vm.DriverRows, r => Assert.False(r.IsSelected));
         }
     }
 }
