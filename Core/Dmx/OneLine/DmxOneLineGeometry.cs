@@ -149,6 +149,10 @@ namespace TurboSuite.Dmx.OneLine
 
             /// <summary>Horizontal length of the "120V FEED" stub into the first driver of a feed.</summary>
             public const double FeedStubLength = 18.0 / 12.0;    // 1'-6"
+
+            /// <summary>Horizontal clearance from the homerun leg end to the designer-only sanity readout,
+            /// parked far enough right to clear the "REFER TO PLAN" header so a sheet crop excludes it.</summary>
+            public const double SanityBlockGap = 114.0 / 12.0;   // 9'-6"
         }
 
         /// <summary>

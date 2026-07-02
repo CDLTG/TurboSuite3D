@@ -1,5 +1,6 @@
 #nullable enable
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using TurboSuite.Dmx.Lock;
 
@@ -17,18 +18,30 @@ namespace TurboSuite.Dmx.OneLine
     /// </summary>
     public static class DmxOneLinePlanner
     {
+        private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
         /// <param name="driverTypeMarkByName">Driver engine Name ("Family : Type") → its Type Mark
         /// ("CV"/"MD"/"ME"), so the driver box shows the Type Mark, not the family name. When the map lacks a
         /// driver (or is null — the unit tests), the box falls back to the engine Name.</param>
+        /// <param name="zoneDesigns">The solve-input zones (each carrying its tape runs + lengths), for the
+        /// designer-only sanity readout parked right of each loop. Null ⇒ no readout (the unit tests).</param>
+        /// <param name="channelCeiling">The profile channel ceiling, for the "used / ceiling" line in that
+        /// readout. 0 (or null zoneDesigns) ⇒ no readout.</param>
         public static IReadOnlyList<DmxOneLineDrawing> Build(DmxBill bill, DmxNumbering numbering,
                                                              IReadOnlyDictionary<string, string>? driverTypeMarkByName = null,
-                                                             int pullUpSizes = 0)
+                                                             int pullUpSizes = 0,
+                                                             IReadOnlyList<ZoneDesign>? zoneDesigns = null,
+                                                             int channelCeiling = 0)
         {
             var byZone = bill.Zones.ToDictionary(z => z.ZoneName);
+            // Solve-input zones (runs + their lengths) keyed by name, for the designer-only sanity readout.
+            // Null (the unit tests) ⇒ no sanity note is drawn.
+            var byDesign = zoneDesigns?.ToDictionary(z => z.ZoneName);
             // One job-wide legend, shared across every loop, so wire numbers are consistent job-wide (Phase 6).
             var legend = DmxWireLegend.ForBill(bill, pullUpSizes);
             return bill.Interfaces
-                .Select(iface => BuildLoop(iface, byZone, numbering, driverTypeMarkByName, legend, pullUpSizes))
+                .Select(iface => BuildLoop(iface, byZone, numbering, driverTypeMarkByName, legend, pullUpSizes,
+                                           byDesign, channelCeiling))
                 .ToList();
         }
 
@@ -48,7 +61,9 @@ namespace TurboSuite.Dmx.OneLine
                                                    IReadOnlyDictionary<string, ZoneSolution> byZone,
                                                    DmxNumbering numbering,
                                                    IReadOnlyDictionary<string, string>? driverTypeMarkByName,
-                                                   DmxWireLegend legend, int pullUpSizes)
+                                                   DmxWireLegend legend, int pullUpSizes,
+                                                   IReadOnlyDictionary<string, ZoneDesign>? byDesign,
+                                                   int channelCeiling)
         {
             // 1. Flatten this interface's decoders in DEC-walk order (zones → clusters → decoders), pairing
             //    each with its DEC # (numbering, lock-aware), zone address, driver type mark, channel count.
@@ -75,13 +90,16 @@ namespace TurboSuite.Dmx.OneLine
             // 2. Feed-block sizes from the interface's §0c feeds — one "120V FEED" per breaker, in DEC order.
             var feedSizes = iface.Feeds.Select(f => f.DriverCount).ToList();
 
+            // 3. Designer-only sanity readout (Tier 1): the loop roll-up + each zone's runs & their lengths.
+            string? sanity = BuildSanityText(iface, byZone, byDesign, channelCeiling, rows, feedSizes);
+
             return Compose(iface.Interface.InterfaceNumber, iface.Interface.LoopName, rows, feedSizes,
-                           legend, pullUpSizes);
+                           legend, pullUpSizes, sanity);
         }
 
         private static DmxOneLineDrawing Compose(int interfaceNumber, string? loopName,
                                                  IReadOnlyList<Row> rows, IReadOnlyList<int> feedSizes,
-                                                 DmxWireLegend legend, int pullUpSizes)
+                                                 DmxWireLegend legend, int pullUpSizes, string? sanityText)
         {
             var symbols = new List<DmxSymbolInstance>();
             var wires = new List<DmxWireSegment>();
@@ -211,7 +229,66 @@ namespace TurboSuite.Dmx.OneLine
                     new Dictionary<string, string>()));
             }
 
+            // Designer-only sanity readout: one left-aligned multi-line note parked well right of the homerun
+            // column so a sheet crop excludes it (the designer deletes or crops it before issue).
+            if (!string.IsNullOrEmpty(sanityText))
+            {
+                double sanityX = decX + DmxOneLineGeometry.Decoder.HomerunOut.X
+                                 + DmxOneLineGeometry.Layout.HomerunLegLength
+                                 + DmxOneLineGeometry.Layout.SanityBlockGap;
+                double sanityY = ifaceY + DmxOneLineGeometry.Interface.Height / 2.0;
+                notes.Add(new DmxNote(new XY(sanityX, sanityY), sanityText!, DmxTextAlign.Left));
+            }
+
             return new DmxOneLineDrawing(interfaceNumber, loopName, symbols, wires, markers, notes);
+        }
+
+        /// <summary>The designer-only "show the math" block for one loop (Tier 1): the loop roll-up
+        /// (channels vs ceiling, decoder/driver/feed counts, connected load) then, per zone, its runs and
+        /// their individual lengths. ASCII-only so it renders in any drafting text font. Returns null when
+        /// the solve inputs weren't supplied (the unit tests call Build without them).</summary>
+        private static string? BuildSanityText(InterfaceSolution iface,
+                                               IReadOnlyDictionary<string, ZoneSolution> byZone,
+                                               IReadOnlyDictionary<string, ZoneDesign>? byDesign,
+                                               int channelCeiling,
+                                               IReadOnlyList<Row> rows, IReadOnlyList<int> feedSizes)
+        {
+            if (byDesign == null || channelCeiling <= 0) return null;
+
+            int used = iface.Interface.ChannelsUsed;
+            int decoders = rows.Count;
+            double loopWatts = iface.Interface.Zones.Sum(z =>
+                byZone.TryGetValue(z.ZoneName, out var s) ? s.Decoders.Sum(d => d.Decoder.TotalWatts) : 0.0);
+
+            var lines = new List<string>
+            {
+                $"INTERFACE #{iface.Interface.InterfaceNumber}"
+                    + (iface.Interface.LoopName != null ? $"  -  loop \"{iface.Interface.LoopName}\"" : "  -  auto-packed"),
+                "------------------------------------------",
+                $"Channels    {used} / {channelCeiling}   ({channelCeiling - used} free)",
+                $"Zones {iface.Interface.Zones.Count}  |  Decoders {decoders}  |  Drivers {decoders}"
+                    + $"  |  120V feeds {feedSizes.Count}",
+                $"Connected  {loopWatts.ToString("0", Inv)} W",
+                "",
+            };
+
+            foreach (var az in iface.Interface.Zones)
+            {
+                if (!byZone.TryGetValue(az.ZoneName, out var sol)) continue;
+                lines.Add($"{az.ZoneName}   {sol.Channels} ch   @{ZoneAddress(az).ToString("D3", Inv)}");
+
+                if (byDesign.TryGetValue(az.ZoneName, out var design) && design.Runs.Count > 0)
+                {
+                    var lengths = design.Runs.Select(r => r.LengthFt).OrderByDescending(l => l).ToList();
+                    string lenList = string.Join(" / ", lengths.Select(l => l.ToString("0.#", Inv)));
+                    double totLen = lengths.Sum();
+                    double totW = design.Runs.Sum(r => PowerMath.TotalWatts(r));
+                    lines.Add($"   runs {design.Runs.Count}   {lenList} ft"
+                              + $"   ({totLen.ToString("0.#", Inv)} ft, {totW.ToString("0", Inv)} W)");
+                }
+            }
+
+            return string.Join("\n", lines);
         }
 
         /// <summary>The decoder address shown on the box = the zone's address-block start (its lowest subzone).</summary>

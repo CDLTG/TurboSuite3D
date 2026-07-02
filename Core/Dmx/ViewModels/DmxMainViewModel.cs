@@ -50,6 +50,8 @@ namespace TurboSuite.Dmx.ViewModels
         // shows. Null whenever the current declarations don't solve (empty/guidance/gate error).
         private DmxBill? _lastBill;
         private DmxNumbering? _lastNumbering;
+        private IReadOnlyList<ZoneDesign>? _lastZones;   // solve-input zones (runs + lengths) for the one-line sanity readout
+        private int _lastChannelCeiling;                 // ceiling snapshotted with the solve, for that readout
         private bool _placing;   // guard against re-entrant Place while a pick is open
 
         // The last-loaded module state — preserved so a save round-trips the overlays this VM does NOT yet
@@ -299,7 +301,7 @@ namespace TurboSuite.Dmx.ViewModels
         /// On every exit it refreshes each loop's placement state + the Place buttons' enabled state.</summary>
         public void Run()
         {
-            _lastBill = null; _lastNumbering = null;   // invalidate the placement plan until a clean solve below
+            _lastBill = null; _lastNumbering = null; _lastZones = null;   // invalidate the placement plan until a clean solve below
             try
             {
                 var zoneResult = DmxZoneBuilder.Build(_fixtures, _loadedState.Clusters);
@@ -322,6 +324,8 @@ namespace TurboSuite.Dmx.ViewModels
                 {
                     var bill = DmxSolver.Solve(contract, zoneResult.Zones, loops);
                     _lastBill = bill;
+                    _lastZones = zoneResult.Zones;                          // runs + lengths for the sanity readout
+                    _lastChannelCeiling = SelectedProfile.ChannelCeiling;   // snapshot the ceiling with the solve
 
                     // Lock-aware numbering (§8c): Unlocked ⇒ fresh 1..N; Locked ⇒ pin to the snapshot baseline,
                     // append additive decoders, flag type/interface drift as REVIEW.
@@ -458,7 +462,8 @@ namespace TurboSuite.Dmx.ViewModels
             var driverMarks = DriverRows
                 .GroupBy(r => r.Candidate.Name)
                 .ToDictionary(g => g.Key, g => g.First().Candidate.TypeMark);
-            var drawings = DmxOneLinePlanner.Build(_lastBill!, _lastNumbering!, driverMarks, _settings.PullUpSizes);
+            var drawings = DmxOneLinePlanner.Build(_lastBill!, _lastNumbering!, driverMarks, _settings.PullUpSizes,
+                                                   _lastZones, _lastChannelCeiling);
             var registry = _loadedState.OneLineViews.ToDictionary(v => v.InterfaceNumber, v => v.ViewId);
             int iface = loop.InterfaceNumber;
             string label = loop.Name;
