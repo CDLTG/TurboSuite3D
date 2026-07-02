@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Autodesk.Revit.DB;
 using TurboSuite.Name.Models;
+using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Name.Services;
 
@@ -23,6 +24,20 @@ public static class RegionNamingService
         var ambiguousDetails = new List<AmbiguousRegion>();
         var unmatchedRegionIds = new List<ElementId>();
         double northAngle = GetTextRotationAngle(doc);
+
+        // A TextNote's on-screen angle is view-relative: rotation 0 renders horizontal no matter
+        // how the crop is rotated. So in a rotated crop the labels read horizontal instead of
+        // running with the model. To make them align to the model (parallel to the walls/rooms
+        // they name) we counter-rotate every note by -cropAngle — EXCEPT at square crop rotations
+        // (0/90/180/270), where we snap upright so labels never render sideways or upside-down
+        // (same rule as TurboDriver's stack). `totalTilt` folds this together with the existing
+        // Project-North compensation and drives BOTH the note rotation and the description offset,
+        // so the description stays directly beneath the (now-tilted) label. Identity at crop 0°
+        // (textCropRotation = 0, ScreenOffsetToModel = identity) — un-rotated production views are
+        // byte-for-byte unaffected.
+        double cropAngle = ViewOrientationHelper.GetViewRotation(view);
+        double textCropRotation = IsNearRightAngle(cropAngle) ? 0.0 : -cropAngle;
+        double totalTilt = northAngle + textCropRotation;
 
         // Collect all TextNotes in the view for existing-comment checks
         var viewTextNotes = new FilteredElementCollector(doc, view.Id)
@@ -67,15 +82,15 @@ public static class RegionNamingService
                         var note = TextNote.Create(doc, view.Id, heightEntry.RevitPoint, textContent, textNoteTypeId);
                         note.HorizontalAlignment = HorizontalTextAlignment.Center;
                         note.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateToProjectNorth(doc, note, heightEntry.RevitPoint, northAngle);
+                        RotateNote(doc, note, heightEntry.RevitPoint, totalTilt);
 
                         if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
                         {
-                            var descPoint = GetDescriptionPoint(heightEntry.RevitPoint, northAngle);
+                            var descPoint = GetDescriptionPoint(view, heightEntry.RevitPoint, totalTilt);
                             var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
                             descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
                             descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                            RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                            RotateNote(doc, descNote, descPoint, totalTilt);
                         }
                     }
                 }
@@ -89,7 +104,7 @@ public static class RegionNamingService
                     var nameNote = TextNote.Create(doc, view.Id, namePlacement, region.ExistingComments, textNoteTypeId);
                     nameNote.HorizontalAlignment = HorizontalTextAlignment.Center;
                     nameNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                    RotateToProjectNorth(doc, nameNote, namePlacement, northAngle);
+                    RotateNote(doc, nameNote, namePlacement, totalTilt);
 
                     foreach (var heightEntry in existingHeightEntries)
                     {
@@ -99,15 +114,15 @@ public static class RegionNamingService
                         var heightNote = TextNote.Create(doc, view.Id, heightEntry.RevitPoint, entryHeight, textNoteTypeId);
                         heightNote.HorizontalAlignment = HorizontalTextAlignment.Center;
                         heightNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateToProjectNorth(doc, heightNote, heightEntry.RevitPoint, northAngle);
+                        RotateNote(doc, heightNote, heightEntry.RevitPoint, totalTilt);
 
                         if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
                         {
-                            var descPoint = GetDescriptionPoint(heightEntry.RevitPoint, northAngle);
+                            var descPoint = GetDescriptionPoint(view, heightEntry.RevitPoint, totalTilt);
                             var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
                             descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
                             descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                            RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                            RotateNote(doc, descNote, descPoint, totalTilt);
                         }
                     }
                 }
@@ -177,17 +192,17 @@ public static class RegionNamingService
                     var note = TextNote.Create(doc, view.Id, nameEntry.RevitPoint, textContent, textNoteTypeId);
                     note.HorizontalAlignment = HorizontalTextAlignment.Center;
                     note.VerticalAlignment = VerticalTextAlignment.Middle;
-                    RotateToProjectNorth(doc, note, nameEntry.RevitPoint, northAngle);
+                    RotateNote(doc, note, nameEntry.RevitPoint, totalTilt);
                 }
 
                 if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId
                     && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, description))
                 {
-                    var descPoint = GetDescriptionPoint(nameEntries[0].RevitPoint, northAngle);
+                    var descPoint = GetDescriptionPoint(view, nameEntries[0].RevitPoint, totalTilt);
                     var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
                     descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
                     descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                    RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                    RotateNote(doc, descNote, descPoint, totalTilt);
                 }
             }
             else
@@ -204,17 +219,17 @@ public static class RegionNamingService
                         var note = TextNote.Create(doc, view.Id, cadEntry.RevitPoint, textContent, textNoteTypeId);
                         note.HorizontalAlignment = HorizontalTextAlignment.Center;
                         note.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateToProjectNorth(doc, note, cadEntry.RevitPoint, northAngle);
+                        RotateNote(doc, note, cadEntry.RevitPoint, totalTilt);
                     }
 
                     if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId
                         && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, description))
                     {
-                        var descPoint = GetDescriptionPoint(cadEntry.RevitPoint, northAngle);
+                        var descPoint = GetDescriptionPoint(view, cadEntry.RevitPoint, totalTilt);
                         var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
                         descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
                         descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateToProjectNorth(doc, descNote, descPoint, northAngle);
+                        RotateNote(doc, descNote, descPoint, totalTilt);
                     }
                 }
             }
@@ -357,23 +372,39 @@ public static class RegionNamingService
     }
 
     /// <summary>
-    /// Offsets a point "below" the anchor in the Project North coordinate frame,
-    /// accounting for the rotation angle so the description stays beneath the main text.
+    /// Offsets a point "below" the main text, in the note's own tilted frame. The offset is a
+    /// screen-down half-foot rotated by <paramref name="tilt"/> (Project-North comp + crop
+    /// counter-rotation), mapped into model space via the view so it lands directly under the
+    /// note the user sees. Identity in an un-rotated view (tilt = 0, mapping = identity).
     /// </summary>
-    private static XYZ GetDescriptionPoint(XYZ anchor, double northAngle)
+    private static XYZ GetDescriptionPoint(View view, XYZ anchor, double tilt)
     {
-        double dx = 0.5 * Math.Sin(northAngle);
-        double dy = -0.5 * Math.Cos(northAngle);
-        return new XYZ(anchor.X + dx, anchor.Y + dy, anchor.Z);
+        double dx = 0.5 * Math.Sin(tilt);
+        double dy = -0.5 * Math.Cos(tilt);
+        XYZ model = ViewOrientationHelper.ScreenOffsetToModel(view, new XYZ(dx, dy, 0));
+        return new XYZ(anchor.X + model.X, anchor.Y + model.Y, anchor.Z);
     }
 
     /// <summary>
-    /// Rotates a TextNote to align with Project North if the angle is non-zero.
+    /// Rotates a TextNote about the vertical axis by <paramref name="tilt"/> (Project-North
+    /// compensation folded together with the view's crop counter-rotation) if it is non-zero.
     /// </summary>
-    private static void RotateToProjectNorth(Document doc, TextNote note, XYZ center, double northAngle)
+    private static void RotateNote(Document doc, TextNote note, XYZ center, double tilt)
     {
-        if (Math.Abs(northAngle) < 1e-9) return;
+        if (Math.Abs(tilt) < 1e-9) return;
         var axis = Line.CreateBound(center, center + XYZ.BasisZ);
-        ElementTransformUtils.RotateElement(doc, note.Id, axis, northAngle);
+        ElementTransformUtils.RotateElement(doc, note.Id, axis, tilt);
+    }
+
+    /// <summary>
+    /// True when <paramref name="angleRad"/> is within ~1° of a right-angle multiple
+    /// (0/90/180/270). At those crop rotations the labels snap upright instead of tilting with
+    /// the model, so they never render sideways or upside-down.
+    /// </summary>
+    private static bool IsNearRightAngle(double angleRad)
+    {
+        double halfPi = Math.PI / 2.0;
+        double nearest = Math.Round(angleRad / halfPi) * halfPi;
+        return Math.Abs(angleRad - nearest) <= Math.PI / 180.0;
     }
 }
