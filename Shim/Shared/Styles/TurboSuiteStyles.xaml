@@ -123,6 +123,18 @@
     <Style TargetType="GroupBox">
         <Setter Property="Cursor" Value="Arrow"/>
     </Style>
+    <!-- SemiBold-header GroupBox (matches TurboDMX's section headers). Keyed, not implicit, so
+         GroupBoxes with custom element headers (context menus, dropdown buttons) are unaffected.
+         Apply only to boxes whose Header is a plain string. -->
+    <Style x:Key="BoldHeaderGroupBox" TargetType="GroupBox" BasedOn="{StaticResource {x:Type GroupBox}}">
+        <Setter Property="HeaderTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <!-- Sortable DataGrid: apply to grids with column sorting enabled -->
     <Style x:Key="SortableDataGridStyle" TargetType="DataGrid">
         <Setter Property="Cursor" Value="Arrow"/>

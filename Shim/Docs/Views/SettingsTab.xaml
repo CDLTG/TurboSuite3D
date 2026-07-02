@@ -14,7 +14,7 @@
 
     <StackPanel Margin="0,8">
         <!-- Company Info -->
-        <GroupBox Header="Company" Margin="0,0,0,12">
+        <GroupBox Header="Company" Margin="0,0,0,12" Style="{StaticResource BoldHeaderGroupBox}">
             <Grid Margin="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="70"/>
@@ -59,7 +59,7 @@
         </GroupBox>
 
         <!-- Cover Page Settings -->
-        <GroupBox Header="Cover Page" Margin="0,0,0,12">
+        <GroupBox Header="Cover Page" Margin="0,0,0,12" Style="{StaticResource BoldHeaderGroupBox}">
             <Grid Margin="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="100"/>
@@ -94,7 +94,7 @@
         </GroupBox>
 
         <!-- Document Settings -->
-        <GroupBox Header="Document" Margin="0,0,0,12">
+        <GroupBox Header="Document" Margin="0,0,0,12" Style="{StaticResource BoldHeaderGroupBox}">
             <Grid Margin="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="70"/>

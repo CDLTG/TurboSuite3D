@@ -39,18 +39,6 @@
                 <Setter Property="Margin" Value="0,0,0,4"/>
             </Style>
 
-            <!-- Settings-section GroupBox: SemiBold header to match the kit (Decoders/Drivers) headers.
-                 Keyed (not the shared GroupBox style) so Docs/Settings headers are unaffected. -->
-            <Style x:Key="DmxGroupBox" TargetType="GroupBox" BasedOn="{StaticResource {x:Type GroupBox}}">
-                <Setter Property="HeaderTemplate">
-                    <Setter.Value>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </DataTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-
             <!-- Flat, chrome-less icon/text button for the demoted loop-row actions (←, + Cluster, ⊙, ✕, 🗑).
                  Keeps Place ▸ / One-line ▸ / + Add selected as the only chromed = primary buttons. -->
             <Style x:Key="IconButton" TargetType="Button">
@@ -168,7 +156,7 @@
                     <TextBlock Text="DECLARATIONS" Style="{StaticResource SectionHeader}" Margin="0,4,0,6"/>
 
                     <!-- General: profile + system voltage -->
-                    <GroupBox Header="General" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                    <GroupBox Header="General" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                         <StackPanel Margin="4">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -197,7 +185,7 @@
                     </GroupBox>
 
                     <!-- Breaker packing -->
-                    <GroupBox Header="Breaker packing" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                    <GroupBox Header="Breaker packing" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                         <StackPanel Margin="4">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -268,7 +256,7 @@
                     </GroupBox>
 
                     <!-- Homerun -->
-                    <GroupBox Header="Homerun" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                    <GroupBox Header="Homerun" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                         <StackPanel Margin="4">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -726,7 +714,7 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <!-- Totals -->
-                            <GroupBox Header="Totals" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                            <GroupBox Header="Totals" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                                 <Grid Margin="4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -763,7 +751,7 @@
                             </GroupBox>
 
                             <!-- Decoder BOM -->
-                            <GroupBox Header="Decoder BOM" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                            <GroupBox Header="Decoder BOM" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                                 <ItemsControl ItemsSource="{Binding Bill.DecoderBom}" Margin="4">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -774,7 +762,7 @@
                             </GroupBox>
 
                             <!-- Driver BOM -->
-                            <GroupBox Header="Driver BOM" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                            <GroupBox Header="Driver BOM" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                                 <ItemsControl ItemsSource="{Binding Bill.DriverBom}" Margin="4">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -786,7 +774,7 @@
 
                             <!-- Wire legend (Phase 6): dense, per-job numbering — the same numbers the
                                  one-line stamps on each wire. Only types actually used appear. -->
-                            <GroupBox Header="Wire Legend" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                            <GroupBox Header="Wire Legend" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                                 <StackPanel Margin="4">
                                     <ItemsControl ItemsSource="{Binding WireLegend}">
                                         <ItemsControl.ItemTemplate>

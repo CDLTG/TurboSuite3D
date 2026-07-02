@@ -27,7 +27,7 @@
         </Grid.RowDefinitions>
 
         <!-- Generate Regions section -->
-        <GroupBox Grid.Row="0" Header="Generate Regions" Padding="12,8">
+        <GroupBox Grid.Row="0" Header="Generate Regions" Padding="12,8" Style="{StaticResource BoldHeaderGroupBox}">
             <StackPanel>
                 <TextBlock TextWrapping="Wrap"
                            Text="Draw Room Region filled regions interactively. Rectangle mode (two clicks) for simple rooms, Polygon mode (multi-click) for complex shapes."/>
@@ -38,7 +38,7 @@
         </GroupBox>
 
         <!-- Assign Room Names section -->
-        <GroupBox Grid.Row="2" Header="Assign Room Names" Padding="12,8">
+        <GroupBox Grid.Row="2" Header="Assign Room Names" Padding="12,8" Style="{StaticResource BoldHeaderGroupBox}">
             <StackPanel>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
                            Text="Reads linked DWG files to extract room names and ceiling heights, assigns them to Room Region filled regions, and places TextNotes."/>

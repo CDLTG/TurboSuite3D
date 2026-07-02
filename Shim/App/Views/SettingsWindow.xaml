@@ -50,7 +50,7 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
             <StackPanel>
                 <!-- General Settings -->
-                <GroupBox Header="General" Margin="0,0,0,10"
+                <GroupBox Header="General" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}"
                           BorderBrush="#2B579A" BorderThickness="1.5">
                     <StackPanel Margin="4">
                         <CheckBox Content="Show circuit comments dialog when creating circuits (TurboWire)"
@@ -68,7 +68,7 @@
                 </GroupBox>
 
                 <!-- CAD Room Source Settings -->
-                <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,10"
+                <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}"
                           BorderBrush="#2B579A" BorderThickness="1.5">
                     <StackPanel Margin="4">
                         <TextBlock Text="Configure how room names and ceiling heights are extracted from linked CAD files."
@@ -188,7 +188,7 @@
                 </GroupBox>
 
                 <!-- Region Generation Layers -->
-                <GroupBox Header="Region Generation Layers (2D Workflow)" Margin="0,0,0,10"
+                <GroupBox Header="Region Generation Layers (2D Workflow)" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}"
                           BorderBrush="#2B579A" BorderThickness="1.5">
                     <StackPanel Margin="4">
                         <TextBlock Text="CAD layer names used by TurboName to auto-generate Room Region filled regions."
@@ -236,7 +236,7 @@
                 <TextBlock Text="Configure which family names receive special routing behavior."
                            Foreground="#555555" Margin="0,0,0,12" TextWrapping="Wrap"/>
 
-                <GroupBox Header="Wall Sconce Families" Margin="0,0,0,10">
+                <GroupBox Header="Wall Sconce Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel Margin="4">
                         <TextBlock Text="Families matched for wall sconce spline routing (one per line):"
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
@@ -246,7 +246,7 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox Header="Receptacle Families" Margin="0,0,0,10">
+                <GroupBox Header="Receptacle Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel Margin="4">
                         <TextBlock Text="Families matched for receptacle spline routing (one per line):"
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
@@ -256,7 +256,7 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox Header="Vertical Families" Margin="0,0,0,10">
+                <GroupBox Header="Vertical Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel Margin="4">
                         <TextBlock Text="Lighting fixture families treated as wall-mounted for tag placement (one per line):"
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
@@ -266,7 +266,7 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox Header="Switch Families" Margin="0,0,0,10">
+                <GroupBox Header="Switch Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel Margin="4">
                         <TextBlock Text="Families matched for switch wire endpoint offset (one per line):"
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
@@ -276,7 +276,7 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox Header="Equipment Box Families" Margin="0,0,0,10">
+                <GroupBox Header="Equipment Box Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel Margin="4">
                         <TextBlock Text="Families matched for vertical (up/down) switchleg placement (one per line):"
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>

@@ -59,7 +59,7 @@
             </Grid.RowDefinitions>
 
             <!-- Power Supply Types -->
-            <GroupBox Header="Power Supply Types" Grid.Row="0" Margin="6,0,6,0">
+            <GroupBox Header="Power Supply Types" Grid.Row="0" Margin="6,0,6,0" Style="{StaticResource BoldHeaderGroupBox}">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
@@ -98,7 +98,7 @@
             </GroupBox>
 
             <!-- Specification Notes -->
-            <GroupBox Header="Specification Notes" Grid.Row="1" Margin="6,6,6,0">
+            <GroupBox Header="Specification Notes" Grid.Row="1" Margin="6,6,6,0" Style="{StaticResource BoldHeaderGroupBox}">
                 <Grid Margin="8,6,8,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="18"/>

@@ -28,7 +28,7 @@
         <!-- General Notes (Fixture Package) -->
         <GroupBox Header="General Notes"
                   Visibility="{Binding IsFixturePackage, Converter={StaticResource BoolToVis}}"
-                  Margin="6,0,6,0">
+                  Margin="6,0,6,0" Style="{StaticResource BoldHeaderGroupBox}">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="{Binding GeneralSource}" FontSize="10"
                            Foreground="#888888" Margin="8,4,8,4" FontStyle="Italic"/>
@@ -56,7 +56,7 @@
         <!-- Control Notes (Control Package) -->
         <GroupBox Header="Control Notes"
                   Visibility="{Binding IsControlPackage, Converter={StaticResource BoolToVis}}"
-                  Margin="6,0,6,0">
+                  Margin="6,0,6,0" Style="{StaticResource BoldHeaderGroupBox}">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="{Binding ControlSource}" FontSize="10"
                            Foreground="#888888" Margin="8,4,8,4" FontStyle="Italic"/>

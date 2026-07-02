@@ -18,7 +18,7 @@
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
         <!-- BOM summary -->
-        <GroupBox Header="Bill of Materials" Margin="6,0,6,0">
+        <GroupBox Header="Bill of Materials" Margin="6,0,6,0" Style="{StaticResource BoldHeaderGroupBox}">
             <StackPanel Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock Text="{Binding SummaryText}" FontSize="14" TextAlignment="Center"
                            Foreground="#444444" Margin="0,0,0,8"/>
