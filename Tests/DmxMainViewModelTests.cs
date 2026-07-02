@@ -78,11 +78,11 @@ namespace TurboSuite.Tests.Dmx
             Assert.Contains("decoder", vm.Bill.StatusMessage);
         }
 
-        // Select the named pool zones and pull them into a new loop (the "+ New loop from selection" gesture).
+        // Select the named pool zones and pull them into a new loop (the "+ New loop" gesture, seeded from selection).
         private static DmxLoopRowViewModel NewLoop(DmxMainViewModel vm, params string[] zones)
         {
             foreach (var z in zones) vm.ZonePool.Single(p => p.ZoneName == z).IsSelected = true;
-            vm.NewLoopFromSelectionCommand.Execute(null);
+            vm.NewLoopCommand.Execute(null);
             return vm.Loops[vm.Loops.Count - 1];
         }
 
@@ -144,9 +144,30 @@ namespace TurboSuite.Tests.Dmx
         public void EmptyLoopHasNoInterfaceNumber()
         {
             var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1") }));
-            vm.NewEmptyLoopCommand.Execute(null);
+            vm.NewLoopCommand.Execute(null);   // no pool selection ⇒ empty loop
             var loop = vm.Loops.Single();
             Assert.Equal(0, loop.InterfaceNumber);   // no zones ⇒ not in any solved interface
+        }
+
+        [Fact]
+        public void AutoNamedLoopsNeverCollide()
+        {
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1") }));
+            vm.NewLoopCommand.Execute(null);         // Loop 1
+            vm.Loops[0].Name = "Loop 2";             // rename onto the next auto-name
+            vm.NewLoopCommand.Execute(null);          // must skip "Loop 2"
+            Assert.Equal(2, vm.Loops.Select(l => l.Name).Distinct(System.StringComparer.OrdinalIgnoreCase).Count());
+        }
+
+        [Fact]
+        public void ManuallyRenamingOntoAnotherLoopAutoSuffixes()
+        {
+            var vm = new DmxMainViewModel(Snapshot(new[] { Fix("Z1") }));
+            vm.NewLoopCommand.Execute(null);   // Loop 1
+            vm.NewLoopCommand.Execute(null);   // Loop 2
+            vm.Loops[1].Name = "Loop 1";        // collide with the first loop
+            Assert.Equal("Loop 1 (2)", vm.Loops[1].Name);
+            Assert.Equal(2, vm.Loops.Select(l => l.Name).Distinct(System.StringComparer.OrdinalIgnoreCase).Count());
         }
 
         [Fact]
@@ -169,7 +190,7 @@ namespace TurboSuite.Tests.Dmx
 
             vm.DecoderRows.Single(r => r.Candidate.TypeId == "dec4").IsSelected = true;
             vm.ZonePool.Single(p => p.ZoneName == "Z1").IsSelected = true;
-            vm.NewLoopFromSelectionCommand.Execute(null);
+            vm.NewLoopCommand.Execute(null);
             vm.Loops[0].Name = "House";
             vm.Loops[0].ReservedChannels = 3;
 

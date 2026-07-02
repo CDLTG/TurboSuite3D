@@ -46,6 +46,7 @@ namespace TurboSuite.Dmx.ViewModels
     {
         private string _name;
         private int _reservedChannels;
+        private string _summary = "—";
 
         public DmxLoopRowViewModel(string name)
         {
@@ -84,6 +85,14 @@ namespace TurboSuite.Dmx.ViewModels
         /// <summary>The interface # the last solve assigned this loop (0 = not yet solved / empty). Set by the
         /// ViewModel after each Run; the per-loop Place targets exactly this interface.</summary>
         public int InterfaceNumber { get; set; }
+
+        /// <summary>Badge shown in the loop header: this loop's slice of the BOM from the last solve
+        /// ("{n} dec/drv · {ch} ch"), or "—" when the loop is empty / hasn't solved. Set by the owning VM.</summary>
+        public string Summary
+        {
+            get => _summary;
+            set => SetProperty(ref _summary, value);
+        }
 
         // Wired by the owning ViewModel (it holds the pool selection + the solve/registry the actions need).
         public ICommand? AddSelectedCommand { get; set; }   // + Add selected pool zones to this loop

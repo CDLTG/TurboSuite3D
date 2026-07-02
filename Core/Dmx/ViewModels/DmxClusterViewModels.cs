@@ -35,7 +35,6 @@ namespace TurboSuite.Dmx.ViewModels
         public int RunCount => RunIds.Count;
 
         public ICommand? VerifyCommand { get; set; }
-        public ICommand? AddSelectionCommand { get; set; }
         public ICommand? RemoveCommand { get; set; }
 
         public void RaiseRunCountChanged() => OnPropertyChanged(nameof(RunCount));

@@ -112,8 +112,7 @@ namespace TurboSuite.Dmx.ViewModels
             _fixtures = new List<DmxFixtureReading>();
 
             RunCommand = new RelayCommand(Run);
-            NewEmptyLoopCommand = new RelayCommand(NewEmptyLoop);
-            NewLoopFromSelectionCommand = new RelayCommand(NewLoopFromSelection);
+            NewLoopCommand = new RelayCommand(NewLoop);
             RefreshCommand = new RelayCommand(Refresh, () => _workQueue != null && _reader != null);
             // One button does both: Lock (first time) and Re-lock (re-baseline when already Locked).
             LockCommand = new RelayCommand(Lock, () => _lastNumbering != null);
@@ -288,8 +287,7 @@ namespace TurboSuite.Dmx.ViewModels
 
         // ── Commands ─────────────────────────────────────────────────────────────────────────────────
         public ICommand RunCommand { get; }
-        public ICommand NewEmptyLoopCommand { get; }
-        public ICommand NewLoopFromSelectionCommand { get; }
+        public ICommand NewLoopCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand LockCommand { get; }
         public ICommand UnlockCommand { get; }
@@ -358,14 +356,24 @@ namespace TurboSuite.Dmx.ViewModels
         /// every Place. (Placement is idempotent via orphan cleanup, so no placed/unplaced state is tracked.)</summary>
         private void UpdateLoopInterfaceNumbers()
         {
-            var ifaceByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var ifaceByName = new Dictionary<string, InterfaceSolution>(StringComparer.OrdinalIgnoreCase);
             if (_lastBill != null)
                 foreach (var i in _lastBill.Interfaces)
-                    if (i.Interface.LoopName != null) ifaceByName[i.Interface.LoopName] = i.Interface.InterfaceNumber;
+                    if (i.Interface.LoopName != null) ifaceByName[i.Interface.LoopName] = i;
 
             foreach (var loop in Loops)
-                loop.InterfaceNumber = _lastNumbering != null && _lastBill != null
-                    && ifaceByName.TryGetValue(loop.Name, out var n) ? n : 0;
+            {
+                if (_lastNumbering != null && _lastBill != null && ifaceByName.TryGetValue(loop.Name, out var sol))
+                {
+                    loop.InterfaceNumber = sol.Interface.InterfaceNumber;
+                    loop.Summary = $"{sol.DeviceCount} dec/drv · {sol.Interface.ChannelsUsed} ch";
+                }
+                else
+                {
+                    loop.InterfaceNumber = 0;
+                    loop.Summary = "—";
+                }
+            }
         }
 
         private bool CanPlaceLoop(DmxLoopRowViewModel loop) =>
@@ -567,19 +575,34 @@ namespace TurboSuite.Dmx.ViewModels
         private List<string> SelectedPoolZones() =>
             ZonePool.Where(z => z.IsSelected).Select(z => z.ZoneName).ToList();
 
-        private void NewEmptyLoop()
+        // Auto-name "Loop N", skipping any name already in use — the name is the interface key
+        // (ifaceByName), so a collision would alias two loops onto one interface.
+        private string NextLoopName()
         {
-            var loop = WireLoop(new DmxLoopRowViewModel($"Loop {++_loopSeq}"));
-            Loops.Add(loop);
-            BuilderStatus = $"Added empty loop \"{loop.Name}\".";
-            Persist();              // no zones ⇒ no solve change, but persist the new loop
-            RaisePlaceCanExecute();
+            var taken = new HashSet<string>(Loops.Select(l => l.Name), StringComparer.OrdinalIgnoreCase);
+            string name;
+            do { name = $"Loop {++_loopSeq}"; } while (taken.Contains(name));
+            return name;
         }
 
-        private void NewLoopFromSelection()
+        // A user-typed name that duplicates another loop would alias both onto one interface (ifaceByName).
+        // Cheapest guard: auto-suffix "(2)", "(3)", … until unique. Re-fires PropertyChanged once, then settles.
+        private void EnsureUniqueLoopName(DmxLoopRowViewModel loop)
+        {
+            bool Taken(string n) => Loops.Any(l => l != loop && string.Equals(l.Name, n, StringComparison.OrdinalIgnoreCase));
+            if (!Taken(loop.Name)) return;
+            string baseName = loop.Name;
+            int i = 2;
+            string candidate;
+            do { candidate = $"{baseName} ({i++})"; } while (Taken(candidate));
+            loop.Name = candidate;   // now unique ⇒ the re-entrant call returns immediately
+        }
+
+        // One button: seed the new loop with the pool selection, or make it empty when nothing's selected.
+        private void NewLoop()
         {
             var sel = SelectedPoolZones();
-            var loop = WireLoop(new DmxLoopRowViewModel($"Loop {++_loopSeq}"));
+            var loop = WireLoop(new DmxLoopRowViewModel(NextLoopName()));
             Loops.Add(loop);
             foreach (var zn in sel) loop.Zones.Add(MakeLoopZone(loop, zn));
             BuilderStatus = sel.Count > 0
@@ -630,6 +653,7 @@ namespace TurboSuite.Dmx.ViewModels
         {
             loop.PropertyChanged += (_, e) =>                   // name edits persist; reserved re-solves
             {
+                if (e.PropertyName == nameof(DmxLoopRowViewModel.Name)) EnsureUniqueLoopName(loop);
                 if (e.PropertyName == nameof(DmxLoopRowViewModel.ReservedChannels)) Run();
                 Persist();
             };
@@ -894,7 +918,6 @@ namespace TurboSuite.Dmx.ViewModels
         private void WireClusterRow(DmxLoopZoneViewModel z, DmxClusterRowViewModel row)
         {
             row.VerifyCommand = new RelayCommand(() => Verify(row), () => CanCluster);
-            row.AddSelectionCommand = new RelayCommand(() => AddSelectionToCluster(z, row), () => CanCluster);
             row.RemoveCommand = new RelayCommand(() => RemoveCluster(z, row), () => CanCluster);
             row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(DmxClusterRowViewModel.Name)) RenameCluster(row); };
         }
@@ -922,18 +945,6 @@ namespace TurboSuite.Dmx.ViewModels
                 _loadedState.Clusters.Add(dto);
                 AssignRuns(z.ZoneName, dto.ClusterId, mine);
                 BuilderStatus = $"New cluster: {mine.Count} run(s) in \"{z.ZoneName}\"" + IgnoredText(ignored);
-                AfterClusterEdit(z);
-            });
-        }
-
-        private void AddSelectionToCluster(DmxLoopZoneViewModel z, DmxClusterRowViewModel row)
-        {
-            WithSelection(ids =>
-            {
-                var (mine, ignored) = FilterToZone(ids, z.ZoneName);
-                if (mine.Count == 0) { BuilderStatus = $"Nothing in zone \"{z.ZoneName}\" selected ({ignored} ignored)."; return; }
-                AssignRuns(z.ZoneName, row.ClusterId, mine);
-                BuilderStatus = $"Added {mine.Count} run(s) to \"{row.Name}\"" + IgnoredText(ignored);
                 AfterClusterEdit(z);
             });
         }
