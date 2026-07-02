@@ -112,13 +112,14 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
 
         width = Math.Max(width, BubbleConstants.MinSymbolWidthFt);
 
-        var tagWidth = GetTagWidth(view, tag);
+        double fixtureAngle = GeometryHelper.GetTransformAngle(fixture.GetTransform());
+        var tagWidth = GetTagWidth(view, tag, fixtureAngle);
         width = Math.Max(width, tagWidth);
 
         return (length, width);
     }
 
-    internal static double GetTagWidth(View view, IndependentTag tag)
+    internal static double GetTagWidth(View view, IndependentTag tag, double fixtureAngle)
     {
         var charCount = tag.TagText?.Length ?? 0;
 
@@ -127,13 +128,25 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
             1 => BubbleConstants.TagWidth1CharFt,
             2 => BubbleConstants.TagWidth2CharsFt,
             3 => BubbleConstants.TagWidth3CharsFt,
-            _ => CalculateTagWidthFromBounds(view, tag)
+            _ => CalculateTagWidthFromBounds(view, tag, fixtureAngle)
         };
     }
 
-    internal static double CalculateTagWidthFromBounds(View view, IndependentTag tag)
+    internal static double CalculateTagWidthFromBounds(View view, IndependentTag tag, double fixtureAngle)
     {
         var bbox = tag.get_BoundingBox(view);
-        return bbox != null ? Math.Abs(bbox.Max.X - bbox.Min.X) : 0;
+        if (bbox == null) return 0;
+
+        double aabbWidth = Math.Abs(bbox.Max.X - bbox.Min.X);
+
+        // The tag rotates with the fixture, so its axis-aligned bbox inflates by (|cos|+|sin|)
+        // for its square footprint — overstating the width and pushing the bubble too far at
+        // odd fixture angles. Divide the inflation back out to recover the true (un-rotated)
+        // width. Identity at 0°/90° (divisor = 1), exact at any angle for a square footprint.
+        double inflation = Math.Abs(Math.Cos(fixtureAngle)) + Math.Abs(Math.Sin(fixtureAngle));
+        if (inflation > BubbleConstants.RotationEpsilon)
+            aabbWidth /= inflation;
+
+        return aabbWidth;
     }
 }
