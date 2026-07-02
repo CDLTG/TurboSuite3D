@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="TurboDMX"
-    Height="792" Width="1300"
+    Height="792" Width="1220"
     MinHeight="552" MinWidth="1040"
     WindowStartupLocation="CenterScreen"
     ShowInTaskbar="True"
@@ -51,28 +51,49 @@
                 </Setter>
             </Style>
 
-            <!-- Flat "⋯" overflow toggle for the loop header (rare/destructive actions live behind it). -->
-            <Style x:Key="OverflowToggle" TargetType="ToggleButton">
+            <!-- Flat, chrome-less icon/text button for the demoted loop-row actions (←, + Cluster, ⊙, ✕, 🗑).
+                 Keeps Place ▸ / One-line ▸ / + Add selected as the only chromed = primary buttons. -->
+            <Style x:Key="IconButton" TargetType="Button">
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Background" Value="Transparent"/>
                 <Setter Property="BorderThickness" Value="0"/>
-                <Setter Property="Padding" Value="8,0"/>
-                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Padding" Value="4,1"/>
                 <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
                 <Setter Property="Template">
                     <Setter.Value>
-                        <ControlTemplate TargetType="ToggleButton">
+                        <ControlTemplate TargetType="Button">
                             <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.4"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
 
             <!-- Shared width of every loop-row "right region" — the gutter all name-box right edges align to.
                  Repeated on the identity row, the action strip, and each cluster row; edit here only. -->
             <GridLength x:Key="LoopGutter">150</GridLength>
+
+            <!-- Loop card = column-1 GroupBox look (Option A): the loop's Border matches the GroupBox
+                 chrome — the Aero2 GroupBox border tone (#D5DFE5), white fill, and the same 10px
+                 inter-card gap — but stays squared. The editable name-box is the card's header, so
+                 there's no title notch. -->
+            <Style x:Key="LoopCard" TargetType="Border">
+                <Setter Property="BorderBrush" Value="#D5DFE5"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="3"/>
+                <Setter Property="Background" Value="{StaticResource ContentBgBrush}"/>
+                <Setter Property="Padding" Value="8"/>
+                <Setter Property="Margin" Value="0,0,0,10"/>
+            </Style>
 
             <!-- Dim BOM badge in the loop header ("{n} dec/drv · {ch} ch"). -->
             <Style x:Key="LoopBadge" TargetType="Border">
@@ -479,9 +500,21 @@
             </Border>
 
             <!-- LOOPS (tree: loop → zones → clusters) -->
-            <DockPanel Grid.Column="2" Margin="0,4,8,0">
-                <TextBlock DockPanel.Dock="Top" Text="LOOPS" Style="{StaticResource SectionHeader}" Margin="0,0,0,2"/>
-                <TextBlock DockPanel.Dock="Top" Text="{Binding BuilderStatus}" Style="{StaticResource HintText}"/>
+            <DockPanel Grid.Column="2" Margin="0,0,8,0">
+                <!-- Header row: title + inline transient status. Keeping the status in-line (not a
+                     separate line below) puts the first loop's top on the same baseline as the
+                     Zones / General cards — the header carries the top:4 / bottom:6 like the others. -->
+                <Grid DockPanel.Dock="Top" Margin="0,4,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="LOOPS" Style="{StaticResource SectionHeader}" Margin="0"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding BuilderStatus}" Style="{StaticResource HintText}"
+                               Margin="12,0,0,0" VerticalAlignment="Center"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                </Grid>
                 <!-- Pinned at the bottom: one context-sensitive add button (seeds from the pool selection, else empty). -->
                 <Button DockPanel.Dock="Bottom" Content="+ New loop" Padding="6,3" Margin="0,6,0,0"
                         Command="{Binding NewLoopCommand}"
@@ -490,20 +523,28 @@
                     <ItemsControl ItemsSource="{Binding Loops}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="1"
-                                        Padding="6" Margin="0,0,0,6">
+                                <Border Style="{StaticResource LoopCard}">
                                     <StackPanel>
-                                        <!-- Identity row: name (fills to the gutter) · [ BOM badge · ⋯ ] right region.
-                                             The 190px right region is the shared gutter — repeated on the action strip
-                                             and every cluster row so all name-box right edges line up. -->
+                                        <!-- Identity row: name (fills) · Reserved box · [ BOM badge · 🗑 ] gutter.
+                                             Reserved sits BETWEEN the name and the shared gutter (eats the name's
+                                             stretch, not the gutter). Delete-loop 🗑 is the gutter's right cell (where
+                                             ⋯ used to be), so it aligns down-column with each cluster's ✕. -->
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="{StaticResource LoopGutter}"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBox Grid.Column="0" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
                                                      VerticalAlignment="Center"/>
-                                            <Grid Grid.Column="1" Margin="8,0,0,0">
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip="Channels reserved on this loop's interface for smart fixtures (§3c). 0 = none. Edge case — leave 0 unless this loop has DMX-addressable fixtures the tape packer doesn't place.">
+                                                <TextBlock Text="Reserved" Style="{StaticResource FieldLabel}" Margin="0,0,6,0"/>
+                                                <TextBox Width="40" VerticalAlignment="Center"
+                                                         Text="{Binding ReservedChannels, UpdateSourceTrigger=LostFocus}"/>
+                                            </StackPanel>
+                                            <Grid Grid.Column="2" Margin="8,0,0,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
@@ -513,33 +554,11 @@
                                                     <TextBlock Text="{Binding Summary}" HorizontalAlignment="Center"
                                                                Foreground="{StaticResource TextSecondaryBrush}"/>
                                                 </Border>
-                                                <ToggleButton x:Name="LoopMenu" Grid.Column="1" Content="⋯" Margin="4,0,0,0"
-                                                              Style="{StaticResource OverflowToggle}"
-                                                              ToolTip="More: reserved channels · delete loop"/>
+                                                <Button Grid.Column="1" Content="🗑" Margin="4,0,0,0"
+                                                        Style="{StaticResource IconButton}"
+                                                        Command="{Binding RemoveCommand}"
+                                                        ToolTip="Delete this loop — its zones return to the pool."/>
                                             </Grid>
-                                            <Popup PlacementTarget="{Binding ElementName=LoopMenu}" Placement="Bottom"
-                                                   IsOpen="{Binding IsChecked, ElementName=LoopMenu}" StaysOpen="False"
-                                                   AllowsTransparency="True" PopupAnimation="Fade">
-                                                <Border Background="{StaticResource ContentBgBrush}" BorderBrush="{StaticResource SeparatorBrush}"
-                                                        BorderThickness="1" Padding="8" MinWidth="180">
-                                                    <StackPanel>
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="44"/>
-                                                            </Grid.ColumnDefinitions>
-                                                            <TextBlock Grid.Column="0" Text="Reserved channels" Style="{StaticResource FieldLabel}"
-                                                                       ToolTip="Channels reserved on this loop's interface for smart fixtures (§3c). 0 = none. Edge case — leave 0 unless this loop has DMX-addressable fixtures the tape packer doesn't place."/>
-                                                            <TextBox Grid.Column="1" VerticalAlignment="Center"
-                                                                     Text="{Binding ReservedChannels, UpdateSourceTrigger=LostFocus}"
-                                                                     ToolTip="Channels reserved on this loop's interface for smart fixtures (§3c). 0 = none. Edge case — leave 0 unless this loop has DMX-addressable fixtures the tape packer doesn't place."/>
-                                                        </Grid>
-                                                        <Button Content="Delete loop" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                                                Padding="4,3" Margin="0,8,0,0" Command="{Binding RemoveCommand}"
-                                                                ToolTip="Delete this loop — its zones return to the pool."/>
-                                                    </StackPanel>
-                                                </Border>
-                                            </Popup>
                                         </Grid>
 
                                         <!-- Action strip: + Add (left) · [ Place · One-line ] right region (same 190px gutter).
@@ -570,11 +589,23 @@
                                         <Border BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0"/>
 
                                         <!-- Zones in this loop -->
-                                        <ItemsControl ItemsSource="{Binding Zones}" Margin="14,4,0,0">
+                                        <ItemsControl ItemsSource="{Binding Zones}" Margin="14,4,0,0" AlternationCount="1000">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,0,0,1"
-                                                            Padding="0,2">
+                                                    <!-- Divider BETWEEN zones: top border on every row but the first
+                                                         (index 0), so there's no trailing line under the last zone. -->
+                                                    <Border Padding="0,2">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="BorderBrush" Value="{StaticResource SeparatorBrush}"/>
+                                                                <Setter Property="BorderThickness" Value="0,1,0,0"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="0">
+                                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
                                                         <StackPanel>
                                                             <!-- Zone header: ← (to pool, left) · name (N runs) · split (right) -->
                                                             <Grid>
@@ -583,19 +614,24 @@
                                                                     <ColumnDefinition Width="*"/>
                                                                     <ColumnDefinition Width="Auto"/>
                                                                 </Grid.ColumnDefinitions>
-                                                                <Button Grid.Column="0" Content="←" Padding="6,1" Margin="0,0,6,0"
+                                                                <Button Grid.Column="0" Content="←" Margin="0,0,6,0"
+                                                                        Style="{StaticResource IconButton}"
                                                                         Command="{Binding RemoveFromLoopCommand}"
                                                                         ToolTip="Return this zone to the pool."/>
                                                                 <TextBlock Grid.Column="1" Text="{Binding Header}" VerticalAlignment="Center"
                                                                            Foreground="{StaticResource TextPrimaryBrush}"/>
-                                                                <Button Grid.Column="2" Content="+ Cluster" Padding="6,1" Margin="4,0,0,0"
+                                                                <Button Grid.Column="2" Content="+ Cluster" Margin="4,0,0,0"
+                                                                        Style="{StaticResource IconButton}"
                                                                         Command="{Binding NewClusterCommand}"
                                                                         Visibility="{Binding CanSplit, Converter={StaticResource BoolToVisibility}}"
                                                                         ToolTip="New cluster in this zone: select tape runs in the model, then click."/>
                                                             </Grid>
 
-                                                            <!-- Cluster sub-builder (only when the zone spans ≥2 runs) -->
-                                                            <StackPanel Margin="12,2,0,2"
+                                                            <!-- Cluster sub-builder (only when the zone spans ≥2 runs).
+                                                                 Left margin indents the children (unclustered text + cluster
+                                                                 name boxes) past the zone title; right stays 0 so the gutter
+                                                                 (⊙/✕) is unmoved. -->
+                                                            <StackPanel Margin="26,2,0,2"
                                                                         Visibility="{Binding CanSplit, Converter={StaticResource BoolToVisibility}}">
                                                                 <TextBlock Text="{Binding ResidualText}" Foreground="{StaticResource TextSecondaryBrush}"
                                                                            Visibility="{Binding HasClusters, Converter={StaticResource BoolToVisibility}}"/>
@@ -609,20 +645,26 @@
                                                                                     <ColumnDefinition Width="{StaticResource LoopGutter}"/>
                                                                                 </Grid.ColumnDefinitions>
                                                                                 <TextBox Grid.Column="0" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                                                                <!-- Gutter: run count left (unmoved), ⊙ Select + ✕ remove right-anchored
+                                                                                     to the gutter edge — ✕ aligns down-column with the loop 🗑. -->
                                                                                 <Grid Grid.Column="1" Margin="8,0,0,0">
                                                                                     <Grid.ColumnDefinitions>
                                                                                         <ColumnDefinition Width="24"/>
                                                                                         <ColumnDefinition Width="*"/>
                                                                                         <ColumnDefinition Width="Auto"/>
+                                                                                        <ColumnDefinition Width="Auto"/>
                                                                                     </Grid.ColumnDefinitions>
                                                                                     <TextBlock Grid.Column="0" Text="{Binding RunCount}"
                                                                                                HorizontalAlignment="Left" VerticalAlignment="Center"
                                                                                                Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                                                    <Button Grid.Column="1" Content="Select" Padding="6,1" Margin="2,0"
+                                                                                    <Button Grid.Column="2" Content="⊙" Margin="0,0,2,0"
+                                                                                            Style="{StaticResource IconButton}"
                                                                                             Command="{Binding VerifyCommand}"
                                                                                             ToolTip="Select this cluster's tape runs in the model."/>
-                                                                                    <Button Grid.Column="2" Content="✕" Padding="6,1" Margin="2,0"
-                                                                                            Command="{Binding RemoveCommand}"/>
+                                                                                    <Button Grid.Column="3" Content="✕" Margin="0"
+                                                                                            Style="{StaticResource IconButton}"
+                                                                                            Command="{Binding RemoveCommand}"
+                                                                                            ToolTip="Remove this cluster — its runs return to (unclustered)."/>
                                                                                 </Grid>
                                                                             </Grid>
                                                                         </DataTemplate>
@@ -644,11 +686,11 @@
 
             <!-- BILL (always-on whole-system roll-up) -->
             <Border Grid.Column="3" BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="1,0,0,0"
-                    Padding="12,4,0,0">
+                    Padding="12,0,0,0">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="BILL" Style="{StaticResource SectionHeader}"/>
+                    <TextBlock DockPanel.Dock="Top" Text="BILL" Style="{StaticResource SectionHeader}" Margin="0,4,0,6"/>
 
-                    <Border DockPanel.Dock="Top" Margin="0,2,0,8" Padding="6"
+                    <Border DockPanel.Dock="Top" Margin="0,0,0,10" Padding="6"
                             Background="{StaticResource FooterBgBrush}">
                         <TextBlock Text="{Binding Bill.StatusMessage}" TextWrapping="Wrap">
                             <TextBlock.Style>
@@ -683,78 +725,92 @@
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                            <!-- Totals -->
+                            <GroupBox Header="Totals" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                                <Grid Margin="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Interfaces" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Bill.InterfaceCount}" Style="{StaticResource BillNumber}"/>
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Decoders" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Bill.Decoders}" Style="{StaticResource BillNumber}"/>
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Drivers" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Bill.Drivers}" Style="{StaticResource BillNumber}"/>
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Breakers" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Bill.Breakers}" Style="{StaticResource BillNumber}"/>
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Channels" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Bill.ChannelsText}" Style="{StaticResource BillNumber}"/>
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Processors" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Bill.Processors}" Style="{StaticResource BillNumber}"/>
-                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Repeaters" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding Bill.Repeaters}" Style="{StaticResource BillNumber}"/>
-                                <TextBlock Grid.Row="7" Grid.Column="0" Text="Total W" Style="{StaticResource FieldLabel}"/>
-                                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding Bill.TotalWattsText}" Style="{StaticResource BillNumber}"/>
-                            </Grid>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Interfaces" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Bill.InterfaceCount}" Style="{StaticResource BillNumber}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Decoders" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Bill.Decoders}" Style="{StaticResource BillNumber}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Drivers" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Bill.Drivers}" Style="{StaticResource BillNumber}"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Breakers" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Bill.Breakers}" Style="{StaticResource BillNumber}"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Channels" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Bill.ChannelsText}" Style="{StaticResource BillNumber}"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Processors" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Bill.Processors}" Style="{StaticResource BillNumber}"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Repeaters" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding Bill.Repeaters}" Style="{StaticResource BillNumber}"/>
+                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Total W" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding Bill.TotalWattsText}" Style="{StaticResource BillNumber}"/>
+                                </Grid>
+                            </GroupBox>
 
-                            <TextBlock Text="Decoder BOM" Style="{StaticResource SectionHeader}"/>
-                            <ItemsControl ItemsSource="{Binding Bill.DecoderBom}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Display}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <!-- Decoder BOM -->
+                            <GroupBox Header="Decoder BOM" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                                <ItemsControl ItemsSource="{Binding Bill.DecoderBom}" Margin="4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Display}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </GroupBox>
 
-                            <TextBlock Text="Driver BOM" Style="{StaticResource SectionHeader}"/>
-                            <ItemsControl ItemsSource="{Binding Bill.DriverBom}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Display}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <!-- Driver BOM -->
+                            <GroupBox Header="Driver BOM" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                                <ItemsControl ItemsSource="{Binding Bill.DriverBom}" Margin="4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Display}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </GroupBox>
 
                             <!-- Wire legend (Phase 6): dense, per-job numbering — the same numbers the
                                  one-line stamps on each wire. Only types actually used appear. -->
-                            <TextBlock Text="Wire Legend" Style="{StaticResource SectionHeader}"/>
-                            <ItemsControl ItemsSource="{Binding WireLegend}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,1,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="24"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding Number}" Style="{StaticResource BillNumber}"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Label}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <Button Content="Legend view ▸" Command="{Binding DrawWireLegendCommand}"
-                                    HorizontalAlignment="Left" Margin="0,6,0,0" Padding="8,3"
-                                    ToolTip="Generate (or redraw) the one per-job wire-legend drafting view you can place on a sheet — same numbers as the one-line."/>
+                            <GroupBox Header="Wire Legend" Margin="0,0,0,10" Style="{StaticResource DmxGroupBox}">
+                                <StackPanel Margin="4">
+                                    <ItemsControl ItemsSource="{Binding WireLegend}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,1,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <!-- Number left-aligned at the card edge (same indent as the Driver BOM
+                                                         lines), then a gap before the label. -->
+                                                    <TextBlock Grid.Column="0" Text="{Binding Number}" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Label}" Margin="8,0,0,0"
+                                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Content="Legend view ▸" Command="{Binding DrawWireLegendCommand}"
+                                            HorizontalAlignment="Left" Margin="0,8,0,0" Padding="8,3"
+                                            ToolTip="Generate (or redraw) the one per-job wire-legend drafting view you can place on a sheet — same numbers as the one-line."/>
+                                </StackPanel>
+                            </GroupBox>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
