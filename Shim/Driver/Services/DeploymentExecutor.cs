@@ -34,6 +34,20 @@ namespace TurboSuite.Driver.Services
     {
         private const double SpacingFt = 9.5 / 12.0; // 9.5 inches in feet
 
+        // Crop rotations within this tolerance of a right angle (0/90/180/270) count as "square"
+        // and snap the driver column to screen-down. ~1° — clean angles land exactly; nobody sets 89°.
+        private const double RightAngleToleranceRad = Math.PI / 180.0;
+
+        /// <summary>
+        /// True when the angle (radians) is within ~1° of a multiple of 90° (0/90/180/270).
+        /// </summary>
+        private static bool IsNearRightAngle(double angleRad)
+        {
+            double halfPi = Math.PI / 2.0;
+            double nearest = Math.Round(angleRad / halfPi) * halfPi;
+            return Math.Abs(angleRad - nearest) <= RightAngleToleranceRad;
+        }
+
         /// <summary>
         /// Absolute elevation at which to drop annotation-only devices so they display in the
         /// active plan view WITHOUT bleeding into the companion view. Placing at the cut plane
@@ -116,6 +130,19 @@ namespace TurboSuite.Driver.Services
             var service = new DeploymentService(doc);
             var result = new DeploymentResult();
 
+            // Stacking rule for a rotated view: align the column to the PROJECT/model (so an
+            // odd-angle view shows it tilted to match the rotated geometry), EXCEPT at square
+            // crop rotations (0/90/180/270) where model-down would lay the column sideways — there
+            // we snap it to screen-down. Device orientation follows the same rule. Identity in an
+            // un-rotated view. `stackDownUnit` is the unit "down the column" vector in model coords.
+            View activeView = doc.ActiveView;
+            double cropAngle = ViewOrientationHelper.GetViewRotation(activeView);
+            bool snapToScreen = IsNearRightAngle(cropAngle);
+            XYZ stackDownUnit = snapToScreen
+                ? ViewOrientationHelper.ScreenOffsetToModel(activeView, new XYZ(0, -1, 0))
+                : new XYZ(0, -1, 0);
+            double deviceRotation = snapToScreen ? cropAngle : 0.0;
+
             // Pick origin: select an existing power supply (new ones placed 9.5" below)
             // or press Escape to pick a bare point instead
             XYZ origin;
@@ -128,7 +155,11 @@ namespace TurboSuite.Driver.Services
 
                 var anchor = doc.GetElement(reference.ElementId) as FamilyInstance;
                 var anchorLocation = GeometryHelper.GetFixtureLocation(anchor);
-                origin = new XYZ(anchorLocation.X, anchorLocation.Y - SpacingFt, anchorLocation.Z);
+                // First new supply sits one spacing "down the column" from the anchor.
+                origin = new XYZ(
+                    anchorLocation.X + stackDownUnit.X * SpacingFt,
+                    anchorLocation.Y + stackDownUnit.Y * SpacingFt,
+                    anchorLocation.Z);
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
             {
@@ -176,8 +207,13 @@ namespace TurboSuite.Driver.Services
 
                         for (int i = 0; i < circuit.QuantityToPlace; i++)
                         {
-                            // Column layout: each instance offset downward (-Y) by 9.5"
-                            XYZ point = new XYZ(origin.X, origin.Y - (globalIndex * SpacingFt), origin.Z);
+                            // Column layout: each instance offset "down the column" by 9.5" along
+                            // the stack direction (model-aligned, or screen-down at square angles).
+                            double dist = globalIndex * SpacingFt;
+                            XYZ point = new XYZ(
+                                origin.X + stackDownUnit.X * dist,
+                                origin.Y + stackDownUnit.Y * dist,
+                                origin.Z);
 
                             var instance = service.PlacePowerSupply(point, circuit.DriverSymbol);
                             if (instance == null)
@@ -186,6 +222,13 @@ namespace TurboSuite.Driver.Services
                                 result.Warnings.Add($"Circuit {circuit.CircuitNumber}: Failed to place instance.");
                                 globalIndex++;
                                 continue;
+                            }
+
+                            // Match the stack rule: upright on screen at square angles, else model-aligned.
+                            if (System.Math.Abs(deviceRotation) > 1e-9)
+                            {
+                                Line axis = Line.CreateBound(point, point + XYZ.BasisZ);
+                                ElementTransformUtils.RotateElement(doc, instance.Id, axis, deviceRotation);
                             }
 
                             result.TotalPlaced++;
