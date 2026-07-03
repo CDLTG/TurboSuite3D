@@ -133,15 +133,26 @@ namespace TurboSuite.Dmx.Services
         private void PlaceLoop(IReadOnlyList<DmxDevicePlacement> devices, XYZ origin, View view,
                                DmxPlacementResult result, List<ElementId> placedIds)
         {
+            // Same view-crop rule as TurboDriver's stack: align the two-column strip to the MODEL at
+            // odd crop rotations (it tilts with the geometry on screen), but SNAP to screen down/left
+            // at square rotations (0/90/180/270) with the devices rotated upright. Identity in an
+            // un-rotated view, so production placements are unaffected.
+            double cropAngle = ViewOrientationHelper.GetViewRotation(view);
+            bool snapToScreen = IsNearRightAngle(cropAngle);
+            XYZ downUnit = snapToScreen ? ViewOrientationHelper.ScreenOffsetToModel(view, new XYZ(0, -1, 0)) : new XYZ(0, -1, 0);
+            XYZ rightUnit = snapToScreen ? ViewOrientationHelper.ScreenOffsetToModel(view, new XYZ(1, 0, 0)) : new XYZ(1, 0, 0);
+            double deviceRotation = snapToScreen ? cropAngle : 0.0;
+
             int row = 0;
             foreach (var dev in devices)
             {
-                var decoderPt = new XYZ(origin.X, origin.Y - row * RowSpacingFt, origin.Z);
-                var driverPt = new XYZ(origin.X - DriverDxFt, origin.Y - row * RowSpacingFt, origin.Z);
+                XYZ rowDown = downUnit * (row * RowSpacingFt);
+                var decoderPt = origin + rowDown;                    // picked point anchors the decoder column
+                var driverPt = decoderPt - rightUnit * DriverDxFt;   // driver sits one bay to the decoder's left
                 row++;
 
                 // Decoder: place → write Switch ID → tag (Switch ID).
-                var decoder = PlaceSymbol(dev.DecoderTypeId, decoderPt);
+                var decoder = PlaceSymbol(dev.DecoderTypeId, decoderPt, deviceRotation);
                 if (decoder == null)
                 {
                     result.Failed++;
@@ -160,7 +171,7 @@ namespace TurboSuite.Dmx.Services
                 }
 
                 // Driver: place → tag (Type Mark, NOT written — the family carries it).
-                var driver = PlaceSymbol(dev.DriverTypeId, driverPt);
+                var driver = PlaceSymbol(dev.DriverTypeId, driverPt, deviceRotation);
                 if (driver == null)
                 {
                     result.Failed++;
@@ -304,15 +315,30 @@ namespace TurboSuite.Dmx.Services
             return ids;
         }
 
-        private FamilyInstance PlaceSymbol(string typeId, XYZ point)
+        private FamilyInstance PlaceSymbol(string typeId, XYZ point, double rotation)
         {
             if (string.IsNullOrEmpty(typeId)) return null;
             if (!(_doc.GetElement(typeId) is FamilySymbol symbol)) return null;
 
             if (!symbol.IsActive) { symbol.Activate(); _doc.Regenerate(); }
             var instance = _doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
+            if (Math.Abs(rotation) > 1e-9)
+            {
+                var axis = Line.CreateBound(point, point + XYZ.BasisZ);
+                ElementTransformUtils.RotateElement(_doc, instance.Id, axis, rotation);
+            }
             _doc.Regenerate();
             return instance;
+        }
+
+        // Mirrors TurboDriver's DeploymentExecutor: within ~1° of a right-angle crop rotation
+        // (0/90/180/270) the strip snaps to the screen and devices rotate upright; off those, it
+        // aligns to the model. Kept local (also duplicated in Driver/Name) — a small shared seam.
+        private static bool IsNearRightAngle(double angleRad)
+        {
+            double halfPi = Math.PI / 2.0;
+            double nearest = Math.Round(angleRad / halfPi) * halfPi;
+            return Math.Abs(angleRad - nearest) <= Math.PI / 180.0;
         }
 
         private static bool SetSwitchId(FamilyInstance instance, string switchId)
