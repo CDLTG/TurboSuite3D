@@ -25,6 +25,22 @@ public class MaskCommand : IExternalCommand
         Document doc = uidoc.Document;
         View activeView = doc.ActiveView;
 
+        // Dependent views don't own their annotations — tags and detail lines live in the primary
+        // view — so TurboMask's CopyElements draw-order passes can't run here. Placing everything
+        // on the primary view instead is workable but painfully slow (forces a full regen of the
+        // non-active view). Point the user at the parent view, where the mask shows through every
+        // dependent anyway. No-op for a normal (non-dependent) view.
+        var primaryViewId = activeView.GetPrimaryViewId();
+        if (primaryViewId != ElementId.InvalidElementId)
+        {
+            string parentName = (doc.GetElement(primaryViewId) as View)?.Name ?? "the parent view";
+            TaskDialog.Show("TurboMask",
+                "TurboMask can't run in a dependent view.\n\n" +
+                $"Open the parent view ({parentName}) and run TurboMask there — " +
+                "the mask will show through this dependent view.");
+            return Result.Cancelled;
+        }
+
         try
         {
             if (!IsValidViewType(activeView))
@@ -104,6 +120,13 @@ public class MaskCommand : IExternalCommand
 
                 var groupMemberIds = new List<ElementId> { region.Id };
 
+                // A stamp is a Generic Annotation, whose on-screen angle is view-relative (rotation
+                // 0 renders horizontal no matter the crop). Rotating it to the fixture's model angle
+                // therefore leaves it cropAngle off the fixture in a rotated crop. Subtract the crop
+                // rotation so the stamp stays glued to its fixture on screen — like a tag, tracking
+                // the fixture at every crop angle (no square-angle snap). Identity at crop 0°.
+                double cropAngle = ViewOrientationHelper.GetViewRotation(activeView);
+
                 foreach (var fixture in fixtures)
                 {
                     if (!fixtureToSymbol.TryGetValue(fixture.Id, out var stampSymbol))
@@ -118,7 +141,7 @@ public class MaskCommand : IExternalCommand
                     var stampInstance = doc.Create.NewFamilyInstance(insertPoint, stampSymbol, activeView);
                     groupMemberIds.Add(stampInstance.Id);
 
-                    double angle = GeometryHelper.GetTransformAngle(fixture.GetTotalTransform());
+                    double angle = GeometryHelper.GetTransformAngle(fixture.GetTotalTransform()) - cropAngle;
                     if (Math.Abs(angle) > 1e-9)
                     {
                         var axis = Line.CreateBound(insertPoint, insertPoint + XYZ.BasisZ * 10);
