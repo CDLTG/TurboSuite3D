@@ -34,19 +34,6 @@ namespace TurboSuite.Driver.Services
     {
         private const double SpacingFt = 9.5 / 12.0; // 9.5 inches in feet
 
-        // Crop rotations within this tolerance of a right angle (0/90/180/270) count as "square"
-        // and snap the driver column to screen-down. ~1° — clean angles land exactly; nobody sets 89°.
-        private const double RightAngleToleranceRad = Math.PI / 180.0;
-
-        /// <summary>
-        /// True when the angle (radians) is within ~1° of a multiple of 90° (0/90/180/270).
-        /// </summary>
-        private static bool IsNearRightAngle(double angleRad)
-        {
-            double halfPi = Math.PI / 2.0;
-            double nearest = Math.Round(angleRad / halfPi) * halfPi;
-            return Math.Abs(angleRad - nearest) <= RightAngleToleranceRad;
-        }
 
         /// <summary>
         /// Absolute elevation at which to drop annotation-only devices so they display in the
@@ -137,7 +124,7 @@ namespace TurboSuite.Driver.Services
             // un-rotated view. `stackDownUnit` is the unit "down the column" vector in model coords.
             View activeView = doc.ActiveView;
             double cropAngle = ViewOrientationHelper.GetViewRotation(activeView);
-            bool snapToScreen = IsNearRightAngle(cropAngle);
+            bool snapToScreen = ViewOrientationHelper.IsNearRightAngle(cropAngle);
             XYZ stackDownUnit = snapToScreen
                 ? ViewOrientationHelper.ScreenOffsetToModel(activeView, new XYZ(0, -1, 0))
                 : new XYZ(0, -1, 0);

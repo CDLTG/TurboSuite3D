@@ -36,7 +36,7 @@ public static class RegionNamingService
         // (textCropRotation = 0, ScreenOffsetToModel = identity) — un-rotated production views are
         // byte-for-byte unaffected.
         double cropAngle = ViewOrientationHelper.GetViewRotation(view);
-        double textCropRotation = IsNearRightAngle(cropAngle) ? 0.0 : -cropAngle;
+        double textCropRotation = ViewOrientationHelper.IsNearRightAngle(cropAngle) ? 0.0 : -cropAngle;
         double totalTilt = northAngle + textCropRotation;
 
         // Collect all TextNotes in the view for existing-comment checks
@@ -394,17 +394,5 @@ public static class RegionNamingService
         if (Math.Abs(tilt) < 1e-9) return;
         var axis = Line.CreateBound(center, center + XYZ.BasisZ);
         ElementTransformUtils.RotateElement(doc, note.Id, axis, tilt);
-    }
-
-    /// <summary>
-    /// True when <paramref name="angleRad"/> is within ~1° of a right-angle multiple
-    /// (0/90/180/270). At those crop rotations the labels snap upright instead of tilting with
-    /// the model, so they never render sideways or upside-down.
-    /// </summary>
-    private static bool IsNearRightAngle(double angleRad)
-    {
-        double halfPi = Math.PI / 2.0;
-        double nearest = Math.Round(angleRad / halfPi) * halfPi;
-        return Math.Abs(angleRad - nearest) <= Math.PI / 180.0;
     }
 }

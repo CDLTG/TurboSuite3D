@@ -138,7 +138,7 @@ namespace TurboSuite.Dmx.Services
             // at square rotations (0/90/180/270) with the devices rotated upright. Identity in an
             // un-rotated view, so production placements are unaffected.
             double cropAngle = ViewOrientationHelper.GetViewRotation(view);
-            bool snapToScreen = IsNearRightAngle(cropAngle);
+            bool snapToScreen = ViewOrientationHelper.IsNearRightAngle(cropAngle);
             XYZ downUnit = snapToScreen ? ViewOrientationHelper.ScreenOffsetToModel(view, new XYZ(0, -1, 0)) : new XYZ(0, -1, 0);
             XYZ rightUnit = snapToScreen ? ViewOrientationHelper.ScreenOffsetToModel(view, new XYZ(1, 0, 0)) : new XYZ(1, 0, 0);
             double deviceRotation = snapToScreen ? cropAngle : 0.0;
@@ -329,16 +329,6 @@ namespace TurboSuite.Dmx.Services
             }
             _doc.Regenerate();
             return instance;
-        }
-
-        // Mirrors TurboDriver's DeploymentExecutor: within ~1° of a right-angle crop rotation
-        // (0/90/180/270) the strip snaps to the screen and devices rotate upright; off those, it
-        // aligns to the model. Kept local (also duplicated in Driver/Name) — a small shared seam.
-        private static bool IsNearRightAngle(double angleRad)
-        {
-            double halfPi = Math.PI / 2.0;
-            double nearest = Math.Round(angleRad / halfPi) * halfPi;
-            return Math.Abs(angleRad - nearest) <= Math.PI / 180.0;
         }
 
         private static bool SetSwitchId(FamilyInstance instance, string switchId)

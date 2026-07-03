@@ -42,4 +42,18 @@ public static class ViewOrientationHelper
         XYZ right = view.RightDirection;
         return System.Math.Atan2(right.Y, right.X);
     }
+
+    /// <summary>
+    /// True when <paramref name="angleRad"/> is within ~1° of a right-angle multiple
+    /// (0/90/180/270). At those crop rotations, placement code snaps to the screen (upright/
+    /// down-the-page) rather than tilting with the model — the "square-angle snap" shared by the
+    /// TurboDriver / TurboDMX stacks and TurboName's labels. ~1° tolerance: clean angles land
+    /// exactly and nobody crops to 89°.
+    /// </summary>
+    public static bool IsNearRightAngle(double angleRad)
+    {
+        double halfPi = System.Math.PI / 2.0;
+        double nearest = System.Math.Round(angleRad / halfPi) * halfPi;
+        return System.Math.Abs(angleRad - nearest) <= System.Math.PI / 180.0;
+    }
 }
