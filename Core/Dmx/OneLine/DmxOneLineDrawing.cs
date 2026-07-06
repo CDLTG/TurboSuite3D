@@ -214,6 +214,9 @@ namespace TurboSuite.Dmx.OneLine
 
         public XY Start { get; }
         public XY End { get; }
+
+        /// <summary>Dashed = the control wires (DMX chain + interface↔processor comm), which the renderer draws
+        /// with the "Wiring (CAT6)" line style; solid = the power wires, drawn "Wiring".</summary>
         public bool Dashed { get; }
     }
 

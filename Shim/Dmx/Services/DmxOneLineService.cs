@@ -58,8 +58,10 @@ namespace TurboSuite.Dmx.Services
                     var symbols = ResolveSymbols(result);
                     var marker = ResolveSymbol(DmxOneLineGeometry.Marker.Family, DmxOneLineGeometry.Marker.Type);
                     if (marker == null) result.Warnings.Add($"Wire-mark family \"{DmxOneLineGeometry.Marker.Family}\" not loaded — markers skipped.");
-                    var dashed = ResolveLineStyle(new[] { "Dash", "Dashed", "Hidden", "<Hidden>" });
-                    var solid = ResolveLineStyle(new[] { "<Solid>", "Solid", "Medium Lines", "Thin Lines" });
+                    // Template line styles: the control wires (DMX chain + comm) draw "Wiring (CAT6)", the
+                    // power wires "Wiring". Fall back to generic dash/solid styles if the template lacks them.
+                    var dashed = ResolveLineStyle(new[] { "Wiring (CAT6)", "Dash", "Dashed", "Hidden", "<Hidden>" });
+                    var solid = ResolveLineStyle(new[] { "Wiring", "<Solid>", "Solid", "Medium Lines", "Thin Lines" });
                     var textType = ResolveTextType();
 
                     var view = FindOrCreateView(drawing, systemName, viewRegistry, result);

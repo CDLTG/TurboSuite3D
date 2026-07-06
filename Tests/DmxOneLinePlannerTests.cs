@@ -11,7 +11,7 @@ namespace TurboSuite.Tests.Dmx
     /// Oracles for <see cref="DmxOneLinePlanner"/> — the bill→one-line layout (BuildPlan Phase 4). Locks the
     /// per-loop symbol inventory, the DEC#/address/Type-Mark label params, the wire-type markers, the
     /// connection-point geometry (chain vertical, power horizontal), and — the headline — that the drawn
-    /// "120V FEED" blocks equal the §0c breaker count (the reconciliation made visible in the drawing).
+    /// "TO 20A BREAKER" feed blocks equal the §0c breaker count (the reconciliation made visible in the drawing).
     /// </summary>
     public class DmxOneLinePlannerTests
     {
@@ -39,7 +39,7 @@ namespace TurboSuite.Tests.Dmx
 
         private static int Count(DmxOneLineDrawing d, DmxSymbolKind k) => d.Symbols.Count(s => s.Kind == k);
         private static int Markers(DmxOneLineDrawing d, DmxWireType t) => d.Markers.Count(m => m.Type == t);
-        private static int Feeds(DmxOneLineDrawing d) => d.Notes.Count(n => n.Text == "120V FEED");
+        private static int Feeds(DmxOneLineDrawing d) => d.Notes.Count(n => n.Text == "TO 20A\nBREAKER");
 
         [Fact]
         public void OneDrawingPerLoop_WithItsInterfaceNumber()
@@ -89,7 +89,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void DrawnFeedBlocksEqualTheSec0cBreakerCount()
         {
-            // 5 decoders, inrush cap 2 ⇒ feeds [2,2,1] = 3 (count-bound). The drawing's "120V FEED" notes
+            // 5 decoders, inrush cap 2 ⇒ feeds [2,2,1] = 3 (count-bound). The drawing's "TO 20A BREAKER" notes
             // must equal the interface's §0c feeds AND the bill's breaker count — the gap is closed.
             var bill = DmxSolver.Solve(Contract(2), new[] { Zone("Z1", 5) });
             var d = Assert.Single(Plan(bill));

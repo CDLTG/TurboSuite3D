@@ -79,7 +79,7 @@ namespace TurboSuite.Dmx.OneLine
             public const double Height = 15.0 / 12.0;  // 1'-3"
 
             public static readonly XY ChainOut = XY.In(0, -7.5);   // bottom mid → first decoder's DMX in
-            public static readonly XY CommIn = XY.In(12, 0);       // right edge mid ↔ processor comm
+            public static readonly XY CommIn = XY.In(-12, 0);      // left edge mid ↔ processor comm (processor sits left)
         }
 
         /// <summary>Lutron Processor box — static text; comm point (L) to the interface.</summary>
@@ -88,10 +88,10 @@ namespace TurboSuite.Dmx.OneLine
             public const string Family = "AL_Detail_Processor";
             public const string Type = "AL_Detail_Processor";
 
-            public const double Width = 26.0 / 12.0;   // 2'-2"
+            public const double Width = 24.0 / 12.0;   // 2'-0" (authored box)
             public const double Height = 15.0 / 12.0;  // 1'-3"
 
-            public static readonly XY Comm = XY.In(-13, 0);   // left edge mid ↔ interface comm
+            public static readonly XY Comm = XY.In(12, 0);   // right edge mid ↔ interface comm (processor sits left)
         }
 
         /// <summary>DMX Terminator box — static text; DMX in (top) from the last decoder.</summary>
@@ -121,12 +121,12 @@ namespace TurboSuite.Dmx.OneLine
         /// </summary>
         public static class Layout
         {
-            /// <summary>Vertical center-to-center between stacked decoder rows (7" box + ~8" gap so the address
+            /// <summary>Vertical center-to-center between stacked decoder rows (7" box + 9" gap so the address
             /// labels + chain markers don't crowd the box above).</summary>
-            public const double RowPitch = 15.0 / 12.0;          // 1'-3"
+            public const double RowPitch = 16.0 / 12.0;          // 1'-4"
 
             /// <summary>Edge-to-edge gap between a driver's right and its decoder's left (the ③ leg + marker).</summary>
-            public const double DriverDecoderGap = 6.0 / 12.0;   // 0'-6"
+            public const double DriverDecoderGap = 10.0 / 12.0;   // 0'-10"
 
             /// <summary>Driver column center X (the per-loop origin's left rail). Decoder column derives from it.</summary>
             public const double DriverCenterX = 0.0;
@@ -135,14 +135,15 @@ namespace TurboSuite.Dmx.OneLine
             public const double DecoderCenterX =
                 DriverCenterX + Driver.Width / 2.0 + DriverDecoderGap + Decoder.Width / 2.0;
 
-            /// <summary>Vertical gap between consecutive 120 V FEED blocks (an extra row of breathing room).</summary>
-            public const double FeedGroupGap = 9.0 / 12.0;       // 0'-9"
+            /// <summary>Vertical gap between consecutive 120 V FEED blocks (an extra row of breathing room). Held
+            /// so RowPitch + FeedGroupGap stays 2'-0" ⇒ the feed-boundary decoder gap stays 1'-5".</summary>
+            public const double FeedGroupGap = 8.0 / 12.0;       // 0'-8"
 
             /// <summary>Drop from the interface box center down to the first decoder row center.</summary>
             public const double InterfaceDrop = 24.0 / 12.0;     // 2'-0"
 
-            /// <summary>Drop from the last decoder row center to the terminator box center.</summary>
-            public const double TerminatorDrop = 18.0 / 12.0;    // 1'-6"
+            /// <summary>Drop from the last decoder row center to the terminator box center (10" box-to-box gap).</summary>
+            public const double TerminatorDrop = 21.0 / 12.0;    // 1'-9"
 
             /// <summary>Horizontal length of the single homerun leg out of each decoder (to the "REFER TO PLAN" note).</summary>
             public const double HomerunLegLength = 18.0 / 12.0;  // 1'-6"

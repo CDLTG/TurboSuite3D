@@ -47,14 +47,15 @@ namespace TurboSuite.Dmx.OneLine
 
         private readonly struct Row
         {
-            public Row(int dec, int address, string driverMark, int channels)
+            public Row(int dec, int address, string driverMark, int channels, string zoneName)
             {
-                Dec = dec; Address = address; DriverMark = driverMark; Channels = channels;
+                Dec = dec; Address = address; DriverMark = driverMark; Channels = channels; ZoneName = zoneName;
             }
             public int Dec { get; }
             public int Address { get; }
             public string DriverMark { get; }
             public int Channels { get; }
+            public string ZoneName { get; }
         }
 
         private static DmxOneLineDrawing BuildLoop(InterfaceSolution iface,
@@ -83,7 +84,7 @@ namespace TurboSuite.Dmx.OneLine
                     string driverMark = driverTypeMarkByName != null
                                         && driverTypeMarkByName.TryGetValue(pd.Driver.Name, out var tm)
                         ? tm : pd.Driver.Name;
-                    rows.Add(new Row(dec, address, driverMark, sol.Channels));
+                    rows.Add(new Row(dec, address, driverMark, sol.Channels, addressed.ZoneName));
                 }
             }
 
@@ -117,12 +118,17 @@ namespace TurboSuite.Dmx.OneLine
             // ── Coordinate frame ───────────────────────────────────────────────────────────────────────
             double drvX = DmxOneLineGeometry.Layout.DriverCenterX;
             double decX = DmxOneLineGeometry.Layout.DecoderCenterX;
-            double chainX = decX + DmxOneLineGeometry.Decoder.DmxIn.X;   // the DMX column; interface/terminator center on it
+            double chainX = decX + DmxOneLineGeometry.Decoder.DmxIn.X;   // the DMX column the daisy-chain wires run down
             double ifaceY = 0.0;
-            var ifaceCenter = new XY(chainX, ifaceY);
+            // Interface + terminator are centered on the decoder column (vertically aligned with the DEC
+            // boxes); the DMX-chain wires still run down chainX, so their chain ends land off-center (right)
+            // on the interface/terminator boxes — intentional, wires are untouched by the box shift.
+            var ifaceCenter = new XY(decX, ifaceY);
 
             const double commGap = 1.0;   // ft, interface→processor comm leader
-            double procX = chainX + DmxOneLineGeometry.Interface.CommIn.X + commGap - DmxOneLineGeometry.Processor.Comm.X;
+            // Processor sits to the LEFT of the interface (CommIn/Comm now the boxes' inner-facing edges).
+            double procX = decX + DmxOneLineGeometry.Interface.CommIn.X - commGap
+                           - DmxOneLineGeometry.Processor.Comm.X;
             var procCenter = new XY(procX, ifaceY);
 
             // Row Y positions + feed-block membership (a feed gets an extra gap before the next).
@@ -147,7 +153,7 @@ namespace TurboSuite.Dmx.OneLine
                 while (r < rows.Count) { rowY[r] = y; y -= DmxOneLineGeometry.Layout.RowPitch; r++; }   // safety
             }
             double lastRowY = rows.Count > 0 ? rowY[rows.Count - 1] : firstRowY;
-            var termCenter = new XY(chainX, lastRowY - DmxOneLineGeometry.Layout.TerminatorDrop);
+            var termCenter = new XY(decX, lastRowY - DmxOneLineGeometry.Layout.TerminatorDrop);
 
             // ── Top boxes: interface (+ # param) and processor, joined by the ⑦ comm leader ──────────────
             symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Interface,
@@ -193,7 +199,8 @@ namespace TurboSuite.Dmx.OneLine
                 var hrEnd = hrStart.Offset(DmxOneLineGeometry.Layout.HomerunLegLength, 0);
                 var homerunType = DmxWireLegend.HomerunFor(row.Channels, pullUpSizes);
                 Wire(hrStart, hrEnd, dashed: false, homerunType);
-                notes.Add(new DmxNote(hrEnd, homerunType.Gauge, DmxTextAlign.Left));
+                notes.Add(new DmxNote(hrEnd.Offset(2.0 / 12.0, 2.5 / 12.0),
+                                      $"TO DMX FIXTURE(S) - {row.ZoneName.ToUpper(Inv)}", DmxTextAlign.Left));
 
                 // first driver of a feed: the 120V FEED stub (①) + label
                 if (feedFirst[r])
@@ -201,7 +208,10 @@ namespace TurboSuite.Dmx.OneLine
                     var pin = drvCenter.Plus(DmxOneLineGeometry.Driver.PowerIn);
                     var stubStart = pin.Offset(-DmxOneLineGeometry.Layout.FeedStubLength, 0);
                     Wire(stubStart, pin, dashed: false, DmxWireType.Hv);
-                    notes.Add(new DmxNote(stubStart, "120V FEED", DmxTextAlign.Right));
+                    // Two lines; the TextNote anchors at the top of the block, so the top line ("TO 20A")
+                    // stays on the stub wire and "BREAKER" drops below it. Nudged up 2.25" / left 2".
+                    notes.Add(new DmxNote(stubStart.Offset(-2.0 / 12.0, 2.25 / 12.0),
+                                          "TO 20A\nBREAKER", DmxTextAlign.Right));
                 }
 
                 // driver daisy within the feed (①): this driver down to the next (unless it ends the feed)
@@ -216,13 +226,13 @@ namespace TurboSuite.Dmx.OneLine
             // ── DMX daisy chain (CAT6, ⑥): interface → decoder0 → … → decoderN → terminator ─────────────
             if (rows.Count > 0)
             {
-                Wire(ifaceCenter.Plus(DmxOneLineGeometry.Interface.ChainOut),
+                Wire(new XY(chainX, ifaceY).Plus(DmxOneLineGeometry.Interface.ChainOut),
                      new XY(decX, rowY[0]).Plus(DmxOneLineGeometry.Decoder.DmxIn), dashed: true, DmxWireType.Cat6);
                 for (int r = 0; r + 1 < rows.Count; r++)
                     Wire(new XY(decX, rowY[r]).Plus(DmxOneLineGeometry.Decoder.DmxOut),
                          new XY(decX, rowY[r + 1]).Plus(DmxOneLineGeometry.Decoder.DmxIn), dashed: true, DmxWireType.Cat6);
                 Wire(new XY(decX, rowY[rows.Count - 1]).Plus(DmxOneLineGeometry.Decoder.DmxOut),
-                     termCenter.Plus(DmxOneLineGeometry.Terminator.DmxIn), dashed: true, DmxWireType.Cat6);
+                     new XY(chainX, termCenter.Y).Plus(DmxOneLineGeometry.Terminator.DmxIn), dashed: true, DmxWireType.Cat6);
 
                 symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Terminator,
                     DmxOneLineGeometry.Terminator.Family, DmxOneLineGeometry.Terminator.Type, termCenter,
