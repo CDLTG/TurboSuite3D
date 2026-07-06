@@ -47,4 +47,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
   </ItemGroup>
+  <!-- Expose internal Core helpers to the oracle test suite only (compile-time visibility;
+       no runtime/shipping impact). Lets the tests pin crisp internal logic — e.g.
+       PanelAllocationService's ParseLocationNumber / CalculateModuleCount / GetOrderedTypes —
+       directly instead of only through the public orchestrator. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TurboSuite.Core.Tests" />
+  </ItemGroup>
 </Project>

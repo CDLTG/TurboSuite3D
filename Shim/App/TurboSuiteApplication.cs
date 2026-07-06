@@ -190,6 +190,21 @@ public class TurboSuiteApplication : IExternalApplication
                 "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
                 "TurboMask");
 
+            // ── Debug panel (TurboSpike) ──
+            // Rides the shared ExperimentalCommandsEnabled gate, so the spike bench surfaces every dev
+            // session and disappears in shipped builds. Uses the Blank placeholder icon — it's a dev tool.
+            if (ExperimentalCommandsEnabled)
+            {
+                RibbonPanel debugPanel = application.CreateRibbonPanel("TurboSuite", "Debug");
+                CreateButton(debugPanel, assemblyPath,
+                    "TurboSpike",
+                    "    Spike    ",
+                    "TurboSuite.Spike.SpikeCommand",
+                    "Diagnostic bench — swap the Execute body per investigation",
+                    "Runs an ad-hoc diagnostic probe against the running model and shows the result in a dialog. The Execute body is scratch space, swapped out for each investigation. Developer-only; gated off in shipped builds.",
+                    "Blank");
+            }
+
             // Auto-update check (two handlers: one checks/stages, one shows the dialog on next idle)
             application.Idling += OnIdlingCheckForUpdate;
             application.Idling += OnIdlingShowUpdateNotification;

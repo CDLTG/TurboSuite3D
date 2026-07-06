@@ -21,7 +21,7 @@ Platform target is **x64**. All Revit-coupled add-in source lives **once** in `S
 - **Single shared file** (`Shim/.../ElementRefConversions`, the `.Value`↔`.IntegerValue` boundary): compiles for both because the member exists in each API, just differently typed.
 - **Per-shim split file** (`Revit{year}/Setup/LinkGraphicsSeam.cs`): same namespace + class declared once under each `Revit{year}/`, each picked up only by its own shim's default globbing. Use this when an API member exists in *only one* version — e.g. the 2025-only RVT link *Custom* display settings, which the 2024 file stubs out.
 
-Supporting these: version-agnostic, multi-targeted (`net48;net8.0-windows`) `Core/` and `Abstractions/` (no Revit refs), plus `Updater/` and `Installer/`. Tests live in `Tests/TurboSuite.Core.Tests.csproj` (xUnit, net8.0-windows; run `dotnet test`) — automated oracle suites for the pure, Revit-free logic in `Core/` (the `Core/Dmx/` engine and the `Core/Driver/` `StaleClassifier`, expanding as more pure Core logic lands); the shims are validated by manual in-Revit testing. No linting configs.
+Supporting these: version-agnostic, multi-targeted (`net48;net8.0-windows`) `Core/` and `Abstractions/` (no Revit refs), plus `Updater/` and `Installer/`. Tests live in `Tests/TurboSuite.Core.Tests.csproj` (xUnit, net8.0-windows; run `dotnet test`) — automated oracle suites for the pure, Revit-free logic in `Core/` (the `Core/Dmx/` engine, the `Core/Driver/` `StaleClassifier`, the `Core/Docs/` Counts catalog cut-list/qty engine, and the `Core/Zones/` allocator/label/link services, expanding as more pure Core logic lands); the shims are validated by manual in-Revit testing. Core exposes internals to the test assembly via `<InternalsVisibleTo>` (compile-time only) so internal helpers can be pinned directly. No linting configs.
 
 To build just one channel (e.g. in CI or a quick check): `dotnet build Revit2025/TurboSuite.Revit2025.csproj` (or `Revit2024/...`). In Visual Studio, set the desired shim as startup project and F5 to launch that Revit.
 
@@ -104,6 +104,12 @@ When adding or removing fields in any storage service (`FamilyNameSettingsStorag
 5. Open Settings, re-enter values, and save
 
 **Recovery procedure:** To clear stale DataStorage during dev, use a one-shot RevitPythonShell / pyRevit script against the open document to run `FilteredElementCollector(doc).OfClass(typeof(DataStorage))` and delete the results inside a transaction. After deletion, restart Revit so cached `Schema.Lookup` results clear.
+
+### TurboSpike — Diagnostic Bench
+`Shim/Spike/SpikeCommand.cs` is a throwaway diagnostic command, gated behind `ExperimentalCommandsEnabled` so it surfaces every dev session and ships disabled. Rules:
+1. **Spike over guessing.** When the running model can answer a question you'd otherwise trial-and-error or assume (a parameter's `StorageType`/writability, whether an API member exists on this version, a family's connectors/geometry), write a probe into `SpikeCommand.Execute`, have the user build and run it, and read the dialog — before writing the targeted code.
+2. **Overwrite-safe by design.** Everything in `SpikeCommand.Execute` is diagnostics-only scratch. Never store logic there that anything else depends on, and never treat its contents as worth preserving.
+3. **Clobber freely.** When you need TurboSpike, overwrite whatever probe is already in the `Execute` body without asking — no prior spike is worth keeping.
 
 ### Specification Documents
 Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NOT use them unless the user explicitly asks.
