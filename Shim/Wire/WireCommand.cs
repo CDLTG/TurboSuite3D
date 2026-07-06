@@ -40,18 +40,17 @@ public class WireCommand : IExternalCommand
 
                 foreach (ElectricalSystem circuit in preSelectedCircuits)
                 {
+                    // Wire every fixture on the circuit as one nearest-neighbor run,
+                    // regardless of category — a mixed circuit routes through all its
+                    // members rather than as separate per-category clusters.
                     List<FamilyInstance> fixturesOnCircuit = GetFixturesOnCircuit(circuit);
-                    foreach (var group in fixturesOnCircuit.GroupBy(f => f.Category.BuiltInCategory))
+                    if (fixturesOnCircuit.Count >= 2)
                     {
-                        List<FamilyInstance> groupList = group.ToList();
-                        if (groupList.Count >= 2)
+                        Result result = WireMultipleFixtures(doc, fixturesOnCircuit, ref message);
+                        if (result != Result.Succeeded)
                         {
-                            Result result = WireMultipleFixtures(doc, groupList, ref message);
-                            if (result != Result.Succeeded)
-                            {
-                                txGroup.RollBack();
-                                return result;
-                            }
+                            txGroup.RollBack();
+                            return result;
                         }
                     }
                 }
@@ -89,6 +88,22 @@ public class WireCommand : IExternalCommand
         }
         catch (Autodesk.Revit.Exceptions.OperationCanceledException)
         {
+            return Result.Cancelled;
+        }
+        catch (Autodesk.Revit.Exceptions.ArgumentException ex) when (
+            ex.Message.IndexOf("electComponents", StringComparison.OrdinalIgnoreCase) >= 0
+            || ex.Message.IndexOf("at least one component", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            // Revit rejects ElectricalSystem.Create when the selected fixtures can't
+            // form one circuit — almost always a voltage mismatch (e.g. some at 120V,
+            // some at 240V). Translate the cryptic "electComponents" error. Any open
+            // transaction/group has already rolled back on the way out.
+            TaskDialog.Show("TurboWire",
+                "These fixtures can't be placed on one circuit — Revit rejected them as " +
+                "electrically incompatible.\n\n" +
+                "This is almost always a voltage mismatch (e.g. some fixtures at 120V and " +
+                "others at 240V). Check that the selected fixtures share the same connector " +
+                "voltage.");
             return Result.Cancelled;
         }
         catch (Exception ex)
@@ -208,43 +223,44 @@ public class WireCommand : IExternalCommand
 
         var circuitsToComment = new List<ElectricalSystem>();
 
-        foreach (var group in fixtures.GroupBy(f => f.Category.BuiltInCategory))
+        // One circuit for the whole selection, regardless of fixture category — the API
+        // accepts mixed Lighting + Electrical members (verified), so a relay-switched
+        // closet's downlights + switched receptacles land on a single circuit rather
+        // than splitting. Wiring then runs a single nearest-neighbor path through every
+        // fixture in the selection, not per-category clusters.
+        var selectionAnalysis = CircuitService.AnalyzeFixtures(fixtures);
+
+        ElectricalSystem? mixedCircuit = null;
+
+        if (selectionAnalysis.AllUncircuited)
         {
-            List<FamilyInstance> groupList = group.ToList();
-            var analysis = CircuitService.AnalyzeFixtures(groupList);
+            mixedCircuit = CircuitService.CreateCircuit(doc, fixtures);
+        }
+        else if (selectionAnalysis.SingleCircuit && selectionAnalysis.UncircuitedFixtures.Count > 0)
+        {
+            CircuitService.AddFixturesToCircuit(doc, selectionAnalysis.SingleCircuitRef!, selectionAnalysis.UncircuitedFixtures);
+            mixedCircuit = selectionAnalysis.SingleCircuitRef;
+        }
+        else if (selectionAnalysis.SingleCircuit)
+        {
+            mixedCircuit = selectionAnalysis.SingleCircuitRef;
+        }
 
-            ElectricalSystem? resultCircuit = null;
+        if (fixtures.Count >= 2)
+        {
+            Result result = WireMultipleFixtures(doc, fixtures, ref message);
+            if (result != Result.Succeeded)
+            {
+                txGroup.RollBack();
+                return result;
+            }
+        }
 
-            if (analysis.AllUncircuited)
-            {
-                resultCircuit = CircuitService.CreateCircuit(doc, groupList);
-            }
-            else if (analysis.SingleCircuit && analysis.UncircuitedFixtures.Count > 0)
-            {
-                CircuitService.AddFixturesToCircuit(doc, analysis.SingleCircuitRef!, analysis.UncircuitedFixtures);
-                resultCircuit = analysis.SingleCircuitRef;
-            }
-            else if (analysis.SingleCircuit)
-            {
-                resultCircuit = analysis.SingleCircuitRef;
-            }
-
-            if (groupList.Count >= 2)
-            {
-                Result result = WireMultipleFixtures(doc, groupList, ref message);
-                if (result != Result.Succeeded)
-                {
-                    txGroup.RollBack();
-                    return result;
-                }
-            }
-
-            if (resultCircuit != null)
-            {
-                string existingComment = ParameterHelper.GetCircuitComments(resultCircuit);
-                if (string.IsNullOrEmpty(existingComment))
-                    circuitsToComment.Add(resultCircuit);
-            }
+        if (mixedCircuit != null)
+        {
+            string existingComment = ParameterHelper.GetCircuitComments(mixedCircuit);
+            if (string.IsNullOrEmpty(existingComment))
+                circuitsToComment.Add(mixedCircuit);
         }
 
         if (circuitsToComment.Count > 0)
@@ -277,13 +293,77 @@ public class WireCommand : IExternalCommand
         var panels = CircuitService.GetAllPanels(doc);
         var autoPanel = CircuitService.FindLastUsedPanel(doc);
 
-        var dialog = new CommentsDialog(existingComments, panels, autoPanel, circuitNumbers);
+        // Resolve each circuit's live base room (linked Rooms, region fallback in 2D)
+        // the same way TurboZones does — first lighting/electrical fixture on the
+        // circuit. Blank is valid.
+        var regionFallback = new RegionRoomLookupService(doc);
+        var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
+        var baseRooms = circuits.ToDictionary(
+            c => c,
+            c => ResolveBaseRoom(c, roomCache));
+        var existingOverrides = RoomOverrideStorageService.Load(doc);
+
+        // Each circuit's effective room = its existing override if set, else its base
+        // room. Prefill that when all circuits agree (so a saved override is visible and
+        // preserved when the field is left alone); when they disagree, show <varies>
+        // rather than misleadingly stamping the first circuit's room across the batch.
+        // Left untouched, <varies> is a no-op (below); typing over it applies to all.
+        // Kept as plain ASCII so an accidental edit is trivial to retype/correct.
+        const string VariesPlaceholder = "<varies>";
+        string EffectiveRoom(ElectricalSystem c) =>
+            (existingOverrides.TryGetValue(c.UniqueId, out var ov) && !string.IsNullOrWhiteSpace(ov)
+                ? ov
+                : baseRooms[c]) ?? string.Empty;
+
+        string resolvedRoom = string.Empty;
+        if (circuits.Count > 0)
+        {
+            var distinctRooms = circuits
+                .Select(c => EffectiveRoom(c).Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            resolvedRoom = distinctRooms.Count == 1 ? distinctRooms[0] : VariesPlaceholder;
+        }
+        var roomNames = CollectProjectRoomNames(doc, regionFallback);
+
+        var dialog = new CommentsDialog(existingComments, panels, autoPanel, circuitNumbers,
+            resolvedRoom, roomNames);
         if (dialog.ShowDialog() == true)
         {
             if (!string.IsNullOrEmpty(dialog.CommentsText))
             {
                 foreach (var circuit in circuits)
                     CircuitService.SetCircuitComments(doc, circuit, dialog.CommentsText);
+            }
+
+            // Room Override: only act when the user actually changed the field from what
+            // was prefilled. An untouched field must be a true no-op — otherwise, in a
+            // multi-circuit batch it would stamp the first circuit's prefilled room onto
+            // circuits whose base room differs, and it would clear an existing override
+            // the user left alone. When the field IS changed, apply per-circuit: entered
+            // text that equals a circuit's own base room clears it (falls back to
+            // geometry); anything else (including blank) is written as-is / cleared.
+            string enteredRoom = (dialog.RoomOverrideText ?? string.Empty).Trim();
+            bool userChangedRoom = !string.Equals(enteredRoom,
+                (resolvedRoom ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+            if (userChangedRoom)
+            {
+                var overrideChanges = new Dictionary<string, string>();
+                foreach (var circuit in circuits)
+                {
+                    string baseRoom = (baseRooms[circuit] ?? string.Empty).Trim();
+                    bool isOverride = enteredRoom.Length > 0
+                        && !string.Equals(enteredRoom, baseRoom, StringComparison.OrdinalIgnoreCase);
+                    overrideChanges[circuit.UniqueId] = isOverride ? enteredRoom : string.Empty;
+                }
+                if (overrideChanges.Values.Any(v => !string.IsNullOrEmpty(v))
+                    || existingOverrides.Keys.Any(k => overrideChanges.ContainsKey(k)))
+                {
+                    using var t = new Transaction(doc, "TurboWire — Room override");
+                    t.Start();
+                    RoomOverrideStorageService.Upsert(doc, overrideChanges);
+                    t.Commit();
+                }
             }
 
             if (dialog.SelectedPanel != null)
@@ -300,6 +380,61 @@ public class WireCommand : IExternalCommand
         }
 
         return false; // User cancelled
+    }
+
+    /// <summary>
+    /// Live base room for a circuit: the room resolved from its first
+    /// lighting/electrical fixture (matches TurboZones' convention). Empty if the
+    /// circuit has no such fixture or no room resolves.
+    /// </summary>
+    private static string ResolveBaseRoom(ElectricalSystem circuit,
+        LinkedRoomFinderService.RoomLookupCache roomCache)
+    {
+        var fixtures = GetFixturesOnCircuit(circuit);
+        if (fixtures.Count == 0)
+            return string.Empty;
+        return roomCache.FindRoomName(fixtures[0]) ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Distinct, sorted room names for the Room Override search/autofill: real Rooms
+    /// across the host document and all linked models, plus "Room Region" names from
+    /// the 2D fallback so drafting jobs (which have no Rooms) still get suggestions.
+    /// </summary>
+    private static List<string> CollectProjectRoomNames(Document doc,
+        RegionRoomLookupService regionFallback)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Collect(Document d)
+        {
+            foreach (var room in new FilteredElementCollector(d)
+                .OfCategory(BuiltInCategory.OST_Rooms)
+                .OfClass(typeof(SpatialElement))
+                .Cast<Autodesk.Revit.DB.Architecture.Room>())
+            {
+                string? name = room.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString();
+                if (!string.IsNullOrWhiteSpace(name))
+                    names.Add(name!.Trim());
+            }
+        }
+
+        Collect(doc);
+        foreach (var link in new FilteredElementCollector(doc)
+            .OfClass(typeof(RevitLinkInstance))
+            .Cast<RevitLinkInstance>())
+        {
+            var linkDoc = link.GetLinkDocument();
+            if (linkDoc != null)
+                Collect(linkDoc);
+        }
+
+        // 2D drafting: "Room Region" names, so jobs with no Room elements still list.
+        foreach (var name in regionFallback.RoomNames)
+            if (!string.IsNullOrWhiteSpace(name))
+                names.Add(name.Trim());
+
+        return names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static Result ManualSelection(UIDocument uiDoc, Document doc, ref string message)

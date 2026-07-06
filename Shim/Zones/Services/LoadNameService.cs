@@ -59,7 +59,7 @@ namespace TurboSuite.Zones.Services
                         updatedCount++;
                 }
 
-                ZonesRoomOverrideStorageService.Write(doc, roomOverrides);
+                RoomOverrideStorageService.Write(doc, roomOverrides);
 
                 trans.Commit();
             }

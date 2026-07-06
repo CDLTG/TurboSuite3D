@@ -71,6 +71,16 @@ public class RegionRoomLookupService
     }
 
     /// <summary>
+    /// Distinct room names (Comments) of all "Room Region" FilledRegions — the 2D
+    /// counterpart to the project's Room list, for populating room-name pickers.
+    /// </summary>
+    public IReadOnlyList<string> RoomNames =>
+        _regions.Select(r => r.Comments)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct()
+            .ToList();
+
+    /// <summary>
     /// Returns the room name (Comments) of the "Room Region" containing the given point,
     /// or null if no region contains it.
     /// </summary>

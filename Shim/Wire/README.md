@@ -6,8 +6,8 @@ Creates electrical circuits and wire connections between lighting fixtures and e
 
 ## Entry Modes
 
-1. **Pre-selected circuits** — Wires all fixtures on each selected circuit, sorted by proximity (nearest-neighbor). No circuit creation. Prompts for circuit comments if any selected circuit has no existing comment.
-2. **Pre-selected fixtures (2+)** — Creates or joins circuits as needed, wires the selected fixtures, then prompts for circuit comments. Lighting and Electrical fixtures are processed as separate groups (cannot share a circuit). Rejects selections spanning multiple existing circuits.
+1. **Pre-selected circuits** — Wires all fixtures on each selected circuit as one proximity-sorted (nearest-neighbor) run, regardless of category. No circuit creation. Prompts for circuit comments if any selected circuit has no existing comment.
+2. **Pre-selected fixtures (2+)** — Creates or joins a **single** circuit for the whole selection (Lighting and Electrical fixtures can share one circuit — e.g. a relay-switched closet), wires one nearest-neighbor run through all of them regardless of category, then prompts for circuit comments. Rejects selections that already span multiple existing circuits, or whose fixtures have mismatched voltages (Revit can't form the circuit — surfaced as a plain-language "voltage mismatch" message instead of Revit's cryptic error).
 3. **Pre-selected fixture (1)** — Creates a circuit if none exists and prompts for circuit comments. If the circuit already has a comment, silently deselects and does nothing.
 4. **Manual pick** — If nothing is selected, prompts for first and second fixture. Wire only — no circuit creation or comments dialog.
 
@@ -25,6 +25,8 @@ New circuits are automatically assigned to the last-used panel in the document (
 ## Comments Dialog
 
 After circuit creation/wiring, a comments dialog appears if the circuit has no existing comment. The dialog displays the circuit number and offers autofill suggestions from all existing circuit comments in the document. The dialog can be disabled in TurboSuite Settings (`General > Show circuit comments dialog`).
+
+The dialog also has a **Room Override** field. It prefills with the circuit's room — resolved from its first fixture the same way TurboZones does (linked Room, or a "Room Region" filled region in 2D drafting jobs), or an existing saved override — and offers project room names for autofill/search. Editing it stores a per-circuit room override in shared ExtensibleStorage (`RoomOverrideStorageService`, read by TurboZones for load naming); the base room is never written, so clearing the field falls back to the geometry. Leaving the field unchanged writes nothing. When a batch of circuits resolves to different rooms, the field shows `<varies>` and stays a no-op unless typed over.
 
 ## Wire Routing
 

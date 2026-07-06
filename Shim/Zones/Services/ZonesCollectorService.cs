@@ -32,7 +32,7 @@ namespace TurboSuite.Zones.Services
                 var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
 
                 // Persisted per-circuit room overrides (keyed by circuit UniqueId).
-                var roomOverrides = ZonesRoomOverrideStorageService.Load(doc);
+                var roomOverrides = RoomOverrideStorageService.Load(doc);
 
                 foreach (ElectricalSystem circuit in circuits)
                 {
