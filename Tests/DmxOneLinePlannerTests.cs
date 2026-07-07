@@ -51,7 +51,7 @@ namespace TurboSuite.Tests.Dmx
             Assert.Equal(2, drawings.Count);
             Assert.Equal(new[] { 1, 2 }, drawings.Select(d => d.InterfaceNumber).ToArray());
             Assert.Equal("A", drawings[0].LoopName);
-            Assert.Equal("TurboDMX — Sys — Interface #1", drawings[0].ViewName("Sys"));
+            Assert.Equal("TurboDMX - Interface #1", drawings[0].ViewName("Sys"));
         }
 
         [Fact]
@@ -142,6 +142,33 @@ namespace TurboSuite.Tests.Dmx
             var dToDec = d.Wires.Count(w => !w.Dashed && System.Math.Abs(w.Start.Y - w.End.Y) < Eps
                                             && System.Math.Abs(w.Start.X - w.End.X) > Eps);
             Assert.True(dToDec >= bill.TotalDecoders);
+        }
+
+        [Fact]
+        public void ReservedChannels_DrawAPlaceholderBoxOnTheChain_WithoutExtraDecoderOrDriver()
+        {
+            var bill = DmxSolver.Solve(Contract(0), new[] { Zone("Z1", 1) },
+                new[] { new LoopDeclaration("A", new[] { "Z1" }, reservedChannels: 8) });
+            var d = Assert.Single(Plan(bill));
+
+            // The placeholder is drawn but is NOT a decoder/driver — those stay 1:1 with the real zone.
+            Assert.Equal(1, Count(d, DmxSymbolKind.Decoder));
+            Assert.Equal(1, Count(d, DmxSymbolKind.Driver));
+            Assert.Equal(1, Count(d, DmxSymbolKind.Terminator));
+
+            // The channel-count label is drawn, and the box is spliced INTO the chain: one extra dashed
+            // Cat6 segment vs. the no-reserve case (iface→dec→box→terminator = 3, vs. iface→dec→term = 2).
+            Assert.Contains(d.Notes, n => n.Text == "RESERVED\n8 CH");
+            Assert.Equal(3, Markers(d, DmxWireType.Cat6));
+        }
+
+        [Fact]
+        public void NoReservedChannels_DrawNoPlaceholder()
+        {
+            var bill = DmxSolver.Solve(Contract(0), new[] { Zone("Z1", 1) });
+            var d = Assert.Single(Plan(bill));
+
+            Assert.DoesNotContain(d.Notes, n => n.Text.StartsWith("RESERVED"));
         }
     }
 }

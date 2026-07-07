@@ -119,12 +119,13 @@ namespace TurboSuite.Dmx.OneLine
             string? sanity = BuildSanityText(iface, byZone, byDesign, channelCeiling, rows, feedSizes);
 
             return Compose(iface.Interface.InterfaceNumber, iface.Interface.LoopName, rows, feedSizes,
-                           legend, pullUpSizes, sanity);
+                           legend, pullUpSizes, sanity, iface.Interface.ReservedChannels);
         }
 
         private static DmxOneLineDrawing Compose(int interfaceNumber, string? loopName,
                                                  IReadOnlyList<Row> rows, IReadOnlyList<int> feedSizes,
-                                                 DmxWireLegend legend, int pullUpSizes, string? sanityText)
+                                                 DmxWireLegend legend, int pullUpSizes, string? sanityText,
+                                                 int reservedChannels)
         {
             var symbols = new List<DmxSymbolInstance>();
             var wires = new List<DmxWireSegment>();
@@ -177,7 +178,18 @@ namespace TurboSuite.Dmx.OneLine
                 while (r < rows.Count) { rowY[r] = y; y -= DmxOneLineGeometry.Layout.RowPitch; r++; }   // safety
             }
             double lastRowY = rows.Count > 0 ? rowY[rows.Count - 1] : firstRowY;
-            var termCenter = new XY(decX, lastRowY - DmxOneLineGeometry.Layout.TerminatorDrop);
+            // Optional reserved-channel placeholder: a plain box spliced onto the DMX daisy below the last
+            // decoder (or below the interface, for a reserved-only loop), standing in for the loop's smart /
+            // DMX-native fixtures that consume interface channels directly — no decoder/driver. Drawn simple on
+            // purpose; the designer hand-details it in the drafting view. See LoopDeclaration.ReservedChannels.
+            bool hasReserved = reservedChannels > 0;
+            double reservedY = rows.Count > 0 ? lastRowY - DmxOneLineGeometry.Layout.RowPitch : firstRowY;
+            // The box's bottom line (its chain-out) sits its extra depth below a decoder's, so the terminator
+            // and its leg shift down by that same amount.
+            double lastChainY = hasReserved
+                ? reservedY - DmxOneLineGeometry.Layout.ReservedBoxExtraDepth
+                : lastRowY;
+            var termCenter = new XY(decX, lastChainY - DmxOneLineGeometry.Layout.TerminatorDrop);
 
             // ── Top boxes: interface (+ # param) and processor, joined by the ⑦ comm leader ──────────────
             symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Interface,
@@ -247,15 +259,53 @@ namespace TurboSuite.Dmx.OneLine
                 }
             }
 
-            // ── DMX daisy chain (CAT6, ⑥): interface → decoder0 → … → decoderN → terminator ─────────────
-            if (rows.Count > 0)
+            // ── DMX daisy chain (CAT6, ⑥): interface → decoder0 → … → decoderN → [reserved box] → terminator
+            if (rows.Count > 0 || hasReserved)
             {
+                // Each chain node contributes a DMX-in (top) and DMX-out (bottom) point; the reserved box
+                // reuses the decoder's chain offsets so it lands square on the same daisy column.
+                var chainIn = new List<XY>();
+                var chainOut = new List<XY>();
+                for (int r = 0; r < rows.Count; r++)
+                {
+                    chainIn.Add(new XY(decX, rowY[r]).Plus(DmxOneLineGeometry.Decoder.DmxIn));
+                    chainOut.Add(new XY(decX, rowY[r]).Plus(DmxOneLineGeometry.Decoder.DmxOut));
+                }
+
+                if (hasReserved)
+                {
+                    // Plain rectangle (four solid, unmarked detail lines) + a centered channel-count label and a
+                    // "REFER TO PLAN" side note — no family, no wire markers.
+                    double hw = DmxOneLineGeometry.Decoder.Width / 2.0;
+                    double hh = DmxOneLineGeometry.Decoder.Height / 2.0;
+                    // Same top edge as a decoder box; the bottom line drops the extra depth lower.
+                    double topY = reservedY + hh;
+                    double botY = reservedY - hh - DmxOneLineGeometry.Layout.ReservedBoxExtraDepth;
+                    var tl = new XY(decX - hw, topY);
+                    var tr = new XY(decX + hw, topY);
+                    var br = new XY(decX + hw, botY);
+                    var bl = new XY(decX - hw, botY);
+                    Wire(tl, tr, dashed: false, null);
+                    Wire(tr, br, dashed: false, null);
+                    Wire(br, bl, dashed: false, null);
+                    Wire(bl, tl, dashed: false, null);
+                    // Two-line label anchored near the box top (TextNote anchors at its top edge).
+                    notes.Add(new DmxNote(new XY(decX, reservedY + 2.5 / 12.0),
+                                          $"RESERVED\n{reservedChannels} CH", DmxTextAlign.Center));
+                    notes.Add(new DmxNote(new XY(decX + hw + 2.0 / 12.0, reservedY + 2.5 / 12.0),
+                                          "SMART FIXTURE(S)\nREFER TO PLAN", DmxTextAlign.Left));
+
+                    // Chain in at the top edge (decoder offset), out at the lowered bottom line.
+                    double chainOffsetX = DmxOneLineGeometry.Decoder.DmxIn.X;
+                    chainIn.Add(new XY(decX + chainOffsetX, topY));
+                    chainOut.Add(new XY(decX + chainOffsetX, botY));
+                }
+
                 Wire(new XY(chainX, ifaceY).Plus(DmxOneLineGeometry.Interface.ChainOut),
-                     new XY(decX, rowY[0]).Plus(DmxOneLineGeometry.Decoder.DmxIn), dashed: true, DmxWireType.Cat6);
-                for (int r = 0; r + 1 < rows.Count; r++)
-                    Wire(new XY(decX, rowY[r]).Plus(DmxOneLineGeometry.Decoder.DmxOut),
-                         new XY(decX, rowY[r + 1]).Plus(DmxOneLineGeometry.Decoder.DmxIn), dashed: true, DmxWireType.Cat6);
-                Wire(new XY(decX, rowY[rows.Count - 1]).Plus(DmxOneLineGeometry.Decoder.DmxOut),
+                     chainIn[0], dashed: true, DmxWireType.Cat6);
+                for (int i = 0; i + 1 < chainIn.Count; i++)
+                    Wire(chainOut[i], chainIn[i + 1], dashed: true, DmxWireType.Cat6);
+                Wire(chainOut[chainOut.Count - 1],
                      new XY(chainX, termCenter.Y).Plus(DmxOneLineGeometry.Terminator.DmxIn), dashed: true, DmxWireType.Cat6);
 
                 symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Terminator,
@@ -305,6 +355,10 @@ namespace TurboSuite.Dmx.OneLine
                 $"Connected  {loopWatts.ToString("0", Inv)} W",
                 "",
             };
+
+            // Reserved channels don't pack into decoders — call them out so the used/free line reads right.
+            if (iface.Interface.ReservedChannels > 0)
+                lines.Insert(3, $"Reserved    {iface.Interface.ReservedChannels} ch   (smart fixtures — see placeholder)");
 
             foreach (var az in iface.Interface.Zones)
             {

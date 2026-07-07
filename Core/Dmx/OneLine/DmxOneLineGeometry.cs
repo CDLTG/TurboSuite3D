@@ -147,6 +147,11 @@ namespace TurboSuite.Dmx.OneLine
             /// <summary>Horizontal length of the single homerun leg out of each decoder (to the "REFER TO PLAN" note).</summary>
             public const double HomerunLegLength = 18.0 / 12.0;  // 1'-6"
 
+            /// <summary>Extra downward depth on the reserved-channel placeholder box beyond a decoder box — its
+            /// bottom line drops this far to leave room for the hand-detailed smart-fixture block. The terminator
+            /// (and its chain leg) shift down by the same amount to keep the daisy tidy.</summary>
+            public const double ReservedBoxExtraDepth = 4.75 / 12.0;   // 0'-4 3/4"
+
             /// <summary>Horizontal length of the "120V FEED" stub into the first driver of a feed.</summary>
             public const double FeedStubLength = 18.0 / 12.0;    // 1'-6"
 
