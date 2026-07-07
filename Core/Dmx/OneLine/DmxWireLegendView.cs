@@ -13,16 +13,21 @@ namespace TurboSuite.Dmx.OneLine
     /// </summary>
     public sealed class DmxWireLegendDrawing
     {
-        public DmxWireLegendDrawing(IReadOnlyList<DmxMarker> markers, IReadOnlyList<DmxNote> notes)
+        public DmxWireLegendDrawing(DmxNote title, IReadOnlyList<DmxMarker> markers, IReadOnlyList<DmxNote> notes)
         {
+            Title = title;
             Markers = markers;
             Notes = notes;
         }
 
+        /// <summary>The "WIRE LEGEND" title. Drawn separately (larger type) and centered over the row block by
+        /// the shim, which measures the rendered rows — its X/alignment here are only a fallback.</summary>
+        public DmxNote Title { get; }
+
         /// <summary>The circled legend numbers, one per legend row (the <see cref="Marker"/> family).</summary>
         public IReadOnlyList<DmxMarker> Markers { get; }
 
-        /// <summary>The title note plus one label note per row.</summary>
+        /// <summary>One label note per row (the title is <see cref="Title"/>, not in here).</summary>
         public IReadOnlyList<DmxNote> Notes { get; }
 
         /// <summary>Deterministic owned-view name — a re-draw finds + wipes this one view (one per job).</summary>
@@ -46,18 +51,25 @@ namespace TurboSuite.Dmx.OneLine
             double markerX = DmxOneLineGeometry.Legend.MarkerX;
             double labelX = DmxOneLineGeometry.Legend.LabelX;
 
-            // Title at the top, left-aligned over the number column.
-            notes.Add(new DmxNote(new XY(markerX, 0.0), DmxOneLineGeometry.Legend.Title, DmxTextAlign.Left));
+            // Title at the top — a larger (3/32") type. The shim centers it over the measured row block, so
+            // the X here (over the number column) and Center alignment are only a fallback if measuring fails.
+            var title = new DmxNote(new XY(markerX, 0.0), DmxOneLineGeometry.Legend.Title, DmxTextAlign.Center,
+                                    DmxOneLineGeometry.Legend.TitleTextHeightFt);
+
+            // A TextNote is top-anchored while the marker family is center-anchored, so raise each label's
+            // insertion Y by half the cap height to put its glyph midline on the circled number's center.
+            double labelNudge = DmxOneLineGeometry.Legend.LabelMidlineNudge;
 
             double y = -DmxOneLineGeometry.Legend.TitleGap;
             foreach (var entry in legend.Entries)
             {
                 markers.Add(new DmxMarker(new XY(markerX, y), entry.Type, entry.Number));
-                notes.Add(new DmxNote(new XY(labelX, y), entry.Label, DmxTextAlign.Left));
+                notes.Add(new DmxNote(new XY(labelX, y + labelNudge),
+                                      entry.Label?.ToUpperInvariant() ?? string.Empty, DmxTextAlign.Left));
                 y -= DmxOneLineGeometry.Legend.RowPitch;
             }
 
-            return new DmxWireLegendDrawing(markers, notes);
+            return new DmxWireLegendDrawing(title, markers, notes);
         }
     }
 

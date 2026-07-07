@@ -167,15 +167,35 @@ namespace TurboSuite.Dmx.OneLine
             public const double MarkerX = 0.0;
 
             /// <summary>Label text left X — clear of the circle.</summary>
-            public const double LabelX = 9.0 / 12.0;    // 0'-9"
+            public const double LabelX = 4.5 / 12.0;    // 0'-4 1/2"
 
             /// <summary>Center-to-center between legend rows.</summary>
-            public const double RowPitch = 9.0 / 12.0;  // 0'-9"
+            public const double RowPitch = 7.0 / 12.0;  // 0'-7"
 
             /// <summary>Drop from the "WIRE LEGEND" title down to the first row.</summary>
             public const double TitleGap = 12.0 / 12.0; // 1'-0"
 
+            /// <summary>Upward nudge applied to a row label's insertion Y so its glyph midline lands on the
+            /// circled marker's center. A <c>TextNote</c> is anchored at its top edge (no vertical-alignment
+            /// API), while the marker family is center-anchored — so raise the label by half the text cap
+            /// height. <see cref="NoteTextHeightFt"/> is the <i>paper</i> size, so scale it to model space
+            /// (these row positions are model feet) by <see cref="ViewScale"/>. The extra term is a measured
+            /// correction for the line-box leading above the glyph cap (the insertion point sits above the
+            /// visible top), tuned in-Revit so the row reads dead-on.</summary>
+            public const double LabelMidlineNudge = NoteTextHeightFt * ViewScale / 2.0 + 0.95 / 12.0;
+
             public const string Title = "WIRE LEGEND";
+
+            /// <summary>Title text height (paper). Larger than the 1/16" rows — the first 3/32" type is used.</summary>
+            public const double TitleTextHeightFt = (3.0 / 32.0) / 12.0;
+
+            /// <summary>Outward gap from the row/title extents to the enclosing border rectangle (model feet).</summary>
+            public const double BorderOffset = 3.0 / 12.0;   // 0'-3"
+
+            /// <summary>Downward trim on the border's top edge only — a TextNote's view bounding box carries
+            /// extra headroom above the glyph cap (font + line-box leading), so the raw top extent sits too
+            /// high. Pull the top line down to hug the title. Tuned in-Revit for this font.</summary>
+            public const double BorderTopTrim = 1.25 / 12.0;   // 0'-1 1/4"
         }
     }
 }

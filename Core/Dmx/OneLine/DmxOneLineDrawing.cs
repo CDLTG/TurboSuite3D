@@ -242,16 +242,20 @@ namespace TurboSuite.Dmx.OneLine
     /// <summary>One native <c>TextNote</c> the generator draws (leaders/headers, 1/16").</summary>
     public sealed class DmxNote
     {
-        public DmxNote(XY position, string text, DmxTextAlign align)
+        public DmxNote(XY position, string text, DmxTextAlign align, double? textHeightFt = null)
         {
             Position = position;
             Text = text;
             Align = align;
+            TextHeightFt = textHeightFt;
         }
 
         public XY Position { get; }
         public string Text { get; }
         public DmxTextAlign Align { get; }
+
+        /// <summary>Paper text height override (feet); null ⇒ the renderer's default note type (1/16").</summary>
+        public double? TextHeightFt { get; }
     }
 
     /// <summary>

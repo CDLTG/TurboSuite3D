@@ -114,6 +114,7 @@ namespace TurboSuite.Dmx.Services
                     var marker = ResolveSymbol(DmxOneLineGeometry.Marker.Family, DmxOneLineGeometry.Marker.Type);
                     if (marker == null) result.Warnings.Add($"Wire-mark family \"{DmxOneLineGeometry.Marker.Family}\" not loaded — numbers skipped.");
                     var textType = ResolveTextType();
+                    var borderStyle = ResolveLineStyle(new[] { "Lighting Fixture" });
 
                     string name = drawing.ViewName(systemName);
                     var view = FindOrCreateViewByIdOrName(name, existingViewId, result.Warnings, out bool created);
@@ -125,6 +126,14 @@ namespace TurboSuite.Dmx.Services
                     if (!created) WipeView(view);
                     DrawNotes(view, drawing.Notes, textType, result.Warnings);
                     result.Rows += DrawMarkers(view, drawing.Markers, marker, result.Warnings);
+
+                    // Center the title over the rendered row block (measure the rows now on the page).
+                    _doc.Regenerate();
+                    DrawTitleCentered(view, drawing.Title, textType, result.Warnings);
+
+                    // Enclose everything in a border, offset out from the combined extents.
+                    _doc.Regenerate();
+                    DrawLegendBorder(view, borderStyle);
 
                     result.ViewId = view.Id.ToRef().Value;
                     opened = view;
@@ -232,10 +241,24 @@ namespace TurboSuite.Dmx.Services
         private int DrawNotes(View view, IReadOnlyList<DmxNote> notes, ElementId textType, List<string> warnings)
         {
             if (textType == ElementId.InvalidElementId) { warnings.Add("No text type — notes skipped."); return 0; }
+            var sizeCache = new Dictionary<double, ElementId>();
             int drawn = 0;
             foreach (var n in notes)
             {
-                var opts = new TextNoteOptions(textType)
+                // A note may override the default height (e.g. the legend's 3/32" title) — resolve the first
+                // type at that size, falling back to the default type if the project has none.
+                var type = textType;
+                if (n.TextHeightFt is double h)
+                {
+                    if (!sizeCache.TryGetValue(h, out type))
+                    {
+                        type = ResolveTextTypeBySize(h);
+                        if (type == ElementId.InvalidElementId) type = textType;
+                        sizeCache[h] = type;
+                    }
+                }
+
+                var opts = new TextNoteOptions(type)
                 {
                     HorizontalAlignment = Align(n.Align),
                     Rotation = 0.0,
@@ -245,6 +268,78 @@ namespace TurboSuite.Dmx.Services
             }
             return drawn;
         }
+
+        // Draw the legend title horizontally centered over the row block. The rows are already on the page,
+        // so union their view bounding boxes for the block's X-extent and drop a Center-aligned note on it.
+        private void DrawTitleCentered(View view, DmxNote title, ElementId defaultType, List<string> warnings)
+        {
+            if (title == null) return;
+
+            double centerX = TryUnionViewBox(view, out var min, out var max)
+                ? (min.X + max.X) / 2.0
+                : title.Position.X;
+
+            var type = title.TextHeightFt is double h ? ResolveTextTypeBySize(h) : ElementId.InvalidElementId;
+            if (type == ElementId.InvalidElementId) type = defaultType;
+            if (type == ElementId.InvalidElementId) { warnings.Add("No text type — title skipped."); return; }
+
+            var opts = new TextNoteOptions(type)
+            {
+                HorizontalAlignment = HorizontalTextAlignment.Center,
+                Rotation = 0.0,
+            };
+            TextNote.Create(_doc, view.Id, new XYZ(centerX, title.Position.Y, 0.0), title.Text, opts);
+        }
+
+        // Rectangle around the whole legend, offset outward from the combined extents (matches the hand-drawn
+        // sample: box the objects touching the extents, then offset 3").
+        private void DrawLegendBorder(View view, GraphicsStyle solid)
+        {
+            if (!TryUnionViewBox(view, out var min, out var max)) return;
+            double o = DmxOneLineGeometry.Legend.BorderOffset;
+            double topY = max.Y + o - DmxOneLineGeometry.Legend.BorderTopTrim;   // absorb the text bbox headroom
+            var bl = new XYZ(min.X - o, min.Y - o, 0.0);
+            var br = new XYZ(max.X + o, min.Y - o, 0.0);
+            var tr = new XYZ(max.X + o, topY, 0.0);
+            var tl = new XYZ(min.X - o, topY, 0.0);
+            DrawSegment(view, bl, br, solid);
+            DrawSegment(view, br, tr, solid);
+            DrawSegment(view, tr, tl, solid);
+            DrawSegment(view, tl, bl, solid);
+        }
+
+        private void DrawSegment(View view, XYZ a, XYZ b, GraphicsStyle style)
+        {
+            var dc = _doc.Create.NewDetailCurve(view, Line.CreateBound(a, b));
+            if (style != null) { try { dc.LineStyle = style; } catch { /* style not applicable — leave default */ } }
+        }
+
+        // Union of every non-type element's view bounding box; false if the view has nothing to bound.
+        private bool TryUnionViewBox(View view, out XYZ min, out XYZ max)
+        {
+            double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+            bool any = false;
+            foreach (var id in new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType().ToElementIds())
+            {
+                var bb = _doc.GetElement(id)?.get_BoundingBox(view);
+                if (bb == null) continue;
+                any = true;
+                minX = Math.Min(minX, bb.Min.X); minY = Math.Min(minY, bb.Min.Y);
+                maxX = Math.Max(maxX, bb.Max.X); maxY = Math.Max(maxY, bb.Max.Y);
+            }
+            min = new XYZ(minX, minY, 0.0);
+            max = new XYZ(maxX, maxY, 0.0);
+            return any;
+        }
+
+        // First existing TextNoteType at the given paper size (feet), or Invalid if the project has none.
+        private ElementId ResolveTextTypeBySize(double sizeFt) =>
+            new FilteredElementCollector(_doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>()
+                .FirstOrDefault(t =>
+                {
+                    var p = t.get_Parameter(BuiltInParameter.TEXT_SIZE);
+                    return p != null && Math.Abs(p.AsDouble() - sizeFt) < 1e-4;
+                })?.Id ?? ElementId.InvalidElementId;
 
         private int DrawMarkers(View view, IReadOnlyList<DmxMarker> markers, FamilySymbol marker, List<string> warnings)
         {

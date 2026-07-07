@@ -125,8 +125,8 @@ namespace TurboSuite.Tests.Dmx
             var drawing = DmxWireLegendPlanner.Build(legend);
 
             Assert.Equal(legend.Entries.Count, drawing.Markers.Count);          // one circled # per row
-            Assert.Equal(legend.Entries.Count + 1, drawing.Notes.Count);        // one label per row + the title
-            Assert.Equal(DmxOneLineGeometry.Legend.Title, drawing.Notes[0].Text);
+            Assert.Equal(legend.Entries.Count, drawing.Notes.Count);            // one label per row (title is separate)
+            Assert.Equal(DmxOneLineGeometry.Legend.Title, drawing.Title.Text);
         }
 
         [Fact]
@@ -140,9 +140,9 @@ namespace TurboSuite.Tests.Dmx
                 Assert.Equal(legend.Entries[i].Number, drawing.Markers[i].Number);   // # on the view = legend #
                 Assert.Equal(legend.Entries[i].Type, drawing.Markers[i].Type);
             }
-            // The label notes (after the title) read the legend labels in order.
-            var labels = drawing.Notes.Skip(1).Select(n => n.Text).ToArray();
-            Assert.Equal(legend.Entries.Select(e => e.Label).ToArray(), labels);
+            // The label notes read the legend labels in order (uppercased for the view).
+            var labels = drawing.Notes.Select(n => n.Text).ToArray();
+            Assert.Equal(legend.Entries.Select(e => e.Label.ToUpperInvariant()).ToArray(), labels);
         }
 
         [Fact]
