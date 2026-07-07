@@ -262,10 +262,12 @@ public class SetupCommand : IExternalCommand
                 }
                 result.LevelsCopied = sourceToHostLevel.Count;
 
-                // 1b. Turn the host Toposolid category off on the firm templates BEFORE creating views,
-                //     so each view inherits "Toposolid off" when ApplyViewTemplateParameters runs. The
-                //     2022-origin templates can't express this; the running 2024+ job can. The linked
-                //     Toposolid follows the host category, suppressing it in the lighting set.
+                // 1b. Turn the host Toposolid category off on every firm lighting template (AL_ prefix)
+                //     BEFORE creating views, so each generated view inherits "Toposolid off" when
+                //     ApplyViewTemplateParameters runs. The 2022-origin templates can't express this;
+                //     the running 2024+ job can. This also reaches templates TurboSetup never creates
+                //     views for — notably AL_Section, auto-applied to later section views — so the
+                //     linked Toposolid stays suppressed across the whole lighting set.
                 using (var t = new Transaction(doc, "Hide Toposolid on templates"))
                 {
                     t.Start();

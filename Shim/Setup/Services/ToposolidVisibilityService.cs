@@ -1,4 +1,5 @@
 #nullable disable
+using System.Linq;
 using Autodesk.Revit.DB;
 
 namespace TurboSuite.Setup.Services;
@@ -16,8 +17,14 @@ namespace TurboSuite.Setup.Services;
 /// This sets HOST-view category visibility. The linked Toposolid follows because (a) a freshly
 /// created view defaults its link display to "By host view", and (b) the firm link hybrid resolves
 /// model categories to the host view (ObjectStyles = ByHostView) — so the host-off state is already
-/// in place when the Custom override is written. Setting it on the templates too keeps any future
-/// manual application of AL_Floor Plan / AL_RCP correct.
+/// in place when the Custom override is written.
+///
+/// The template sweep (<see cref="HideOnTemplates"/>) covers every firm lighting template
+/// (AL_ prefix), not just the generated Floor Plan / RCP. This reaches templates TurboSetup never
+/// creates views for — chiefly AL_Section, which is auto-applied ("applied but not held") to new
+/// section views and sets RVT Links to "By Host View". Because "By Host View" resolves to the
+/// section view's own model-category visibility, and AL_Section controls Model Categories, hiding
+/// Toposolid on the template carries a Toposolid-off state into every section drawn later.
 ///
 /// Caller owns the transaction.
 /// </summary>
@@ -26,11 +33,21 @@ internal static class ToposolidVisibilityService
     private static readonly ElementId ToposolidCategoryId =
         new ElementId(BuiltInCategory.OST_Toposolid);
 
-    /// <summary>Hides Toposolid on the firm Floor Plan + RCP view templates, where present.</summary>
+    /// <summary>
+    /// Hides Toposolid on every firm lighting view template (name starts with
+    /// <see cref="SetupConstants.LightingTemplatePrefix"/>), where the category is controllable.
+    /// </summary>
     public static void HideOnTemplates(Document doc)
     {
-        HideOn(ViewGenerationService.FindTemplate(doc, SetupConstants.FloorPlanViewTemplateName));
-        HideOn(ViewGenerationService.FindTemplate(doc, SetupConstants.RcpViewTemplateName));
+        var templates = new FilteredElementCollector(doc)
+            .OfClass(typeof(View))
+            .Cast<View>()
+            .Where(v => v.IsTemplate
+                && v.Name.StartsWith(SetupConstants.LightingTemplatePrefix,
+                    System.StringComparison.OrdinalIgnoreCase));
+
+        foreach (var template in templates)
+            HideOn(template);
     }
 
     /// <summary>

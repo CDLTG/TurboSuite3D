@@ -12,6 +12,14 @@ internal static class SetupConstants
     /// <summary>View template applied to every generated RCP (ceiling plan) view.</summary>
     public const string RcpViewTemplateName = "AL_RCP";
 
+    /// <summary>
+    /// Name prefix identifying the firm's lighting view templates (AL_Floor Plan, AL_RCP,
+    /// AL_Section, AL_Elevation, …). The Toposolid-off sweep targets every template whose name
+    /// starts with this, so section/elevation templates that set RVT Links to "By Host View"
+    /// carry a Toposolid-off host state into the views they're applied to.
+    /// </summary>
+    public const string LightingTemplatePrefix = "AL_";
+
     /// <summary>Suffix for generated floor plan view names: "{NN} - Floor - Lighting".</summary>
     public const string FloorViewSuffix = "Floor - Lighting";
 
