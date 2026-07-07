@@ -216,6 +216,7 @@ namespace TurboSuite.Name
                 genWindow.Close();
             };
 
+            ModelessWindowGuard.Register(doc, genWindow, genWindow.Close);
             genWindow.Show();
 
             return Result.Succeeded;

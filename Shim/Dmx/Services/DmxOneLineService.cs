@@ -59,9 +59,9 @@ namespace TurboSuite.Dmx.Services
                     var marker = ResolveSymbol(DmxOneLineGeometry.Marker.Family, DmxOneLineGeometry.Marker.Type);
                     if (marker == null) result.Warnings.Add($"Wire-mark family \"{DmxOneLineGeometry.Marker.Family}\" not loaded — markers skipped.");
                     // Template line styles: the control wires (DMX chain + comm) draw "Wiring (CAT6)", the
-                    // power wires "Wiring". Fall back to generic dash/solid styles if the template lacks them.
+                    // power wires "Lighting Fixture". Fall back to generic dash/solid styles if the template lacks them.
                     var dashed = ResolveLineStyle(new[] { "Wiring (CAT6)", "Dash", "Dashed", "Hidden", "<Hidden>" });
-                    var solid = ResolveLineStyle(new[] { "Wiring", "<Solid>", "Solid", "Medium Lines", "Thin Lines" });
+                    var solid = ResolveLineStyle(new[] { "Lighting Fixture", "<Solid>", "Solid", "Medium Lines", "Thin Lines" });
                     var textType = ResolveTextType();
 
                     var view = FindOrCreateView(drawing, systemName, viewRegistry, result);
@@ -197,10 +197,18 @@ namespace TurboSuite.Dmx.Services
             catch { try { view.Name = name + " " + Guid.NewGuid().ToString("N").Substring(0, 4); } catch { /* keep default */ } }
         }
 
-        // Wipe everything the view owns (it's program-owned, so a full clear is safe wipe-and-redraw).
+        // Wipe everything the view owns (it's program-owned, so a full clear is safe wipe-and-redraw). Delete
+        // ONLY the element kinds we actually draw — DetailCurves, TextNotes, and FamilyInstances (Detail Items
+        // + the AnnotationSymbol markers, which subclass FamilyInstance). The view-scoped collector
+        // (FilteredElementCollector(doc, viewId)) sees the content, but its raw set for a drafting view also
+        // includes a categoryless internal Element whose deletion cascades to the view itself (then the redraw
+        // hits a dead wrapper → InvalidObjectException); the type filter skips it. OwnedByView is NOT usable
+        // here — it comes back empty for drafting-view detail/annotation content, so nothing gets wiped.
         private void WipeView(View view)
         {
-            var ids = new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType().ToElementIds();
+            var ids = new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType()
+                .Where(e => e is CurveElement || e is TextNote || e is FamilyInstance)
+                .Select(e => e.Id).ToList();
             if (ids.Count == 0) return;
             try { _doc.Delete(ids); } catch { /* best-effort: a pinned/undeletable element shouldn't abort the redraw */ }
         }

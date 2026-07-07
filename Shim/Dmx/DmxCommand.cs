@@ -98,6 +98,11 @@ public class DmxCommand : IExternalCommand
                 workQueue.Dispose();
             };
 
+            // If the project closes out from under us, force-close skipping the deferred zone-color revert:
+            // the closing document's view overrides are discarded with it, and the queued revert would run
+            // after the doc is gone (crash). Setting `reverted` lets the Closing handler pass straight through.
+            ModelessWindowGuard.Register(doc, window, () => { reverted = true; window.Close(); });
+
             _activeWindow = window;
             window.Show();
             return Result.Succeeded;

@@ -31,6 +31,10 @@ public class TurboSuiteApplication : IExternalApplication
             // (%LOCALAPPDATA%\TurboSuite\{ver}\, Addins\{ver}\) isolate off this at runtime.
             UpdateConstants.RevitVersion = application.ControlledApplication.VersionNumber;
 
+            // Close any open modeless window when the document it was opened against closes — otherwise it
+            // lingers holding a dead document and crashes Revit on the next interaction.
+            ModelessWindowGuard.Hook(application.ControlledApplication);
+
             application.CreateRibbonTab("TurboSuite");
             RibbonPanel settingsPanel = application.CreateRibbonPanel("TurboSuite", "Settings");
             RibbonPanel commandsPanel = application.CreateRibbonPanel("TurboSuite", "Commands");

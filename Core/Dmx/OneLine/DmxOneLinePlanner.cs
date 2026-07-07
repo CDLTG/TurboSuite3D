@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -47,15 +48,38 @@ namespace TurboSuite.Dmx.OneLine
 
         private readonly struct Row
         {
-            public Row(int dec, int address, string driverMark, int channels, string zoneName)
+            public Row(int dec, int address, string driverMark, int channels, string zoneName, string clusterName)
             {
-                Dec = dec; Address = address; DriverMark = driverMark; Channels = channels; ZoneName = zoneName;
+                Dec = dec; Address = address; DriverMark = driverMark; Channels = channels;
+                ZoneName = zoneName; ClusterName = clusterName;
             }
             public int Dec { get; }
             public int Address { get; }
             public string DriverMark { get; }
             public int Channels { get; }
             public string ZoneName { get; }
+            public string ClusterName { get; }
+
+            /// <summary>
+            /// The homerun destination label: the zone, plus the cluster in parens when it names a real
+            /// sub-grouping (i.e. differs from the zone name — flat, single-cluster zones carry the zone name
+            /// as the cluster name, so those stay bare). e.g. "WINE ROOM (SOUTH WALL)".
+            /// </summary>
+            public string Destination
+            {
+                get
+                {
+                    string zone = ZoneName ?? "";
+                    string cluster = ClusterName ?? "";
+                    if (cluster.Length == 0 || string.Equals(cluster, zone, StringComparison.OrdinalIgnoreCase))
+                        return zone;
+                    // Residual/already-parenthesized cluster names (e.g. "(unclustered)") append bare to avoid
+                    // doubling the parens.
+                    return cluster.StartsWith("(", StringComparison.Ordinal)
+                        ? $"{zone} {cluster}"
+                        : $"{zone} ({cluster})";
+                }
+            }
         }
 
         private static DmxOneLineDrawing BuildLoop(InterfaceSolution iface,
@@ -84,7 +108,7 @@ namespace TurboSuite.Dmx.OneLine
                     string driverMark = driverTypeMarkByName != null
                                         && driverTypeMarkByName.TryGetValue(pd.Driver.Name, out var tm)
                         ? tm : pd.Driver.Name;
-                    rows.Add(new Row(dec, address, driverMark, sol.Channels, addressed.ZoneName));
+                    rows.Add(new Row(dec, address, driverMark, sol.Channels, addressed.ZoneName, cluster.Name));
                 }
             }
 
@@ -200,7 +224,7 @@ namespace TurboSuite.Dmx.OneLine
                 var homerunType = DmxWireLegend.HomerunFor(row.Channels, pullUpSizes);
                 Wire(hrStart, hrEnd, dashed: false, homerunType);
                 notes.Add(new DmxNote(hrEnd.Offset(2.0 / 12.0, 2.5 / 12.0),
-                                      $"TO DMX FIXTURE(S) - {row.ZoneName.ToUpper(Inv)}", DmxTextAlign.Left));
+                                      $"TO DMX FIXTURE(S) - {row.Destination.ToUpper(Inv)}", DmxTextAlign.Left));
 
                 // first driver of a feed: the 120V FEED stub (①) + label
                 if (feedFirst[r])

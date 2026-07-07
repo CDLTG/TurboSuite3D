@@ -90,6 +90,7 @@ namespace TurboSuite.Number
                     workQueue.Dispose();
                 };
 
+                ModelessWindowGuard.Register(doc, window, window.Close);
                 _activeWindow = window;
                 window.Show();
 

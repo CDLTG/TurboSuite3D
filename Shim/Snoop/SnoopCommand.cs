@@ -4,6 +4,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
+using TurboSuite.Shared.Services;
 using TurboSuite.Snoop.Models;
 using TurboSuite.Snoop.Services;
 using TurboSuite.Snoop.ViewModels;
@@ -96,6 +97,7 @@ public class SnoopCommand : IExternalCommand
                 _activeWindow = null;
         };
 
+        ModelessWindowGuard.Register(doc, window, window.Close);
         _activeWindow = window;
         window.Show();
         return Result.Succeeded;

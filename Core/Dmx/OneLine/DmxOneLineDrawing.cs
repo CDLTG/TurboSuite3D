@@ -290,6 +290,6 @@ namespace TurboSuite.Dmx.OneLine
 
         /// <summary>Deterministic owned-view name: a re-run finds + wipes this view.</summary>
         public string ViewName(string systemName) =>
-            $"TurboDMX — {systemName} — Interface #{InterfaceNumber}";
+            $"TurboDMX - Interface #{InterfaceNumber}";
     }
 }

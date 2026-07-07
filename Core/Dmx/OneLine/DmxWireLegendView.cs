@@ -31,7 +31,7 @@ namespace TurboSuite.Dmx.OneLine
         public IReadOnlyList<DmxNote> Notes { get; }
 
         /// <summary>Deterministic owned-view name — a re-draw finds + wipes this one view (one per job).</summary>
-        public string ViewName(string systemName) => $"TurboDMX — {systemName} — Wire Legend";
+        public string ViewName(string systemName) => $"TurboDMX - Wire Legend";
     }
 
     /// <summary>
