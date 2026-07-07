@@ -16,17 +16,17 @@ namespace TurboSuite.Dmx
             ReservedChannels = reservedChannels;
         }
 
-        /// <summary>1-based interface number (the "Interface #" on the one-line, §8a).</summary>
+        /// <summary>1-based interface number (the "Interface #" on the one-line).</summary>
         public int InterfaceNumber { get; }
         public IReadOnlyList<AddressedZone> Zones { get; }
 
         /// <summary>
-        /// The designer-declared DMX Loop name this interface realizes (§0d), or null if the engine
+        /// The designer-declared DMX Loop name this interface realizes, or null if the engine
         /// auto-packed it. Brands the loop's one-line diagram identity.
         /// </summary>
         public string? LoopName { get; }
 
-        /// <summary>Smart-fixture (Topology B) channels held off this interface's budget (§3c). Carried
+        /// <summary>Smart-fixture (Topology B) channels held off this interface's budget. Carried
         /// from the declared loop; auto-packed interfaces reserve nothing.</summary>
         public int ReservedChannels { get; }
 
@@ -44,19 +44,19 @@ namespace TurboSuite.Dmx
 
         public IReadOnlyList<DmxInterface> Interfaces { get; }
 
-        /// <summary>Profile channel ceiling (§1.6): Lutron QSE-CI-DMX = 32, native universe = 512.</summary>
+        /// <summary>Profile channel ceiling: Lutron QSE-CI-DMX = 32, native universe = 512.</summary>
         public int ChannelCeiling { get; }
 
         public int InterfaceCount => Interfaces.Count;
     }
 
     /// <summary>
-    /// Step 7 — pack zones into interfaces under the D1 budget (ceiling − reserved, §3c/§4), then
+    /// Step 7 — pack zones into interfaces under the D1 budget (ceiling − reserved), then
     /// address each interface's zones from slot 1 (each interface is its own universe). Zones are
     /// kept WHOLE within an interface (next-fit); a zone spanning interfaces — the expensive
-    /// address-duplication case (§6c) — is the deferred physical-spread path, not done here.
+    /// address-duplication case — is the deferred physical-spread path, not done here.
     ///
-    /// Designer-declared DMX Loops (§0d) override packing for their member zones: each declared loop
+    /// Designer-declared DMX Loops override packing for their member zones: each declared loop
     /// becomes exactly one interface (in declaration order), branded with its loop name; the remaining
     /// (undeclared) zones auto-pack by next-fit after them. An over-budget declared loop is the third
     /// pre-solve gate (<see cref="DmxValidator"/>), so it should never reach here — this guards anyway.
@@ -75,7 +75,7 @@ namespace TurboSuite.Dmx
             foreach (var z in zones) byName[z.ZoneName] = z;
 
             // Declared loops first, in declaration order — one interface each, branded with the loop name.
-            // Each carries its OWN reserved-channel headroom (§3c), so its budget is ceiling − its reserved.
+            // Each carries its OWN reserved-channel headroom, so its budget is ceiling − its reserved.
             var groups = new List<(string? loopName, int reserved, List<ZoneInput> zones)>();
             var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (declaredLoops != null)

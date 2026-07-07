@@ -7,7 +7,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Oracles for <see cref="DmxLockReconciler"/> — the Control-Zone-anchored numbering lock (§8c). Covers
+    /// Oracles for <see cref="DmxLockReconciler"/> — the Control-Zone-anchored numbering lock. Covers
     /// the Unlocked fresh-numbering path and the Locked behaviors: unchanged ⇒ identical #s, additive ⇒
     /// append past high-water, shrink ⇒ retire (gap, no renumber), new zone ⇒ append, and the type/interface
     /// drift REVIEW verdicts. Pure — no Revit, no bill needed (the reconciler works off DmxSolvedZone).

@@ -5,9 +5,9 @@ using System.Linq;
 namespace TurboSuite.Dmx
 {
     /// <summary>
-    /// The full job contract (§1.5) as flat declared values — every knob the engine reads. Build one
+    /// The full job contract as flat declared values — every knob the engine reads. Build one
     /// by hand (decoder POOL, driver pool, voltage, ceiling, D4) and the bill is a pure function of it
-    /// plus the tagged zones. No part is named in code. Smart-fixture channel reservation (§3c) is a
+    /// plus the tagged zones. No part is named in code. Smart-fixture channel reservation is a
     /// per-loop property (<see cref="LoopDeclaration.ReservedChannels"/>) — auto-packed interfaces
     /// reserve nothing.
     /// </summary>
@@ -38,27 +38,27 @@ namespace TurboSuite.Dmx
         public IReadOnlyList<DecoderSpec> DecoderPool { get; }
         public IReadOnlyList<DriverType> DriverPool { get; }
         public double SystemVolts { get; }
-        public int ChannelCeiling { get; }       // §1.6 profile: Lutron 32 / native 512
+        public int ChannelCeiling { get; } // profile: Lutron 32 / native 512
         public int MaxDevicesPerSegment { get; } // D4 (~32 default), an input
 
-        // §0c 120 V feed pass: breaker = amps × volts × continuous-derate, plus an inrush count cap.
+        // 120 V feed pass: breaker = amps × volts × continuous-derate, plus an inrush count cap.
         public double BreakerAmps { get; }              // 20 A typical
         public double FeedVolts { get; }                // 120 V line side
         public double BreakerContinuousDerate { get; }  // NEC 80% ⇒ 0.8 (DeratingFactor.Normalize rules)
         public int MaxDriversPerBreaker { get; }        // inrush cap; 0 = no count limit
         public BreakerBasis BreakerBasis { get; }       // pack by connected load or full nameplate
 
-        // §8b / Q8 Link→Processor roll-up (report-only, §1.6 profile values). Lutron QS / HQP7-2 defaults.
+        // Link→Processor roll-up (report-only, profile values). Lutron QS / HQP7-2 defaults.
         public int LinkChannelCapacity { get; }  // switch legs per link (1 DMX ch = 1 leg); QS = 512
         public int LinkDeviceCapacity { get; }   // devices (interfaces) per link; QS = 99
         public int LinksPerProcessor { get; }    // links per processor; HQP7-2 = 2
 
-        /// <summary>The branch-breaker watt cap drivers are load-packed under (§0c).</summary>
+        /// <summary>The branch-breaker watt cap drivers are load-packed under.</summary>
         public double BreakerCapWatts => BreakerPacker.Cap(BreakerAmps, FeedVolts, BreakerContinuousDerate);
     }
 
     /// <summary>
-    /// A PHYSICAL cluster of runs (§8d): the runs close enough to share decoders — one wall, one cove,
+    /// A PHYSICAL cluster of runs: the runs close enough to share decoders — one wall, one cove,
     /// one location. Decoders pack PER cluster (a decoder can't reach across the room), so a cluster is
     /// the decoder-packing grain. It's orthogonal to the control zone (the addressing grain): one zone
     /// holds one or more clusters, all mirrored to the zone's single address.
@@ -76,7 +76,7 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// One control zone as the designer tagged it (§5): a name + its physical clusters. A zone is the
+    /// One control zone as the designer tagged it: a name + its physical clusters. A zone is the
     /// ADDRESSING grain (one mirrored DMX address); clusters are the DECODER-PACKING grain within it.
     /// </summary>
     public sealed class ZoneDesign
@@ -99,7 +99,7 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// A designer-declared DMX Loop (Design §0d / §6c): a named, ordered grouping of Control Zones that
+    /// A designer-declared DMX Loop: a named, ordered grouping of Control Zones that
     /// must share ONE interface/chain (= one one-line diagram). Zones are referenced by name (the harness
     /// analog of the Switch-ID the real module keys on). Declaring a loop forces those zones onto their
     /// own interface; any zone in NO declared loop falls through to engine auto-packing (the geometry-blind
@@ -122,7 +122,7 @@ namespace TurboSuite.Dmx
         public IReadOnlyList<string> ZoneNames { get; }
 
         /// <summary>Channels reserved off this loop's interface budget for smart fixtures the tape packer
-        /// doesn't place (§3c). 0 = the whole ceiling is available to tape. Per-loop because the fixtures
+        /// doesn't place. 0 = the whole ceiling is available to tape. Per-loop because the fixtures
         /// that motivate a reservation live in a specific loop; auto-packed interfaces reserve nothing.</summary>
         public int ReservedChannels { get; }
     }
@@ -183,7 +183,7 @@ namespace TurboSuite.Dmx
         public LoopSegmentation Segmentation { get; }
         public int RepeaterCount => Segmentation.RepeaterCount;
 
-        /// <summary>This interface's 120 V feeds (§0c) — one <see cref="BreakerLoad"/> per feed, drivers in
+        /// <summary>This interface's 120 V feeds — one <see cref="BreakerLoad"/> per feed, drivers in
         /// DEC order (next-fit, never spanning interfaces). The one-line draws these as the "120V FEED"
         /// blocks; <c>bill.Breakers</c> is these flattened across interfaces, so the count and the drawing
         /// agree by construction.</summary>
@@ -206,13 +206,13 @@ namespace TurboSuite.Dmx
         public IReadOnlyList<ZoneSolution> Zones { get; }
         public IReadOnlyList<InterfaceSolution> Interfaces { get; }
 
-        /// <summary>The 120 V branch breakers drivers were load-packed onto (§0c) — one feed per breaker.</summary>
+        /// <summary>The 120 V branch breakers drivers were load-packed onto — one feed per breaker.</summary>
         public IReadOnlyList<BreakerLoad> Breakers { get; }
 
-        /// <summary>The control Links the interfaces roll up onto (§8b/Q8) — report-only DMX demand.</summary>
+        /// <summary>The control Links the interfaces roll up onto — report-only DMX demand.</summary>
         public IReadOnlyList<LinkLoad> Links { get; }
 
-        /// <summary>Links per processor (§1.6 profile; HQP7-2 = 2) used for the processor roll-up.</summary>
+        /// <summary>Links per processor ( profile; HQP7-2 = 2) used for the processor roll-up.</summary>
         public int LinksPerProcessor { get; }
 
         public int TotalDecoders => Zones.Sum(z => z.DecoderCount);
@@ -220,10 +220,10 @@ namespace TurboSuite.Dmx
         public int RequiredBreakers => Breakers.Count;
         public int InterfaceCount => Interfaces.Count;
 
-        /// <summary>Control links the interfaces imply (§8b/Q8) — reported, never provisioned.</summary>
+        /// <summary>Control links the interfaces imply — reported, never provisioned.</summary>
         public int RequiredLinks => Links.Count;
 
-        /// <summary>Processors the links imply: ceil(links / LinksPerProcessor) (§8b/Q8).</summary>
+        /// <summary>Processors the links imply: ceil(links / LinksPerProcessor).</summary>
         public int RequiredProcessors => LinkPacker.ProcessorCount(Links.Count, LinksPerProcessor);
         public int TotalChannels => Interfaces.Sum(i => i.Interface.ChannelsUsed);
         public int TotalRepeaters => Interfaces.Sum(i => i.RepeaterCount);
@@ -244,15 +244,57 @@ namespace TurboSuite.Dmx
     /// <summary>
     /// The whole pure pipeline in one call: select a decoder type + power-pack each zone → address &amp;
     /// interface-pack all zones → segment each loop by D4. Deterministic; refuses only at the three
-    /// pre-solve gates (<see cref="DmxValidator"/>): the §6c contract hard-stop
+    /// pre-solve gates (<see cref="DmxValidator"/>): the contract hard-stop
     /// (<see cref="UnmappableTapeException"/>), the drawn-correctly over-cap gate
     /// (<see cref="OverCapRunsException"/>), and the declared-loop-over-ceiling gate
     /// (<see cref="OverCapLoopsException"/>) — never silently splits a drawn run or a declared loop.
     /// </summary>
+    /// <remarks>
+    /// CANONICAL DMX VOCABULARY — the containment ladder (largest → smallest). Each rung physically
+    /// contains the one below it; capacity is tiered &amp; growable (fill a rung ⇒ add another of it). The
+    /// solve spine is: Project → Processor → Link → Interface → DMX Loop → Decoder → DMX Fixture. Other
+    /// files cite these rung numbers; this is their definition.
+    /// <list type="number">
+    /// <item><b>Project</b> — the connected control-system file (one job). Grows freely (add Processors).</item>
+    /// <item><b>Processor</b> — the control head-end unit (Lutron HQP7-2 = 2 Links). Report-only.</item>
+    /// <item><b>Link</b> — a control trunk off the Processor that the Interfaces hang on. Lutron QS =
+    ///   <b>512 switch legs / 99 devices</b> (1 DMX channel = 1 switch leg), <i>shared with all non-DMX
+    ///   Lutron loads</i> ⇒ TurboDMX sizes &amp; REPORTS it, never enforces (D2). See <see cref="LinkPacker"/>.</item>
+    /// <item><b>Interface</b> — a DMX gateway emitting one universe; the universe divides into
+    ///   <i>channels</i> (the budget atom). <b>1 Interface : 1 DMX Loop.</b> Channel ceiling is a profile
+    ///   value (Lutron 32 / native 512). See <see cref="DmxProfile"/>, <see cref="InterfacePacker"/>.</item>
+    /// <item><b>DMX Loop</b> — the daisy chain of Decoders off one Interface (+ terminator) = <b>one
+    ///   one-line diagram</b>. Designer-declarable (Zone→Loop, <see cref="LoopDeclaration"/>); an
+    ///   undeclared zone auto-packs. Split into signal segments by repeaters.
+    ///   <list type="bullet"><item><b>5a. Signal segment</b> — one repeater-bounded RS-485 run:
+    ///   ≤ ~32 devices (D4) / ≤ 1000 ft (D3), vendor-independent physics. See <see cref="LoopSegmenter"/>.</item></list></item>
+    /// <item><b>Decoder</b> — the DMX <i>device</i> on the Loop; turns channels into LED power outputs.
+    ///   Selected from the pool by output count (smallest whose outputs ≥ the tape's channels). Set to a
+    ///   Control Zone's DMX address. Counts toward a segment's ~32.</item>
+    /// <item><b>DMX Fixture</b> — the controlled LED load; declares an integer <c>DMX Channels</c>
+    ///   (<c>&gt; 0</c> marks ANY DMX fixture, linear or point). A Revit lighting fixture carrying
+    ///   <c>Control Zone</c>.</item>
+    /// </list>
+    /// LOGICAL GROUPINGS (cut across the ladder, not rungs):
+    /// <list type="bullet">
+    /// <item><b>Control Zone</b> — design intent: the tapes (and their decoders) sharing ONE DMX address,
+    ///   mirrored across all the zone's decoders. The one true human input (a native fixture param). Can
+    ///   span Loops by duplicating its address.</item>
+    /// <item><b>Physical cluster</b> — geometry: runs close enough to share a Decoder (one wall/cove). The
+    ///   decoder-packing grain, orthogonal to the Control Zone (the addressing grain). See <see cref="DmxZoneBuilder"/>.</item>
+    /// <item><b>DMX address</b> — the coordinate a Control Zone owns (e.g. "005"): the start channel its
+    ///   decoders are set to. Not a rung — it's what a Control Zone <i>is</i>, in the Interface's channels.</item>
+    /// </list>
+    /// OVERLOADED WORDS (disambiguate on sight): <b>Device</b> = an Interface (on the Link) OR a Decoder
+    /// (on the Loop) — always say which. <b>Loop</b> = one Interface's full chain; <b>segment</b> = its
+    /// repeater-bounded ~32-device piece. <b>Channel</b> = one DMX slot / budget atom (= 1 switch leg on
+    /// Lutron), a count; <b>address</b> = a Control Zone's start channel, a position. <b>Zone</b> always
+    /// means Control Zone.
+    /// </remarks>
     public static class DmxSolver
     {
         /// <param name="loops">
-        /// Optional designer-declared DMX Loops (§0d): each forces its zones onto one interface. Zones in
+        /// Optional designer-declared DMX Loops: each forces its zones onto one interface. Zones in
         /// no declared loop fall through to engine auto-packing. Null/empty ⇒ pure auto-packing (the
         /// original behavior).
         /// </param>
@@ -262,7 +304,7 @@ namespace TurboSuite.Dmx
             if (contract == null) throw new ArgumentNullException(nameof(contract));
             if (zones == null) throw new ArgumentNullException(nameof(zones));
 
-            // 0. Gate: mappability (§6c) + drawn-correctly over-cap + declared-loop over-ceiling (§0d).
+            // 0. Gate: mappability + drawn-correctly over-cap + declared-loop over-ceiling.
             //    Refuses before any partial bill.
             DmxValidator.Validate(contract, zones, loops);
 
@@ -292,12 +334,12 @@ namespace TurboSuite.Dmx
             }
 
             // 2. Control: address zones and pack them into interfaces under the D1 budget. Declared loops
-            //    each become one interface (in declaration order); the rest auto-pack (§0d).
+            // each become one interface (in declaration order); the rest auto-pack.
             var packed = InterfacePacker.Pack(zoneInputs, contract.ChannelCeiling, loops);
 
-            // 3. Per interface: split the loop by D4 (segments) AND pack its drivers onto 120 V feeds (§0c).
+            // 3. Per interface: split the loop by D4 (segments) AND pack its drivers onto 120 V feeds.
             //    Feeds pack PER INTERFACE in DEC-walk order (next-fit) so a feed is consecutive DEC#s and
-            //    never spans interfaces — the §0c count then equals the one-line's drawn "120V FEED" blocks
+            // never spans interfaces — the count then equals the one-line's drawn "120V FEED" blocks
             //    (gap closed). Per-driver watts are connected load OR full nameplate, per the contract basis.
             var byZone = zoneSolutions.ToDictionary(z => z.ZoneName);
             var interfaceSolutions = new List<InterfaceSolution>(packed.Interfaces.Count);
@@ -325,7 +367,7 @@ namespace TurboSuite.Dmx
             // 4. Feeds roll up to the bill: bill.Breakers = the per-interface feeds, flattened in order.
             var breakers = interfaceSolutions.SelectMany(i => i.Feeds).ToList();
 
-            // 5. Roll-up (§8b/Q8, report-only): pack interfaces onto control links (legs + device caps),
+            // 5. Roll-up (report-only): pack interfaces onto control links (legs + device caps),
             //    then links → processors. Sized & reported; never a solve stop, never provisioned.
             var links = LinkPacker.Pack(interfaceSolutions.Select(i => i.Interface.ChannelsUsed).ToList(),
                                         contract.LinkChannelCapacity, contract.LinkDeviceCapacity);

@@ -8,7 +8,7 @@ namespace TurboSuite.Tests.Dmx
     /// <summary>
     /// The count → sub-zone structure convention (option a). A fixture declares only a channel COUNT;
     /// this table decomposes it into named Lutron primitives for addressing. Tier B for the
-    /// decompositions (Screenshot_195 + the RGBATW cutsheet), Tier A for the sum invariant.
+    /// decompositions (the reference one-line + the RGBATW cutsheet), Tier A for the sum invariant.
     /// </summary>
     public class SubZoneStructureTests
     {

@@ -15,20 +15,20 @@ using TurboSuite.Shared.Helpers;
 namespace TurboSuite.Dmx.Services
 {
     /// <summary>
-    /// Shim-side <see cref="IDmxPlacementService"/> — the first TurboDMX model writes (BuildPlan Phase 2).
+    /// Shim-side <see cref="IDmxPlacementService"/> — the first TurboDMX model writes.
     /// Loop-by-loop click-to-place, mirroring TurboDriver's deploy gesture: for each loop prompt one point,
     /// drop that loop's decoder + driver instances in a tidy two-column strip (cosmetic layout deferred per
-    /// Design §8a), write the decoder <c>Switch ID</c> ("DEC n"), and place real auto-syncing tags — a
+    /// ), write the decoder <c>Switch ID</c> ("DEC n"), and place real auto-syncing tags — a
     /// Switch-ID tag on each decoder, a Type-Mark tag on each driver (the driver's Type Mark is NOT written,
     /// only tagged — the family already carries it, e.g. "MD"; per the chosen Phase-2 behavior).
     ///
-    /// Placement is non-destructive (BuildPlan Phase 3): a re-Place lands only the unbuilt remainder (skips
+    /// Placement is non-destructive: a re-Place lands only the unbuilt remainder (skips
     /// DEC #s already in the model) and removes ORPHANS — pairs whose DEC # left the solve — using the
     /// persisted registry to delete the decoder AND its paired driver exactly (auto when Unlocked, confirmed
     /// when Locked). This preserves the designer's click-placement + any manual switch systems on survivors,
     /// while still reconciling removals (Option A, decided 2026-06-26).
     ///
-    /// No wiring / circuits here — DMX decoders aren't power-circuited like RPS (that's the §0c feed half,
+    /// No wiring / circuits here — DMX decoders aren't power-circuited like RPS (that's the feed half,
     /// deferred). Each loop places in its own transaction, committed before the next pick (you can't pick
     /// inside an open transaction). Escape during any pick stops the run and keeps what's already placed.
     ///
@@ -67,12 +67,12 @@ namespace TurboSuite.Dmx.Services
             View view = _doc.ActiveView;
             double? displayZ = GetDisplayElevation(_doc, view);
 
-            // Option-A cleanup (Phase 3): remove decoders whose DEC # is no longer in the solve, plus their
+            // Option-A cleanup: remove decoders whose DEC # is no longer in the solve, plus their
             // paired drivers (exact, via the registry) — auto when Unlocked, confirmed when Locked. Runs in
             // its own committed transaction BEFORE the remainder scan so freed DEC #s aren't seen as "existing".
             RemoveOrphans(plan, locked, registry, result);
 
-            // Idempotent re-Place (Phase 3 "unbuilt remainder"): skip any decoder whose DEC # is already in
+            // Idempotent re-Place ( "unbuilt remainder"): skip any decoder whose DEC # is already in
             // the model, so placing again after a locked additive re-run lands only the new decoders.
             var existing = ExistingDecoderSwitchIds();
 

@@ -6,7 +6,7 @@ using System.Text;
 namespace TurboSuite.Dmx
 {
     /// <summary>
-    /// Renders a <see cref="DmxBill"/> as a human-readable list dump — Screenshot_196 in text form:
+    /// Renders a <see cref="DmxBill"/> as a human-readable list dump — the reference one-line in text form:
     /// totals, driver BOM, wire legend, then each interface's loop with its zones, addresses, and
     /// the decoders (DEC #, watts, driver) mirrored under each zone. Pure string output.
     /// </summary>

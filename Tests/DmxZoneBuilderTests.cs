@@ -8,7 +8,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Oracles for <see cref="DmxZoneBuilder"/> — the Revit-readings → engine-zones boundary (Phase 1).
+    /// Oracles for <see cref="DmxZoneBuilder"/> — the Revit-readings → engine-zones boundary.
     /// Verifies grouping by Control Zone value, flat-cluster default, unassigned counting, and that the
     /// produced zones feed the engine solver unchanged.
     /// </summary>
@@ -79,7 +79,7 @@ namespace TurboSuite.Tests.Dmx
             Assert.True(bill.TotalDecoders >= 2);
         }
 
-        // ── Cluster sub-builder (§8d): per-zone partition by fixture ElementId ───────────────────────
+        // ── Cluster sub-builder: per-zone partition by fixture ElementId ───────────────────────
 
         [Fact]
         public void ClustersPartitionZoneIntoNamedClustersPlusResidual()

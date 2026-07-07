@@ -5,10 +5,10 @@ namespace TurboSuite.Dmx.Input
 {
     // The boundary types between the Revit-coupled reader (Shim/Dmx/Services/DmxModelReader) and the pure
     // Core layer (zone builder, contract builder, the main ViewModel). The reader populates these from the
-    // active document with ZERO model writes (TurboDMX-BuildPlan Phase 1); Core consumes them blind to Revit.
+    // active document with ZERO model writes; Core consumes them blind to Revit.
 
     /// <summary>One DMX lighting-fixture instance as read from the model — the engine's <c>TapeRun</c> raw
-    /// material plus the native <c>Control Zone</c> value that groups it (TurboDMX-BuildPlan Phase 1).</summary>
+    /// material plus the native <c>Control Zone</c> value that groups it.</summary>
     public sealed class DmxFixtureReading
     {
         /// <summary>Host-document ElementId of the fixture instance (for selection / cluster binding later).</summary>
@@ -29,7 +29,7 @@ namespace TurboSuite.Dmx.Input
     }
 
     /// <summary>A discovered decoder family type and its caps (Kind-1 part properties, read off the family).
-    /// The designer ticks the job's kit from these (Q10 curated-from-discovery).</summary>
+    /// The designer ticks the job's kit from these ( curated-from-discovery).</summary>
     public sealed class DmxDecoderCandidate
     {
         /// <summary>Stable type identity (UniqueId) for persistence + re-resolution.</summary>

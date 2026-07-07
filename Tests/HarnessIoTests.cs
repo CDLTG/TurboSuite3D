@@ -3,7 +3,7 @@ using Xunit;
 
 namespace TurboSuite.Tests.Dmx
 {
-    /// <summary>Wire gauges derived from the channel count (§8a): channels + 1 common, rounded to stock pairs.</summary>
+    /// <summary>Wire gauges derived from the channel count: channels + 1 common, rounded to stock pairs.</summary>
     public class WireSpecTests
     {
         [Theory]

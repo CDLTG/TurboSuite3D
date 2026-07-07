@@ -8,10 +8,10 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Oracles for <see cref="DmxOneLinePlanner"/> — the bill→one-line layout (BuildPlan Phase 4). Locks the
+    /// Oracles for <see cref="DmxOneLinePlanner"/> — the bill→one-line layout. Locks the
     /// per-loop symbol inventory, the DEC#/address/Type-Mark label params, the wire-type markers, the
     /// connection-point geometry (chain vertical, power horizontal), and — the headline — that the drawn
-    /// "TO 20A BREAKER" feed blocks equal the §0c breaker count (the reconciliation made visible in the drawing).
+    /// "TO 20A BREAKER" feed blocks equal the breaker count (the reconciliation made visible in the drawing).
     /// </summary>
     public class DmxOneLinePlannerTests
     {
@@ -90,7 +90,7 @@ namespace TurboSuite.Tests.Dmx
         public void DrawnFeedBlocksEqualTheSec0cBreakerCount()
         {
             // 5 decoders, inrush cap 2 ⇒ feeds [2,2,1] = 3 (count-bound). The drawing's "TO 20A BREAKER" notes
-            // must equal the interface's §0c feeds AND the bill's breaker count — the gap is closed.
+            // must equal the interface's feeds AND the bill's breaker count — the gap is closed.
             var bill = DmxSolver.Solve(Contract(2), new[] { Zone("Z1", 5) });
             var d = Assert.Single(Plan(bill));
 

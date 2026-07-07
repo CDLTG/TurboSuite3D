@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace TurboSuite.Dmx.Placement
 {
-    // Pure, Revit-free placement plan + result (BuildPlan Phase 2 "Placement + tags"). The planner walks a
+    // Pure, Revit-free placement plan + result ( "Placement + tags"). The planner walks a
     // solved DmxBill into an ordered, loop-by-loop list of devices to drop — each a decoder + its driver,
     // carrying the FamilySymbol identities (UniqueId) the shim resolves and the global "DEC n" Switch ID
     // that matches the bill's decoder numbering. The shim consumes this on the Revit thread (click-to-place);
@@ -98,7 +98,7 @@ namespace TurboSuite.Dmx.Placement
         public int Failed { get; set; }
 
         /// <summary>Decoders skipped because their DEC # is already in the model — re-Place lands only the
-        /// unbuilt remainder (BuildPlan Phase 3), so it's safe to Place again after a locked additive re-run.</summary>
+        /// unbuilt remainder, so it's safe to Place again after a locked additive re-run.</summary>
         public int AlreadyPlaced { get; set; }
 
         /// <summary>Orphaned decoders removed this run — DEC #s no longer in the solve (Option A cleanup).</summary>

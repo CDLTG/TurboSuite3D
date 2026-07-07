@@ -6,7 +6,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// The whole pipeline in one call. A small hand-verifiable solve, the §6a bracket, decoder-type
+    /// The whole pipeline in one call. A small hand-verifiable solve, the bracket, decoder-type
     /// selection (4-ch vs 6-ch), and the run-breaking blocker. Also the I/O-testing substrate.
     /// </summary>
     public class DmxSolverTests
@@ -82,9 +82,9 @@ namespace TurboSuite.Tests.Dmx
         public void Feeds_PackPerInterface_NotSystemWide_SoTheCountMatchesTheOneLine()
         {
             // Two declared loops ⇒ two interfaces, each a single 300 W driver. Packed PER INTERFACE the
-            // §0c count is 2 feeds (one per column); a system-wide pack would have merged 600 W onto ONE
+            // count is 2 feeds (one per column); a system-wide pack would have merged 600 W onto ONE
             // 1920 W breaker (count 1). Per-interface is the buildable figure the one-line draws, so the
-            // breaker COUNT == the drawn "120V FEED" blocks (gap closed, §0c / Phase 4).
+            // breaker COUNT == the drawn "120V FEED" blocks (gap closed).
             var zones = new[]
             {
                 new ZoneDesign("Z1", new[] { new TapeRun(300.0 / 5.2, 5.2, 4) }),
@@ -131,7 +131,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void FiveChannelTape_WithOnlyFourChannelDecoders_AbortsWholeRun()
         {
-            // The §6c hard-stop: contract misconfiguration ⇒ run-breaking, with an actionable message.
+            // The hard-stop: contract misconfiguration ⇒ run-breaking, with an actionable message.
             var zones = new[] { new ZoneDesign("Lobby RGBTW", new[] { new TapeRun(40.0, 5.2, channels: 5) }) };
             var contract = Contract(0.85, decoders: new[] { DecoderSpec.Dmx4_5000_10A });
 
@@ -141,7 +141,7 @@ namespace TurboSuite.Tests.Dmx
             Assert.Equal(4, ex.MaxOutputsAvailable);
         }
 
-        // --- The §6a bracket: same 40×475 W RGBW tape, two zonings, opposite binding limits ---
+        // --- The bracket: same 40×475 W RGBW tape, two zonings, opposite binding limits ---
 
         private static TapeRun[] FortyRuns() =>
             Enumerable.Range(0, 40).Select(_ => new TapeRun(475.0 / 5.2, 5.2, 4)).ToArray();

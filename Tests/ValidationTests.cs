@@ -5,7 +5,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// The drawn-correctly gate (Design §0b): the engine refuses to silently cut a drawn run. A run too
+    /// The drawn-correctly gate: the engine refuses to silently cut a drawn run. A run too
     /// long for a single feed is flagged (batched, located, with the min split) and the whole solve is
     /// refused; runs that fit are grouped WHOLE, never cut. The cap is the coupled effective feed
     /// (decoder C1/C2 ∧ largest driver × derate), so the derate INPUT moves the threshold.

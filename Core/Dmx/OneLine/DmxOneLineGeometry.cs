@@ -18,9 +18,8 @@ namespace TurboSuite.Dmx.OneLine
     }
 
     /// <summary>
-    /// The authored one-line symbol library's geometry (BuildPlan Phase 4) — the SOURCE OF TRUTH for the
-    /// firm's authored families (the former <c>TurboDMX-FamilySpec-Form.txt</c> that collected these is
-    /// retired): family/type names, the instance label parameter
+    /// The authored one-line symbol library's geometry — the SOURCE OF TRUTH for the
+    /// firm's authored families: family/type names, the instance label parameter
     /// names the renderer writes, box sizes, and the connection-point offsets (from each box's <b>center</b>
     /// origin) the line-drawing targets. All lengths are <b>model feet</b>; the families are Detail Items
     /// drawn at architectural size and read at the pinned view scale (1/4" = 1'-0"). The <see cref="Layout"/>
@@ -107,7 +106,7 @@ namespace TurboSuite.Dmx.OneLine
         }
 
         /// <summary>Wire-type marker — Generic Annotation placed ON a wire; <c>WireMark</c> = the per-job
-        /// legend # (Phase 6: dense, 1..N — the fixed 1–7 range is gone now that #16-N is uncapped).</summary>
+        /// legend # (dense, 1..N — the fixed 1–7 range is gone now that #16-N is uncapped).</summary>
         public static class Marker
         {
             public const string Family = "AL_Annotation_Wire Mark";
@@ -117,7 +116,7 @@ namespace TurboSuite.Dmx.OneLine
 
         /// <summary>
         /// TurboDMX's layout spacing — <b>not</b> family facts but the generator's own arrangement choices
-        /// (Screenshot_185/196 style), tunable without touching a family. All model feet.
+        /// (the reference one-line style), tunable without touching a family. All model feet.
         /// </summary>
         public static class Layout
         {
@@ -157,7 +156,7 @@ namespace TurboSuite.Dmx.OneLine
         }
 
         /// <summary>
-        /// The per-job wire-legend view's own layout (BuildPlan Phase 6) — a title over a vertical list of
+        /// The per-job wire-legend view's own layout — a title over a vertical list of
         /// rows, each a circled <see cref="Marker"/> number + the wire-type label. Model feet; same view
         /// scale + text height as the one-line so the circled numbers match the wire markers exactly.
         /// </summary>

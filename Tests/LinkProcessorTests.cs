@@ -5,7 +5,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// The Link→Processor roll-up (Design §8b, Q8) — a pure REPORT pass (D2 is report-only, §6c). The
+    /// The Link→Processor roll-up — a pure REPORT pass (D2 is report-only). The
     /// engine sizes the DMX demand up the tiered ladder: interfaces → control links (≤512 switch legs /
     /// ≤99 devices each) → processors (≤2 links each, HQP7-2). It never provisions and never stops on it.
     /// </summary>

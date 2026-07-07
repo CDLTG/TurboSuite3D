@@ -17,7 +17,7 @@ namespace TurboSuite.Dmx;
 ///
 /// STATE: experimental — registered only when <c>ExperimentalCommandsEnabled</c> is set
 /// (App/TurboSuiteApplication.cs), ribbon still uses the <c>Blank</c> placeholder icon. The model READ is
-/// still read-only (no element creation/modification — that's Phase 2 placement, pending); Phase 2 adds the
+/// still read-only (no element creation/modification — that's placement, pending); adds the
 /// first writes as doc-side ExtensibleStorage persistence of the declarations (settings, curated part pools,
 /// declared loops) so the window reopens where the designer left it.
 ///
@@ -58,16 +58,16 @@ public class DmxCommand : IExternalCommand
             var snapshot = reader.Read();
             var state = DmxStorageService.Load(doc);
 
-            // The Refresh re-read AND the doc-side state save (Phase 2 loop persistence) both go through the
+            // The Refresh re-read AND the doc-side state save ( loop persistence) both go through the
             // Revit API thread via the shared work queue; the persister coalesces save bursts into one tx.
             var workQueue = new RevitWorkQueue("TurboDMX Error", "TurboDMX Work Queue");
             var persister = new DmxStatePersister(workQueue, doc);
             var placement = new DmxPlacementService(uidoc);
             var oneLine = new DmxOneLineService(uidoc);
             var selection = new DmxModelSelection(uidoc);
-            var zoneColor = new DmxZoneColorService(uidoc);   // Phase 5 active-view zone overlay
+            var zoneColor = new DmxZoneColorService(uidoc); // active-view zone overlay
 
-            // Yes/No gate for the destructive numbering-lock actions (Re-lock / Unlock, §8c).
+            // Yes/No gate for the destructive numbering-lock actions (Re-lock / Unlock).
             System.Func<string, bool> confirm = msg =>
                 new TaskDialog("TurboDMX")
                 {
@@ -83,7 +83,7 @@ public class DmxCommand : IExternalCommand
             var window = new TurboDmxWindow { DataContext = viewModel };
             new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
 
-            // Phase 5: defer the close until the active-view zone overlay reverts on the API thread. The first
+            // : defer the close until the active-view zone overlay reverts on the API thread. The first
             // Closing cancels and queues the revert; its completion (UI thread) re-issues Close, which passes.
             bool reverted = false;
             window.Closing += (s, e) =>

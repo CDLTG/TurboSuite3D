@@ -11,7 +11,7 @@ namespace TurboSuite.Shared.Helpers;
 /// in raw screen directions (e.g. "stack the next item DOWN the page") that would otherwise be
 /// pinned to the model axes and drift when the view's crop is rotated.
 ///
-/// Phase 0 findings (see plan): for both Floor Plan and RCP, <c>View.RightDirection</c> /
+/// Confirmed behavior: for both Floor Plan and RCP, <c>View.RightDirection</c> /
 /// <c>View.UpDirection</c> track the crop rotation exactly and need no RCP sign special-case.
 /// In an un-rotated view Right = (1,0,0) and Up = (0,1,0), so the mapping is the identity —
 /// existing behavior is preserved byte-for-byte.

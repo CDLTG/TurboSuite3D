@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace TurboSuite.Dmx.OneLine
 {
     /// <summary>
-    /// One <b>per-job</b> wire-legend drawing, as a pure Revit-free set of primitives (BuildPlan Phase 6):
+    /// One <b>per-job</b> wire-legend drawing, as a pure Revit-free set of primitives:
     /// a title note over a vertical list of rows, each a circled <see cref="DmxMarker"/> number paired with
     /// its wire-type label note. Unlike the one-line (one owned view per loop), there is exactly ONE legend
     /// view per job — its circled numbers are the same job-wide numbers the one-line stamps on every wire
@@ -35,11 +35,11 @@ namespace TurboSuite.Dmx.OneLine
     }
 
     /// <summary>
-    /// Lays a <see cref="DmxWireLegend"/> out into a <see cref="DmxWireLegendDrawing"/> (BuildPlan Phase 6) —
+    /// Lays a <see cref="DmxWireLegend"/> out into a <see cref="DmxWireLegendDrawing"/> —
     /// the title, then one row per entry in canonical order (the entries are already ordered): a circled
     /// number on the left, the wire-type label to its right. Pure geometry off
-    /// <see cref="DmxOneLineGeometry.Legend"/>; no Revit. Matches the firm's legend sample (number + label,
-    /// no sample line — Specs/_DMX/Legend.txt).
+    /// <see cref="DmxOneLineGeometry.Legend"/>; no Revit. The firm's legend format is a circled number plus
+    /// the wire-type label per row — no sample line.
     /// </summary>
     public static class DmxWireLegendPlanner
     {
@@ -73,7 +73,7 @@ namespace TurboSuite.Dmx.OneLine
         }
     }
 
-    /// <summary>Outcome of drawing the per-job wire-legend view (BuildPlan Phase 6), surfaced back to the
+    /// <summary>Outcome of drawing the per-job wire-legend view, surfaced back to the
     /// window. <see cref="ViewId"/> is the owned view (created or re-used) the ViewModel persists so the next
     /// draw finds and wipes the same one.</summary>
     public sealed class DmxWireLegendResult

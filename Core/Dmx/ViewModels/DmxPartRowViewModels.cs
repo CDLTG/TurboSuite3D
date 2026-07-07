@@ -5,7 +5,7 @@ using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Dmx.ViewModels
 {
-    /// <summary>One discovered decoder type in the curated-from-discovery checklist (Q10). Ticking it
+    /// <summary>One discovered decoder type in the curated-from-discovery checklist. Ticking it
     /// adds its caps to the contract's decoder pool.</summary>
     public sealed class DmxDecoderRowViewModel : ViewModelBase
     {

@@ -6,9 +6,9 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Oracles for the BuildPlan Phase 6 conductor engine + per-job wire legend: the uncapped
+    /// Oracles for the conductor engine + per-job wire legend: the uncapped
     /// channels→#16-N math (with the job-wide pull-up), and the dense, per-job sequential numbering that
-    /// skips unused sizes (matches the firm's sample, <c>Specs/_DMX/Legend.txt</c>).
+    /// skips unused sizes (the firm's dense per-job numbering convention).
     /// </summary>
     public class DmxWireLegendTests
     {
@@ -57,7 +57,7 @@ namespace TurboSuite.Tests.Dmx
             Assert.Equal("#16-6 Stranded Low Voltage", DmxWireType.Lv(6).Label);
         }
 
-        // ── Dense per-job numbering: skip the unused size (the Legend.txt worked example) ───────────────
+        // ── Dense per-job numbering: skip the unused size (the #16-4-absent worked example) ───────────────
         [Fact]
         public void LowVoltage_NumbersDenselyFromFour_SkippingUnusedSizes()
         {

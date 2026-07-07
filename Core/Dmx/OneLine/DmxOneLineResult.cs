@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace TurboSuite.Dmx.OneLine
 {
-    /// <summary>Outcome of drawing one loop's one-line into its owned Drafting View (BuildPlan Phase 4),
+    /// <summary>Outcome of drawing one loop's one-line into its owned Drafting View,
     /// surfaced back to the window. <see cref="ViewId"/> is the owned view (created or re-used) the
     /// ViewModel persists so the next run finds and wipes the same view.</summary>
     public sealed class DmxOneLineResult

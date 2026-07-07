@@ -60,7 +60,7 @@ namespace TurboSuite.Dmx.ViewModels
             set => SetProperty(ref _name, value);
         }
 
-        /// <summary>Channels reserved off this loop's interface budget for smart fixtures (§3c). 0 = none.
+        /// <summary>Channels reserved off this loop's interface budget for smart fixtures. 0 = none.
         /// Edge-case knob — most loops leave it 0. Changing it re-solves (the owning VM watches for it).</summary>
         public int ReservedChannels
         {
@@ -98,6 +98,6 @@ namespace TurboSuite.Dmx.ViewModels
         public ICommand? AddSelectedCommand { get; set; }   // + Add selected pool zones to this loop
         public ICommand? RemoveCommand { get; set; }        // ✕ delete loop (its zones return to the pool)
         public ICommand? PlaceCommand { get; set; }         // Place ▸ this loop's decoders + drivers
-        public ICommand? DrawOneLineCommand { get; set; }   // One-line ▸ draw/redraw this loop's diagram (Phase 4)
+        public ICommand? DrawOneLineCommand { get; set; } // One-line ▸ draw/redraw this loop's diagram
     }
 }

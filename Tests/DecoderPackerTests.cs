@@ -38,7 +38,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void FoyerCove_ThreeRings_PowerMinimalPackIsOneDecoder()
         {
-            // 794 W ≤ 960, 8.3 A/color ≤ 10. As-built used 3 decoders for GEOMETRY (out of scope §3b);
+            // 794 W ≤ 960, 8.3 A/color ≤ 10. As-built used 3 decoders for GEOMETRY (out of scope );
             // the engine's power-minimal answer is 1 — intended divergence.
             var runs = new[]
             {
@@ -56,7 +56,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void OverCapRun_Throws_NotSilentlySplit()
         {
-            // Drawn-correctly contract (Design §0b): a run over the cap is a redraw flag, never a split.
+            // Drawn-correctly contract: a run over the cap is a redraw flag, never a split.
             var runs = new[] { new TapeRun(200.0, 5.2, 4) }; // 1040 W > 960 decoder cap
             Assert.Throws<System.InvalidOperationException>(() => DecoderPacker.Pack(runs, Decoder, Volts));
         }

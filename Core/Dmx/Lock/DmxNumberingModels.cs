@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace TurboSuite.Dmx.Lock
 {
-    // Pure, Revit-free types for the Phase-3 numbering lock (§8c). The reconciler turns a solved bill (as a
+    // Pure, Revit-free types for the Phase-3 numbering lock. The reconciler turns a solved bill (as a
     // canonical-order list of solved zones) + the frozen lock baseline into a concrete DEC-number assignment
     // plus any REVIEW verdicts, all without touching Revit so it's fully unit-testable.
 
@@ -43,7 +43,7 @@ namespace TurboSuite.Dmx.Lock
         public IReadOnlyList<int> DecIds { get; }
     }
 
-    /// <summary>A lock-aware verdict: a locked-zone change that would mislabel an issued DEC # (§8c REVIEW).</summary>
+    /// <summary>A lock-aware verdict: a locked-zone change that would mislabel an issued DEC # ( REVIEW).</summary>
     public sealed class DmxReviewItem
     {
         public DmxReviewItem(string zoneValue, string message)

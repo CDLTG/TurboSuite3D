@@ -7,7 +7,7 @@ using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Dmx.ViewModels
 {
-    /// <summary>One declared cluster within a zone (§8d): a name + the fixture (run) ElementIds bound to it.
+    /// <summary>One declared cluster within a zone: a name + the fixture (run) ElementIds bound to it.
     /// "Verify" highlights its runs in the model; "Add selection" folds the current model selection into it
     /// (last-wins reassign); "✕" removes it (its runs fall back to the zone's residual).</summary>
     public sealed class DmxClusterRowViewModel : ViewModelBase
@@ -43,7 +43,7 @@ namespace TurboSuite.Dmx.ViewModels
     /// <summary>
     /// One zone as it lives inside a loop (the loop-centric tree's middle tier): the zone name + run count,
     /// a "← (to pool)" action to unassign it, and — for a location-spanning zone (≥2 runs) — its nested
-    /// cluster sub-builder (§8d) with the visible "(unclustered)" residual. A single-run zone shows no
+    /// cluster sub-builder with the visible "(unclustered)" residual. A single-run zone shows no
     /// cluster UI (the flat default needs none). Clusters are keyed by zone value in ExtensibleStorage,
     /// independent of which loop the zone sits in, so moving a zone pool→loop→pool preserves them.
     /// </summary>

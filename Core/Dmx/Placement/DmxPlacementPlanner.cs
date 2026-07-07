@@ -6,10 +6,10 @@ namespace TurboSuite.Dmx.Placement
 {
     /// <summary>
     /// Turns a solved <see cref="DmxBill"/> + its reconciled <see cref="DmxNumbering"/> into a
-    /// <see cref="DmxPlacementPlan"/> (BuildPlan Phase 2/3). Walks the bill in the SAME order the numbering
+    /// <see cref="DmxPlacementPlan"/> (3). Walks the bill in the SAME order the numbering
     /// was assigned — interfaces → their zones → each zone's clusters → powered decoders — and stamps each
     /// decoder's <c>Switch ID</c> ("DEC n") from the numbering, so placed numbers match the bill AND honor
-    /// the lock baseline (§8c). Each device carries the chosen decoder/driver type names mapped back to
+    /// the lock baseline. Each device carries the chosen decoder/driver type names mapped back to
     /// loaded-family identities (UniqueId) via the curated-pool maps; an unmapped name yields a null id (the
     /// shim places nothing for it and warns), never an exception.
     /// </summary>

@@ -5,7 +5,7 @@ using System.Linq;
 namespace TurboSuite.Dmx
 {
     /// <summary>
-    /// Which watts the breaker pack charges per driver (§0c). <see cref="ConnectedLoad"/> = actual draw
+    /// Which watts the breaker pack charges per driver. <see cref="ConnectedLoad"/> = actual draw
     /// (steady-state, the tighter count). <see cref="DriverRating"/> = full nameplate (worst-case, and
     /// the inrush-honest basis — turn-on surge scales with a supply's capacity, not its load).
     /// </summary>
@@ -13,7 +13,7 @@ namespace TurboSuite.Dmx
 
     /// <summary>
     /// One 120 V branch breaker's assigned drivers — the watts each driver actually DRAWS (its connected
-    /// load, not its nameplate rating: a power supply pulls to load, not to capacity, §0c). Realized in
+    /// load, not its nameplate rating: a power supply pulls to load, not to capacity). Realized in
     /// Revit as one unassigned "switched" circuit (no panel/breaker) drawn as a feed on the one-line.
     /// </summary>
     public sealed class BreakerLoad
@@ -29,13 +29,13 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// The 120 V feed pass (§0c / §6c): pack drivers onto branch breakers by their CONNECTED LOAD watts
+    /// The 120 V feed pass: pack drivers onto branch breakers by their CONNECTED LOAD watts
     /// under TWO co-equal limits — the watt cap (amps × volts × continuous-derate) AND a max-drivers-per-
     /// breaker count cap (inrush). For a few large drivers watts bind; for many small drivers the count
     /// binds (a 52 W driver draws 52 W, so dozens "fit" by watts but their combined surge would trip).
     /// A driver sits on exactly one breaker. The packing is <b>order-preserving next-fit</b>, run once
     /// PER INTERFACE by the solver (a feed never spans interfaces), so a feed is a run of consecutive
-    /// drivers and the §0c breaker COUNT == the one-line's drawn "120V FEED" blocks (the gap is closed —
+    /// drivers and the breaker COUNT == the one-line's drawn "120V FEED" blocks (the gap is closed —
     /// the drawing groups the same decoders, in DEC order, into the same feeds). The slightly looser
     /// count vs. a system-wide FFD min is the conservative, actually-buildable figure.
     /// </summary>
@@ -78,7 +78,7 @@ namespace TurboSuite.Dmx
             return breakers;
         }
 
-        /// <summary>Just the breaker count — the engine's only required 120 V output (§0c).</summary>
+        /// <summary>Just the breaker count — the engine's only required 120 V output.</summary>
         public static int Count(IReadOnlyList<double> driverLoadWatts, double cap, int maxPerBreaker)
             => Pack(driverLoadWatts, cap, maxPerBreaker).Count;
     }

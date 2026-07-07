@@ -6,7 +6,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Step 8 oracle — repeater/segment split on D4 (devices/segment). The §6a all-one-zone case
+    /// Step 8 oracle — repeater/segment split on D4 (devices/segment). The all-one-zone case
     /// (53 decoders → 27/26) is the centerpiece. CONFIDENCE: Tier A arithmetic; D4 itself is a
     /// Tier-C input (~32 RS-485 default), handled as a parameter so there's no constant to confirm.
     /// </summary>
@@ -37,7 +37,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void SplitIsBalanced_NotFillAndSpill()
         {
-            // §6b rule 2: 53 must be 27/26, NOT 32/21. Balance ⇒ segment sizes differ by ≤ 1.
+            // : 53 must be 27/26, NOT 32/21. Balance ⇒ segment sizes differ by ≤ 1.
             var seg = LoopSegmenter.Segment(53, D4);
             int max = seg.Segments.Max(s => s.DeviceCount);
             int min = seg.Segments.Min(s => s.DeviceCount);
@@ -60,7 +60,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void D4_IsAnInput_RaisingItRemovesTheSplit()
         {
-            // Modern ⅛-UL transceivers allow up to 256 (§6b). At D4=256, 53 devices need no split.
+            // Modern ⅛-UL transceivers allow up to 256. At D4=256, 53 devices need no split.
             var seg = LoopSegmenter.Segment(deviceCount: 53, maxDevicesPerSegment: 256);
             Assert.Equal(1, seg.SegmentCount);
         }

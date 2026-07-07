@@ -27,7 +27,7 @@ namespace TurboSuite.Tests.Dmx
         public void WhiteHeavyRun_FailsC1Only_NotC2()
         {
             // Single-color (1 channel) concentrates all watts on one terminal: 300 W ⇒ 12.5 A (>10),
-            // while 300 W ≪ 960. The only way C1 binds independently (the §1.5 split seam).
+            // while 300 W ≪ 960. The only way C1 binds independently (the split seam).
             var run = new TapeRun(60.0, 5.0, channels: 1); // 300 W
             var result = DecoderFit.Check(Decoder, run, Volts);
 

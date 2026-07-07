@@ -178,7 +178,7 @@ namespace TurboSuite.Tests.Dmx
             Assert.True(loop.InterfaceNumber > 0);   // resolved to an interface in the last solve
         }
 
-        // ── Persistence (BuildPlan Phase 2: declarations survive reopen via the doc-side ES bundle) ────
+        // ── Persistence (declarations survive reopen via the doc-side ES bundle) ────
 
         [Fact]
         public void DeclarationChangesFirePersistWithCurrentState()

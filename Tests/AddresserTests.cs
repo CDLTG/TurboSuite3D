@@ -5,7 +5,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Addressing &amp; mirroring. Stride/mirroring values are read off Screenshot_195/196 (Tier B);
+    /// Addressing &amp; mirroring. Stride/mirroring values are read off the reference one-lines (Tier B);
     /// the rest is contiguity arithmetic (Tier A). Zones now declare a channel count, not a color.
     /// </summary>
     public class AddresserTests

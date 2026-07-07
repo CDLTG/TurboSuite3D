@@ -23,7 +23,7 @@ namespace TurboSuite.Dmx.ViewModels
     /// (profile, Kind-2 settings, curated decoder/driver pools), then works the model loop by loop: zones
     /// start in the <see cref="ZonePool"/> (the engine auto-packs them), and the designer pulls them into
     /// declared <see cref="Loops"/> — each a tree node owning its assigned zones (and each zone its cluster
-    /// sub-builder, §8d). The right-hand bill is the always-on whole-system roll-up (interfaces / links /
+    /// sub-builder). The right-hand bill is the always-on whole-system roll-up (interfaces / links /
     /// processors / breakers — only complete once every loop is declared). Placement is the loop: each loop
     /// carries its own Place action + placement state. The solve stays whole-system under the hood (DEC #s
     /// are system-wide 1..N), so per-loop placement just stamps the numbers the solve already assigned.
@@ -40,7 +40,7 @@ namespace TurboSuite.Dmx.ViewModels
         private readonly Func<string, bool>? _confirm;   // shim Yes/No gate for the destructive lock actions
         private readonly DmxJobSettings _settings = new DmxJobSettings();
 
-        // Fixture ElementId → its Control Zone, so a model selection can be filtered to one zone's runs (§8d).
+        // Fixture ElementId → its Control Zone, so a model selection can be filtered to one zone's runs.
         private Dictionary<long, string> _zoneByFixtureId = new Dictionary<long, string>();
         // Zone value → run (fixture) count — drives the pool's "(N)" and a zone's cluster splittability.
         private Dictionary<string, int> _runsByZone = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -127,7 +127,7 @@ namespace TurboSuite.Dmx.ViewModels
             LoadSnapshot(snapshot);
             Run();
             _loaded = true;   // any later mutation now persists
-            ApplyZoneColors();   // Phase 5: color the active view by Control Zone while the window is open
+            ApplyZoneColors(); // : color the active view by Control Zone while the window is open
         }
 
         // ── Declarations: profile ───────────────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ namespace TurboSuite.Dmx.ViewModels
             Persist();
         }
 
-        /// <summary>Job-wide homerun pull-up (Phase 6). Bumping it re-derives the wire legend, so refresh it.</summary>
+        /// <summary>Job-wide homerun pull-up. Bumping it re-derives the wire legend, so refresh it.</summary>
         public int PullUpSizes
         {
             get => _settings.PullUpSizes;
@@ -259,7 +259,7 @@ namespace TurboSuite.Dmx.ViewModels
         private DmxBillViewModel _bill;
         public DmxBillViewModel Bill { get => _bill; private set => SetProperty(ref _bill, value); }
 
-        // ── Generated wire legend (Phase 6) — dense, per-job, rebuilt off the last solve + pull-up ─────
+        // ── Generated wire legend — dense, per-job, rebuilt off the last solve + pull-up ─────
         /// <summary>The per-job wire legend rows (number ↔ type), regenerated on each solve and when the
         /// pull-up changes. The same numbers the planner stamps on the one-line's <c>WireMark</c> markers.</summary>
         public ObservableCollection<DmxWireLegendEntry> WireLegend { get; }
@@ -276,7 +276,7 @@ namespace TurboSuite.Dmx.ViewModels
         private string _placementStatus = "";
         public string PlacementStatus { get => _placementStatus; private set => SetProperty(ref _placementStatus, value); }
 
-        // ── Numbering lock (§8c) — state lives in the persisted snapshot ─────────────────────────────
+        // ── Numbering lock — state lives in the persisted snapshot ─────────────────────────────
         public bool IsLocked =>
             string.Equals(_loadedState.Snapshot?.NumberingState, "Locked", StringComparison.OrdinalIgnoreCase);
 
@@ -297,7 +297,7 @@ namespace TurboSuite.Dmx.ViewModels
         public ICommand EditDecoderKitCommand { get; }
         public ICommand EditDriverKitCommand { get; }
 
-        /// <summary>The pure solve (TurboDMX-Design §1.5 pipeline). Idempotent — safe to call constantly.
+        /// <summary>The pure solve (TurboDMX pipeline). Idempotent — safe to call constantly.
         /// On every exit it refreshes each loop's placement state + the Place buttons' enabled state.</summary>
         public void Run()
         {
@@ -327,7 +327,7 @@ namespace TurboSuite.Dmx.ViewModels
                     _lastZones = zoneResult.Zones;                          // runs + lengths for the sanity readout
                     _lastChannelCeiling = SelectedProfile.ChannelCeiling;   // snapshot the ceiling with the solve
 
-                    // Lock-aware numbering (§8c): Unlocked ⇒ fresh 1..N; Locked ⇒ pin to the snapshot baseline,
+                    // Lock-aware numbering: Unlocked ⇒ fresh 1..N; Locked ⇒ pin to the snapshot baseline,
                     // append additive decoders, flag type/interface drift as REVIEW.
                     var solved = DmxBillFlattener.Flatten(bill);
                     _lastNumbering = DmxLockReconciler.Reconcile(solved, _loadedState.Snapshot, IsLocked);
@@ -353,7 +353,7 @@ namespace TurboSuite.Dmx.ViewModels
             }
         }
 
-        // ── Per-loop placement (BuildPlan Phase 2/3: the loop is the placement unit) ──────────────────
+        // ── Per-loop placement (3: the loop is the placement unit) ──────────────────
 
         /// <summary>Refresh each loop's interface # from the last solve (0 when there's no clean solve), so the
         /// per-loop Place / one-line / legend actions target the right interface. Called after every Run and
@@ -446,7 +446,7 @@ namespace TurboSuite.Dmx.ViewModels
             Persist();
         }
 
-        // ── Per-loop one-line (Phase 4): draw/redraw this loop's owned Drafting View ──────────────────
+        // ── Per-loop one-line: draw/redraw this loop's owned Drafting View ──────────────────
         private bool _drawing;
         private bool CanDrawOneLine(DmxLoopRowViewModel loop) =>
             _oneLine != null && _workQueue != null && !_drawing
@@ -487,7 +487,7 @@ namespace TurboSuite.Dmx.ViewModels
                 });
         }
 
-        // ── Per-job wire legend view (BuildPlan Phase 6) ─────────────────────────────────────────────
+        // ── Per-job wire legend view ─────────────────────────────────────────────
         private bool CanDrawWireLegend() =>
             _oneLine != null && _workQueue != null && !_drawing && _lastBill != null && WireLegend.Count > 0;
 
@@ -532,7 +532,7 @@ namespace TurboSuite.Dmx.ViewModels
             Persist();
         }
 
-        // ── Numbering lock lifecycle (§8c): Unlocked ⇄ Locked ───────────────────────────────────────
+        // ── Numbering lock lifecycle: Unlocked ⇄ Locked ───────────────────────────────────────
         // One Lock action does double duty: the first press snapshots the current numbering as the frozen
         // baseline; pressing it again while Locked RE-baselines (re-issue) — confirmed, and crucially never
         // renumbers (it captures the current pinned numbers, unlike Unlock→Lock which would clobber to 1..N).
@@ -792,7 +792,7 @@ namespace TurboSuite.Dmx.ViewModels
                 result => { LoadSnapshot((DmxModelSnapshot)result); Run(); ApplyZoneColors(); });
         }
 
-        // ── Phase 5: Control-Zone color overlay (active view, live only while the window is open) ──────
+        // ── : Control-Zone color overlay (active view, live only while the window is open) ──────
         /// <summary>Color the active view's DMX fixtures by Control Zone. Best-effort: no-op when there's no
         /// overlay service, no zones, or the view is template-locked (the shim returns a notice). Re-run on
         /// open and after each Refresh so the palette tracks the current zone set.</summary>
@@ -891,7 +891,7 @@ namespace TurboSuite.Dmx.ViewModels
             RebuildPool();
         }
 
-        // ── Cluster sub-builder (§8d): selection-driven, persisted by fixture ElementId ──────────────
+        // ── Cluster sub-builder: selection-driven, persisted by fixture ElementId ──────────────
 
         /// <summary>Drop cluster bindings to runs/zones that no longer exist (copied/deleted tape, retagged
         /// zones) so a refresh doesn't carry stale ids; empties land back in the residual on next solve.</summary>

@@ -2,8 +2,8 @@ namespace TurboSuite.Dmx
 {
     /// <summary>
     /// A single physical tape/fixture run as the engine sees it: a length of tape at a known
-    /// watts-per-foot and a DMX CHANNEL COUNT (read from the family — no color model in code, §1.5).
-    /// Geometry (homeruns, injection points, voltage drop) is deliberately NOT modeled — manual (§3b).
+    /// watts-per-foot and a DMX CHANNEL COUNT (read from the family — no color model in code).
+    /// Geometry (homeruns, injection points, voltage drop) is deliberately NOT modeled — manual.
     /// </summary>
     public readonly struct TapeRun
     {
@@ -32,7 +32,7 @@ namespace TurboSuite.Dmx
 
         /// <summary>
         /// Watts on each color terminal under the EVEN split: total ÷ channel count. (Unequal/
-        /// white-heavy tape is the known §1.5 leak — a future per-fixture split override, not here.)
+        /// white-heavy tape is the known leak — a future per-fixture split override, not here.)
         /// </summary>
         public static double PerColorWatts(TapeRun run) => TotalWatts(run) / run.Channels;
 

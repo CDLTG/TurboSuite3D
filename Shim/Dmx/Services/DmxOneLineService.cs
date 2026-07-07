@@ -13,13 +13,13 @@ using TurboSuite.Shared.Helpers;
 namespace TurboSuite.Dmx.Services
 {
     /// <summary>
-    /// Shim-side <see cref="IDmxOneLineService"/> — the per-loop one-line generator (BuildPlan Phase 4). The
+    /// Shim-side <see cref="IDmxOneLineService"/> — the per-loop one-line generator. The
     /// program OWNS one Drafting View per loop (deterministic name + the persisted view id), so a draw is a
     /// pure <b>wipe-and-redraw</b> from the <see cref="DmxOneLineDrawing"/> snapshot: find/create the owned
     /// view, delete everything in it, then replay the symbols (Detail Items with their label params), the
     /// wires (<c>DetailCurve</c>s, solid power / dashed control), the native notes (<c>TextNote</c>s at
     /// 1/16"), and the wire-type markers (Generic Annotations). The designer drops the finished view onto a
-    /// print sheet by hand; the static WIRE LEGEND is author-once and never drawn here (§8a).
+    /// print sheet by hand; the static WIRE LEGEND is author-once and never drawn here.
     ///
     /// All geometry is model feet straight off <see cref="DmxOneLineGeometry"/>; the whole draw is one
     /// transaction (no pick — the diagram is generated, not click-placed), run on the API thread via the
@@ -98,7 +98,7 @@ namespace TurboSuite.Dmx.Services
             return result;
         }
 
-        // ── Per-job wire legend (BuildPlan Phase 6): one owned view, same wipe-and-redraw as the one-line ──
+        // ── Per-job wire legend: one owned view, same wipe-and-redraw as the one-line ──
         public DmxWireLegendResult DrawWireLegend(DmxWireLegendDrawing drawing, string systemName, long existingViewId)
         {
             var result = new DmxWireLegendResult();
@@ -197,7 +197,7 @@ namespace TurboSuite.Dmx.Services
             catch { try { view.Name = name + " " + Guid.NewGuid().ToString("N").Substring(0, 4); } catch { /* keep default */ } }
         }
 
-        // Wipe everything the view owns (it's program-owned, so a full clear is safe — Phase 4 wipe-and-redraw).
+        // Wipe everything the view owns (it's program-owned, so a full clear is safe wipe-and-redraw).
         private void WipeView(View view)
         {
             var ids = new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType().ToElementIds();

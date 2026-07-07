@@ -5,7 +5,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Physical clusters (§8d): decoders pack PER cluster (a decoder can't reach across the room), but
+    /// Physical clusters: decoders pack PER cluster (a decoder can't reach across the room), but
     /// addressing stays PER zone (one mirrored address). This is what lets the engine say "9 decoders,
     /// 2 channels" for three same-color walls — a combination neither pure zoning nor pure pooling gives.
     /// </summary>
@@ -45,7 +45,7 @@ namespace TurboSuite.Tests.Dmx
         public void OneFlatCluster_PoolsAcrossWalls_FewerDecoders_GeometryBlind()
         {
             // The SAME 204 sheets with no physical partition pool globally ⇒ 8 — the geometry-blind
-            // optimum that isn't buildable when the walls are separate locations (§8d / §3b).
+            // optimum that isn't buildable when the walls are separate locations.
             var zone = new ZoneDesign("All Walls", Sheets(204));
 
             var bill = DmxSolver.Solve(Contract(), new[] { zone });

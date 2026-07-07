@@ -5,7 +5,7 @@ using TurboSuite.Dmx.Overlay;
 namespace TurboSuite.Dmx.Services
 {
     /// <summary>
-    /// Revit-free contract for the Phase 5 Control-Zone color overlay (BuildPlan Phase 5) — a view aid, not
+    /// Revit-free contract for the Control-Zone color overlay — a view aid, not
     /// a deliverable. Implemented shim-side against the ACTIVE view via direct per-element graphic overrides
     /// (the UI's "Override Graphics in View ▸ By Element"); the Core ViewModel invokes it through the work
     /// queue so the override transaction runs on the Revit API thread. (Named <c>ParameterFilterElement</c>s

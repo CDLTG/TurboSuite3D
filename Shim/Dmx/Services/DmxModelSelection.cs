@@ -10,7 +10,7 @@ using TurboSuite.Shared.Helpers;
 namespace TurboSuite.Dmx.Services
 {
     /// <summary>
-    /// Shim-side <see cref="IDmxModelSelection"/> for the cluster sub-builder (§8d): read the active
+    /// Shim-side <see cref="IDmxModelSelection"/> for the cluster sub-builder: read the active
     /// document's current selection (the runs the designer picked on one wall) and highlight a cluster's
     /// runs back in the model (verify). Read-only — selection is not a model edit; invoked through the work
     /// queue so both calls run on the Revit API thread.

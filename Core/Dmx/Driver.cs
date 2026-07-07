@@ -6,7 +6,7 @@ namespace TurboSuite.Dmx
     /// <summary>
     /// The derate convention, identical to TurboDriver's documented <c>Derating Factor</c> rule:
     /// the max fraction of rated capacity to load to. A raw value of missing / 0 / out-of-range
-    /// means NO derate (1.0). Applied only to the packing ceiling, never to count math (§3b).
+    /// means NO derate (1.0). Applied only to the packing ceiling, never to count math.
     /// </summary>
     public static class DeratingFactor
     {
@@ -15,9 +15,9 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// A driver Type as the engine sees it (Kind-1 part properties, §1.5). <see cref="Name"/> is a
+    /// A driver Type as the engine sees it (Kind-1 part properties). <see cref="Name"/> is a
     /// label only — role/watts come from parameters, never from parsing the Type-mark string
-    /// (device-identity rule, §2). Rated watts and the derating factor are read off the family Type.
+    /// (device-identity rule). Rated watts and the derating factor are read off the family Type.
     /// </summary>
     public readonly struct DriverType
     {
@@ -47,7 +47,7 @@ namespace TurboSuite.Dmx
     /// Step 4 — driver selection: from a family's candidate Types, pick the smallest whose
     /// effective cap covers the load, after filtering to system voltage. Mirrors TurboDriver's
     /// "family of Types, smallest that fits." Returns null when no single Type covers the load —
-    /// the caller then splits into more drivers (over-grouping contract, §6).
+    /// the caller then splits into more drivers (over-grouping contract).
     /// </summary>
     public static class DriverSelector
     {
@@ -72,7 +72,7 @@ namespace TurboSuite.Dmx
 
         /// <summary>
         /// The largest effective cap among voltage-matched candidates — the bound the decoder
-        /// packing ceiling is clamped to (decision A coupling: decoder load ≤ min(960, this), §8).
+        /// packing ceiling is clamped to (decision A coupling: decoder load ≤ min(960, this)).
         /// 0 if no candidate matches the voltage.
         /// </summary>
         public static double LargestEffectiveCap(IReadOnlyList<DriverType> candidates, double systemVolts)

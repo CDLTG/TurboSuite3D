@@ -6,7 +6,8 @@ using System.Linq;
 namespace TurboSuite.Dmx
 {
     /// <summary>
-    /// A control-system PROFILE (TurboDMX-Design §1.6, Hierarchy rungs 3–4): the source of the
+    /// A control-system PROFILE (the Link + Interface rungs 3–4 of the ladder on
+    /// <see cref="DmxSolver"/>): the source of the
     /// version-/vendor-specific DEFAULTS the contract is pre-filled from — the DMX interface channel
     /// ceiling and the Link → Processor roll-up capacities. The engine never branches on the profile
     /// NAME; it only consumes the numbers a profile supplies, so adding a vendor is a data entry here,
@@ -48,7 +49,7 @@ namespace TurboSuite.Dmx
         public static readonly DmxProfile Lutron = new DmxProfile("Lutron", 32, 512, 99, 2);
 
         // Crestron DIN-DMX — native universe ceiling; link/processor roll-up is a Lutron-ism, so the
-        // capacities here are nominal report-only values (the roll-up is never provisioned, §8b/Q8).
+        // capacities here are nominal report-only values (the roll-up is never provisioned).
         public static readonly DmxProfile Crestron = new DmxProfile("Crestron", 512, 512, 99, 2);
 
         // Generic ETC / Pathway gateway — native 512-channel universe, no vendor link semantics.

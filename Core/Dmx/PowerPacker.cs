@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace TurboSuite.Dmx
 {
-    /// <summary>One decoder load paired with the driver Type sized to feed it (1:1 in practice, §8).</summary>
+    /// <summary>One decoder load paired with the driver Type sized to feed it (1:1 in practice).</summary>
     public sealed class PoweredDecoder
     {
         public PoweredDecoder(DecoderLoad decoder, DriverType driver)
@@ -36,7 +36,7 @@ namespace TurboSuite.Dmx
 
     /// <summary>
     /// The cross-tier coupling + end-to-end power pass (runs → decoders → drivers) for ONE selected
-    /// decoder type. Decision A (§8): the decoder ceiling is clamped to min(decoder cap, largest
+    /// decoder type. Decision A: the decoder ceiling is clamped to min(decoder cap, largest
     /// driver × derate), so every decoder load fits a driver by construction.
     /// </summary>
     public static class PowerPacker
@@ -54,7 +54,7 @@ namespace TurboSuite.Dmx
 
         /// <summary>
         /// Pack one zone's runs into powered decoders using the given (already-selected) decoder type.
-        /// Conserves watts; never refuses (over-grouping, §6).
+        /// Conserves watts; never refuses (over-grouping).
         /// </summary>
         public static PowerPackResult Pack(IReadOnlyList<TapeRun> runs, DecoderSpec decoder, double volts,
                                            IReadOnlyList<DriverType> driverCandidates)

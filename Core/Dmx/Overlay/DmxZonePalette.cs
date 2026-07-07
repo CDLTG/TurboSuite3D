@@ -17,7 +17,7 @@ namespace TurboSuite.Dmx.Overlay
     }
 
     /// <summary>
-    /// Pure zone→color assignment for the Phase 5 Control-Zone view overlay (BuildPlan Phase 5). The colors
+    /// Pure zone→color assignment for the Control-Zone view overlay. The colors
     /// exist purely to TELL ZONES APART in the active view while the TurboDMX window is open — exact hues
     /// don't matter, but the mapping must be DETERMINISTIC and stable across window opens so a given zone
     /// keeps its color. Achieved by sorting the distinct zone names and walking the golden-angle (≈137.5°)

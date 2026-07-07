@@ -32,9 +32,9 @@ namespace TurboSuite.Dmx
     /// Groups <see cref="DmxFixtureReading"/>s by their native <c>Control Zone</c> value into engine
     /// <see cref="ZoneDesign"/>s. Default is FLAT — one cluster per zone (correct for single-location zones,
     /// the common case). When the designer has split a location-spanning zone with the in-window cluster
-    /// sub-builder (§8d), the per-zone <see cref="DmxClusterDto"/> assignments (keyed by fixture ElementId)
+    /// sub-builder, the per-zone <see cref="DmxClusterDto"/> assignments (keyed by fixture ElementId)
     /// partition that zone's runs into named clusters, with any unassigned runs gathered into a visible
-    /// "(unclustered)" residual. Packing per cluster is what produces the realizable decoder count (§8d's
+    /// "(unclustered)" residual. Packing per cluster is what produces the realizable decoder count ('s
     /// 9-vs-8 effect). Fixtures with no zone are counted, not solved. Pure / Revit-free.
     /// </summary>
     public static class DmxZoneBuilder

@@ -6,7 +6,7 @@ namespace TurboSuite.Dmx
 {
     /// <summary>
     /// One run the designer drew too long to be fed by a single decoder/driver — a DRAWING error under
-    /// the drawn-correctly contract (Design §0b). Carries everything a "redraw this" flag needs: which
+    /// the drawn-correctly contract. Carries everything a "redraw this" flag needs: which
     /// zone/run, its watts vs. the buildable feed cap, and the minimum split (pieces + max length each).
     /// </summary>
     public readonly struct OverCapRun
@@ -45,7 +45,7 @@ namespace TurboSuite.Dmx
 
     /// <summary>
     /// Raised when one or more runs are drawn too long for any single feed (drawn-correctly contract,
-    /// Design §0b). Unlike <see cref="UnmappableTapeException"/> (a one-shot CONTRACT error), this is a
+    /// ). Unlike <see cref="UnmappableTapeException"/> (a one-shot CONTRACT error), this is a
     /// DRAWING error: it BATCHES every offender so the designer fixes them all in one editing pass. The
     /// whole solve is refused — no partial bill — until the drawing is clean.
     /// </summary>
@@ -70,7 +70,7 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// A designer-declared DMX Loop (§0d) assigned more channels than one interface/chain can carry —
+    /// A designer-declared DMX Loop assigned more channels than one interface/chain can carry —
     /// a DECLARATION error: the loop is a physical chain capped at the interface ceiling, and the cable
     /// break is a geometry call the engine won't make for the designer. Carries everything a "re-declare
     /// this loop" flag needs: the loop, its channel sum vs. the budget, and the minimum loop count.
@@ -103,7 +103,7 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// Raised when one or more DECLARED DMX Loops exceed the interface ceiling (Design §0d) — the third
+    /// Raised when one or more DECLARED DMX Loops exceed the interface ceiling — the third
     /// pre-solve gate. Like <see cref="OverCapRunsException"/> it BATCHES every offender so the designer
     /// re-declares them all in one pass, and refuses the whole solve (no partial bill). Distinct from
     /// capacity overflow, which the engine still silently auto-fills for UNDECLARED zones.
@@ -129,8 +129,8 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// A malformed loop declaration (§0d) — a loop referencing a zone that doesn't exist, or a zone
-    /// placed in more than one loop (a chain can't carry the same zone twice; spanning loops is the §6
+    /// A malformed loop declaration — a loop referencing a zone that doesn't exist, or a zone
+    /// placed in more than one loop (a chain can't carry the same zone twice; spanning loops is the 
     /// address-duplication path, out of scope). An input bug, not the capacity gate, so it throws
     /// immediately rather than batching.
     /// </summary>
@@ -140,12 +140,12 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// The pre-solve gate enforcing the drawn-correctly contract (Design §0b): the engine NEVER silently
-    /// cuts a drawn run to fit. It first confirms every zone maps to a decoder (else the §6c contract
+    /// The pre-solve gate enforcing the drawn-correctly contract: the engine NEVER silently
+    /// cuts a drawn run to fit. It first confirms every zone maps to a decoder (else the contract
     /// abort), then flags every run whose watts exceed its zone's coupled feed cap so the designer
     /// redraws it. The cap is the buildable feed — min(decoder C1/C2, largest driver × derate) — so the
     /// derate INPUT moves the threshold (tighter derate ⇒ shorter max run ⇒ more pieces). Finally it
-    /// enforces declared DMX Loops against the interface ceiling (§0d, the third gate).
+    /// enforces declared DMX Loops against the interface ceiling (the third gate).
     /// </summary>
     public static class DmxValidator
     {
@@ -161,7 +161,7 @@ namespace TurboSuite.Dmx
             if (contract == null) throw new ArgumentNullException(nameof(contract));
             if (zones == null) throw new ArgumentNullException(nameof(zones));
 
-            // Pass 1 — decoder mappability: a CONTRACT error, run-breaking, abort on the first (§6c).
+            // Pass 1 — decoder mappability: a CONTRACT error, run-breaking, abort on the first.
             foreach (var zone in zones)
             {
                 if (zone.Runs.Count == 0) continue;
@@ -176,7 +176,7 @@ namespace TurboSuite.Dmx
             if (violations.Count > 0)
                 throw new OverCapRunsException(violations);
 
-            // Pass 3 — declared loops (§0d): integrity (throws), then over-ceiling (batched gate).
+            // Pass 3 — declared loops: integrity (throws), then over-ceiling (batched gate).
             if (loops != null && loops.Count > 0)
             {
                 CheckLoopIntegrity(zones, loops);
@@ -232,7 +232,7 @@ namespace TurboSuite.Dmx
             var violations = new List<OverCapLoop>();
             foreach (var loop in loops)
             {
-                int budget = contract.ChannelCeiling - loop.ReservedChannels;   // §3c: reservation is per-loop
+                int budget = contract.ChannelCeiling - loop.ReservedChannels; // : reservation is per-loop
                 int sum = 0;
                 foreach (var zn in loop.ZoneNames)
                     if (channelsByZone.TryGetValue(zn, out int c)) sum += c;

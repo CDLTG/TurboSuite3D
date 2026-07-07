@@ -8,7 +8,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Oracles for <see cref="DmxPlacementPlanner"/> — the bill→placement-plan walk (BuildPlan Phase 2). Locks
+    /// Oracles for <see cref="DmxPlacementPlanner"/> — the bill→placement-plan walk. Locks
     /// the global "DEC n" Switch-ID numbering (same order BillReport numbers decoders), the loop grouping, and
     /// the decoder/driver name→loaded-family-id mapping (including the unmapped-name = null path).
     /// </summary>

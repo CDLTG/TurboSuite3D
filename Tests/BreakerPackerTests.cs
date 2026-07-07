@@ -6,7 +6,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// The 120 V feed pass (§0c): pack drivers onto breakers by CONNECTED LOAD watts under two co-equal
+    /// The 120 V feed pass: pack drivers onto breakers by CONNECTED LOAD watts under two co-equal
     /// limits — the watt cap (amps × volts × continuous-derate) and the inrush count cap. Verified by
     /// invariants (both floors, conservation, both caps respected), never an unverifiable exact count.
     /// </summary>

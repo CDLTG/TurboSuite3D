@@ -18,7 +18,7 @@ namespace TurboSuite.Dmx
     /// <summary>
     /// Option (a): the count → sub-zone structure convention. A fixture declares only its CHANNEL
     /// COUNT (read from the family); this table decides how those channels decompose into named,
-    /// separately-addressable Lutron primitives (1-ch singles + 3-ch rgb objects, §3a). It affects
+    /// separately-addressable Lutron primitives (1-ch singles + 3-ch rgb objects). It affects
     /// ONLY addressing/naming — never watts, decoder selection, or budget, which use the count alone.
     /// These are the defaults; the settings layer can override a row (e.g. an unusual 6-ch tape).
     /// </summary>
@@ -94,14 +94,14 @@ namespace TurboSuite.Dmx
         public IReadOnlyList<AddressedSubZone> SubZones { get; }
         public int DecoderCount { get; }
 
-        /// <summary>Channels this zone consumes — independent of decoder count (mirroring is free, §6).</summary>
+        /// <summary>Channels this zone consumes — independent of decoder count (mirroring is free).</summary>
         public int ChannelsConsumed => SubZones.Sum(s => s.ChannelCount);
     }
 
     /// <summary>
     /// Addressing. Explodes each zone into its sub-zones (per <see cref="SubZoneStructure"/>) and walks
     /// a single cursor across the universe assigning each a contiguous block (stride = its channel count).
-    /// The zone's decoders all mirror these addresses, so adding decoders costs zero channels (§6).
+    /// The zone's decoders all mirror these addresses, so adding decoders costs zero channels.
     /// </summary>
     public static class Addresser
     {

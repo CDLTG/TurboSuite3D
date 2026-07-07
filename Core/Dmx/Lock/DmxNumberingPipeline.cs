@@ -25,7 +25,7 @@ namespace TurboSuite.Dmx.Lock
         }
     }
 
-    /// <summary>Captures a numbering as the frozen lock baseline (Lock / Re-lock event, §8c).</summary>
+    /// <summary>Captures a numbering as the frozen lock baseline (Lock / Re-lock event).</summary>
     public static class DmxSnapshotBuilder
     {
         public static DmxSnapshotDto Capture(DmxNumbering numbering, string state = "Locked") =>

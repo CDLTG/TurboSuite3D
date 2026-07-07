@@ -5,7 +5,7 @@ using TurboSuite.Dmx.OneLine;
 namespace TurboSuite.Dmx.Services
 {
     /// <summary>
-    /// Revit-free contract for drawing the per-loop one-line (BuildPlan Phase 4). Implemented shim-side
+    /// Revit-free contract for drawing the per-loop one-line. Implemented shim-side
     /// against the active document; the Core ViewModel invokes it through the
     /// <see cref="TurboSuite.Abstractions.IRevitWorkQueue"/> so the view create + draw transaction run on
     /// the Revit API thread. Per loop: the program OWNS a Drafting View (deterministic name + the persisted
@@ -22,7 +22,7 @@ namespace TurboSuite.Dmx.Services
         DmxOneLineResult Draw(IReadOnlyList<DmxOneLineDrawing> drawings, string systemName,
                               int onlyInterfaceNumber, IReadOnlyDictionary<int, long> viewRegistry);
 
-        /// <summary>Draw the single per-job wire legend into its own owned Drafting View (BuildPlan Phase 6) —
+        /// <summary>Draw the single per-job wire legend into its own owned Drafting View —
         /// same wipe-and-redraw ownership as the one-line, but one view per job (not per loop).</summary>
         /// <param name="drawing">The legend layout off the last solve's <see cref="DmxWireLegend"/>.</param>
         /// <param name="systemName">The Control System label — seeds the owned view's deterministic name.</param>

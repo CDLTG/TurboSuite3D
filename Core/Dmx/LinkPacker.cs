@@ -6,9 +6,10 @@ namespace TurboSuite.Dmx
 {
     /// <summary>
     /// One control Link (e.g. a Lutron QS wired link) and the DMX interfaces hung on it. A link's DMX
-    /// usage is sized under two co-equal caps (§8b / Hierarchy rung 3): **switch legs** (1 DMX channel =
+    /// usage is sized under two co-equal caps (the Link, rung 3 of the ladder on
+    /// <see cref="DmxSolver"/>): **switch legs** (1 DMX channel =
     /// 1 leg) and **link devices** (here the interfaces — the QS-link "devices", distinct from the
-    /// decoders, which are DMX-Loop devices). Report-only (§6c/§8b): the engine sizes &amp; reports DMX
+    /// decoders, which are DMX-Loop devices). Report-only: the engine sizes &amp; reports DMX
     /// demand; provisioning links/processors stays in the control system.
     /// </summary>
     public sealed class LinkLoad
@@ -30,8 +31,8 @@ namespace TurboSuite.Dmx
     }
 
     /// <summary>
-    /// The Link/Processor roll-up (Design §8b, Q8) — a pure REPORT pass, not a solve stop (D2 is
-    /// report-only, §6c). Packs the solved interfaces onto control Links under two co-equal caps —
+    /// The Link/Processor roll-up — a pure REPORT pass, not a solve stop (D2 is
+    /// report-only). Packs the solved interfaces onto control Links under two co-equal caps —
     /// switch legs (channels) AND device count (interfaces per link) — then rolls Links up to Processors
     /// by a fixed links-per-processor capacity (e.g. HQP7-2 = 2). First-Fit-Decreasing by channels, like
     /// <see cref="BreakerPacker"/>. The engine emits the COUNTS; provisioning stays in the control system.

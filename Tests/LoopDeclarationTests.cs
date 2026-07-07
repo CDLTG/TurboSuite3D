@@ -5,7 +5,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Designer-declared DMX Loops (Design §0d) — the Zone→Loop declaration. A declared loop forces its
+    /// Designer-declared DMX Loops — the Zone→Loop declaration. A declared loop forces its
     /// zones onto one interface/chain (= one one-line diagram); zones in no declared loop fall through to
     /// engine auto-packing. A declared loop is a PHYSICAL chain capped at the interface ceiling, so
     /// over-ceiling assignment is the THIRD pre-solve hard-stop (batched <see cref="OverCapLoopsException"/>),
@@ -30,7 +30,7 @@ namespace TurboSuite.Tests.Dmx
         private static LoopDeclaration Loop(string name, params string[] zoneNames)
             => new LoopDeclaration(name, zoneNames);
 
-        // --- Force-separate: the engine's whole reason loops are declarable (§0d) ----------------------
+        // --- Force-separate: the engine's whole reason loops are declarable ----------------------
 
         [Fact]
         public void NoLoops_AutoPacks_TwoSmallZones_OntoOneInterface()
@@ -55,7 +55,7 @@ namespace TurboSuite.Tests.Dmx
             Assert.Equal(new[] { "East", "West" }, bill.Interfaces.Select(i => i.Interface.LoopName).ToArray());
         }
 
-        // --- Declared loop carries exactly its zones; the rest auto-pack alongside (§0d) ---------------
+        // --- Declared loop carries exactly its zones; the rest auto-pack alongside ---------------
 
         [Fact]
         public void DeclaredLoop_GroupsItsZones_AndUnassignedZonesAutoPack()
@@ -90,7 +90,7 @@ namespace TurboSuite.Tests.Dmx
             Assert.Equal(32, bill.Interfaces.Single().Interface.ChannelsUsed);
         }
 
-        // --- The third gate: a declared loop over the interface ceiling (§0d) --------------------------
+        // --- The third gate: a declared loop over the interface ceiling --------------------------
 
         [Fact]
         public void DeclaredLoop_OverCeiling_IsTheThirdHardStop()
@@ -164,12 +164,12 @@ namespace TurboSuite.Tests.Dmx
             Assert.Contains("Z1", ex.Message);
         }
 
-        // --- D3/D4 on a declared loop is NOT a stop — repeaters split it WITHIN the one loop (§6b) ------
+        // --- D3/D4 on a declared loop is NOT a stop — repeaters split it WITHIN the one loop ------
 
         [Fact]
         public void DeclaredLoop_OverDeviceCount_Repeats_DoesNotStop_DiagramIntact()
         {
-            // The §8d cluster oracle as one declared loop: 72/60/72 TW sheets ⇒ 9 decoders, 2 channels.
+            // The cluster oracle as one declared loop: 72/60/72 TW sheets ⇒ 9 decoders, 2 channels.
             // With D4 = 4, the loop needs repeaters (ceil(9/4) = 3 segments ⇒ 2 repeaters) but stays ONE
             // interface/diagram — D3/D4 never break the chain, only D1 does.
             TapeRun[] Sheets(int n) => Enumerable.Range(0, n).Select(_ => new TapeRun(17.2, 1.0, 2)).ToArray();

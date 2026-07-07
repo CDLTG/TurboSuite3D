@@ -6,7 +6,7 @@ using TurboSuite.Dmx.Persistence;
 namespace TurboSuite.Dmx.Lock
 {
     /// <summary>
-    /// Assigns DEC numbers to a solved system, lock-aware (TurboDMX-Design §8c). The lock baseline is
+    /// Assigns DEC numbers to a solved system, lock-aware. The lock baseline is
     /// **Control-Zone-anchored** (decision 2026-06-26): a locked re-run pins each zone to the DEC #s it was
     /// issued at Lock, so already-issued numbers never move.
     ///

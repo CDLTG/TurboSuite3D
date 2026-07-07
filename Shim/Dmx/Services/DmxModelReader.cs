@@ -13,7 +13,7 @@ namespace TurboSuite.Dmx.Services
     /// <summary>
     /// Reads the active document into a <see cref="DmxModelSnapshot"/> for TurboDMX — the DMX fixtures
     /// (with their <c>Control Zone</c> + <c>DMX Channels</c> + length/power) and the discovered
-    /// decoder/driver candidate pools. READ-ONLY (TurboDMX-BuildPlan Phase 1): no transaction, no writes.
+    /// decoder/driver candidate pools. READ-ONLY: no transaction, no writes.
     ///
     /// Keys on the confirmed schema in <see cref="DmxParameterNames"/>. Defensive throughout: an
     /// element/symbol missing a required param is simply skipped, never an exception.

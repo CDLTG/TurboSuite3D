@@ -8,7 +8,7 @@ namespace TurboSuite.Dmx.OneLine
     /// <summary>The five drafted box symbols (Detail Items). Maps to a family/type in <see cref="DmxOneLineGeometry"/>.</summary>
     public enum DmxSymbolKind { Decoder, Driver, Interface, Processor, Terminator }
 
-    /// <summary>The canonical wire-type families a job draws (BuildPlan Phase 6). The first three are always
+    /// <summary>The canonical wire-type families a job draws. The first three are always
     /// present and always numbered 1–2–3; low-voltage homeruns are <c>#16-N</c> for the computed conductor
     /// count and are numbered <b>per-job</b> (4+, ascending by N — see <see cref="DmxWireLegend"/>).
     /// <see cref="WallCord"/> is smart-fixture only (deferred, never drawn today).</summary>
@@ -22,7 +22,7 @@ namespace TurboSuite.Dmx.OneLine
     }
 
     /// <summary>
-    /// One wire type on the one-line (BuildPlan Phase 6). Replaces the old fixed <c>Lv2/Lv4/Lv6</c> enum
+    /// One wire type on the one-line. Replaces the old fixed <c>Lv2/Lv4/Lv6</c> enum
     /// buckets: low-voltage carries its actual conductor count (<c>#16-N</c>, uncapped — 2, 4, 6, 8, …) so a
     /// 6-channel RGBATW tape correctly reads <c>#16-8</c> rather than the under-spec'd <c>#16-6</c> ceiling.
     /// Value type with structural equality so distinct <c>#16-N</c> sizes are distinct legend rows.
@@ -49,7 +49,8 @@ namespace TurboSuite.Dmx.OneLine
         /// <summary>A <c>#16-N</c> stranded low-voltage cable carrying <paramref name="conductors"/> conductors.</summary>
         public static DmxWireType Lv(int conductors) => new DmxWireType(DmxWireCategory.LowVoltage, conductors);
 
-        /// <summary>The full legend label (matches the firm's legend sample, <c>Specs/_DMX/Legend.txt</c>).</summary>
+        /// <summary>The full legend label in the firm's exact wording: fixed strings for the HV/CAT6/Comm
+        /// categories, <c>#16-N Stranded Low Voltage</c> for a low-voltage homerun.</summary>
         public string Label => Category switch
         {
             DmxWireCategory.LineVoltage => "#12-2 Line Voltage",
@@ -96,7 +97,7 @@ namespace TurboSuite.Dmx.OneLine
     }
 
     /// <summary>
-    /// The per-job wire legend (BuildPlan Phase 6). The firm numbers wire types <b>densely and per-job</b> —
+    /// The per-job wire legend. The firm numbers wire types <b>densely and per-job</b> —
     /// only the types actually used appear, numbered sequentially in a fixed canonical order so an unused
     /// size is skipped (their sample: <c>#16-4</c> absent ⇒ <c>#16-6</c> gets 5, not 6). The same number is
     /// stamped on every wire of that type (the <c>WireMark</c> annotation) AND emitted into the legend, so
@@ -173,7 +174,7 @@ namespace TurboSuite.Dmx.OneLine
                     used.Add(HomerunFor(zone.Channels, pullUpSizes));
                 }
                 // The 24 V driver→decoder jumper is #16-2, present wherever a decoder is — and it shares its
-                // number with a 1-channel homerun (BuildPlan Phase 6).
+                // number with a 1-channel homerun.
                 if (anyDecoder) used.Add(DmxWireType.Lv(2));
             }
             return Build(used);
@@ -221,7 +222,7 @@ namespace TurboSuite.Dmx.OneLine
     }
 
     /// <summary>One wire-type marker (the Generic Annotation circled number) placed ON a wire. The
-    /// <see cref="Number"/> is the per-job legend number resolved at plan time (BuildPlan Phase 6).</summary>
+    /// <see cref="Number"/> is the per-job legend number resolved at plan time.</summary>
     public sealed class DmxMarker
     {
         public DmxMarker(XY position, DmxWireType type, int number)
@@ -259,7 +260,7 @@ namespace TurboSuite.Dmx.OneLine
     }
 
     /// <summary>
-    /// One loop's complete one-line, as a pure, Revit-free set of primitives (BuildPlan Phase 4): the box
+    /// One loop's complete one-line, as a pure, Revit-free set of primitives: the box
     /// symbols + their label params, the wire segments, the wire-type markers, and the native notes — all
     /// in model feet. The shim renderer wipes the loop's owned Drafting View and replays this, so the
     /// drawing is regenerated from the snapshot every run (never hand-edited). One drawing per loop.
@@ -287,7 +288,7 @@ namespace TurboSuite.Dmx.OneLine
         public IReadOnlyList<DmxMarker> Markers { get; }
         public IReadOnlyList<DmxNote> Notes { get; }
 
-        /// <summary>Deterministic owned-view name (BuildPlan Phase 4): a re-run finds + wipes this view.</summary>
+        /// <summary>Deterministic owned-view name: a re-run finds + wipes this view.</summary>
         public string ViewName(string systemName) =>
             $"TurboDMX — {systemName} — Interface #{InterfaceNumber}";
     }

@@ -19,12 +19,12 @@ namespace TurboSuite.Dmx
         public DmxContract Contract { get; }
         public IReadOnlyList<ZoneDesign> Zones { get; }
 
-        /// <summary>Designer-declared DMX Loops (§0d), empty if none — then zones pure-auto-pack.</summary>
+        /// <summary>Designer-declared DMX Loops, empty if none — then zones pure-auto-pack.</summary>
         public IReadOnlyList<LoopDeclaration> Loops { get; }
     }
 
     /// <summary>
-    /// Parser for the plain line-based scenario file (see Harness/sample.dmx.txt). Format:
+    /// Parser for the plain line-based scenario file used by the Core test suite (HarnessIoTests). Format:
     /// `key = value` scalars, repeatable `decoder =` / `driver =` / `zone =` lines, `#` comments.
     /// Deliberately forgiving and simple — it's a dev I/O harness, not a shipping format.
     /// </summary>
@@ -106,7 +106,7 @@ namespace TurboSuite.Dmx
             return new Scenario(contract, zones, loops);
         }
 
-        // loop = <loopName> | <zoneA>, <zoneB>, ...  [ | <reservedChannels> ]   (a declared DMX Loop, §0d)
+        // loop = <loopName> | <zoneA>, <zoneB>, ... [ | <reservedChannels> ] (a declared DMX Loop)
         private static LoopDeclaration ParseLoopLine(string val, int lineNo)
         {
             var parts = val.Split('|');
@@ -181,7 +181,7 @@ namespace TurboSuite.Dmx
             }
         }
 
-        // cluster = <zoneName> | <clusterName> | <len, len, ...>   (a physical group within a zone, §8d)
+        // cluster = <zoneName> | <clusterName> | <len, len, ...> (a physical group within a zone)
         private static void ParseClusterLine(string val, double wattsPerFt, int lineNo,
                                              Dictionary<string, int> channelsByZone, Dictionary<string, List<RunCluster>> clustersByZone)
         {

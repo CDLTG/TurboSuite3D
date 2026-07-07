@@ -4,7 +4,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// DEC 20, the foyer-job worked power check (§5): 94.3 ft of 4-channel (RGBW) tape @ 5.2 W/ft, 24 V.
+    /// DEC 20, the foyer-job worked power check: 94.3 ft of 4-channel (RGBW) tape @ 5.2 W/ft, 24 V.
     /// TotalWatts/PerColorAmps are Tier-A arithmetic; the per-color value rests on the even split (÷ channels).
     /// </summary>
     public class PowerMathTests
@@ -28,7 +28,7 @@ namespace TurboSuite.Tests.Dmx
 
     /// <summary>
     /// Derate is a contract INPUT (the family Derating Factor param), normalized by the documented
-    /// missing/0/out-of-range ⇒ no-derate rule. See DriverSelectorTests / ORACLES.md.
+    /// missing/0/out-of-range ⇒ no-derate rule. See DriverSelectorTests.
     /// </summary>
     public class DriverDerateNormalizationTests
     {

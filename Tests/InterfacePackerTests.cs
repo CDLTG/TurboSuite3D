@@ -7,8 +7,8 @@ namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
     /// Step 7 oracle — packing zones into interfaces under the D1 budget. Auto-packed interfaces get the
-    /// full ceiling; a declared loop's budget is ceiling − its OWN reserved (§3c, per-loop). The 26-vs-2
-    /// interface counts are the §6a / §1.6 extremes. CONFIDENCE: Tier A arithmetic, with the 32/512
+    /// full ceiling; a declared loop's budget is ceiling − its OWN reserved (per-loop). The 26-vs-2
+    /// interface counts are the extremes. CONFIDENCE: Tier A arithmetic, with the 32/512
     /// ceilings as Tier-B profile values.
     /// </summary>
     public class InterfacePackerTests
@@ -23,7 +23,7 @@ namespace TurboSuite.Tests.Dmx
         private static LoopDeclaration Loop(ZoneInput[] zones, int reserved) =>
             new LoopDeclaration("L", zones.Select(z => z.ZoneName).ToList(), reserved);
 
-        // --- The two §6a / §1.6 extremes: same 832 channels, different ceilings ---
+        // --- The two extremes: same 832 channels, different ceilings ---
 
         [Fact]
         public void EachRunOwnZone_832Channels_PacksTo26Interfaces_OnLutron()
@@ -38,13 +38,13 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void SameLoad_OnNative512Profile_PacksTo2Interfaces()
         {
-            // §1.6: a native 512-channel universe nearly removes D1 as a binding limit. 832 / 512 ⇒ 2.
+            // : a native 512-channel universe nearly removes D1 as a binding limit. 832 / 512 ⇒ 2.
             var result = InterfacePacker.Pack(RgbwZones(208), NativeUniverse);
 
             Assert.Equal(2, result.InterfaceCount);
         }
 
-        // --- A declared loop's own reserved channels shrink ITS budget (§3c, per-loop) ---
+        // --- A declared loop's own reserved channels shrink ITS budget (per-loop) ---
 
         [Fact]
         public void LoopReservedChannels_ShrinkThatLoopsBudget()
@@ -61,7 +61,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void LoopOverItsReservedBudget_Throws()
         {
-            // 7 RGBW zones = 28 ch, but the loop reserving 5 leaves only 27 ⇒ over budget, the §0d gate.
+            // 7 RGBW zones = 28 ch, but the loop reserving 5 leaves only 27 ⇒ over budget, the gate.
             var zones = RgbwZones(7);
             Assert.Throws<InvalidOperationException>(() =>
                 InterfacePacker.Pack(zones, Lutron, new[] { Loop(zones, reserved: 5) }));

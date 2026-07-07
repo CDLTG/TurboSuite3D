@@ -8,13 +8,13 @@ namespace TurboSuite.Dmx.OneLine
 {
     /// <summary>
     /// Lays a solved <see cref="DmxBill"/> + its reconciled <see cref="DmxNumbering"/> out into one
-    /// <see cref="DmxOneLineDrawing"/> per loop (BuildPlan Phase 4), in the SAME DEC-walk order as the
-    /// placement planner so the diagram's DEC#s match the placed families and the lock baseline (§8c).
+    /// <see cref="DmxOneLineDrawing"/> per loop, in the SAME DEC-walk order as the
+    /// placement planner so the diagram's DEC#s match the placed families and the lock baseline.
     /// Pure geometry off <see cref="DmxOneLineGeometry"/> — no Revit. Each loop: interface + processor at
     /// top, a vertical column of <c>[driver][decoder][homerun]</c> rows grouped into "120V FEED" blocks
-    /// (from <see cref="InterfaceSolution.Feeds"/>, so the blocks == the §0c breaker count), the DMX daisy
+    /// (from <see cref="InterfaceSolution.Feeds"/>, so the blocks == the breaker count), the DMX daisy
     /// chain running top→bottom to a terminator, and the wire-type markers off the legend. Single homerun
-    /// leg per decoder (185 style) + one "REFER TO PLAN" header; tape type is not drawn (§8a).
+    /// leg per decoder (185 style) + one "REFER TO PLAN" header; tape type is not drawn.
     /// </summary>
     public static class DmxOneLinePlanner
     {
@@ -37,7 +37,7 @@ namespace TurboSuite.Dmx.OneLine
             // Solve-input zones (runs + their lengths) keyed by name, for the designer-only sanity readout.
             // Null (the unit tests) ⇒ no sanity note is drawn.
             var byDesign = zoneDesigns?.ToDictionary(z => z.ZoneName);
-            // One job-wide legend, shared across every loop, so wire numbers are consistent job-wide (Phase 6).
+            // One job-wide legend, shared across every loop, so wire numbers are consistent job-wide.
             var legend = DmxWireLegend.ForBill(bill, pullUpSizes);
             return bill.Interfaces
                 .Select(iface => BuildLoop(iface, byZone, numbering, driverTypeMarkByName, legend, pullUpSizes,
@@ -88,7 +88,7 @@ namespace TurboSuite.Dmx.OneLine
                 }
             }
 
-            // 2. Feed-block sizes from the interface's §0c feeds — one "120V FEED" per breaker, in DEC order.
+            // 2. Feed-block sizes from the interface's feeds — one "120V FEED" per breaker, in DEC order.
             var feedSizes = iface.Feeds.Select(f => f.DriverCount).ToList();
 
             // 3. Designer-only sanity readout (Tier 1): the loop roll-up + each zone's runs & their lengths.
@@ -166,7 +166,7 @@ namespace TurboSuite.Dmx.OneLine
                  procCenter.Plus(DmxOneLineGeometry.Processor.Comm), dashed: true, DmxWireType.Comm);
 
             // One column header above the homerun legs (185 style); sits below the processor row so it can't
-            // collide with the interface/processor/⑦. Tape type is NOT drawn (§8a).
+            // collide with the interface/processor/⑦. Tape type is NOT drawn.
             double headerY = firstRowY + DmxOneLineGeometry.Layout.RowPitch * 0.75;
             notes.Add(new DmxNote(new XY(decX + DmxOneLineGeometry.Decoder.HomerunOut.X, headerY),
                 "REFER TO PLAN FOR NUMBER OF HOMERUNS PER DECODER", DmxTextAlign.Left));
@@ -189,12 +189,12 @@ namespace TurboSuite.Dmx.OneLine
                         [DmxOneLineGeometry.Decoder.AddressParam] = row.Address.ToString("D3"),
                     }));
 
-                // driver → decoder jumper (24 V) — #16-2, shared with a 1-channel homerun (Phase 6)
+                // driver → decoder jumper (24 V) — #16-2, shared with a 1-channel homerun
                 Wire(drvCenter.Plus(DmxOneLineGeometry.Driver.PowerOut),
                      decCenter.Plus(DmxOneLineGeometry.Decoder.PowerIn), dashed: false, DmxWireType.Lv(2));
 
                 // decoder → tape: single leg + circled legend # marker, plus the actual #16-N gauge text at
-                // the leg end (BuildPlan Phase 6 — the post-pull-up conductor count annotated on each homerun).
+                // the leg end (the post-pull-up conductor count annotated on each homerun).
                 var hrStart = decCenter.Plus(DmxOneLineGeometry.Decoder.HomerunOut);
                 var hrEnd = hrStart.Offset(DmxOneLineGeometry.Layout.HomerunLegLength, 0);
                 var homerunType = DmxWireLegend.HomerunFor(row.Channels, pullUpSizes);

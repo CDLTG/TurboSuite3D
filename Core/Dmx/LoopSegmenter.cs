@@ -4,12 +4,13 @@ using System.Linq;
 
 namespace TurboSuite.Dmx
 {
-    /// <summary>One repeater-bounded RS-485 run within a DMX loop (§6b / Hierarchy rung 5a).</summary>
+    /// <summary>One repeater-bounded RS-485 run within a DMX loop (rung 5a of the ladder on
+    /// <see cref="DmxSolver"/>).</summary>
     public sealed class SignalSegment
     {
         public SignalSegment(int deviceCount) { DeviceCount = deviceCount; }
 
-        /// <summary>DMX devices on this segment (decoders; the bridge counts too — §6b rule 4).</summary>
+        /// <summary>DMX devices on this segment (decoders; the bridge counts too).</summary>
         public int DeviceCount { get; }
     }
 
@@ -24,7 +25,7 @@ namespace TurboSuite.Dmx
         /// <summary>Repeaters/splitter-outputs needed: one fresh segment per split beyond the first.</summary>
         public int RepeaterCount => Math.Max(0, SegmentCount - 1);
 
-        /// <summary>Repeaters regenerate the signal transparently — they cost ZERO DMX channels (§6b).</summary>
+        /// <summary>Repeaters regenerate the signal transparently — they cost ZERO DMX channels.</summary>
         public int ExtraChannelCost => 0;
     }
 
@@ -32,12 +33,12 @@ namespace TurboSuite.Dmx
     /// Step 8 — split a loop's devices into signal segments under D4 (devices/segment). D4 is a
     /// CONTRACT INPUT (RS-485 default ~32, vendor-unspecified), not a constant. The fix follows the
     /// axis that broke: too many devices ⇒ repeater, keeping 1 interface / 1 address / 0 channels
-    /// (§6b). Splitting is BALANCED (~27/26), not fill-and-spill, to leave each segment re-run
-    /// headroom (§6b rule 2). D3 (length) is flag-only and needs geometry we don't model — not here.
+    ///. Splitting is BALANCED (~27/26), not fill-and-spill, to leave each segment re-run
+    /// headroom. D3 (length) is flag-only and needs geometry we don't model — not here.
     /// </summary>
     public static class LoopSegmenter
     {
-        /// <summary>The RS-485 unit-load limit: max DMX devices on one repeater-bounded segment (§6b).
+        /// <summary>The RS-485 unit-load limit: max DMX devices on one repeater-bounded segment.
         /// The DMX512/RS-485 standard figure — a fixed hardware property of the bus, not a per-job knob,
         /// so it's a Core constant rather than a UI setting. A loop denser than this is split by repeaters
         /// (0 channels, 1 address). Change here (one-line) only if a gateway/decoder kit reliably drives more.</summary>

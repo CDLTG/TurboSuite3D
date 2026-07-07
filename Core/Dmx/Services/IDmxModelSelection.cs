@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace TurboSuite.Dmx.Services
 {
     /// <summary>
-    /// Revit-free contract for the cluster sub-builder's two model touches (§8d): read what the designer has
+    /// Revit-free contract for the cluster sub-builder's two model touches: read what the designer has
     /// selected in the drawing (to turn a wall's worth of runs into a cluster), and highlight a cluster's
     /// runs back in the model (verify). Implemented shim-side over <c>UIDocument.Selection</c>; the Core
     /// ViewModel invokes it through the <see cref="TurboSuite.Abstractions.IRevitWorkQueue"/> so both run on

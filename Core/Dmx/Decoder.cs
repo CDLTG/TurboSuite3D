@@ -5,7 +5,7 @@ using System.Linq;
 namespace TurboSuite.Dmx
 {
     /// <summary>
-    /// A decoder type's declared caps (Kind-1 part properties, §1.5) — read off the family type. The
+    /// A decoder type's declared caps (Kind-1 part properties) — read off the family type. The
     /// two power caps are C1 (per-color current) and C2 (total watts); <see cref="MaxOutputs"/> is the
     /// channel ceiling that gates which tape it can drive. <see cref="Name"/> is a label only.
     /// </summary>
@@ -39,7 +39,7 @@ namespace TurboSuite.Dmx
 
     /// <summary>
     /// Raised when a zone's tape needs more DMX channels than any decoder in the contract pool can
-    /// drive (§6c "impossible part"). This is a run-breaking contract-configuration error — the Revit
+    /// drive ( "impossible part"). This is a run-breaking contract-configuration error — the Revit
     /// layer surfaces it as a dialog and aborts the whole solve.
     /// </summary>
     public sealed class UnmappableTapeException : Exception

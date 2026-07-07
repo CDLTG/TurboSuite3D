@@ -43,7 +43,7 @@ namespace TurboSuite.Tests.Dmx
         [Fact]
         public void Dec20_AtDerate80_IsOverCap_BecauseCoupledCapDropsBelowLoad()
         {
-            // 490 W > coupled cap 480 @0.80. Under the drawn-correctly contract (Design §0b) this is a
+            // 490 W > coupled cap 480 @0.80. Under the drawn-correctly contract this is a
             // redraw flag, not a split — Pack's backstop throws (DmxValidator surfaces it upstream).
             var runs = new[] { new TapeRun(94.3, 5.2, 4) }; // 490 W
             Assert.Throws<System.InvalidOperationException>(() => PowerPacker.Pack(runs, Decoder, V, Family(0.80)));
@@ -65,7 +65,7 @@ namespace TurboSuite.Tests.Dmx
         {
             // The derate INPUT moves the cap the designer must draw under — not a split count. At 1.00 the
             // 500 W runs each fit one whole; at 0.80 the cap drops to 480 < 500 ⇒ over-cap, so Pack's
-            // backstop throws (these would be redraw flags, Design §0b), never a silent split.
+            // backstop throws (these would be redraw flags), never a silent split.
             var runs = Enumerable.Range(0, 10).Select(_ => new TapeRun(500.0 / 5.2, 5.2, 4)).ToArray();
 
             var loose = PowerPacker.Pack(runs, Decoder, V, Family(1.00));

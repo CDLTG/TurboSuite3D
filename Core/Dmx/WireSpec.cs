@@ -1,9 +1,9 @@
 namespace TurboSuite.Dmx
 {
     /// <summary>
-    /// Wire gauges that fall out of the channel count (§8a): channels + 1 common, rounded up to stock
+    /// Wire gauges that fall out of the channel count: channels + 1 common, rounded up to stock
     /// pairs ⇒ #16-2 (1 ch) / #16-4 (2–3 ch) / #16-6 (4–5 ch) / #16-8 (6 ch RGBATW) / … — <b>uncapped</b>
-    /// (BuildPlan Phase 6; the job-wide pull-up lives in <see cref="OneLine.DmxWireLegend"/>). The HV
+    /// (; the job-wide pull-up lives in <see cref="OneLine.DmxWireLegend"/>). The HV
     /// breaker→driver feed is #12-2. Derived from the count, not hardcoded per color model.
     /// </summary>
     public static class WireSpec

@@ -18,7 +18,7 @@ namespace TurboSuite.Dmx
         public int MaxDriversPerBreaker { get; set; } = 0;     // 0 = no inrush count cap
         public BreakerBasis BreakerBasis { get; set; } = BreakerBasis.DriverRating;   // "safe" nameplate default
 
-        /// <summary>Job-wide homerun pull-up (BuildPlan Phase 6): bump every LV homerun this many stock sizes
+        /// <summary>Job-wide homerun pull-up: bump every LV homerun this many stock sizes
         /// past its exact required conductor count (#16-4 → #16-6 → #16-8). 0 = exact required conductors.</summary>
         public int PullUpSizes { get; set; } = 0;
     }
@@ -26,7 +26,7 @@ namespace TurboSuite.Dmx
     /// <summary>
     /// Assembles a <see cref="DmxContract"/> from the window's declarations: the selected
     /// <see cref="DmxProfile"/> (ceiling + link caps), the <see cref="DmxJobSettings"/> (Kind-2 policy),
-    /// and the curated decoder/driver candidate pools (Q10). Pure / Revit-free — the same contract the
+    /// and the curated decoder/driver candidate pools. Pure / Revit-free — the same contract the
     /// engine harness builds from a scenario file, just sourced from the UI instead of text.
     /// </summary>
     public static class DmxContractBuilder
@@ -54,7 +54,7 @@ namespace TurboSuite.Dmx
                 decoderPool, driverPool,
                 systemVolts: settings.SystemVolts,
                 channelCeiling: profile.ChannelCeiling,
-                maxDevicesPerSegment: LoopSegmenter.DevicesPerSegment,   // §6b RS-485 unit-load limit (Core const, not a UI knob)
+                maxDevicesPerSegment: LoopSegmenter.DevicesPerSegment, // RS-485 unit-load limit (Core const, not a UI knob)
                 breakerAmps: settings.BreakerAmps,
                 feedVolts: settings.FeedVolts,
                 breakerContinuousDerate: settings.BreakerContinuousDerate,

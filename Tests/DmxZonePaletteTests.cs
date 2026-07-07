@@ -6,7 +6,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
-    /// Oracles for <see cref="DmxZonePalette"/> — the Phase 5 Control-Zone color overlay's pure palette. The
+    /// Oracles for <see cref="DmxZonePalette"/> — the Control-Zone color overlay's pure palette. The
     /// colors only need to DIFFERENTIATE zones, so these lock the properties that matter: deterministic +
     /// stable across opens (same input ⇒ same colors), distinct colors per distinct zone, blanks/dupes/
     /// case/whitespace folded out, and the assignment keyed off SORTED position (so order-of-discovery

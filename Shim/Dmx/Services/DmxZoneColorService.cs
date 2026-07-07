@@ -11,7 +11,7 @@ using TurboSuite.Dmx.Services;
 namespace TurboSuite.Dmx.Services
 {
     /// <summary>
-    /// Shim-side <see cref="IDmxZoneColorService"/> — the Phase 5 Control-Zone color overlay. While the
+    /// Shim-side <see cref="IDmxZoneColorService"/> — the Control-Zone color overlay. While the
     /// TurboDMX window is open, the active view's DMX fixtures are colored by their <c>Control Zone</c> so the
     /// designer can tell zones apart; on close the overlay reverts and the view looks as it did before.
     ///
@@ -31,7 +31,7 @@ namespace TurboSuite.Dmx.Services
     ///
     /// We remember which elements we colored (per view) so <see cref="Revert"/> clears exactly those. There is
     /// no transient coloring in Revit, so each apply/revert dirties the doc and pushes one undo entry —
-    /// accepted cost (BuildPlan Phase 5).
+    /// accepted cost.
     /// </summary>
     public sealed class DmxZoneColorService : IDmxZoneColorService
     {

@@ -6,9 +6,9 @@ namespace TurboSuite.Dmx
 {
     /// <summary>
     /// One decoder's assigned load: the watt pieces packed onto it. Each piece is a WHOLE run — the
-    /// drawn-correctly contract (Design §0b) forbids cutting a drawn run, so over-cap runs are flagged
+    /// drawn-correctly contract forbids cutting a drawn run, so over-cap runs are flagged
     /// upstream by <see cref="DmxValidator"/> and redrawn, never split here. Geometry/homeruns are not
-    /// modeled (§3b).
+    /// modeled.
     /// </summary>
     public sealed class DecoderLoad
     {
@@ -58,7 +58,7 @@ namespace TurboSuite.Dmx
 
         /// <summary>
         /// Group WHOLE runs into decoder loads under an explicit watt cap using First-Fit-Decreasing.
-        /// Conserves watts. The drawn-correctly contract (Design §0b): a run that exceeds the cap is NOT
+        /// Conserves watts. The drawn-correctly contract: a run that exceeds the cap is NOT
         /// split — it throws (a backstop; <see cref="DmxValidator"/> flags it upstream for redraw). The
         /// coupling entry point.
         /// </summary>
@@ -75,7 +75,7 @@ namespace TurboSuite.Dmx
                 if (watts > cap + Eps)
                     throw new InvalidOperationException(
                         $"Run {watts:F0} W exceeds the feed cap {cap:F0} W. The drawn-correctly contract "
-                        + "(Design §0b) forbids silently splitting a drawn run — over-cap runs must be "
+                        + "forbids silently splitting a drawn run — over-cap runs must be "
                         + "flagged by DmxValidator and redrawn, not cut.");
                 pieces.Add(watts);
             }

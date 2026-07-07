@@ -12,9 +12,9 @@ namespace TurboSuite.Dmx.Services
     /// The TurboDMX module's own document-side ExtensibleStorage — the single home for the design-intent
     /// overlays (module settings, declared loops, physical clusters, control-system tags, and the later
     /// solve snapshot). Doc-singleton, stored on a <see cref="DataStorage"/> element like the other
-    /// settings services (NOT the shared TurboSuite Settings dialog — TurboDMX-Design §1.5).
+    /// settings services (NOT the shared TurboSuite Settings dialog).
     ///
-    /// SHAPE (TurboDMX-BuildPlan Phase 0): the whole <see cref="DmxModuleState"/> bundle is serialized to
+    /// SHAPE: the whole <see cref="DmxModuleState"/> bundle is serialized to
     /// one JSON document in the <c>StateJson</c> field, with a parallel <c>PayloadVersion</c> int for
     /// at-a-glance migration gating. Backing the nested overlays with JSON (rather than native ES
     /// array/map fields) keeps the ES field set fixed so Phases 1–3 grow the payload via PayloadVersion —

@@ -52,7 +52,7 @@ namespace TurboSuite.Dmx.ViewModels
         public ObservableCollection<DmxBomLineViewModel> DecoderBom { get; } = new ObservableCollection<DmxBomLineViewModel>();
         public ObservableCollection<DmxBomLineViewModel> DriverBom { get; } = new ObservableCollection<DmxBomLineViewModel>();
 
-        /// <summary>Lock-aware REVIEW verdicts (§8c) — locked-zone changes that would mislabel an issued
+        /// <summary>Lock-aware REVIEW verdicts — locked-zone changes that would mislabel an issued
         /// DEC #. Empty unless Locked and a change collides; shown as an amber list, never a popup.</summary>
         public ObservableCollection<string> Reviews { get; } = new ObservableCollection<string>();
         public bool NeedsReview => Reviews.Count > 0;
@@ -64,7 +64,7 @@ namespace TurboSuite.Dmx.ViewModels
         public static DmxBillViewModel Error(string message) => new DmxBillViewModel(false, true, message);
 
         /// <summary>A successful solve — the deterministic bill. Lock-aware REVIEW
-        /// verdicts (§8c) ride along when supplied.</summary>
+        /// verdicts ride along when supplied.</summary>
         public static DmxBillViewModel FromBill(DmxBill bill, int channelCeiling, IEnumerable<string>? reviews = null)
         {
             var vm = new DmxBillViewModel(true, false, "OK")

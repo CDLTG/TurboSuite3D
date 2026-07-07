@@ -5,7 +5,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dmx
 {
     /// <summary>Oracles for <see cref="DmxProfile"/> defaults and <see cref="DmxContractBuilder"/> — the
-    /// declarations → engine-contract assembly (Phase 1).</summary>
+    /// declarations → engine-contract assembly.</summary>
     public class DmxContractBuilderTests
     {
         [Fact]
