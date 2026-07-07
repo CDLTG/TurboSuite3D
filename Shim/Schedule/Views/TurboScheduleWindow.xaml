@@ -191,8 +191,9 @@
         </ResourceDictionary>
     </Window.Resources>
 
-    <Grid Margin="10" IsEnabled="{Binding IsEnabled}">
+    <Grid Background="{StaticResource ContentBgBrush}" IsEnabled="{Binding IsEnabled}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -200,8 +201,14 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- Blue header bar (matches every other TurboSuite window) — full-bleed above the 10px-inset body. -->
+        <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
+            <TextBlock Text="TurboSchedule - Specifications Editor"
+                       Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+        </Border>
+
         <!-- ── Top nav bar ── -->
-        <Grid Grid.Row="0" Margin="0,0,0,6">
+        <Grid Grid.Row="1" Margin="10,10,10,6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -264,13 +271,13 @@
                        Foreground="{StaticResource HeaderBlueBrush}" FontWeight="SemiBold"/>
         </Grid>
 
-        <Border Grid.Row="1" Height="1" Background="{StaticResource SeparatorBrush}" Margin="0,0,0,6"/>
+        <Border Grid.Row="2" Height="1" Background="{StaticResource SeparatorBrush}" Margin="10,0,10,6"/>
 
         <!-- ── Body (3 zones + notes), DataContext = current page ── -->
         <!-- Columns row stretches (*): the three GroupBoxes fill it so their bottoms line up. At the
              window's initial (content-fit) height there's no slack; growing the window taller stretches
              the columns (acceptable whitespace) while Notes + the action bar stay anchored at the bottom. -->
-        <Grid Grid.Row="2" DataContext="{Binding CurrentPage}">
+        <Grid Grid.Row="3" Margin="10,0,10,0" DataContext="{Binding CurrentPage}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -396,10 +403,10 @@
             </GroupBox>
         </Grid>
 
-        <Border Grid.Row="3" Height="1" Background="{StaticResource SeparatorBrush}" Margin="0,8,0,0"/>
+        <Border Grid.Row="4" Height="1" Background="{StaticResource SeparatorBrush}" Margin="10,8,10,0"/>
 
         <!-- ── Action bar ── -->
-        <Grid Grid.Row="4" Margin="0,8,0,0">
+        <Grid Grid.Row="5" Margin="10,8,10,10">
             <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
                        Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
