@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\Sha
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -RevitVersion "2024" -Version "1.2.0"
 ```
 
-**IMPORTANT**: Always use `dotnet.exe` (not `dotnet`) when running from WSL — the `.exe` suffix is required to invoke Windows executables. Always use Windows-style paths for `dotnet.exe`/MSBuild commands (e.g., `'C:\Users\jacobq\...\TurboSuite.Revit2025.csproj'`). Never use WSL-style `/mnt/c/...` paths — they cause `MSB1001` errors.
+**IMPORTANT**: Always use `dotnet.exe` (not `dotnet`) when running from WSL — the `.exe` suffix is required to invoke Windows executables. Pass Windows-style **relative** paths from the repo root (e.g., `'Revit2025\TurboSuite.Revit2025.csproj'`, backslash separators) — WSL interop resolves them against the current directory. Never use WSL-style `/mnt/c/...` absolute paths — they cause `MSB1001` errors.
 
 ## Git Repository
 
