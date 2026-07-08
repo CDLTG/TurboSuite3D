@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024 and 2025**, built for electrical/lighting designers working on luxury architectural lighting projects. Fourteen commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET 8.0-windows for Revit 2025, .NET Framework 4.8 for Revit 2024), x64.
+A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024 and 2025**, built for electrical/lighting designers working on luxury architectural lighting projects. Fifteen commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET 8.0-windows for Revit 2025, .NET Framework 4.8 for Revit 2024), x64.
 
 ## Installation
 
@@ -43,17 +43,18 @@ The "TurboSuite" ribbon tab has three panels:
 | Button | Shortcut | Description |
 |--------|----------|-------------|
 | [TurboCompact](Shim/Compact/README.md) | `Ctrl+Shift+S` | Remove unused materials and compact-save the active family |
+| [TurboSnoop](Shim/Snoop/README.md) | `TS` | List the Visibility/Graphics checkboxes a linked family draws under |
 | [TurboTag](Shim/Tag/README.md) | `TT` | Batch-place type tags on selected lighting fixtures |
 | [TurboWire](Shim/Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
 | [TurboBubble](Shim/Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |
 | [TurboDriver](Shim/Driver/README.md) | `TD` | Deploy power supplies for selected RPS fixtures |
 | [TurboMask](Shim/Mask/README.md) | `BB` | Mask selected elements while preserving fixture footprint graphics |
-| [TurboSnoop](Shim/Snoop/README.md) | `TS` | List the Visibility/Graphics checkboxes a linked family draws under |
 
 ### Utilities Panel
 
 | Button | Description |
 |--------|-------------|
+| [TurboSetup](Shim/Setup/README.md) | Set up a new project from the linked architectural model (levels, views, link graphics) |
 | [TurboName](Shim/Name/README.md) | Assign CAD room names and ceiling heights to filled regions |
 | [TurboSchedule](Shim/Schedule/README.md) | Edit lighting fixture and driver type specs, one Type Mark per page |
 | [TurboZones](Shim/Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |

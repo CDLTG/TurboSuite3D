@@ -15,7 +15,7 @@ namespace TurboSuite.App;
 /// </summary>
 public class TurboSuiteApplication : IExternalApplication
 {
-    // Gates experimental commands (e.g., TurboSetup) so they ship compiled but
+    // Gates experimental commands (e.g., TurboDMX) so they ship compiled but
     // unreachable until they're ready. `static readonly` (not `const`) so the compiler doesn't
     // flag the gated branch as unreachable (CS0162).
     private static readonly bool ExperimentalCommandsEnabled = true;
@@ -106,16 +106,13 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboBubble");
 
             // ── Utilities panel ──
-            if (ExperimentalCommandsEnabled)
-            {
-                CreateButton(utilitiesPanel, assemblyPath,
-                    "TurboSetup",
-                    "    Setup    ",
-                    "TurboSuite.Setup.SetupCommand",
-                    "Set up a new project from the linked architectural model",
-                    "Copies levels from the linked architectural model, creates Floor Plan and RCP views per level with firm view templates, and wires each view's link graphics to a chosen architectural view. 3D RVT-linked projects only.",
-                    "TurboSetup");
-            }
+            CreateButton(utilitiesPanel, assemblyPath,
+                "TurboSetup",
+                "    Setup    ",
+                "TurboSuite.Setup.SetupCommand",
+                "Set up a new project from the linked architectural model",
+                "Copies levels from the linked architectural model, creates Floor Plan and RCP views per level with firm view templates, and wires each view's link graphics to a chosen architectural view. 3D RVT-linked projects only.",
+                "TurboSetup");
 
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboName",
