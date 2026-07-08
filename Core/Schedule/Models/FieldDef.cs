@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using TurboSuite.Dmx;
 using TurboSuite.Shared.Constants;
 
 namespace TurboSuite.Schedule.Models;
@@ -107,6 +108,13 @@ public class FieldDef
         list.Add(new FieldDef("Sub-Driver Power", SpecSection.Electrical, ParameterNames.SubDriverPower, SpecKinds.Driver));
         list.Add(new FieldDef("Maximum Fixtures", SpecSection.Electrical, ParameterNames.MaximumFixtures, SpecKinds.Driver));
         list.Add(new FieldDef("Derating Factor", SpecSection.Electrical, ParameterNames.DeratingFactor, SpecKinds.Driver));
+        // DMX (net-new TurboDMX type params, grouped at the bottom of Electrical). Names come from
+        // DmxParameterNames so they can't drift from what the DMX model reader keys on. DMX Channels is
+        // shared fixture+decoder; Bundle Size is a fixture-type trait; Amps Per Channel is a decoder cap
+        // (decoders are OST_LightingDevices, so it surfaces on the Driver page — n/a on non-DMX types).
+        list.Add(new FieldDef("DMX Channels", SpecSection.Electrical, DmxParameterNames.DmxChannels, SpecKinds.Both));
+        list.Add(new FieldDef("DMX Bundle Size", SpecSection.Electrical, DmxParameterNames.BundleSize, SpecKinds.Fixture));
+        list.Add(new FieldDef("Amps Per Channel", SpecSection.Electrical, DmxParameterNames.DecoderAmpsPerChannel, SpecKinds.Driver));
 
         // ── Mechanical (driver drops Ceiling Thickness) ──
         list.Add(new FieldDef("Listings & Ratings", SpecSection.Mechanical, ParameterNames.ListingsAndRatings, SpecKinds.Both));
