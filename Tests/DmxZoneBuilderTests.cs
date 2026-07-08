@@ -14,8 +14,10 @@ namespace TurboSuite.Tests.Dmx
     /// </summary>
     public class DmxZoneBuilderTests
     {
-        private static DmxFixtureReading Fix(string zone, int ch, double len, double wpf = 5.2, long id = 0) =>
-            new DmxFixtureReading { ElementId = id, ControlZone = zone, Channels = ch, LengthFt = len, WattsPerFt = wpf };
+        private static DmxFixtureReading Fix(string zone, int ch, double len, double wpf = 5.2, long id = 0,
+                                             int max = 1, string mark = "") =>
+            new DmxFixtureReading { ElementId = id, ControlZone = zone, Channels = ch, LengthFt = len,
+                                    WattsPerFt = wpf, MaxPerBundle = max, TypeMark = mark };
 
         private static DmxClusterDto Cluster(string name, string zone, params long[] runs) =>
             new DmxClusterDto { ClusterId = name, Name = name, ZoneValue = zone, RunElementIds = runs.ToList() };
@@ -119,6 +121,48 @@ namespace TurboSuite.Tests.Dmx
 
             Assert.Single(zone.Clusters.Single(c => c.Name == "A").Runs);          // only run 1
             Assert.Single(zone.Clusters.Single(c => c.Name == DmxZoneBuilder.ResidualClusterName).Runs); // run 2
+        }
+
+        // ── Bundling: per-cluster chains of connectable fixtures ───────────────────────────────
+
+        // A 1'×2' light sheet as read: point fixture (unit length), 17.2 W carried as W/ft, 2 channels,
+        // chainable 5-per-tap. Unique ids so the bundler's per-id slicing is deterministic.
+        private static DmxFixtureReading Sheet(string zone, long id) =>
+            Fix(zone, 2, 1.0, wpf: 17.2, id: id, max: 5, mark: "SHEET");
+
+        [Fact]
+        public void WineRoom_ThreeWallClusters_BundlePerClusterInto42Chains()
+        {
+            // One Control Zone, 204 sheets, split into three wall clusters of 72 / 60 / 72.
+            var sheets = Enumerable.Range(1, 204).Select(i => Sheet("Wine Room", i)).ToArray();
+            var clusters = new[]
+            {
+                Cluster("W1", "Wine Room", Enumerable.Range(1, 72).Select(i => (long)i).ToArray()),
+                Cluster("W2", "Wine Room", Enumerable.Range(73, 60).Select(i => (long)i).ToArray()),
+                Cluster("W3", "Wine Room", Enumerable.Range(133, 72).Select(i => (long)i).ToArray()),
+            };
+
+            var zone = DmxZoneBuilder.Build(sheets, clusters).Zones.Single();
+
+            // Bundled PER cluster: 72→15 (14×5+2), 60→12, 72→15 = 42 bundle runs, not 204 sheets.
+            Assert.Equal(new[] { 15, 12, 15 }, zone.Clusters.Select(c => c.Runs.Count).ToArray());
+            // Each full chain preserves total watts (5 × 17.2 = 86 W).
+            Assert.Equal(86.0, zone.Clusters[0].Runs[0].LengthFt * zone.Clusters[0].Runs[0].WattsPerFt, 3);
+        }
+
+        [Fact]
+        public void FlatZone_BundlesWholeZone_MaxOneIsUnchanged()
+        {
+            var sheets = Enumerable.Range(1, 12).Select(i => Sheet("Cove", i)).ToArray();
+
+            // Flat (no clusters): whole zone bundled — 12 sheets @ 5 = 3 bundles (5+5+2).
+            var bundled = DmxZoneBuilder.Build(sheets).Zones.Single();
+            Assert.Equal(3, bundled.Runs.Count);
+
+            // Same fixtures with max 1 (default) stay 12 discrete runs — the pre-bundle baseline.
+            var plain = DmxZoneBuilder.Build(
+                Enumerable.Range(1, 12).Select(i => Fix("Cove", 2, 1.0, wpf: 17.2, id: i)).ToArray()).Zones.Single();
+            Assert.Equal(12, plain.Runs.Count);
         }
 
         [Fact]

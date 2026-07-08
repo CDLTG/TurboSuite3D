@@ -648,13 +648,19 @@
                                                                                      to the gutter edge — ✕ aligns down-column with the loop 🗑. -->
                                                                                 <Grid Grid.Column="1" Margin="8,0,0,0">
                                                                                     <Grid.ColumnDefinitions>
-                                                                                        <ColumnDefinition Width="24"/>
+                                                                                        <ColumnDefinition Width="Auto"/>
                                                                                         <ColumnDefinition Width="*"/>
                                                                                         <ColumnDefinition Width="Auto"/>
                                                                                         <ColumnDefinition Width="Auto"/>
                                                                                     </Grid.ColumnDefinitions>
+                                                                                    <!-- Run count at the gutter's left edge (near the name box); bundle text follows it tightly. -->
                                                                                     <TextBlock Grid.Column="0" Text="{Binding RunCount}"
                                                                                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                                                    <!-- "→ N bundles": only rendered for bundle-aware products (blank otherwise). -->
+                                                                                    <TextBlock Grid.Column="1" Text="{Binding BundleText}"
+                                                                                               HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                                                               Margin="4,0,0,0"
                                                                                                Foreground="{StaticResource TextSecondaryBrush}"/>
                                                                                     <Button Grid.Column="2" Content="⊙" Margin="0,0,2,0"
                                                                                             Style="{StaticResource IconButton}"

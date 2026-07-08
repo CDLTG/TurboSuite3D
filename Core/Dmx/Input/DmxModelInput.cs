@@ -26,6 +26,17 @@ namespace TurboSuite.Dmx.Input
 
         /// <summary>Watts per foot for this run (from the family/type).</summary>
         public double WattsPerFt { get; set; }
+
+        /// <summary>Max fixtures per field-connectable daisy-chain (the "bundle" size) — read from the
+        /// type's <c>DMX Bundle Size</c> param. <b>1 ⇒ no bundling</b> (each fixture packs independently,
+        /// the pre-bundle default); missing/≤0 is clamped to 1 by the reader.</summary>
+        public int MaxPerBundle { get; set; } = 1;
+
+        /// <summary>The fixture's "same product" grouping key — its Type Mark. Fixtures only chain into
+        /// one bundle when they share this (a different Type Mark = a different catalog number = a
+        /// physically un-chainable product). The reader substitutes a per-type token when the real Type
+        /// Mark is blank, so unmarked fixtures of different types never pool together.</summary>
+        public string TypeMark { get; set; } = "";
     }
 
     /// <summary>A discovered decoder family type and its caps (Kind-1 part properties, read off the family).

@@ -10,7 +10,8 @@ namespace TurboSuite.Dmx
     /// element missing a required param is skipped, never a crash).
     ///
     /// NET-NEW shared params for the module (ship in the project template): <see cref="ControlZone"/>
-    /// (instance), <see cref="DmxChannels"/> (shared fixture+decoder), and <see cref="DecoderAmpsPerChannel"/>.
+    /// (instance), <see cref="DmxChannels"/> (shared fixture+decoder), <see cref="DecoderAmpsPerChannel"/>,
+    /// and <see cref="BundleSize"/> (fixture type — max fixtures per field-connectable chain).
     /// Everything else reuses existing TurboSuite conventions (Linear Length / Linear Power / Power /
     /// Voltage / Derating Factor).
     /// </summary>
@@ -39,6 +40,13 @@ namespace TurboSuite.Dmx
 
         /// <summary>Total watts fallback for point fixtures where <c>Linear Power</c> is 0.</summary>
         public const string Power = "Power";
+
+        /// <summary>Type param (net-new, DMX-only): the max number of these fixtures that can be
+        /// field-connected in ONE daisy-chain/power tap — the atomic packable unit ("bundle"). A
+        /// <b>max, not a divisor</b> (72 sheets @ 5 ⇒ 14 full chains + 1 remainder of 2 = 15 bundles).
+        /// Prefixed "DMX " so non-DMX families never surface it. Missing/≤1 ⇒ no bundling (each fixture
+        /// packs independently — today's behavior). Read live off the type each solve; no ES schema.</summary>
+        public const string BundleSize = "DMX Bundle Size";
 
         // ── Decoder family (OST_LightingDevices) — caps read off the type (confirmed 2026-06-25) ──────
         // The decoder output count reuses the SAME shared DmxChannels param as fixtures (designers call

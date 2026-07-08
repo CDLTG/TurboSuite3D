@@ -34,10 +34,28 @@ namespace TurboSuite.Dmx.ViewModels
 
         public int RunCount => RunIds.Count;
 
+        private int _bundleCount;
+
+        /// <summary>How many bundles (field-connectable chains) this cluster's fixtures coalesce into —
+        /// the count the packer actually sees. Set by the owner after the readings are resolved.</summary>
+        public int BundleCount
+        {
+            get => _bundleCount;
+            set { if (SetProperty(ref _bundleCount, value)) OnPropertyChanged(nameof(BundleText)); }
+        }
+
+        /// <summary>"→ N bundles", shown only when bundling actually collapses runs (a bundle-aware
+        /// product). A max-1 product bundles 1:1, so this stays blank — no noise on ordinary fixtures.</summary>
+        public string BundleText => BundleCount > 0 && BundleCount < RunCount ? $"→ {BundleCount} bundles" : "";
+
         public ICommand? VerifyCommand { get; set; }
         public ICommand? RemoveCommand { get; set; }
 
-        public void RaiseRunCountChanged() => OnPropertyChanged(nameof(RunCount));
+        public void RaiseRunCountChanged()
+        {
+            OnPropertyChanged(nameof(RunCount));
+            OnPropertyChanged(nameof(BundleText));
+        }
     }
 
     /// <summary>
@@ -59,7 +77,24 @@ namespace TurboSuite.Dmx.ViewModels
         public string ZoneName { get; }
         public int TotalRuns { get; }
 
-        public string Header => $"{ZoneName}  ({TotalRuns} run{(TotalRuns == 1 ? "" : "s")})";
+        private int _bundleCount;
+
+        /// <summary>The zone's total bundle count — the sum of its clusters' (and residual's) bundles, or
+        /// the whole-zone bundle count when flat. Set by the owner after the readings resolve; drives the
+        /// header's "→ N bundles" suffix. See <see cref="HasBundles"/> for the gate.</summary>
+        public int BundleCount
+        {
+            get => _bundleCount;
+            set { if (SetProperty(ref _bundleCount, value)) OnPropertyChanged(nameof(Header)); }
+        }
+
+        /// <summary>True when bundling actually reduces the count (a bundle-aware product is present). A
+        /// max-1 product bundles 1:1, so the header stays a plain run count with no bundle suffix.</summary>
+        private bool HasBundles => BundleCount > 0 && BundleCount < TotalRuns;
+
+        public string Header => HasBundles
+            ? $"{ZoneName}  ({TotalRuns} runs → {BundleCount} bundles)"
+            : $"{ZoneName}  ({TotalRuns} run{(TotalRuns == 1 ? "" : "s")})";
 
         /// <summary>Only a zone with ≥2 runs can be split — single-run zones never show the cluster sub-builder.</summary>
         public bool CanSplit => TotalRuns >= 2;

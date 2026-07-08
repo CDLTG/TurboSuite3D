@@ -49,8 +49,9 @@ namespace TurboSuite.Dmx
 
             int unassigned = 0;
             var order = new List<string>();
-            // Keep the fixture ElementId alongside each run so cluster assignments can bind by id.
-            var byZone = new Dictionary<string, List<(long Id, TapeRun Run)>>(StringComparer.OrdinalIgnoreCase);
+            // Keep each fixture as a bundler Item (carries its ElementId for cluster binding) so the
+            // cluster/flat/residual paths can coalesce chains of connectable fixtures into bundle runs.
+            var byZone = new Dictionary<string, List<DmxBundler.Item>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var f in fixtures)
             {
@@ -59,11 +60,12 @@ namespace TurboSuite.Dmx
 
                 if (!byZone.TryGetValue(zone, out var runs))
                 {
-                    runs = new List<(long, TapeRun)>();
+                    runs = new List<DmxBundler.Item>();
                     byZone[zone] = runs;
                     order.Add(zone);
                 }
-                runs.Add((f.ElementId, new TapeRun(f.LengthFt, f.WattsPerFt, f.Channels)));
+                runs.Add(new DmxBundler.Item(
+                    f.ElementId, new TapeRun(f.LengthFt, f.WattsPerFt, f.Channels), f.MaxPerBundle, f.TypeMark));
             }
 
             var clustersByZone = (clusters ?? new List<DmxClusterDto>())
@@ -77,12 +79,12 @@ namespace TurboSuite.Dmx
             return new DmxZoneBuildResult(zones, order, unassigned);
         }
 
-        private static ZoneDesign BuildZone(string zone, List<(long Id, TapeRun Run)> runs,
+        private static ZoneDesign BuildZone(string zone, List<DmxBundler.Item> runs,
                                             List<DmxClusterDto>? zoneClusters)
         {
-            // No declared clusters ⇒ flat (one cluster per zone).
+            // No declared clusters ⇒ flat (one cluster per zone). Bundle within the flat cluster.
             if (zoneClusters == null || zoneClusters.Count == 0)
-                return new ZoneDesign(zone, runs.Select(r => r.Run).ToList());
+                return new ZoneDesign(zone, DmxBundler.Bundle(runs));
 
             // Bind each run to its cluster (last declaration wins, so a reassign just re-lists the run).
             var runToCluster = new Dictionary<long, int>();
@@ -90,26 +92,28 @@ namespace TurboSuite.Dmx
                 foreach (var id in zoneClusters[ci].RunElementIds ?? new List<long>())
                     runToCluster[id] = ci;
 
-            var clusterRuns = new List<TapeRun>[zoneClusters.Count];
-            for (int i = 0; i < clusterRuns.Length; i++) clusterRuns[i] = new List<TapeRun>();
-            var residual = new List<TapeRun>();
+            // Bundling happens PER cluster (a chain can't span walls) — coalesce each cluster's fixtures
+            // independently after the partition.
+            var clusterItems = new List<DmxBundler.Item>[zoneClusters.Count];
+            for (int i = 0; i < clusterItems.Length; i++) clusterItems[i] = new List<DmxBundler.Item>();
+            var residual = new List<DmxBundler.Item>();
 
-            foreach (var (id, run) in runs)
+            foreach (var item in runs)
             {
-                if (runToCluster.TryGetValue(id, out var ci)) clusterRuns[ci].Add(run);
-                else residual.Add(run);
+                if (runToCluster.TryGetValue(item.Id, out var ci)) clusterItems[ci].Add(item);
+                else residual.Add(item);
             }
 
             var built = new List<RunCluster>();
             for (int ci = 0; ci < zoneClusters.Count; ci++)
-                if (clusterRuns[ci].Count > 0)
-                    built.Add(new RunCluster(zoneClusters[ci].Name, clusterRuns[ci]));
+                if (clusterItems[ci].Count > 0)
+                    built.Add(new RunCluster(zoneClusters[ci].Name, DmxBundler.Bundle(clusterItems[ci])));
             if (residual.Count > 0)
-                built.Add(new RunCluster(ResidualClusterName, residual));
+                built.Add(new RunCluster(ResidualClusterName, DmxBundler.Bundle(residual)));
 
             // A zone with fixtures always yields ≥1 cluster; guard the degenerate all-empty case.
             return built.Count > 0 ? new ZoneDesign(zone, built)
-                                   : new ZoneDesign(zone, runs.Select(r => r.Run).ToList());
+                                   : new ZoneDesign(zone, DmxBundler.Bundle(runs));
         }
     }
 }

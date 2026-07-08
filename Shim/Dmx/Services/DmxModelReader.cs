@@ -69,6 +69,11 @@ namespace TurboSuite.Dmx.Services
                     wattsPerFt = totalWatts;
                 }
 
+                // Bundle Size (max fixtures per daisy-chain) is a TYPE trait; read instance→type, clamp
+                // ≤0 ⇒ 1 so a missing/older family means "no bundling" (each fixture packs on its own).
+                int bundleSize = ReadIntIT(fi, DmxParameterNames.BundleSize);
+                if (bundleSize < 1) bundleSize = 1;
+
                 result.Add(new DmxFixtureReading
                 {
                     ElementId = fi.Id.ToRef().Value,
@@ -76,6 +81,8 @@ namespace TurboSuite.Dmx.Services
                     Channels = channels,
                     LengthFt = lengthFt,
                     WattsPerFt = wattsPerFt,
+                    MaxPerBundle = bundleSize,
+                    TypeMark = BundleKey(fi),
                 });
             }
 
@@ -134,6 +141,15 @@ namespace TurboSuite.Dmx.Services
             double linearPower = ParameterHelper.GetLinearPower(fi);
             if (linearPower > 0.0001) return linearPower;
             return WattsOf(ResolveIT(fi, DmxParameterNames.Power));
+        }
+
+        // The bundler's "same product" key: a fixture's Type Mark. Two fixtures chain into one bundle
+        // only when this matches. A blank Type Mark can't identify a product, so fall back to a per-type
+        // token (the symbol UniqueId) — unmarked fixtures of different types then never pool together.
+        private static string BundleKey(FamilyInstance fi)
+        {
+            string mark = StringOf(fi.Symbol?.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_MARK));
+            return string.IsNullOrWhiteSpace(mark) ? "type:" + (fi.Symbol?.UniqueId ?? "") : mark;
         }
 
         // Label row = the Catalog Number1 parameter (not the family name), then the type name.

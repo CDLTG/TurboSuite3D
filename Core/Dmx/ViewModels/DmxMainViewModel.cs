@@ -44,6 +44,9 @@ namespace TurboSuite.Dmx.ViewModels
         private Dictionary<long, string> _zoneByFixtureId = new Dictionary<long, string>();
         // Zone value → run (fixture) count — drives the pool's "(N)" and a zone's cluster splittability.
         private Dictionary<string, int> _runsByZone = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Fixture ElementId → its bundler Item (run + bundle size + product key), so the cluster/zone rows
+        // can show the "→ N bundles" count that matches what the packer sees.
+        private Dictionary<long, DmxBundler.Item> _itemById = new Dictionary<long, DmxBundler.Item>();
         private int _clusterSeq;
 
         // The last successful solve + its lock-aware numbering — kept so Place stamps the same DEC #s the bill
@@ -827,6 +830,9 @@ namespace TurboSuite.Dmx.ViewModels
                 .Where(z => z.Length > 0)
                 .GroupBy(z => z, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+            _itemById = _fixtures
+                .GroupBy(f => f.ElementId)
+                .ToDictionary(g => g.Key, g => ItemOf(g.First()));
 
             var zoneResult = DmxZoneBuilder.Build(_fixtures, _loadedState.Clusters);
             ZoneNames = zoneResult.ZoneNames;
@@ -913,11 +919,35 @@ namespace TurboSuite.Dmx.ViewModels
                          string.Equals(c.ZoneValue, z.ZoneName, StringComparison.OrdinalIgnoreCase)))
             {
                 var row = new DmxClusterRowViewModel(c.ClusterId, c.Name, c.RunElementIds);
+                row.BundleCount = DmxBundler.CountBundles(ItemsFor(row.RunIds));
                 WireClusterRow(z, row);
                 z.Clusters.Add(row);
                 _clusterSeq = Math.Max(_clusterSeq, ExtractSeq(c.Name));
             }
+            z.BundleCount = ZoneBundleCount(z);
             z.RaiseResidualChanged();
+        }
+
+        // The bundler Item for a fixture reading (per-fixture run + its bundle size + product key).
+        private static DmxBundler.Item ItemOf(DmxFixtureReading f) => new DmxBundler.Item(
+            f.ElementId, new TapeRun(f.LengthFt, f.WattsPerFt, f.Channels), f.MaxPerBundle, f.TypeMark);
+
+        private IEnumerable<DmxBundler.Item> ItemsFor(IEnumerable<long> ids) =>
+            ids.Where(id => _itemById.ContainsKey(id)).Select(id => _itemById[id]);
+
+        /// <summary>The zone's total bundle count, computed the same way <see cref="DmxZoneBuilder"/> packs:
+        /// each declared cluster bundled independently, plus the residual (fixtures in no cluster) bundled
+        /// on its own. A flat zone (no clusters) has all its fixtures in the residual = whole-zone bundling.
+        /// Summing per-partition (not whole-zone) is what makes 72+60+72 read 15+12+15=42, not 41.</summary>
+        private int ZoneBundleCount(DmxLoopZoneViewModel z)
+        {
+            var clustered = new HashSet<long>(z.Clusters.SelectMany(c => c.RunIds));
+            int total = z.Clusters.Sum(c => c.BundleCount);
+            var residual = _itemById.Values.Where(i =>
+                !clustered.Contains(i.Id)
+                && _zoneByFixtureId.TryGetValue(i.Id, out var zone)
+                && string.Equals(zone, z.ZoneName, StringComparison.OrdinalIgnoreCase));
+            return total + DmxBundler.CountBundles(residual);
         }
 
         private void WireClusterRow(DmxLoopZoneViewModel z, DmxClusterRowViewModel row)
