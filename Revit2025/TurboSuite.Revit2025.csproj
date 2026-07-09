@@ -17,7 +17,7 @@
          outside this project's compile cone, so no DefaultItemExcludes are needed. -->
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="ACadSharp" Version="3.6.12" />
+    <PackageReference Include="ACadSharp" Version="3.6.35" />
     <!-- ClosedXML — see note in Core/TurboSuite.Core.csproj (0.105.0's formula
          parser is satisfied by the LET-rewritten Counts formulas). -->
     <PackageReference Include="ClosedXML" Version="0.105.0" />
