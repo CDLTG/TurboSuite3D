@@ -7,6 +7,28 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-09
+
+### Added
+- TurboSetup: graduated from experimental to a shipped command — copies levels from the linked arch model, creates Floor/RCP views with firm templates, and configures RVT link display (link-graphics path is Revit 2025-only; 2024 sets up levels/views/templates and leaves links manual).
+- TurboDocs: Power Supplies driver breakdown output.
+- TurboWire: circuit Room Override, single mixed-category circuits, and a voltage-mismatch guard.
+- TurboSchedule: DMX type params (Channels, Bundle Size, Amps Per Channel).
+- TurboRPS: recognizes DMX-decoder-controlled circuits and excludes decoders from the driver candidate pool, flagging them green as "DMX — not driver-managed".
+
+### Changed
+- TurboSetup: sweep Toposolid visibility off across all AL_ lighting templates.
+- TurboMask: filter-aware wire overlays, raise selected detail lines, and a dependent-view guard.
+- TurboSchedule: shared blue header bar and content background.
+- Shared: SemiBold GroupBox headers across Docs, Settings, and Name; consolidated right-angle checks into `ViewOrientationHelper`.
+- Deps: batch dependabot bumps (ACadSharp, System.Memory, test tooling).
+
+### Fixed
+- TurboMask: orient the masking region to the selection and fix annotation stamps in rotated views.
+- TurboName: align room labels to the view crop rotation.
+- TurboBubble: keep the switchleg bubble offset consistent for rotated fixtures.
+- TurboDriver: stack power supplies relative to view crop rotation.
+
 ## [1.3.0] — 2026-06-30
 
 ### Added
@@ -149,6 +171,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.4.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.0
 [1.3.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.3.0
 [1.2.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.2
 [1.2.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.1
