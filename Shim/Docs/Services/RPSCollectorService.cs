@@ -4,12 +4,60 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Docs.Models;
+using TurboSuite.Driver.Services;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Docs.Services;
 
 public static class RPSCollectorService
 {
+    /// <summary>
+    /// Build the driver/sub-driver breakdown for the Power Supplies "Driver Breakdown" output.
+    /// Reuses the exact TurboRPS dashboard pipeline (<see cref="RpsCircuitDataBuilder"/>:
+    /// collect → recommend → classify), projecting each circuit that has a real driver match
+    /// into a Revit-free <see cref="RPSBreakdownModel"/>. Circuits with no matching driver (or
+    /// DMX-decoder-managed circuits, which get no driver recommendation) are omitted.
+    /// </summary>
+    public static List<RPSBreakdownModel> CollectBreakdown(Document doc)
+    {
+        var result = new List<RPSBreakdownModel>();
+
+        foreach (var c in RpsCircuitDataBuilder.Build(doc))
+        {
+            var reco = c.Recommendation;
+            if (reco is not { HasMatch: true } || reco.SubDriverAssignments.Count == 0)
+                continue;
+
+            // Group fixtures exactly as the TurboRPS detail pane does (type + comments + length).
+            var fixtures = c.Fixtures
+                .GroupBy(f => new { f.TypeMark, f.Comments, LinearLength = Math.Round(f.LinearLength, 4) })
+                .Select(g => new BreakdownFixture
+                {
+                    Quantity = g.Count(),
+                    TypeMark = g.Key.TypeMark ?? string.Empty,
+                    Comments = g.Key.Comments ?? string.Empty,
+                    LinearLength = g.Key.LinearLength
+                })
+                .OrderBy(f => f.TypeMark, NaturalStringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            result.Add(new RPSBreakdownModel
+            {
+                CircuitNumber = c.CircuitNumber ?? string.Empty,
+                LoadName = c.LoadName ?? string.Empty,
+                SwitchIds = c.SwitchIds is { Count: > 0 } ? string.Join(", ", c.SwitchIds) : string.Empty,
+                RecommendedType = c.RecommendedTypeName ?? string.Empty,
+                DriverCount = c.RecommendedCount,
+                TotalLoadWatts = c.RpsLoadWatts,
+                SubDrivers = reco.SubDriverAssignments,
+                Fixtures = fixtures
+            });
+        }
+
+        result.Sort((a, b) => NaturalStringComparer.OrdinalIgnoreCase.Compare(a.CircuitNumber, b.CircuitNumber));
+        return result;
+    }
+
     public static (List<RPSScheduleModel> scheduleItems, List<RPSInstanceModel> instances, List<FixtureSpecModel> cutSheetItems)
         Collect(Document doc)
     {

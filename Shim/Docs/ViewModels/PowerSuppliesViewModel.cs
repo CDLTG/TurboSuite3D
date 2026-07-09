@@ -28,7 +28,9 @@ public class PowerSuppliesViewModel : ViewModelBase
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
-    private int _outputMode;
+    private bool _includeSchedule;
+    private bool _includeLookup;
+    private bool _includeBreakdown;
     private bool _useLargeFormat;
     private string _specNote1 = string.Empty;
     private string _specNote2 = string.Empty;
@@ -40,6 +42,7 @@ public class PowerSuppliesViewModel : ViewModelBase
     public string ProjectName { get; }
     public ObservableCollection<RPSScheduleModel> Items { get; }
     public List<RPSInstanceModel> Instances { get; private set; } = [];
+    public List<RPSBreakdownModel> Breakdown { get; private set; } = [];
 
     public double Progress
     {
@@ -63,13 +66,37 @@ public class PowerSuppliesViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// 0 = RPS Schedule only, 1 = Lookup Table only, 2 = Both
-    /// </summary>
-    public int OutputMode
+    /// <summary>Include the per-type RPS schedule pages.</summary>
+    public bool IncludeSchedule
     {
-        get => _outputMode;
-        set => SetProperty(ref _outputMode, value);
+        get => _includeSchedule;
+        set
+        {
+            if (SetProperty(ref _includeSchedule, value))
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    /// <summary>Include the per-instance lookup-table pages.</summary>
+    public bool IncludeLookup
+    {
+        get => _includeLookup;
+        set
+        {
+            if (SetProperty(ref _includeLookup, value))
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    /// <summary>Include the driver/sub-driver breakdown pages.</summary>
+    public bool IncludeBreakdown
+    {
+        get => _includeBreakdown;
+        set
+        {
+            if (SetProperty(ref _includeBreakdown, value))
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
     }
 
     public bool UseLargeFormat
@@ -100,15 +127,33 @@ public class PowerSuppliesViewModel : ViewModelBase
         GenerateCommand = new RelayCommand(ExecuteGenerate, CanGenerate);
     }
 
-    public void LoadData(List<RPSScheduleModel> scheduleItems, List<RPSInstanceModel> instances)
+    public void LoadData(
+        List<RPSScheduleModel> scheduleItems,
+        List<RPSInstanceModel> instances,
+        List<RPSBreakdownModel> breakdown)
     {
         Items.Clear();
         foreach (var item in scheduleItems)
             Items.Add(item);
         Instances = instances;
+        Breakdown = breakdown;
 
         var settings = DocsSettingsService.Load();
-        OutputMode = settings.RPSOutputMode;
+
+        // One-time migration: seed the Include* checkboxes from the legacy single-select
+        // OutputMode (0=Schedule, 1=Lookup, 2=Both) so existing users keep their selection.
+        if (!settings.RPSOutputMigrated)
+        {
+            settings.RPSIncludeSchedule = settings.RPSOutputMode == 0 || settings.RPSOutputMode == 2;
+            settings.RPSIncludeLookup = settings.RPSOutputMode == 1 || settings.RPSOutputMode == 2;
+            settings.RPSIncludeBreakdown = false;
+            settings.RPSOutputMigrated = true;
+            DocsSettingsService.Save(settings);
+        }
+
+        IncludeSchedule = settings.RPSIncludeSchedule;
+        IncludeLookup = settings.RPSIncludeLookup;
+        IncludeBreakdown = settings.RPSIncludeBreakdown;
         UseLargeFormat = settings.RPSUseLargeFormat;
 
         if (settings.RPSSelectedTypeMarks.Count > 0)
@@ -133,7 +178,10 @@ public class PowerSuppliesViewModel : ViewModelBase
             .Where(i => i.IsSelected)
             .Select(i => i.TypeMark)
             .ToList();
-        settings.RPSOutputMode = OutputMode;
+        settings.RPSIncludeSchedule = IncludeSchedule;
+        settings.RPSIncludeLookup = IncludeLookup;
+        settings.RPSIncludeBreakdown = IncludeBreakdown;
+        settings.RPSOutputMigrated = true;
         settings.RPSUseLargeFormat = UseLargeFormat;
         settings.RPSSpecificationNotes = [SpecNote1, SpecNote2, SpecNote3, SpecNote4, SpecNote5, SpecNote6];
         DocsSettingsService.Save(settings);
@@ -142,11 +190,13 @@ public class PowerSuppliesViewModel : ViewModelBase
     private bool CanGenerate()
     {
         if (IsGenerating) return false;
-        // Lookup-only mode just needs instances
-        if (OutputMode == 1) return Instances.Count > 0;
-        // Schedule or combined mode needs selected items
-        return Items.Any(i => i.IsSelected);
+        // At least one checked output that actually has data to render.
+        return ScheduleReady || LookupReady || BreakdownReady;
     }
+
+    private bool ScheduleReady => IncludeSchedule && Items.Any(i => i.IsSelected);
+    private bool LookupReady => IncludeLookup && Instances.Count > 0;
+    private bool BreakdownReady => IncludeBreakdown && Breakdown.Count > 0;
 
     private void SetAllSelected(bool selected)
     {
@@ -181,37 +231,39 @@ public class PowerSuppliesViewModel : ViewModelBase
             };
 
             var selected = Items.Where(i => i.IsSelected).ToList();
+            bool doSchedule = ScheduleReady;
+            bool doLookup = LookupReady;
+            bool doBreakdown = BreakdownReady;
 
             await Task.Run(() =>
             {
-                switch (OutputMode)
+                // Merge each checked-and-ready output into one PDF, in reading order:
+                // schedule → lookup table → breakdown.
+                using var pdf = new PdfDocument();
+                pdf.Info.Title = $"{ProjectName} Power Supplies";
+
+                if (doSchedule)
                 {
-                    case 0: // Schedule only
-                        StatusText = "Generating RPS schedule...";
-                        Progress = 50;
-                        RPSSchedulePdfService.Generate(selected, ProjectName, outputPath, UseLargeFormat, docsSettings);
-                        break;
-
-                    case 1: // Lookup table only
-                        StatusText = "Generating lookup table...";
-                        Progress = 50;
-                        RPSLookupPdfService.Generate(Instances, ProjectName, outputPath, docsSettings);
-                        break;
-
-                    case 2: // Combined
-                        StatusText = "Generating RPS schedule...";
-                        Progress = 30;
-                        using (var pdf = new PdfDocument())
-                        {
-                            pdf.Info.Title = $"{ProjectName} Power Supplies";
-                            RPSSchedulePdfService.GeneratePages(pdf, selected, ProjectName, UseLargeFormat, docsSettings);
-                            StatusText = "Generating lookup table...";
-                            Progress = 70;
-                            RPSLookupPdfService.GeneratePages(pdf, Instances, ProjectName, docsSettings);
-                            pdf.Save(outputPath);
-                        }
-                        break;
+                    StatusText = "Generating RPS schedule...";
+                    Progress = 25;
+                    RPSSchedulePdfService.GeneratePages(pdf, selected, ProjectName, UseLargeFormat, docsSettings);
                 }
+
+                if (doLookup)
+                {
+                    StatusText = "Generating lookup table...";
+                    Progress = 55;
+                    RPSLookupPdfService.GeneratePages(pdf, Instances, ProjectName, docsSettings);
+                }
+
+                if (doBreakdown)
+                {
+                    StatusText = "Generating driver breakdown...";
+                    Progress = 80;
+                    RPSBreakdownPdfService.GeneratePages(pdf, Breakdown, ProjectName, docsSettings);
+                }
+
+                pdf.Save(outputPath);
             });
 
             Progress = 100;

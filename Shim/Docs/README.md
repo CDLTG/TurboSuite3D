@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility. Seven output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Power Supplies** (RPS schedule and switch ID lookup table PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
+Tabbed document generation utility. Seven output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Power Supplies** (RPS schedule, switch ID lookup table, and driver breakdown PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -116,7 +116,7 @@ Re-derives the panel breakdown by reading saved TurboZones settings (brand, pane
 
 ## Power Supplies Tab
 
-Generates documentation for remote power supplies (`OST_LightingDevices`) with three selectable output modes: **RPS Schedule** (type-level specification schedule), **Lookup Table** (switch ID to circuit mapping), or **RPS Schedule + Lookup Table** (combined PDF).
+Generates documentation for remote power supplies (`OST_LightingDevices`) with three independent output checkboxes — **RPS Schedule** (type-level specification schedule), **Lookup Table** (switch ID to circuit mapping), and **Driver Breakdown** (per-circuit sub-driver packing). Any combination merges into one PDF in that reading order.
 
 ### RPS Schedule
 
@@ -125,6 +125,10 @@ Same visual format as the fixture schedule but with two spec sections: **Capacit
 ### Lookup Table
 
 Compact table with columns **Number | Type | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware). Letter size only. Dark header row with alternating row shading.
+
+### Driver Breakdown
+
+The recommended driver packing users see in the TurboRPS detail pane, as a formal paginated PDF (`RPSBreakdownPdfService`). One section per RPS circuit with a driver-number-centric header (bold driver Switch IDs + type on the left, circuit info on the right), then a two-column body: the sub-driver channels with their packed fixture segments (wattage + length + split labels) on the left, and the circuit's grouped fixtures on the right. Reuses the exact TurboRPS pipeline (`RpsCircuitDataBuilder` = `CircuitCollectorService` + `DriverSelectionService`) via `RPSCollectorService.CollectBreakdown`, so the packing matches the dashboard. Circuits are kept whole on a page whenever they fit; only a circuit too tall for one page flows across pages. Letter portrait only.
 
 ### Data Source
 

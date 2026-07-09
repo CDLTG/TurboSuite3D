@@ -29,7 +29,19 @@ public class DocsSettings
 
     // Power Supplies tab settings
     public List<string> RPSSelectedTypeMarks { get; set; } = new();
-    public int RPSOutputMode { get; set; }              // 0=Schedule, 1=Lookup, 2=Both
+
+    // Legacy single-select output mode (0=Schedule, 1=Lookup, 2=Both). Superseded by the
+    // three independent Include* checkboxes below; retained only so the one-time migration in
+    // PowerSuppliesViewModel.LoadData can seed them for existing users. Do not read directly.
+    public int RPSOutputMode { get; set; }
+
+    // Output selection — independent checkboxes; any combination merges into one PDF.
+    public bool RPSIncludeSchedule { get; set; }
+    public bool RPSIncludeLookup { get; set; }
+    public bool RPSIncludeBreakdown { get; set; }
+    // False until RPSOutputMode has been migrated into the Include* flags (once per user).
+    public bool RPSOutputMigrated { get; set; }
+
     public List<string> RPSSpecificationNotes { get; set; } = new();
     public bool RPSUseLargeFormat { get; set; }
 

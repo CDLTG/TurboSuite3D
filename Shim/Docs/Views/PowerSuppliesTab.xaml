@@ -31,25 +31,25 @@
         <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
-        <!-- Output Mode + Page Size -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,0,0,8">
-            <TextBlock Text="Output:" VerticalAlignment="Center" Margin="0,0,12,0"/>
-            <RadioButton Content="RPS Schedule" GroupName="OutputMode"
-                         IsChecked="{Binding OutputMode, Converter={StaticResource IntEqualConverter}, ConverterParameter=0}"
-                         Margin="0,0,16,0" VerticalContentAlignment="Center"/>
-            <RadioButton Content="Lookup Table" GroupName="OutputMode"
-                         IsChecked="{Binding OutputMode, Converter={StaticResource IntEqualConverter}, ConverterParameter=1}"
-                         Margin="0,0,16,0" VerticalContentAlignment="Center"/>
-            <RadioButton Content="RPS Schedule + Lookup Table" GroupName="OutputMode"
-                         IsChecked="{Binding OutputMode, Converter={StaticResource IntEqualConverter}, ConverterParameter=2}"
-                         Margin="0,0,32,0" VerticalContentAlignment="Center"/>
-
-            <TextBlock Text="Page Size:" VerticalAlignment="Center" Margin="0,0,12,0"/>
-            <RadioButton x:Name="SmallFormatRadio" Content='8.5" x 11" (Letter)' GroupName="PageSize"
-                         Margin="0,0,20,0" VerticalContentAlignment="Center"/>
-            <RadioButton Content='8.5" x 28.5" (Construction)' GroupName="PageSize"
-                         IsChecked="{Binding UseLargeFormat}"
-                         VerticalContentAlignment="Center"/>
+        <!-- Output selection (checkboxes) + Page Size, stacked so nothing clips -->
+        <StackPanel DockPanel.Dock="Top" Margin="8,0,0,8">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="Output:" VerticalAlignment="Center" Margin="0,0,12,0" Width="56"/>
+                <CheckBox Content="RPS Schedule" IsChecked="{Binding IncludeSchedule}"
+                          Margin="0,0,20,0" VerticalContentAlignment="Center"/>
+                <CheckBox Content="Lookup Table" IsChecked="{Binding IncludeLookup}"
+                          Margin="0,0,20,0" VerticalContentAlignment="Center"/>
+                <CheckBox Content="Driver Breakdown" IsChecked="{Binding IncludeBreakdown}"
+                          VerticalContentAlignment="Center"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Page Size:" VerticalAlignment="Center" Margin="0,0,12,0" Width="56"/>
+                <RadioButton x:Name="SmallFormatRadio" Content='8.5" x 11" (Letter)' GroupName="PageSize"
+                             Margin="0,0,20,0" VerticalContentAlignment="Center"/>
+                <RadioButton Content='8.5" x 28.5" (Construction)' GroupName="PageSize"
+                             IsChecked="{Binding UseLargeFormat}"
+                             VerticalContentAlignment="Center"/>
+            </StackPanel>
         </StackPanel>
 
         <Grid>

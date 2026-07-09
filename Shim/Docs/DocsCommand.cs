@@ -81,6 +81,7 @@ public class DocsCommand : IExternalCommand
 
         // Collect RPS (remote power supply) data
         var (rpsScheduleItems, rpsInstances, rpsCutSheetFixtures) = RPSCollectorService.Collect(doc);
+        var rpsBreakdown = RPSCollectorService.CollectBreakdown(doc);
 
         // Collect load schedule circuit data
         var loadsCircuits = LoadsCollectorService.Collect(doc);
@@ -116,7 +117,7 @@ public class DocsCommand : IExternalCommand
 
         var viewModel = new DocsViewModel(cutSheetFixtures, rpsCutSheetFixtures, projectName, projectNumber);
         viewModel.ScheduleVM.LoadFixtures(scheduleFixtures);
-        viewModel.PowerSuppliesVM.LoadData(rpsScheduleItems, rpsInstances);
+        viewModel.PowerSuppliesVM.LoadData(rpsScheduleItems, rpsInstances, rpsBreakdown);
         viewModel.LoadsVM.LoadCircuits(loadsCircuits);
         if (panelData != null)
             viewModel.PanelScheduleVM.LoadData(panelData);
