@@ -14,23 +14,30 @@ using Line = ACadSharp.Entities.Line;
 namespace TurboSuite.Name.Services;
 
 /// <summary>
-/// Extracts wall line segments and door/window positions from linked DWG files.
+/// Extracts wall line segments, door/window positions, and the overall-area boundary from linked DWG files.
 /// </summary>
 public static class CadWallExtractorService
 {
-    public static (List<CadWallSegment> WallSegments, List<XYZ> DoorPositions, List<XYZ> WindowPositions)
+    /// <summary>Diagnostic: door-layer entity-type breakdown from the last <see cref="ExtractWallGeometry"/> call.</summary>
+    public static string LastDoorLayerInfo { get; private set; }
+
+    /// <summary>Diagnostic: per-linked-DWG filename, placement scope, and contributed counts from the last call.</summary>
+    public static string LastLinkInfo { get; private set; }
+
+    public static (List<CadWallSegment> WallSegments, List<XYZ> DoorPositions, List<CadWallSegment> AreaSegments)
         ExtractWallGeometry(Document doc, View view, CadRoomSourceSettings settings)
     {
+        int doorInserts = 0, doorLines = 0, doorPolylines = 0, doorArcs = 0;
         var wallSegments = new List<CadWallSegment>();
         var doorPositions = new List<XYZ>();
-        var windowPositions = new List<XYZ>();
+        var areaSegments = new List<CadWallSegment>();
 
         var wallLayers = new HashSet<string>(settings.WallLayerNames ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
         var doorLayers = new HashSet<string>(settings.DoorLayerNames ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-        var windowLayers = new HashSet<string>(settings.WindowLayerNames ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+        var areaLayers = new HashSet<string>(settings.AreaLayerNames ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
 
         if (wallLayers.Count == 0)
-            return (wallSegments, doorPositions, windowPositions);
+            return (wallSegments, doorPositions, areaSegments);
 
         var cadLinks = new FilteredElementCollector(doc, view.Id)
             .OfClass(typeof(ImportInstance))
@@ -38,6 +45,7 @@ public static class CadWallExtractorService
             .Where(ii => ii.IsLinked)
             .ToList();
 
+        var linkInfos = new List<string>();
         foreach (var import in cadLinks)
         {
             var typeId = import.GetTypeId();
@@ -49,6 +57,12 @@ public static class CadWallExtractorService
 
             string dwgPath = ModelPathUtils.ConvertModelPathToUserVisiblePath(extRef.GetAbsolutePath());
             if (!File.Exists(dwgPath)) continue;
+
+            // Scope to the declared source link (blank = all links). Keeps a co-linked RCP that shares
+            // layer names from contributing stray door/wall geometry.
+            if (!string.IsNullOrWhiteSpace(settings.SourceLinkName) &&
+                !string.Equals(Path.GetFileName(dwgPath), settings.SourceLinkName.Trim(), StringComparison.OrdinalIgnoreCase))
+                continue;
 
             Transform cadTransform = import.GetTransform();
             CadDocument cadDoc;
@@ -69,6 +83,7 @@ public static class CadWallExtractorService
 
             double unitToFeet = GetUnitToFeetFactor(cadDoc.Header.InsUnits);
 
+            int wBefore = wallSegments.Count, dBefore = doorPositions.Count, aBefore = areaSegments.Count;
             foreach (var entity in cadDoc.Entities)
             {
                 string layer = entity.Layer?.Name ?? "";
@@ -76,13 +91,30 @@ public static class CadWallExtractorService
                 if (wallLayers.Contains(layer))
                     ExtractWallEntity(entity, unitToFeet, cadTransform, wallSegments);
                 else if (doorLayers.Contains(layer))
+                {
                     ExtractPositionEntity(entity, unitToFeet, cadTransform, doorPositions);
-                else if (windowLayers.Contains(layer))
-                    ExtractPositionEntity(entity, unitToFeet, cadTransform, windowPositions);
+                    switch (entity)
+                    {
+                        case Insert: doorInserts++; break;
+                        case Line: doorLines++; break;
+                        case LwPolyline: doorPolylines++; break;
+                        case ACadSharp.Entities.Arc: doorArcs++; break;
+                    }
+                }
+                else if (areaLayers.Contains(layer))
+                    ExtractWallEntity(entity, unitToFeet, cadTransform, areaSegments);
             }
+
+            string scope = import.ViewSpecific
+                ? $"view:{(doc.GetElement(import.OwnerViewId) as View)?.Name ?? "?"}"
+                : "model-wide";
+            linkInfos.Add($"{Path.GetFileName(dwgPath)} [{scope}]: walls {wallSegments.Count - wBefore}, " +
+                $"doors {doorPositions.Count - dBefore}, area {areaSegments.Count - aBefore}");
         }
 
-        return (wallSegments, doorPositions, windowPositions);
+        LastLinkInfo = linkInfos.Count > 0 ? string.Join("  |  ", linkInfos) : "(no linked DWGs read)";
+        LastDoorLayerInfo = $"door entities: {doorInserts} inserts, {doorLines} lines, {doorPolylines} polylines, {doorArcs} arcs";
+        return (wallSegments, doorPositions, areaSegments);
     }
 
     private static void ExtractWallEntity(Entity entity, double unitToFeet, Transform cadTransform,

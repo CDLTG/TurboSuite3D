@@ -48,6 +48,7 @@ public class GenerateRegionsViewModel : ViewModelBase
         set => SetProperty(ref _pickingHint, value);
     }
 
+    public ICommand AutoGenerateCommand { get; }
     public ICommand RectangleCommand { get; }
     public ICommand PolygonCommand { get; }
     public ICommand FinishCommand { get; }
@@ -59,9 +60,17 @@ public class GenerateRegionsViewModel : ViewModelBase
         _externalEvent = externalEvent;
         _handler = handler;
 
+        AutoGenerateCommand = new RelayCommand(OnAutoGenerate, () => !IsPicking);
         RectangleCommand = new RelayCommand(OnRectangle, () => !IsPicking);
         PolygonCommand = new RelayCommand(OnPolygon, () => !IsPicking);
         FinishCommand = new RelayCommand(OnFinish, () => !IsPicking);
+    }
+
+    private void OnAutoGenerate()
+    {
+        IsPicking = true;
+        PickingHint = "Generating regions from CAD room labels…";
+        RaisePick(new AutoGeneratePickRequest());
     }
 
     private void OnRectangle()

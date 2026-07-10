@@ -47,11 +47,22 @@ public class CadRoomSourceSettings
     /// <summary>CAD layer names containing door geometry (comma-separated in UI).</summary>
     public List<string> DoorLayerNames { get; set; } = new();
 
-    /// <summary>CAD layer names containing window geometry (comma-separated in UI).</summary>
-    public List<string> WindowLayerNames { get; set; } = new();
+    /// <summary>
+    /// CAD layer names containing the overall building area/footprint boundary polyline
+    /// (comma-separated in UI). Used as a hard exterior envelope during region generation —
+    /// rooms cannot flood across it, eliminating exterior bleed.
+    /// </summary>
+    public List<string> AreaLayerNames { get; set; } = new();
 
     /// <summary>FilledRegionType name used for generated regions.</summary>
     public string RegionTypeName { get; set; } = "Room Region";
+
+    /// <summary>
+    /// File name (e.g. "x_Floor Plan.dwg") of the linked DWG the extractor should read. Empty = read every
+    /// linked CAD in the view (legacy behavior). Scopes extraction to the floor plan so a co-linked RCP
+    /// (which can share layer names) doesn't contribute stray geometry. Matched case-insensitively by file name.
+    /// </summary>
+    public string SourceLinkName { get; set; } = "";
 
     public static CadRoomSourceSettings CreateDefaults() => new()
     {
@@ -65,7 +76,8 @@ public class CadRoomSourceSettings
         CeilingHeightBlockTag = "",
         WallLayerNames = new List<string>(),
         DoorLayerNames = new List<string>(),
-        WindowLayerNames = new List<string>(),
-        RegionTypeName = "Room Region"
+        AreaLayerNames = new List<string>(),
+        RegionTypeName = "Room Region",
+        SourceLinkName = ""
     };
 }

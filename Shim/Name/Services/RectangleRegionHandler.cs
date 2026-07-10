@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Windows;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Shared.Models;
 
 namespace TurboSuite.Name.Services;
 
@@ -17,15 +18,18 @@ public class RegionPickHandler : IExternalEventHandler
     private readonly UIDocument _uidoc;
     private readonly View _view;
     private readonly ElementId _regionTypeId;
+    private readonly CadRoomSourceSettings _settings;
 
     public RegionGenerationRequest CurrentRequest { get; set; }
 
-    public RegionPickHandler(Document doc, UIDocument uidoc, View view, ElementId regionTypeId)
+    public RegionPickHandler(Document doc, UIDocument uidoc, View view, ElementId regionTypeId,
+        CadRoomSourceSettings settings)
     {
         _doc = doc;
         _uidoc = uidoc;
         _view = view;
         _regionTypeId = regionTypeId;
+        _settings = settings;
     }
 
     public void Execute(UIApplication app)
@@ -39,6 +43,8 @@ public class RegionPickHandler : IExternalEventHandler
                 RunRectangleLoop(request);
             else if (request is PolygonPickRequest)
                 RunPolygonLoop(request);
+            else if (request is AutoGeneratePickRequest)
+                RunAutoGenerate(request);
         }
         catch (Exception)
         {
@@ -214,6 +220,27 @@ public class RegionPickHandler : IExternalEventHandler
         Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
         {
             request.OnComplete?.Invoke(new PickLoopUpdate(c, f, false));
+        }));
+    }
+
+    // One-shot watershed partition of the whole floor (no pick loop). Reproduces the validated spike:
+    // reports partition diagnostics; does not create regions yet.
+    private void RunAutoGenerate(RegionGenerationRequest request)
+    {
+        string report;
+        try
+        {
+            report = RegionWatershedService.Run(_doc, _view, _settings);
+        }
+        catch (Exception ex)
+        {
+            report = $"Auto-generate failed:\n{ex}";
+        }
+
+        Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+        {
+            request.OnComplete?.Invoke(new PickLoopUpdate(0, 0, true, report));
+            TaskDialog.Show("TurboName — Auto-generate", report);
         }));
     }
 

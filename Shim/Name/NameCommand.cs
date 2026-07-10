@@ -16,8 +16,11 @@ namespace TurboSuite.Name
     /// <summary>
     /// TurboName — Opens a window for CAD-based room name assignment and region generation.
     /// </summary>
+    // NOTE: no [Regeneration(RegenerationOption.Manual)] — that obsolete attribute suppresses automatic
+    // document regeneration, which left DataStorage.Create+SetEntity unfinalized so Revit purged the
+    // (apparently empty) DataStorage on the next regen. That was the real "CAD settings don't persist"
+    // root cause. Absent = automatic regeneration, matching SettingsCommand (whose settings persist).
     [Transaction(TransactionMode.Manual)]
-    [Regeneration(RegenerationOption.Manual)]
     public class NameCommand : IExternalCommand
     {
         private const string TextNoteTypeName = "AL_Annotation_4.5\"";
@@ -38,12 +41,63 @@ namespace TurboSuite.Name
 
                 View view = doc.ActiveView;
 
+                var cadSettings = CadRoomSourceSettingsCache.Get(doc);
+                var vm = new TurboNameViewModel(cadSettings, uidoc);
+
+                // Round-trip loop. Both "Pick from view" and "Save" must run OUTSIDE the dialog's own modal
+                // loop — PickObject can't run under it, and a Revit transaction only persists reliably once
+                // the modal dialog has closed. So the window closes, we act in clean context, then reopen it
+                // bound to the SAME VM at the SAME on-screen position.
+                // "Pick from view" is the ONLY thing that needs the close→act→reopen round-trip
+                // (PickObject can't run under the dialog's own modal loop). Settings are dirty-tracked in the
+                // VM and auto-saved once, after the window finally closes — never inside the loop.
+                double? left = null, top = null;
+                while (true)
+                {
+                    var window = new TurboNameWindow { DataContext = vm };
+                    if (left.HasValue)
+                    {
+                        window.WindowStartupLocation = System.Windows.WindowStartupLocation.Manual;
+                        window.Left = left.Value;
+                        window.Top = top.Value;
+                    }
+                    new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
+                    window.ShowDialog();
+                    left = window.Left;
+                    top = window.Top;
+
+                    if (vm.CadConfig.PickRequested)
+                    {
+                        vm.CadConfig.PickRequested = false;
+                        vm.CadConfig.RunPick();
+                        continue;
+                    }
+                    break;
+                }
+
+                // Auto-save on close: persist once the window is closed (nothing modal follows the commit),
+                // only if something actually changed or we're about to act on the config.
+                bool persisted = vm.SettingsDirty || vm.ShouldRun || vm.ShouldGenerate;
+                if (persisted)
+                    PersistCadConfig(doc, vm.CadConfig);
+
+                if (!vm.ShouldRun && !vm.ShouldGenerate)
+                    // Return Succeeded (not Cancelled) when we persisted — Revit DISCARDS a command's
+                    // committed changes if it returns Cancelled/Failed, which silently rolls back the
+                    // just-saved settings DataStorage.
+                    return persisted ? Result.Succeeded : Result.Cancelled;
+
                 var settings = CadRoomSourceSettingsCache.Get(doc);
+
+                if (vm.ShouldGenerate)
+                    return LaunchGenerateRegions(commandData, doc, uidoc, view, settings);
+
+                // ── Assign Room Names path ──
                 if (string.IsNullOrEmpty(settings.BlockName) && string.IsNullOrEmpty(settings.RoomNameLayer))
                 {
                     TaskDialog.Show("TurboName",
                         "CAD Room Source is not configured.\n\n" +
-                        "Open TurboSuite Settings and configure the CAD Room Source (Block or Text mode) before running TurboName.");
+                        "Configure the CAD Room Source (Block or Text mode) in the TurboName window before running.");
                     return Result.Cancelled;
                 }
 
@@ -59,23 +113,6 @@ namespace TurboSuite.Name
                         "Load the annotation type into the project before running TurboName.");
                     return Result.Cancelled;
                 }
-
-                var vm = new TurboNameViewModel();
-
-                var window = new TurboNameWindow { DataContext = vm };
-                new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
-                vm.CloseRequested += () =>
-                {
-                    window.DialogResult = true;
-                    window.Close();
-                };
-                window.ShowDialog();
-
-                if (vm.ShouldGenerate)
-                    return LaunchGenerateRegions(commandData, doc, uidoc, view, settings);
-
-                if (!vm.ShouldRun)
-                    return Result.Cancelled;
 
                 // Collect data only when Run is clicked
                 var regions = RegionCollectorService.CollectRegions(doc, view);
@@ -177,6 +214,12 @@ namespace TurboSuite.Name
             }
         }
 
+        private static void PersistCadConfig(Document doc, ViewModels.CadRoomSourceConfigViewModel config)
+        {
+            CadRoomSourceStorageService.Save(doc, config.ToModel());
+            CadRoomSourceSettingsCache.Invalidate();
+        }
+
         private static Result LaunchGenerateRegions(ExternalCommandData commandData,
             Document doc, UIDocument uidoc, View view, Shared.Models.CadRoomSourceSettings settings)
         {
@@ -197,7 +240,7 @@ namespace TurboSuite.Name
             }
 
             // Create handler and external event
-            var handler = new RegionPickHandler(doc, uidoc, view, regionType.Id);
+            var handler = new RegionPickHandler(doc, uidoc, view, regionType.Id, settings);
             var externalEvent = ExternalEvent.Create(handler);
 
             var genVm = new GenerateRegionsViewModel(externalEvent, handler);

@@ -6,10 +6,9 @@ Windowed utility for assigning CAD room names and ceiling heights to filled regi
 
 ### Workflow
 
-1. Configure CAD Room Source in TurboSuite Settings (Block mode with block name + attribute tags, or Text mode with layer names and optional block-based ceiling heights).
-2. Run TurboName. A dialog opens with two actions: **Run** (assign names) and **Generate** (create regions).
-3. **Run**: Collects "Room Region" filled regions and linked DWG data, assigns room names to Comments, and places TextNotes. Shows a summary dialog with processed/skipped/ambiguous/unmatched counts.
-4. **Generate**: Opens a sub-dialog with Rectangle (two-click) and Polygon (multi-click) modes for interactively creating filled regions over room areas.
+1. Run TurboName. The window hosts the **CAD Room Source** + **Region Generation Layers** config inline (Block mode with block name + attribute tags, or Text mode with layer names and optional block-based ceiling heights), plus a **Source Link** dropdown and the **Run** / **Generate** actions. Edits auto-save to the document when the window closes (no explicit Save button).
+2. **Run**: Collects "Room Region" filled regions and linked DWG data, assigns room names to Comments, and places TextNotes. Shows a summary dialog with processed/skipped/ambiguous/unmatched counts.
+3. **Generate**: Opens a sub-dialog with Rectangle (two-click) and Polygon (multi-click) modes for interactively creating filled regions over room areas, plus **Auto-generate** (see below).
 
 ### Behavior
 
@@ -27,12 +26,12 @@ Windowed utility for assigning CAD room names and ceiling heights to filled regi
 
 ### CAD Source Modes
 
-Block name, attribute tags, and layer names can be discovered in-app — no AutoCAD needed. In TurboSuite Settings → CAD Room Source, **Pick from view** lets you click a room label in the linked CAD and auto-detects the mode (Block vs Text) plus the block/layer by joining Revit's picked layer with the DWG read via ACadSharp. For a block, the picked room's `value=tag` attribute pairs are shown in the "Detected:" line (e.g. `1-CAR=003, GARAGE=002`) so you can tell which tag holds the room name vs. the ceiling height by reading the values. The Block Name / layer / tag fields are also editable, type-ahead dropdowns populated from the linked DWGs as a fallback, and still accept free-typed values. (Discovery reads the DWG with ACadSharp, the same license-free path used at extraction time.)
+Block name, attribute tags, and layer names can be discovered in-app — no AutoCAD needed. In the TurboName window → CAD Room Source, **Pick from view** lets you click a room label in the linked CAD and auto-detects the mode (Block vs Text) plus the block/layer by joining Revit's picked layer with the DWG read via ACadSharp. For a block, the picked room's `value=tag` attribute pairs are shown in the "Detected:" line (e.g. `1-CAR=003, GARAGE=002`) so you can tell which tag holds the room name vs. the ceiling height by reading the values. The Block Name / layer / tag fields are also editable, type-ahead dropdowns populated from the linked DWGs as a fallback, and still accept free-typed values. (Discovery reads the DWG with ACadSharp, the same license-free path used at extraction time.)
 
 - **Block mode**: Reads INSERT entities matching a configured block name. Room name is concatenated from ordered attribute tags. Ceiling height from a separate attribute tag.
 - **Text mode**: Reads Text/MText entities on configured layers. Room names from the room name layer, ceiling heights from either:
   - A separate ceiling height layer (text entities), or
-  - Block attributes (configured via Ceiling Height Block Name + Tag in Settings)
+  - Block attributes (configured via Ceiling Height Block Name + Tag in the TurboName window)
   - Room names and ceiling heights are added as separate entries at their own CAD locations.
 
 ### Generate Regions
@@ -42,7 +41,9 @@ Interactive region creation with two modes:
 - **Rectangle**: Two clicks define opposite corners of a rectangular filled region.
 - **Polygon**: Multiple clicks define corners of an arbitrary polygon. Press Escape to close the shape (minimum 3 corners). Guide lines are drawn between selected corners using the "Wiring (Green)" line style for visual feedback, and removed when the region is created.
 
-Both modes loop continuously until the user clicks **Finish** in the dialog.
+Both manual modes loop continuously until the user clicks **Finish** in the dialog.
+
+- **Auto-generate** (in development): one-shot watershed partition of the whole floor from the CAD room labels (`RegionWatershedService`) — raster distance-transform priority-flood seeded by room labels, bounded by an **Area layer** envelope, with block-agnostic door sealing. Reads the DWG named in the **Source Link** dropdown (pick the floor plan so a co-linked RCP sharing layer names doesn't add stray geometry), scoped to the active view's crop box. Currently reports the partition + writes a debug image; FilledRegion creation is the remaining work. Configured via the **Region Generation Layers** fields (Wall / Door / Area layers, Region Type Name).
 
 ## Dependencies
 
@@ -64,4 +65,4 @@ Both modes loop continuously until the user clicks **Finish** in the dialog.
 ### Required Linked Files
 
 - At least one **linked DWG/DXF** file in the active view containing room name data
-- CAD source mode (Block or Text) must be configured in TurboSuite Settings before running
+- CAD source mode (Block or Text) must be configured in the TurboName window before running

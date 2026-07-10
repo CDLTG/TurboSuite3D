@@ -1,6 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Text.Json;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Models;
@@ -10,26 +9,32 @@ namespace TurboSuite.Shared.Services;
 /// <summary>
 /// Reads/writes <see cref="CadRoomSourceSettings"/> (TurboName CAD layer/block configuration) to
 /// ExtensibleStorage in the project document.
-/// Schema GUID is versioned — change it on any field add/remove (see CLAUDE.md "ExtensibleStorage Schema Changes").
+///
+/// SHAPE: the whole settings object is serialized to ONE JSON string field (plus a version int), exactly
+/// like <c>DmxStorageService</c> — no native ES array fields. Payload-shape changes bump
+/// <see cref="PayloadVersion"/> instead of the schema GUID.
+///
+/// NOTE (persistence gotcha): the command that saves these settings (TurboName) must return
+/// <c>Result.Succeeded</c> — Revit DISCARDS a command's committed changes when it returns Cancelled/Failed,
+/// which silently rolls back the saved DataStorage. See <c>NameCommand</c>.
+///
+/// Schema GUID is versioned — change it ONLY for a true ES field add/remove (see CLAUDE.md
+/// "ExtensibleStorage Schema Changes").
 /// </summary>
 public static class CadRoomSourceStorageService
 {
-    // V3: new GUID to add CeilingHeightBlockName/CeilingHeightBlockTag fields.
-    // Old schemas live on in document storage until Revit restart clears the Schema.Lookup cache.
-    private static readonly Guid SchemaGuid = new("b2c3d4e5-f6a7-8901-bcde-f12345678903");
-    private const string SchemaName = "TurboSuiteCadRoomSource";
-    private const string ModeField = "Mode";
-    private const string BlockNameField = "BlockName";
-    private const string RoomNameTagsField = "RoomNameTags";
-    private const string CeilingHeightTagField = "CeilingHeightTag";
-    private const string RoomNameLayerField = "RoomNameLayer";
-    private const string CeilingHeightLayerField = "CeilingHeightLayer";
-    private const string CeilingHeightBlockNameField = "CeilingHeightBlockName";
-    private const string CeilingHeightBlockTagField = "CeilingHeightBlockTag";
-    private const string WallLayerNamesField = "WallLayerNames";
-    private const string DoorLayerNamesField = "DoorLayerNames";
-    private const string WindowLayerNamesField = "WindowLayerNames";
-    private const string RegionTypeNameField = "RegionTypeName";
+    // Unique schema name (prior V3–V5 all reused "TurboSuiteCadRoomSource"; never reuse a name across GUIDs).
+    private static readonly Guid SchemaGuid = new("f1e2d3c4-b5a6-4789-9abc-de0123456789");
+    private const string SchemaName = "TurboSuiteCadRoomSourceV6";
+    private const string StateJsonField = "StateJson";
+    private const string PayloadVersionField = "PayloadVersion";
+    private const int PayloadVersion = 1;
+
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
+    {
+        WriteIndented = false,
+        PropertyNameCaseInsensitive = true
+    };
 
     private static Schema GetOrCreateSchema()
     {
@@ -40,18 +45,8 @@ public static class CadRoomSourceStorageService
         builder.SetSchemaName(SchemaName);
         builder.SetReadAccessLevel(AccessLevel.Public);
         builder.SetWriteAccessLevel(AccessLevel.Public);
-        builder.AddSimpleField(ModeField, typeof(string));
-        builder.AddSimpleField(BlockNameField, typeof(string));
-        builder.AddArrayField(RoomNameTagsField, typeof(string));
-        builder.AddSimpleField(CeilingHeightTagField, typeof(string));
-        builder.AddSimpleField(RoomNameLayerField, typeof(string));
-        builder.AddSimpleField(CeilingHeightLayerField, typeof(string));
-        builder.AddSimpleField(CeilingHeightBlockNameField, typeof(string));
-        builder.AddSimpleField(CeilingHeightBlockTagField, typeof(string));
-        builder.AddArrayField(WallLayerNamesField, typeof(string));
-        builder.AddArrayField(DoorLayerNamesField, typeof(string));
-        builder.AddArrayField(WindowLayerNamesField, typeof(string));
-        builder.AddSimpleField(RegionTypeNameField, typeof(string));
+        builder.AddSimpleField(StateJsonField, typeof(string));
+        builder.AddSimpleField(PayloadVersionField, typeof(int));
         return builder.Finish();
     }
 
@@ -66,68 +61,34 @@ public static class CadRoomSourceStorageService
         var entity = storage.GetEntity(schema);
         if (!entity.IsValid()) return null;
 
-        return new CadRoomSourceSettings
+        if (schema.GetField(StateJsonField) == null) return null;
+        string json = entity.Get<string>(StateJsonField);
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
         {
-            Mode = GetStringField(entity, schema, ModeField, "Block"),
-            BlockName = GetStringField(entity, schema, BlockNameField, ""),
-            RoomNameTags = schema.GetField(RoomNameTagsField) != null
-                ? entity.Get<IList<string>>(RoomNameTagsField)?.ToList() ?? new List<string>()
-                : new List<string>(),
-            CeilingHeightTag = GetStringField(entity, schema, CeilingHeightTagField, ""),
-            RoomNameLayer = GetStringField(entity, schema, RoomNameLayerField, ""),
-            CeilingHeightLayer = GetStringField(entity, schema, CeilingHeightLayerField, ""),
-            CeilingHeightBlockName = GetStringField(entity, schema, CeilingHeightBlockNameField, ""),
-            CeilingHeightBlockTag = GetStringField(entity, schema, CeilingHeightBlockTagField, ""),
-            WallLayerNames = schema.GetField(WallLayerNamesField) != null
-                ? entity.Get<IList<string>>(WallLayerNamesField)?.ToList() ?? new List<string>()
-                : new List<string>(),
-            DoorLayerNames = schema.GetField(DoorLayerNamesField) != null
-                ? entity.Get<IList<string>>(DoorLayerNamesField)?.ToList() ?? new List<string>()
-                : new List<string>(),
-            WindowLayerNames = schema.GetField(WindowLayerNamesField) != null
-                ? entity.Get<IList<string>>(WindowLayerNamesField)?.ToList() ?? new List<string>()
-                : new List<string>(),
-            RegionTypeName = GetStringField(entity, schema, RegionTypeNameField, "Room Region")
-        };
-    }
-
-    private static string GetStringField(Entity entity, Schema schema, string fieldName, string defaultValue)
-    {
-        if (schema.GetField(fieldName) == null) return defaultValue;
-        return entity.Get<string>(fieldName) ?? defaultValue;
-    }
-
-    private static void SetStringField(Entity entity, Schema schema, string fieldName, string value)
-    {
-        if (schema.GetField(fieldName) != null)
-            entity.Set(fieldName, value);
+            return JsonSerializer.Deserialize<CadRoomSourceSettings>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            // Corrupt/forward-incompatible payload — start clean rather than crash.
+            return null;
+        }
     }
 
     public static void Save(Document doc, CadRoomSourceSettings settings)
     {
+        if (settings == null) settings = CadRoomSourceSettings.CreateDefaults();
         var schema = GetOrCreateSchema();
+        string json = JsonSerializer.Serialize(settings, JsonOptions);
 
         using var tx = new Transaction(doc, "TurboSuite - Save CAD Room Source Settings");
         tx.Start();
 
         var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
         var entity = new Entity(schema);
-        SetStringField(entity, schema, ModeField, settings.Mode ?? "Block");
-        SetStringField(entity, schema, BlockNameField, settings.BlockName ?? "");
-        if (schema.GetField(RoomNameTagsField) != null)
-            entity.Set(RoomNameTagsField, (IList<string>)(settings.RoomNameTags ?? new List<string>()));
-        SetStringField(entity, schema, CeilingHeightTagField, settings.CeilingHeightTag ?? "");
-        SetStringField(entity, schema, RoomNameLayerField, settings.RoomNameLayer ?? "");
-        SetStringField(entity, schema, CeilingHeightLayerField, settings.CeilingHeightLayer ?? "");
-        SetStringField(entity, schema, CeilingHeightBlockNameField, settings.CeilingHeightBlockName ?? "");
-        SetStringField(entity, schema, CeilingHeightBlockTagField, settings.CeilingHeightBlockTag ?? "");
-        if (schema.GetField(WallLayerNamesField) != null)
-            entity.Set(WallLayerNamesField, (IList<string>)(settings.WallLayerNames ?? new List<string>()));
-        if (schema.GetField(DoorLayerNamesField) != null)
-            entity.Set(DoorLayerNamesField, (IList<string>)(settings.DoorLayerNames ?? new List<string>()));
-        if (schema.GetField(WindowLayerNamesField) != null)
-            entity.Set(WindowLayerNamesField, (IList<string>)(settings.WindowLayerNames ?? new List<string>()));
-        SetStringField(entity, schema, RegionTypeNameField, settings.RegionTypeName ?? "Room Region");
+        entity.Set(StateJsonField, json);
+        entity.Set(PayloadVersionField, PayloadVersion);
         storage.SetEntity(entity);
 
         tx.Commit();

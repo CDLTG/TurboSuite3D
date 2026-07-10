@@ -22,11 +22,4 @@ public partial class SettingsWindow : Window
             };
         }
     }
-
-    // Lazy CAD discovery: load layers/blocks/tags only when a discovery dropdown is first opened.
-    private void OnDiscoveryDropDownOpened(object sender, System.EventArgs e)
-    {
-        if (DataContext is SettingsViewModel vm)
-            vm.EnsureDiscoveryLoaded();
-    }
 }

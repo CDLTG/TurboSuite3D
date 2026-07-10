@@ -13,22 +13,8 @@ Configure TurboSuite behavior and family name mappings per-document. All setting
 
 ### CAD Room Source (2D Workflow)
 
-Configures how TurboName reads room names from linked DWG files. Two modes:
-
-**Block Attributes (default):**
-
-| Field | Purpose | Example |
-|-------|---------|---------|
-| Block Name | INSERT entity name to search for | `CDA_ROOM` |
-| Room Name Tags | Comma-separated attribute tags, concatenated for room name | `003, 002` |
-| Ceiling Height Tag | Single attribute tag for ceiling height | `001` |
-
-**Text on Layer:**
-
-| Field | Purpose | Example |
-|-------|---------|---------|
-| Room Name Layer | CAD layer with room name text | `ANNO_ROOM` |
-| Ceiling Height Layer | CAD layer with ceiling height text | `ANNO_ROOM` |
+Moved out of this dialog into the **TurboName window** (configured where it's used). See
+[Shim/Name/README.md](../Name/README.md).
 
 ### Family Names
 
@@ -49,8 +35,9 @@ Settings are persisted per-document using three ExtensibleStorage schemas:
 | Schema | Content |
 |--------|---------|
 | `TurboSuiteFamilyNameSettings` | Family name lists (array fields) |
-| `TurboSuiteCadRoomSource` | CAD mode, block name, attribute tags, layer names |
 | `TurboSuiteGeneralSettings` | Boolean flags for general options |
+
+CAD Room Source config now persists under its own schema (`TurboSuiteCadRoomSourceV6`, JSON-backed) written by the TurboName window, not this dialog.
 
 Settings are cached in memory and reloaded when the active document changes.
 
