@@ -16,14 +16,16 @@ namespace TurboSuite.Name.Services;
 /// bounded by a hard building-envelope (Area layer) barrier.
 ///
 /// This is the productized home of the validated TurboSpike watershed (see
-/// <c>Specs/TurboName-Region-Generation-Plan.md</c> §10 — the canonical reference implementation). At this
-/// stage it reproduces the spike's PARTITION + DIAGNOSTICS ONLY (leaks / collision px / doors sealed, plus a
-/// debug bitmap) so partition quality can be confirmed from the real Generate Regions UI before the
-/// vectorize → FilledRegion step is added. It does NOT create regions yet.
+/// <c>Specs/TurboName-Region-Generation-Plan.md</c> §10 — the canonical reference implementation). It runs
+/// the partition, emits diagnostics (leaks / collision px / doors sealed, plus a debug bitmap), and
+/// vectorizes each room territory to a boundary polygon (<see cref="RegionVectorizer"/>). It creates NOTHING
+/// itself — <see cref="Run"/> returns the boundaries in a <see cref="WatershedResult"/>; the caller wraps
+/// them in a transaction to build the FilledRegions.
 ///
 /// Pipeline (order matters): seeds from CAD labels → crop-box clip → door sealing (block-agnostic,
 /// gap-in-nearest-wall) → thin-wall raster (NO dilation) with Area envelope as a hard exterior barrier →
-/// multi-source competitive BFS (exterior = owner 1 seeded on the border ring; one room per label).
+/// multi-source competitive BFS (exterior = owner 1 seeded on the border ring; one room per label) →
+/// vectorize each owner's raster territory (contour → Douglas-Peucker → wall-snap).
 /// </summary>
 public static class RegionWatershedService
 {
@@ -39,6 +41,7 @@ public static class RegionWatershedService
     private const double MaxDoorWidth = 12.0;   // ft — gaps wider than this are real openings, not doors
 
     private const double LeakAreaSqFt = 3000.0; // territories bigger than this are exterior/room leaks
+    private const double MinRegionSqFt = 4.0;   // territories smaller than this are noise — not vectorized
 
     // Door sealing now complements the priority-flood watershed rather than carrying it. Targeted policy:
     // apply only TIGHT seals (door marker inside a real wall gap) — these pin cuts at real doors and seal
@@ -57,12 +60,25 @@ public static class RegionWatershedService
     private const int DoorSeal = -4;         // door seal, marker INSIDE the sealed gap (trustworthy)
     private const int ProximityBridge = -6;  // GapBridgingService — corner gap close (≤1 ft)
     private const int DoorSealLoose = -7;    // door seal, marker OUTSIDE the gap (suspect — wrong ref wall)
+    private const int SlotFill = -8;         // sealed thin channel (pocket-door cavity / chase)
+
+    // Thin-slot sealing (pocket doors etc.). Fill any free pixel walled on both sides within this reach.
+    private const bool SealThinSlots = true;
+    private const int SlotWidthPx = 4;       // ~4" at 12 px/ft — cavity narrower than this is not room
+
+    /// <summary>A vectorized room territory: its seed room name + the closed boundary polygon.</summary>
+    public sealed record GeneratedRegion(string RoomName, List<XYZ> Boundary);
+
+    /// <summary>Diagnostics report + the vectorized boundaries the caller turns into FilledRegions.</summary>
+    public sealed record WatershedResult(string Report, List<GeneratedRegion> Regions);
 
     /// <summary>
-    /// Runs the full watershed and returns a human-readable diagnostics report. Writes a debug bitmap of
-    /// the partition to the desktop (dev aid — mirrors the spike). Purely a read of the model + linked CAD.
+    /// Runs the full watershed, vectorizes each room territory to a boundary polygon, and returns those
+    /// boundaries alongside a human-readable diagnostics report. Writes a debug bitmap of the partition to
+    /// the desktop (dev aid — mirrors the spike). Purely a read of the model + linked CAD — creates nothing;
+    /// the caller wraps <see cref="WatershedResult.Regions"/> in a transaction to build the FilledRegions.
     /// </summary>
-    public static string Run(Document doc, View view, CadRoomSourceSettings settings)
+    public static WatershedResult Run(Document doc, View view, CadRoomSourceSettings settings)
     {
         var sb = new StringBuilder();
 
@@ -93,7 +109,7 @@ public static class RegionWatershedService
         }
 
         if (rooms.Count == 0)
-            return sb.AppendLine("\nNo seeds after clipping — nothing to partition.").ToString();
+            return Empty(sb.AppendLine("\nNo seeds after clipping — nothing to partition."));
 
         // ── Gap-close: proximity-only (≤1 ft) corner bridges. Collinear + door bridging were removed —
         //    the priority-flood watershed self-cuts doorless room-to-room gaps, and door openings are handled
@@ -141,7 +157,7 @@ public static class RegionWatershedService
         foreach (var s in tightDoorSeals) { Extend(s.StartPoint); Extend(s.EndPoint); }
         foreach (var s in looseDoorSeals) { Extend(s.StartPoint); Extend(s.EndPoint); }
         if (bMinX > bMaxX)
-            return sb.AppendLine("\nNo wall/area geometry to rasterize.").ToString();
+            return Empty(sb.AppendLine("\nNo wall/area geometry to rasterize."));
 
         bMinX -= EnvelopePadFt; bMinY -= EnvelopePadFt;
         bMaxX += EnvelopePadFt; bMaxY += EnvelopePadFt;
@@ -159,7 +175,7 @@ public static class RegionWatershedService
 
         var grid = new int[(long)w * h > int.MaxValue ? 0 : w * h];
         if (grid.Length == 0)
-            return sb.AppendLine($"\nGrid too large ({w}×{h}). Tighten the crop box.").ToString();
+            return Empty(sb.AppendLine($"\nGrid too large ({w}×{h}). Tighten the crop box."));
         sb.AppendLine($"Grid: {w}×{h} @ {ppf:F1} px/ft  ({widthFt:F0}×{heightFt:F0} ft)");
 
         // ── Rasterize barriers (dilation = 0). Real walls are drawn first and win where any other
@@ -178,6 +194,35 @@ public static class RegionWatershedService
 
         int[] dxs = { 1, -1, 0, 0 };
         int[] dys = { 0, 0, 1, -1 };
+
+        // ── Seal thin slots (pocket-door cavities, chases): a free pixel walled on BOTH sides within
+        //    SlotWidthPx along either axis is a narrow channel the flood shouldn't enter — flooding it
+        //    breeds a needle-thin finger that vectorizes into a self-touching loop FilledRegion rejects.
+        //    Doorway throats (~2.5–3 ft) and open rooms are far wider, so they're untouched. ──
+        if (SealThinSlots)
+        {
+            bool WallWithin(int x, int y, int dx, int dy)
+            {
+                for (int s = 1; s <= SlotWidthPx; s++)
+                {
+                    int nx = x + dx * s, ny = y + dy * s;
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) return false;
+                    if (grid[ny * w + nx] < 0) return true;
+                }
+                return false;
+            }
+            var slotPix = new List<int>();
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    if (grid[y * w + x] != Free) continue;
+                    bool vert = WallWithin(x, y, 0, -1) && WallWithin(x, y, 0, 1);
+                    bool horz = WallWithin(x, y, -1, 0) && WallWithin(x, y, 1, 0);
+                    if (vert || horz) slotPix.Add(y * w + x);
+                }
+            foreach (int i in slotPix) grid[i] = SlotFill;
+            sb.AppendLine($"Thin slots sealed: {slotPix.Count} px (≤{SlotWidthPx}\" channels)");
+        }
 
         // ── Distance transform: each free pixel's 4-connected hop distance to the nearest barrier. This is
         //    the relief the priority flood floods over — doorway throats are local minima (walls pinch the
@@ -305,6 +350,23 @@ public static class RegionWatershedService
             sb.AppendLine($"    {ownerName.GetValueOrDefault(kv.Key, "?")}: {kv.Value * sqftPerPx:F0} sqft");
         sb.AppendLine($"Collision px: {collisions}");
 
+        // ── Vectorize each room territory → boundary polygon. Skip leaks (partition failed there) and
+        //    sub-noise slivers; the rest become FilledRegions in the caller's transaction. ──
+        var regions = new List<GeneratedRegion>();
+        var leakOwners = new HashSet<int>(leaks.Select(kv => kv.Key));
+        XYZ ToRevit(int px, int py) => new XYZ(px / ppf + bMinX, py / ppf + bMinY, 0);
+        int vectorized = 0, vecSkipped = 0;
+        foreach (var kv in pxCount.OrderBy(k => k.Key))
+        {
+            int own = kv.Key;
+            if (leakOwners.Contains(own) || kv.Value * sqftPerPx < MinRegionSqFt) { vecSkipped++; continue; }
+            var boundary = RegionVectorizer.Trace(grid, w, h, own, kv.Value, ToRevit, realWalls);
+            if (boundary == null || boundary.Count < 3) { vecSkipped++; continue; }
+            regions.Add(new GeneratedRegion(ownerName.GetValueOrDefault(own, ""), boundary));
+            vectorized++;
+        }
+        sb.AppendLine($"Vectorized: {vectorized} region(s)  ({vecSkipped} skipped: leak/noise/trace-fail)");
+
         // ── Debug image (dev aid) ──
         try
         {
@@ -329,8 +391,11 @@ public static class RegionWatershedService
             sb.AppendLine($"Bitmap export failed: {ex.Message}");
         }
 
-        return sb.ToString();
+        return new WatershedResult(sb.ToString(), regions);
     }
+
+    private static WatershedResult Empty(StringBuilder sb) =>
+        new WatershedResult(sb.ToString(), new List<GeneratedRegion>());
 
     // ── Block-agnostic door sealing (verbatim from plan §10) ──
     // Door marker LOCATES the opening; the seal is the GAP in the nearest long wall's own line.
@@ -597,6 +662,7 @@ public static class RegionWatershedService
             case DoorSeal: return (0, 120, 255);      // blue — door seal, marker inside gap (trustworthy)
             case DoorSealLoose: return (255, 230, 0); // yellow — door seal, marker outside gap (suspect)
             case ProximityBridge: return (255, 150, 0); // orange — proximity (corner) gap-bridge
+            case SlotFill: return (0, 200, 120);      // green — sealed thin slot (pocket-door cavity)
             case Free: return (255, 255, 255);        // white — unreached
             case Exterior: return (210, 210, 210);    // light gray — exterior
             default:                                   // room — hashed distinct color

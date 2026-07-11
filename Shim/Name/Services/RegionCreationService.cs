@@ -15,14 +15,26 @@ public static class RegionCreationService
     /// Returns the created FilledRegion's ElementId, or InvalidElementId on failure.
     /// </summary>
     public static ElementId CreateRegion(Document doc, View view,
-        List<XYZ> boundary, ElementId regionTypeId)
+        List<XYZ> boundary, ElementId regionTypeId) =>
+        CreateRegion(doc, view, boundary, regionTypeId, out _);
+
+    /// <summary>
+    /// As above, but reports the rejection reason (null on success) for diagnostics.
+    /// </summary>
+    public static ElementId CreateRegion(Document doc, View view,
+        List<XYZ> boundary, ElementId regionTypeId, out string reason)
     {
+        reason = null;
         if (boundary == null || boundary.Count < 3)
+        {
+            reason = $"boundary too small ({boundary?.Count ?? 0} pts)";
             return ElementId.InvalidElementId;
+        }
 
         try
         {
             var loop = new CurveLoop();
+            int edges = 0;
             for (int i = 0; i < boundary.Count; i++)
             {
                 var start = boundary[i];
@@ -33,11 +45,12 @@ public static class RegionCreationService
                     continue;
 
                 loop.Append(Line.CreateBound(start, end));
+                edges++;
             }
 
             // Ensure counter-clockwise orientation (required for outer boundary)
-            if (loop.IsOpen()) return ElementId.InvalidElementId;
-            if (!loop.HasPlane()) return ElementId.InvalidElementId;
+            if (loop.IsOpen()) { reason = $"open loop ({edges} edges)"; return ElementId.InvalidElementId; }
+            if (!loop.HasPlane()) { reason = "no plane"; return ElementId.InvalidElementId; }
 
             if (IsClockwise(boundary))
                 loop.Flip();
@@ -47,8 +60,9 @@ public static class RegionCreationService
 
             return region.Id;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            reason = $"exception: {ex.Message}";
             return ElementId.InvalidElementId;
         }
     }

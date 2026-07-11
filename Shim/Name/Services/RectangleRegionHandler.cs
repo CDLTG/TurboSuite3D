@@ -223,23 +223,49 @@ public class RegionPickHandler : IExternalEventHandler
         }));
     }
 
-    // One-shot watershed partition of the whole floor (no pick loop). Reproduces the validated spike:
-    // reports partition diagnostics; does not create regions yet.
+    // One-shot watershed partition of the whole floor (no pick loop): partition + vectorize, then create
+    // every territory as a FilledRegion in a single transaction (one Ctrl+Z; individual failures skipped).
     private void RunAutoGenerate(RegionGenerationRequest request)
     {
         string report;
+        int created = 0, failed = 0;
         try
         {
-            report = RegionWatershedService.Run(_doc, _view, _settings);
+            var result = RegionWatershedService.Run(_doc, _view, _settings);
+            report = result.Report;
+
+            if (result.Regions.Count > 0)
+            {
+                var failures = new List<string>();
+                using var tx = new Transaction(_doc, "TurboName - Auto-generate Regions");
+                tx.Start();
+                foreach (var region in result.Regions)
+                {
+                    var id = RegionCreationService.CreateRegion(_doc, _view, region.Boundary,
+                        _regionTypeId, out string reason);
+                    if (id != ElementId.InvalidElementId) created++;
+                    else
+                    {
+                        failed++;
+                        string name = string.IsNullOrWhiteSpace(region.RoomName) ? "(unnamed)" : region.RoomName;
+                        failures.Add($"    {name}: {reason} [{region.Boundary.Count} pts]");
+                    }
+                }
+                tx.Commit();
+                report += $"\n\nCreated {created} region(s)" + (failed > 0 ? $", {failed} failed" : "") + ".";
+                if (failures.Count > 0)
+                    report += "\nFailures:\n" + string.Join("\n", failures);
+            }
         }
         catch (Exception ex)
         {
             report = $"Auto-generate failed:\n{ex}";
         }
 
+        int c = created, f = failed;
         Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
         {
-            request.OnComplete?.Invoke(new PickLoopUpdate(0, 0, true, report));
+            request.OnComplete?.Invoke(new PickLoopUpdate(c, f, true, report));
             TaskDialog.Show("TurboName — Auto-generate", report);
         }));
     }
