@@ -64,7 +64,14 @@ public static class RegionWatershedService
 
     // Thin-slot sealing (pocket doors etc.). Fill any free pixel walled on both sides within this reach.
     private const bool SealThinSlots = true;
-    private const int SlotWidthPx = 4;       // ~4" at 12 px/ft — cavity narrower than this is not room
+    private const int SlotWidthPx = 4;       // ~4" at 12 px/ft — cavity narrower than this is not room.
+                                             // Kept at 4: bumping to 8 (to seal a 7.25" orthogonal poché
+                                             // cavity) frayed DIAGONAL wall cavities floor-wide — the
+                                             // axis-aligned scan can't span a diagonal cavity (~1.41× wider
+                                             // along-axis), so it seals the center and leaves triangular
+                                             // fringe tabs the region inherits. A single mis-drawn room
+                                             // (LIVING GUEST) is better handled as a named "Needs manual"
+                                             // skip than by degrading every diagonal room.
 
     /// <summary>A vectorized room territory: its seed room name + the closed boundary polygon.</summary>
     public sealed record GeneratedRegion(string RoomName, List<XYZ> Boundary);
@@ -356,16 +363,29 @@ public static class RegionWatershedService
         var leakOwners = new HashSet<int>(leaks.Select(kv => kv.Key));
         XYZ ToRevit(int px, int py) => new XYZ(px / ppf + bMinX, py / ppf + bMinY, 0);
         int vectorized = 0, vecSkipped = 0;
+        var traceFails = new List<string>();   // real rooms whose boundary wouldn't vectorize — named for manual redraw
         foreach (var kv in pxCount.OrderBy(k => k.Key))
         {
             int own = kv.Key;
             if (leakOwners.Contains(own) || kv.Value * sqftPerPx < MinRegionSqFt) { vecSkipped++; continue; }
-            var boundary = RegionVectorizer.Trace(grid, w, h, own, kv.Value, ToRevit, realWalls);
-            if (boundary == null || boundary.Count < 3) { vecSkipped++; continue; }
+            var boundary = RegionVectorizer.Trace(grid, w, h, own, kv.Value, ToRevit, realWalls, out string why);
+            if (boundary == null || boundary.Count < 3)
+            {
+                vecSkipped++;
+                // A named, above-noise territory that wouldn't vectorize = a mis-drawn room (leak/self-touch).
+                // Surface it — with the failure reason + location — so the user knows which room to draw by
+                // hand and we can categorize the failure mode without guessing.
+                var nm = ownerName.GetValueOrDefault(own, "");
+                nm = string.IsNullOrWhiteSpace(nm) ? "(unnamed)" : nm;
+                traceFails.Add(string.IsNullOrWhiteSpace(why) ? nm : $"{nm} — {why}");
+                continue;
+            }
             regions.Add(new GeneratedRegion(ownerName.GetValueOrDefault(own, ""), boundary));
             vectorized++;
         }
         sb.AppendLine($"Vectorized: {vectorized} region(s)  ({vecSkipped} skipped: leak/noise/trace-fail)");
+        if (traceFails.Count > 0)
+            sb.AppendLine($"Needs manual ({traceFails.Count}):\n    " + string.Join("\n    ", traceFails));
 
         // ── Debug image (dev aid) ──
         try

@@ -46,9 +46,19 @@ public static class RegionVectorizer
     /// </summary>
     public static List<XYZ> Trace(int[] grid, int w, int h, int owner, long pixelCount,
         Func<int, int, XYZ> toRevit, List<CadWallSegment> walls)
+        => Trace(grid, w, h, owner, pixelCount, toRevit, walls, out _);
+
+    /// <summary>
+    /// As <see cref="Trace(int[],int,int,int,long,Func{int,int,XYZ},List{CadWallSegment})"/>, but on a null
+    /// return sets <paramref name="failReason"/> to why the territory couldn't vectorize (self-touch /
+    /// proper-cross with the offending model-coordinate, or a degenerate stage) so the caller can name it.
+    /// </summary>
+    public static List<XYZ> Trace(int[] grid, int w, int h, int owner, long pixelCount,
+        Func<int, int, XYZ> toRevit, List<CadWallSegment> walls, out string failReason)
     {
+        failReason = null;
         var px = TraceContourPixels(grid, w, h, owner, pixelCount);
-        if (px == null || px.Count < 3) return null;
+        if (px == null || px.Count < 3) { failReason = "contour < 3 pts"; return null; }
 
         // The follower starts at the bottom-left owner pixel — a corner. Douglas-Peucker treats the loop
         // as an open chain and pins its endpoints, so a seam on a corner splits it (a stray chamfer) and
@@ -66,16 +76,25 @@ public static class RegionVectorizer
         }
 
         var simplified = DouglasPeucker(contour, SimplifyTolerance);
-        if (simplified.Count < 3) return null;
-        var dpFallback = Cleanup(simplified);
+        if (simplified.Count < 3) { failReason = "DP < 3 pts"; return null; }
 
-        // Prefer the wall-aligned polygon; if alignment left it self-intersecting or degenerate, fall back
-        // to the plain DP polygon so alignment can never make a region fail that would otherwise create.
+        // Only ever return the wall-aligned polygon. If alignment leaves it self-intersecting or degenerate
+        // (the signature of a mis-drawn room the flood leaked through), return null so the caller SKIPS the
+        // territory and names it for manual redraw — the plain un-aligned DP polygon is NOT a usable fallback:
+        // it sits ~1" off the wall face, which breaks downstream keypad/boundary-nudge on every edge.
         var aligned = Cleanup(AlignToWalls(simplified, walls));
-        if (aligned.Count >= 3 && IsSimplePolygon(aligned))
-            return aligned;
+        if (aligned.Count < 3) { failReason = "aligned < 3 pts"; return null; }
+        string why = SelfIntersectionReason(aligned);
+        if (why == null) return aligned;
 
-        return dpFallback.Count >= 3 ? dpFallback : null;
+        // The alignment folded onto itself — the signature of a mis-drawn room, or a sub-resolution wall
+        // feature (a small jog / peninsula base) the 1"/px raster can't trace cleanly. Return null so the
+        // caller SKIPS it and names it for manual redraw. We deliberately do NOT try to repair it in place:
+        // the un-aligned DP polygon sits ~1" off the wall face (breaks §4 keypad/boundary-nudge), and jog
+        // flushing/squaring only ever produced quietly-wrong regions the user had to hand-clean anyway — an
+        // honest, named skip beats a created-but-flawed region ("auto-gen only ever helps"). See the plan.
+        failReason = $"{why} ({aligned.Count} pts)";
+        return null;
     }
 
     // Rotate the pixel loop in place so index 0 sits mid-run on a straight axis-aligned stretch (a window
@@ -349,9 +368,17 @@ public static class RegionVectorizer
         return result.Count >= 3 ? result : dedup;
     }
 
-    // True unless two non-adjacent edges properly cross. Cheap gate (O(n²), n is tiny) to reject a polygon
-    // that alignment folded onto itself, so the caller can fall back to the un-aligned DP polygon.
-    private static bool IsSimplePolygon(List<XYZ> poly)
+    // A self-touch closer than this is a zero-width neck (AlignToWalls collapsed a narrow throat onto
+    // itself). It never *properly* crosses, so SegmentsCross misses it — but Revit rejects the loop
+    // ("input curve loops cannot compose a valid boundary"). One raster pixel = 1", so two non-adjacent
+    // boundary features within 1" can only be a pinch, never two genuine corners of the same room.
+    private const double SelfTouchTol = 1.0 / 12.0; // 1"
+
+    // null if the polygon is simple; otherwise a short diagnostic naming the self-intersection kind and its
+    // model-coordinate — two non-adjacent edges either *properly cross* OR *near-touch* (a vertex-pinch /
+    // zero-width neck within SelfTouchTol). Cheap gate (O(n²), n is tiny) to reject a polygon that alignment
+    // folded onto itself; the caller skips + names the territory.
+    private static string SelfIntersectionReason(List<XYZ> poly)
     {
         int n = poly.Count;
         for (int i = 0; i < n; i++)
@@ -363,11 +390,17 @@ public static class RegionVectorizer
                 if (i == 0 && j == n - 1) continue; // adjacent across the wrap
                 var b1 = poly[j];
                 var b2 = poly[(j + 1) % n];
-                if (SegmentsCross(a1, a2, b1, b2)) return false;
+                if (SegmentsCross(a1, a2, b1, b2)) return $"self-cross near {Fmt(b1)}";
+                // Vertex-pinch: a non-adjacent vertex sitting on (or a hair off) another edge. Checking the
+                // start vertex of each edge covers every vertex over the full i/j sweep.
+                if (PointToSegmentDistance(a1, b1, b2) < SelfTouchTol) return $"near-touch at {Fmt(a1)}";
+                if (PointToSegmentDistance(b1, a1, a2) < SelfTouchTol) return $"near-touch at {Fmt(b1)}";
             }
         }
-        return true;
+        return null;
     }
+
+    private static string Fmt(XYZ p) => $"({p.X:F1}, {p.Y:F1})";
 
     // Proper crossing only (shared endpoints / collinear touches ignored — Cleanup handles those).
     private static bool SegmentsCross(XYZ p1, XYZ p2, XYZ p3, XYZ p4)
