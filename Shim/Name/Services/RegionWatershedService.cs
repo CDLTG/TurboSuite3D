@@ -82,7 +82,11 @@ public static class RegionWatershedService
         var output = RegionWatershedEngine.Run(coreWalls, coreDoors, coreArea, coreSeeds);
         sb.Append(output.Report);
 
-        // ── Debug image (dev aid) — rendered from the grid the engine returned ──
+#if DEBUG
+        // ── Debug image (dev aid) — rendered from the grid the engine returned. DEBUG-only by design: the
+        //    only path to production is publish.ps1's Release build (see PUBLISHING.md), so this is compiled
+        //    out of shipped binaries automatically — no runtime flag to remember. Keep it for iterating on the
+        //    partition; if it's ever wanted from a Release build, swap to an env-var opt-in instead. ──
         if (output.Grid != null)
         {
             try
@@ -99,6 +103,7 @@ public static class RegionWatershedService
                 sb.AppendLine($"Bitmap export failed: {ex.Message}");
             }
         }
+#endif
 
         var regions = output.Regions
             .Select(r => new GeneratedRegion(r.RoomName, r.Boundary.Select(ToXyz).ToList()))
