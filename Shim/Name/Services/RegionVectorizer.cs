@@ -36,10 +36,6 @@ public static class RegionVectorizer
     private const double CornerParallel = 5.0 * Math.PI / 180.0;       // below this, two lines are "the same"
     private const double MaxCornerReach = 1.0;                         // ft — reject runaway near-parallel corners
 
-    // DEBUG: skip DP + alignment and emit the raw pixel-staircase contour (thinned to collinear runs only,
-    // else FilledRegion.Create chokes on thousands of 1" segments). Flip to true to inspect the raw contour.
-    private const bool RawContourOnly = false;
-
     /// <summary>
     /// Traces <paramref name="owner"/>'s territory to a closed boundary polygon (in the model
     /// coordinates produced by <paramref name="toRevit"/>), or null if it can't be vectorized.
@@ -66,14 +62,6 @@ public static class RegionVectorizer
         RotateSeamToStraightRun(px);
 
         var contour = px.Select(p => toRevit(p.x, p.y)).ToList();
-
-        if (RawContourOnly)
-        {
-            // Raw pixel staircase, minus exactly-collinear runs so FilledRegion.Create doesn't drown in
-            // thousands of 1" segments. Every staircase step-corner survives — that's the point.
-            var raw = RemoveCollinear(contour);
-            return raw.Count >= 3 ? raw : null;
-        }
 
         var simplified = DouglasPeucker(contour, SimplifyTolerance);
         if (simplified.Count < 3) { failReason = "DP < 3 pts"; return null; }
@@ -182,22 +170,6 @@ public static class RegionVectorizer
     {
         if (x < 0 || x >= w || y < 0 || y >= h) return false;
         return grid[y * w + x] == owner;
-    }
-
-    // Drop points that lie on the straight segment between their neighbors (collinear within ~0.2").
-    private static List<XYZ> RemoveCollinear(List<XYZ> pts)
-    {
-        var result = new List<XYZ>(pts.Count);
-        int n = pts.Count;
-        for (int i = 0; i < n; i++)
-        {
-            var prev = pts[(i - 1 + n) % n];
-            var cur = pts[i];
-            var next = pts[(i + 1) % n];
-            if (PointToSegmentDistance(cur, prev, next) > 0.02)
-                result.Add(cur);
-        }
-        return result;
     }
 
     private static List<XYZ> DouglasPeucker(List<XYZ> points, double tolerance)

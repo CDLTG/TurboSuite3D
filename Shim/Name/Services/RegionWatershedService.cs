@@ -42,12 +42,18 @@ public static class RegionWatershedService
 
     private const double LeakAreaSqFt = 3000.0; // territories bigger than this are exterior/room leaks
     private const double MinRegionSqFt = 4.0;   // territories smaller than this are noise — not vectorized
+    private const int NeedleReachPx = 10;       // ~10" @12px/ft. Per-side scan for the needle-finger trim: a
+                                                // room pixel is a needle iff its own-owner run exits to *another
+                                                // room owner* within this many px on BOTH sides (thin, flanked by
+                                                // rooms not walls). Catches fingers up to ~2× this wide; a barrier
+                                                // flank (a real narrow closet) or a full-width side (a normal
+                                                // seam) is never flagged, so nothing legitimate is touched.
 
-    // Door sealing now complements the priority-flood watershed rather than carrying it. Targeted policy:
+    // Door sealing complements the priority-flood watershed rather than carrying it. Targeted policy:
     // apply only TIGHT seals (door marker inside a real wall gap) — these pin cuts at real doors and seal
     // room→unseeded (closet/chase) openings the flood can't. LOOSE seals (wrong perpendicular wall, ~half
-    // spurious) are dropped; the flood handles any real doors among them.
-    private const bool EnableDoorSealing = true;
+    // spurious) are dropped; the flood handles any real doors among them. Flip to apply loose seals on a
+    // sloppier floor where the tight set leaves openings.
     private const bool ApplyLooseDoorSeals = false;
 
     // Grid cell values: >=0 owners (0 = Free/unreached, 1 = EXTERIOR, 2.. = rooms); <0 barriers.
@@ -133,24 +139,13 @@ public static class RegionWatershedService
             sb.AppendLine($"    ({m.X:F1}, {m.Y:F1})  len {(b.EndPoint - b.StartPoint).GetLength():F2} ft");
         }
 
-        // ── Door sealing: block-agnostic wall-gap seal at each door marker. (TEMP: gated off for the
-        //    priority-flood experiment — see EnableDoorSealing.) ──
-        List<CadWallSegment> tightDoorSeals, looseDoorSeals;
-        if (EnableDoorSealing)
-        {
-            SealDoorsAlongWalls(realWalls, doors, out tightDoorSeals, out looseDoorSeals,
-                out int sealedCount, out int doorClusters);
-            if (!ApplyLooseDoorSeals) looseDoorSeals = new List<CadWallSegment>(); // targeted: tight only
-            sb.AppendLine($"Doors sealed: {sealedCount}/{doorClusters}  " +
-                $"({tightDoorSeals.Count} tight applied / {(ApplyLooseDoorSeals ? "loose applied" : "loose dropped")})  " +
-                $"({GapBridgingService.LastBridgeInfo})");
-        }
-        else
-        {
-            tightDoorSeals = new List<CadWallSegment>();
-            looseDoorSeals = new List<CadWallSegment>();
-            sb.AppendLine($"Door sealing DISABLED (priority-flood experiment)  ({GapBridgingService.LastBridgeInfo})");
-        }
+        // ── Door sealing: block-agnostic wall-gap seal at each door marker (tight only; see ApplyLooseDoorSeals). ──
+        SealDoorsAlongWalls(realWalls, doors, out var tightDoorSeals, out var looseDoorSeals,
+            out int sealedCount, out int doorClusters);
+        if (!ApplyLooseDoorSeals) looseDoorSeals = new List<CadWallSegment>(); // targeted: tight only
+        sb.AppendLine($"Doors sealed: {sealedCount}/{doorClusters}  " +
+            $"({tightDoorSeals.Count} tight applied / {(ApplyLooseDoorSeals ? "loose applied" : "loose dropped")})  " +
+            $"({GapBridgingService.LastBridgeInfo})");
 
         // ── Raster bounds over all barrier geometry (+pad) ──
         double bMinX = double.MaxValue, bMinY = double.MaxValue, bMaxX = double.MinValue, bMaxY = double.MinValue;
@@ -339,6 +334,58 @@ public static class RegionWatershedService
                 if (nv == Free) { grid[ni] = own; HeapPush(dist[ni], ni); }
                 else if (nv != own) collisions++;   // two owners meet — throat cut
             }
+        }
+
+        // ── Trim needle fingers. A stranded/duplicate label, or a room whose flood crossed a doorless opening,
+        //    leaves a thin finger of one owner poking through the gap into a neighbor — it vectorizes into a
+        //    spurious thin slot region. The clean discriminator: a needle is thin because OTHER ROOM OWNERS
+        //    flank it (it fingered through an opening, no wall between); a real narrow room is thin because
+        //    WALLS flank it. So flag a room pixel iff its own-owner run is short (≤NeedleReachPx each way)
+        //    along X or Y AND the pixel just past BOTH ends of that run is a *different room owner* — never a
+        //    barrier. This never moves a normal seam (full-width territory on one side ⇒ not thin), never eats
+        //    a wall-backed closet (a barrier flank ⇒ kept), and auto-keeps a natural stub at a doorway throat
+        //    (the wall jambs flank the finger there). Each flagged pixel is reclaimed by the nearer flank. ──
+        {
+            int reach = NeedleReachPx;
+            // True + nearer flank owner iff (x,y) of owner v sits in a run that exits to a *room owner* within
+            // reach on BOTH sides along (dx,dy). Exit into a barrier, or no exit within reach, ⇒ not a needle.
+            bool ThinBetweenRooms(int x, int y, int dx, int dy, int v, out int flank)
+            {
+                flank = 0;
+                int op = 0, sp = 0, om = 0, sm = 0;
+                for (int s = 1; s <= reach; s++)
+                {
+                    int nx = x + dx * s, ny = y + dy * s;
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) return false;
+                    int g = grid[ny * w + nx];
+                    if (g != v) { op = g; sp = s; break; }
+                }
+                if (sp == 0) return false;                        // own run wider than reach on + side ⇒ not thin
+                for (int s = 1; s <= reach; s++)
+                {
+                    int nx = x - dx * s, ny = y - dy * s;
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) return false;
+                    int g = grid[ny * w + nx];
+                    if (g != v) { om = g; sm = s; break; }
+                }
+                if (sm == 0) return false;                        // wider than reach on − side ⇒ not thin
+                if (op < FirstRoomOwner || om < FirstRoomOwner) return false; // a barrier flank ⇒ wall-backed, keep
+                flank = sp <= sm ? op : om;                       // reclaim toward the nearer flanking room
+                return true;
+            }
+            // Decide against the frozen partition, then apply — so a reclaim can't cascade mid-scan.
+            var reassign = new List<(int idx, int owner)>();
+            for (int i = 0; i < grid.Length; i++)
+            {
+                int v = grid[i];
+                if (v < FirstRoomOwner) continue;
+                int x = i % w, y = i / w;
+                if (ThinBetweenRooms(x, y, 1, 0, v, out int fx)) reassign.Add((i, fx));
+                else if (ThinBetweenRooms(x, y, 0, 1, v, out int fy)) reassign.Add((i, fy));
+            }
+            foreach (var (idx, o) in reassign) grid[idx] = o;
+            sb.AppendLine($"Needle-finger trim (≤{reach * 2 * 12.0 / ppf:F0}\" between rooms): " +
+                $"{reassign.Count} px reclaimed");
         }
 
         // ── Diagnostics: per-owner area, leaks, collisions ──
