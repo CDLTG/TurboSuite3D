@@ -12,7 +12,7 @@ using TurboSuite.Shared.Models;
 namespace TurboSuite.Name.Services;
 
 /// <summary>
-/// TurboName-1 — auto-generate room regions. <b>Revit adapter</b> over the Revit-free
+/// Auto-generate room regions. <b>Revit adapter</b> over the Revit-free
 /// <see cref="RegionWatershedEngine"/>: extracts walls/doors/area/seeds from the linked CAD (same extractors
 /// as the manual TurboName path), clips them to the active view's crop box, converts them to Core structs,
 /// runs the partition + vectorization engine, renders the dev-aid PNG from the returned grid, and converts

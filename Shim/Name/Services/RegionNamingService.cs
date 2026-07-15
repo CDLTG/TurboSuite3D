@@ -45,13 +45,26 @@ public static class RegionNamingService
             .Cast<TextNote>()
             .ToList();
 
+        // Create a styled, tilt-rotated note and register it into viewTextNotes so later dedup checks in
+        // THIS run see it — the list starts as the pre-run snapshot and grows as notes are placed, so two
+        // CAD entries (or two regions) resolving to identical in-zone text no longer each place a duplicate.
+        TextNote PlaceNote(ElementId typeId, XYZ point, string content)
+        {
+            var note = TextNote.Create(doc, view.Id, point, content, typeId);
+            note.HorizontalAlignment = HorizontalTextAlignment.Center;
+            note.VerticalAlignment = VerticalTextAlignment.Middle;
+            RotateNote(doc, note, point, totalTilt);
+            viewTextNotes.Add(note);
+            return note;
+        }
+
         foreach (var region in regions)
         {
             // Region already has Comments — check if a matching TextNote exists
             if (!string.IsNullOrWhiteSpace(region.ExistingComments))
             {
                 bool hasMatchingTextNote = viewTextNotes.Any(tn =>
-                    tn.Text.Contains(region.ExistingComments)
+                    NoteMatchesContent(tn.Text, region.ExistingComments)
                     && IsPointInZone(region.BoundaryLoops, (tn.Coord)));
 
                 if (hasMatchingTextNote)
@@ -79,18 +92,12 @@ public static class RegionNamingService
                     string textContent = BuildTextContent(region.ExistingComments, entryHeight);
                     if (!string.IsNullOrEmpty(textContent))
                     {
-                        var note = TextNote.Create(doc, view.Id, heightEntry.RevitPoint, textContent, textNoteTypeId);
-                        note.HorizontalAlignment = HorizontalTextAlignment.Center;
-                        note.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateNote(doc, note, heightEntry.RevitPoint, totalTilt);
+                        PlaceNote(textNoteTypeId, heightEntry.RevitPoint, textContent);
 
                         if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
                         {
                             var descPoint = GetDescriptionPoint(view, heightEntry.RevitPoint, totalTilt);
-                            var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
-                            descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                            descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                            RotateNote(doc, descNote, descPoint, totalTilt);
+                            PlaceNote(descriptionTextNoteTypeId, descPoint, description);
                         }
                     }
                 }
@@ -101,28 +108,19 @@ public static class RegionNamingService
                         ? insideExisting.First().RevitPoint
                         : ComputeCentroid(region.BoundaryLoops[0]);
 
-                    var nameNote = TextNote.Create(doc, view.Id, namePlacement, region.ExistingComments, textNoteTypeId);
-                    nameNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                    nameNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                    RotateNote(doc, nameNote, namePlacement, totalTilt);
+                    PlaceNote(textNoteTypeId, namePlacement, region.ExistingComments);
 
                     foreach (var heightEntry in existingHeightEntries)
                     {
                         var (entryHeight, description) = CleanCeilingHeight(heightEntry.CeilingHeight);
                         if (string.IsNullOrEmpty(entryHeight)) continue;
 
-                        var heightNote = TextNote.Create(doc, view.Id, heightEntry.RevitPoint, entryHeight, textNoteTypeId);
-                        heightNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                        heightNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateNote(doc, heightNote, heightEntry.RevitPoint, totalTilt);
+                        PlaceNote(textNoteTypeId, heightEntry.RevitPoint, entryHeight);
 
                         if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
                         {
                             var descPoint = GetDescriptionPoint(view, heightEntry.RevitPoint, totalTilt);
-                            var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
-                            descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                            descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                            RotateNote(doc, descNote, descPoint, totalTilt);
+                            PlaceNote(descriptionTextNoteTypeId, descPoint, description);
                         }
                     }
                 }
@@ -187,22 +185,16 @@ public static class RegionNamingService
                 var (entryHeight, description) = CleanCeilingHeight(heightEntries[0].CeilingHeight);
                 string textContent = BuildTextContent(nameEntry.RoomName, entryHeight);
                 if (!string.IsNullOrEmpty(textContent)
-                    && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, textContent))
+                    && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, nameEntry.RevitPoint, textContent))
                 {
-                    var note = TextNote.Create(doc, view.Id, nameEntry.RevitPoint, textContent, textNoteTypeId);
-                    note.HorizontalAlignment = HorizontalTextAlignment.Center;
-                    note.VerticalAlignment = VerticalTextAlignment.Middle;
-                    RotateNote(doc, note, nameEntry.RevitPoint, totalTilt);
+                    PlaceNote(textNoteTypeId, nameEntry.RevitPoint, textContent);
                 }
 
-                if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId
-                    && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, description))
+                if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
                 {
                     var descPoint = GetDescriptionPoint(view, nameEntries[0].RevitPoint, totalTilt);
-                    var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
-                    descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                    descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                    RotateNote(doc, descNote, descPoint, totalTilt);
+                    if (!HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, descPoint, description))
+                        PlaceNote(descriptionTextNoteTypeId, descPoint, description);
                 }
             }
             else
@@ -214,22 +206,16 @@ public static class RegionNamingService
                     string textContent = BuildTextContent(cadEntry.RoomName, entryHeight);
                     if (string.IsNullOrEmpty(textContent)) continue;
 
-                    if (!HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, textContent))
+                    if (!HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, cadEntry.RevitPoint, textContent))
                     {
-                        var note = TextNote.Create(doc, view.Id, cadEntry.RevitPoint, textContent, textNoteTypeId);
-                        note.HorizontalAlignment = HorizontalTextAlignment.Center;
-                        note.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateNote(doc, note, cadEntry.RevitPoint, totalTilt);
+                        PlaceNote(textNoteTypeId, cadEntry.RevitPoint, textContent);
                     }
 
-                    if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId
-                        && !HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, description))
+                    if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
                     {
                         var descPoint = GetDescriptionPoint(view, cadEntry.RevitPoint, totalTilt);
-                        var descNote = TextNote.Create(doc, view.Id, descPoint, description, descriptionTextNoteTypeId);
-                        descNote.HorizontalAlignment = HorizontalTextAlignment.Center;
-                        descNote.VerticalAlignment = VerticalTextAlignment.Middle;
-                        RotateNote(doc, descNote, descPoint, totalTilt);
+                        if (!HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, descPoint, description))
+                            PlaceNote(descriptionTextNoteTypeId, descPoint, description);
                     }
                 }
             }
@@ -292,15 +278,45 @@ public static class RegionNamingService
         return "";
     }
 
+    // A same-text note within this of the target point is the SAME stamp (a re-run, or a doubled-up CAD
+    // entry at one spot) — not a distinct marker elsewhere in the room. Kept tight: architects place
+    // repeated callouts (e.g. the same ceiling height on the left and right of a room) feet apart, so this
+    // only ever collapses genuinely co-located notes, never two real markers of the same value.
+    private const double DuplicateNoteTolerance = 0.5; // ft
+
     /// <summary>
-    /// Returns true if any TextNote in the view contains the given text
-    /// and is located inside the region boundary.
+    /// Returns true if any TextNote in the view matches <paramref name="text"/> (whole-line), sits inside
+    /// the region boundary, AND is within <see cref="DuplicateNoteTolerance"/> of <paramref name="point"/>.
+    /// The point gate is what lets a room carry the same value at multiple locations (three "10'-0"" ceiling
+    /// callouts) while still suppressing a true duplicate placed at the same spot.
     /// </summary>
     private static bool HasMatchingTextNote(List<TextNote> viewTextNotes,
-        List<List<XYZ>> boundaryLoops, string text)
+        List<List<XYZ>> boundaryLoops, XYZ point, string text)
     {
         return viewTextNotes.Any(tn =>
-            tn.Text.Contains(text) && IsPointInZone(boundaryLoops, tn.Coord));
+            NoteMatchesContent(tn.Text, text)
+            && tn.Coord.DistanceTo(point) < DuplicateNoteTolerance
+            && IsPointInZone(boundaryLoops, tn.Coord));
+    }
+
+    /// <summary>
+    /// True if every non-empty line of <paramref name="content"/> appears as a whole line in
+    /// <paramref name="noteText"/> (trimmed, case-insensitive). Line-aware on purpose: a plain
+    /// substring test lets a short name match a longer note ("BED" inside a "BEDROOM 2" note),
+    /// wrongly treating the region as already-labeled; whole-line matching still tolerates a
+    /// multi-line note (name + ceiling height) carrying extra lines.
+    /// </summary>
+    private static bool NoteMatchesContent(string noteText, string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return false;
+
+        var noteLines = new HashSet<string>(
+            (noteText ?? "").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var line in content.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0))
+            if (!noteLines.Contains(line)) return false;
+        return true;
     }
 
     private static XYZ ComputeCentroid(List<XYZ> outerLoop)

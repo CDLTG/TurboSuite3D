@@ -195,7 +195,12 @@ public static class CadWallExtractorService
         }
         else if (entity is ACadSharp.Entities.Arc arc)
         {
-            double midAngle = (arc.StartAngle + arc.EndAngle) / 2;
+            // Unwrap the CCW end angle before taking the midpoint — same as TessellateArc. Without this, an
+            // arc crossing 0/2π (e.g. Start 350° → End 10°) averages to 180°, landing the marker diametrically
+            // opposite the real swing so the door goes unsealed.
+            double startAngle = arc.StartAngle, endAngle = arc.EndAngle;
+            if (endAngle <= startAngle) endAngle += 2 * Math.PI;
+            double midAngle = (startAngle + endAngle) / 2;
             double mx = arc.Center.X + arc.Radius * Math.Cos(midAngle);
             double my = arc.Center.Y + arc.Radius * Math.Sin(midAngle);
             positions.Add(TransformPoint(mx, my, unitToFeet, cadTransform));

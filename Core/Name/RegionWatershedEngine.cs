@@ -7,7 +7,7 @@ using System.Text;
 namespace TurboSuite.Name.Regions
 {
     /// <summary>
-    /// TurboName-1 — auto-generate room regions via a raster competitive watershed seeded by CAD room labels,
+    /// Auto-generate room regions via a raster competitive watershed seeded by CAD room labels,
     /// bounded by a hard building-envelope (Area layer) barrier. This is the Revit-free core: plain-struct in
     /// (<see cref="WallSeg"/> walls/area, <see cref="Pt"/> door markers, <see cref="Seed"/> room seeds), plain
     /// boundaries out (<see cref="GenRegion"/>). The Shim adapter (RegionWatershedService) does the Revit
