@@ -9,6 +9,7 @@ using ACadSharp.Entities;
 using ACadSharp.IO;
 using Autodesk.Revit.DB;
 using TurboSuite.Name.Models;
+using TurboSuite.Name.Regions;
 using TurboSuite.Shared.Models;
 
 namespace TurboSuite.Name.Services;
@@ -126,7 +127,10 @@ public static class CadRoomExtractorService
     private static void ExtractTextMode(CadDocument cadDoc, Transform cadTransform,
         double unitToFeet, CadRoomSourceSettings settings, List<CadRoomData> results)
     {
-        var roomNameTexts = new List<(string Text, XYZ Point)>();
+        // Room-name text is collected in CAD space (feet, pre-transform) because RoomLabelGrouping measures
+        // along the TEXT's own axes — a DWG inserted into Revit at a rotation would tilt them. The cluster
+        // anchors are transformed to Revit coordinates once grouping is done.
+        var roomNameLabels = new List<LabelText>();
         var ceilingTexts = new List<(string Text, XYZ Point)>();
 
         bool hasCeilingLayer = !string.IsNullOrEmpty(settings.CeilingHeightLayer);
@@ -168,45 +172,52 @@ public static class CadRoomExtractorService
             var extracted = ExtractTextFromEntity(entity);
             if (extracted == null) continue;
 
-            var (text, x, y, layer) = extracted.Value;
+            var (text, x, y, layer, height) = extracted.Value;
             var textPointFeet = new XYZ(x * unitToFeet, y * unitToFeet, 0);
-            var revitPoint2 = cadTransform.OfPoint(textPointFeet);
 
             if (string.Equals(layer, settings.RoomNameLayer, StringComparison.OrdinalIgnoreCase))
-                roomNameTexts.Add((text, revitPoint2));
+            {
+                // Normalize to the FINAL room name before grouping — the horizontal gate measures against
+                // string length, so it has to see the same string that ends up on the region.
+                roomNameLabels.Add(new LabelText(
+                    new Pt(textPointFeet.X, textPointFeet.Y),
+                    text.Replace("#", "").ToUpper(),
+                    height * unitToFeet));
+            }
 
             if (hasCeilingLayer && !sameLayer && !hasCeilingBlock
                 && string.Equals(layer, settings.CeilingHeightLayer, StringComparison.OrdinalIgnoreCase))
-                ceilingTexts.Add((text, revitPoint2));
+                ceilingTexts.Add((text, cadTransform.OfPoint(textPointFeet)));
         }
 
-        if (!hasCeilingLayer && !hasCeilingBlock)
-        {
-            // No ceiling height source — room names only
-            foreach (var (text, point) in roomNameTexts)
-                results.Add(new CadRoomData(text.Replace("#", "").ToUpper(), "", point));
-        }
-        else if (sameLayer && !hasCeilingBlock)
-        {
-            // All text on the same layer — each text is a room name, no ceiling height pairing
-            foreach (var (text, point) in roomNameTexts)
-                results.Add(new CadRoomData(text.Replace("#", "").ToUpper(), "", point));
-        }
-        else
-        {
-            // Room names as entries, plus separate ceiling height entries at their own locations
-            foreach (var (name, namePoint) in roomNameTexts)
-                results.Add(new CadRoomData(name.Replace("#", "").ToUpper(), "", namePoint));
+        // Coalesce the separate text entities that make up one multi-line room label ("BAR/BREAKFAST" over
+        // "AREA") into a single entry. Without this each line seeds its own watershed owner and splits the
+        // room in half, and the manual naming pass sees two names in one region and skips it as ambiguous.
+        //
+        // EXCEPT in sameLayer mode, where ceiling heights live on the room-name layer and are therefore
+        // treated as room names (see below) — grouping would merge "10'-0"" INTO the label and yield
+        // "MASTER BEDROOM 10'-0"" as the room name. Skipping leaves sameLayer exactly as it is today (its
+        // height text still seeds a spurious owner); see roadmap TurboName-8.
+        var clusters = sameLayer
+            ? roomNameLabels.Select(l => new LabelCluster(l.Point, l.Text)).ToList()
+            : RoomLabelGrouping.Group(roomNameLabels);
 
-            foreach (var (heightText, heightPoint) in ceilingTexts)
-                results.Add(new CadRoomData("", heightText, heightPoint));
-        }
+        foreach (var c in clusters)
+            results.Add(new CadRoomData(
+                c.Text, "", cadTransform.OfPoint(new XYZ(c.Anchor.X, c.Anchor.Y, 0))));
+
+        // Separate ceiling-height entries at their own locations. `ceilingTexts` is populated above only when
+        // there is a ceiling source distinct from the room-name text — a different layer, or a block — so the
+        // "no ceiling source" and "same layer, no block" cases contribute nothing here and this loop is a
+        // no-op for them. That is what collapses the three original emit branches into these two loops.
+        foreach (var (heightText, heightPoint) in ceilingTexts)
+            results.Add(new CadRoomData("", heightText, heightPoint));
     }
 
-    private static (string Text, double X, double Y, string Layer)? ExtractTextFromEntity(Entity entity)
+    private static (string Text, double X, double Y, string Layer, double Height)? ExtractTextFromEntity(Entity entity)
     {
         string text = null;
-        double x = 0, y = 0;
+        double x = 0, y = 0, height = 0;
         string layer = entity.Layer?.Name ?? "";
 
         if (entity is TextEntity textEntity)
@@ -214,17 +225,19 @@ public static class CadRoomExtractorService
             text = textEntity.Value;
             x = textEntity.InsertPoint.X;
             y = textEntity.InsertPoint.Y;
+            height = textEntity.Height;
         }
         else if (entity is MText mtext)
         {
             text = mtext.Value;
             x = mtext.InsertPoint.X;
             y = mtext.InsertPoint.Y;
+            height = mtext.Height;
         }
 
         if (text == null) return null;
         text = StripCadFormatting(text);
-        return (text.Trim(), x, y, layer);
+        return (text.Trim(), x, y, layer, height);
     }
 
     private static double GetUnitToFeetFactor(ACadSharp.Types.Units.UnitsType units)
@@ -251,8 +264,13 @@ public static class CadRoomExtractorService
         text = text.Replace("%%P", "\u00B1").Replace("%%p", "\u00B1");
         text = text.Replace("%%C", "\u2205").Replace("%%c", "\u2205");
 
-        // MText formatting codes
-        text = Regex.Replace(text, @"\{\\f[^;]*;", "");
+        // MText formatting codes.
+        // The font code is \fName|b1|i0|c0|p34; and real DWGs carry it BOTH braced and bare — a measured job
+        // had a room label whose second line was stored as "\fRaleway|b1|i0|c0|p34|;3" with no brace. So the
+        // brace is optional here; requiring "{\f" let that code through verbatim and the room got named with
+        // the literal escape instead of "3" (written to Comments AND stamped as a TextNote). Also accepts \F.
+        // The class on the next line covers neither f nor F, so this is the only site that handles the font code.
+        text = Regex.Replace(text, @"\{?\\[fF][^;]*;", "");
         text = Regex.Replace(text, @"\\[HWQTCLOK][^;]*;", "");
         text = text.Replace("\\P", " ");
         text = Regex.Replace(text, @"\\p[^;]*;", "");
