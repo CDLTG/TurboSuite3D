@@ -177,12 +177,23 @@ public static class CadRoomExtractorService
 
             if (string.Equals(layer, settings.RoomNameLayer, StringComparison.OrdinalIgnoreCase))
             {
-                // Normalize to the FINAL room name before grouping — the horizontal gate measures against
-                // string length, so it has to see the same string that ends up on the region.
-                roomNameLabels.Add(new LabelText(
-                    new Pt(textPointFeet.X, textPointFeet.Y),
-                    text.Replace("#", "").ToUpper(),
-                    height * unitToFeet));
+                // sameLayer mode: heights share the room-name layer. Split height-shaped text (leads with a
+                // digit/'+' AND has a '/") off to ceilingTexts so it isn't treated as a room name and doesn't
+                // seed its own watershed owner (the TurboName-5 split, TurboName-8). Outside sameLayer this is
+                // never hit for heights — two-layer/block modes capture them via the branch below / above.
+                if (sameLayer && CeilingHeightFormatter.LooksLikeHeight(text))
+                {
+                    ceilingTexts.Add((text, cadTransform.OfPoint(textPointFeet)));
+                }
+                else
+                {
+                    // Normalize to the FINAL room name before grouping — the horizontal gate measures against
+                    // string length, so it has to see the same string that ends up on the region.
+                    roomNameLabels.Add(new LabelText(
+                        new Pt(textPointFeet.X, textPointFeet.Y),
+                        text.Replace("#", "").ToUpper(),
+                        height * unitToFeet));
+                }
             }
 
             if (hasCeilingLayer && !sameLayer && !hasCeilingBlock
@@ -193,14 +204,9 @@ public static class CadRoomExtractorService
         // Coalesce the separate text entities that make up one multi-line room label ("BAR/BREAKFAST" over
         // "AREA") into a single entry. Without this each line seeds its own watershed owner and splits the
         // room in half, and the manual naming pass sees two names in one region and skips it as ambiguous.
-        //
-        // EXCEPT in sameLayer mode, where ceiling heights live on the room-name layer and are therefore
-        // treated as room names (see below) — grouping would merge "10'-0"" INTO the label and yield
-        // "MASTER BEDROOM 10'-0"" as the room name. Skipping leaves sameLayer exactly as it is today (its
-        // height text still seeds a spurious owner); see roadmap TurboName-8.
-        var clusters = sameLayer
-            ? roomNameLabels.Select(l => new LabelCluster(l.Point, l.Text)).ToList()
-            : RoomLabelGrouping.Group(roomNameLabels);
+        // Applies in sameLayer mode too now that height-shaped text has been split off above (TurboName-8), so
+        // roomNameLabels holds only names — nothing can merge a "10'-0"" into a label.
+        var clusters = RoomLabelGrouping.Group(roomNameLabels);
 
         foreach (var c in clusters)
             results.Add(new CadRoomData(

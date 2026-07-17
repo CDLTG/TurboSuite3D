@@ -54,5 +54,31 @@ namespace TurboSuite.Tests
             var (height, _) = CeilingHeightFormatter.Clean(input);
             Assert.Equal(expectedHeight ?? "", height ?? "");
         }
+
+        [Theory]
+        // Height-shaped: leads with a digit or '+' AND carries a '/". (sameLayer classifier — TurboName-8.)
+        [InlineData("10'-0\"", true)]
+        [InlineData("+10'-0\"", true)]
+        [InlineData("9'-0\"", true)]
+        [InlineData("8'-4\"", true)]
+        [InlineData("10'", true)]          // foot mark only
+        [InlineData("6\"", true)]          // inch mark only
+        [InlineData("10'-0\" VAULTED", true)] // height + trailing descriptor still reads as a height
+        // Numeric-leading room names have NO foot/inch mark → stay room names.
+        [InlineData("1-CAR GARAGE", false)]
+        [InlineData("3-CAR GARAGE", false)]
+        [InlineData("2ND FLOOR MECH", false)]
+        [InlineData("BEDROOM 4", false)]
+        [InlineData("MECH 5", false)]
+        // Non-numeric-leading text (incl. bare descriptors) → room name; descriptor keywords not consulted.
+        [InlineData("MASTER BEDROOM", false)]
+        [InlineData("VAULTED", false)]
+        [InlineData("GRAND SITTING", false)] // contains "TIN" — must NOT be treated as a height/descriptor
+        [InlineData("", false)]
+        [InlineData("   ", false)]
+        public void LooksLikeHeight_ClassifiesSharedLayerText(string input, bool expected)
+        {
+            Assert.Equal(expected, CeilingHeightFormatter.LooksLikeHeight(input));
+        }
     }
 }

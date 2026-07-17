@@ -28,6 +28,24 @@ namespace TurboSuite.Name.Regions
         };
 
         /// <summary>
+        /// Heuristic: does this text read as a ceiling-height annotation rather than a room name? True when it
+        /// leads with a digit or <c>'+'</c> <b>and</b> carries a <c>'</c> or <c>"</c> mark. Requiring BOTH keeps
+        /// a numeric-leading room name ("1-CAR GARAGE", "2ND FLOOR MECH" — digit-led but no foot/inch mark) out.
+        /// Used only by the <c>sameLayer</c> path in the extractor, where heights share the room-name layer and
+        /// must be split off so they don't seed a spurious region owner. Deliberately does NOT consult the
+        /// descriptor keywords (VAULTED, …): that match is a loose substring test that trips on room names like
+        /// "GRAND SITTING" (contains "TIN"), so a bare descriptor with no measurement stays classed as a name.
+        /// </summary>
+        public static bool LooksLikeHeight(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            string t = text.TrimStart();
+            bool leadsRight = char.IsDigit(t[0]) || t[0] == '+';
+            bool hasMark = t.IndexOf('\'') >= 0 || t.IndexOf('"') >= 0;
+            return leadsRight && hasMark;
+        }
+
+        /// <summary>
         /// Returns the rounded, reformatted numeric height (e.g. <c>10'-7"</c>, or <c>""</c> when the value
         /// carries no foot/inch measurement) and any preserved descriptor keywords, upper-cased.
         /// </summary>
