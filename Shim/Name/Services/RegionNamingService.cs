@@ -274,15 +274,23 @@ public static class RegionNamingService
     /// wrongly treating the region as already-labeled; whole-line matching still tolerates a
     /// multi-line note (name + ceiling height) carrying extra lines.
     /// </summary>
+    /// <remarks>
+    /// Split on BOTH '\r' and '\n'. Revit's <see cref="TextNote.Text"/> separates lines with a bare
+    /// carriage return ('\r'), NOT the '\n' our <see cref="BuildTextContent"/> writes — so a two-line
+    /// "NAME\rHEIGHT\r" note split on '\n' alone stays one chunk and its internal '\r' survives the Trim,
+    /// so the name line never matches. That made every combined name+height note miss the re-run skip test
+    /// and get re-stamped at the seed on every run (single-line notes escaped it only because Trim eats a
+    /// lone trailing '\r'). Splitting on both characters is the whole fix.
+    /// </remarks>
     private static bool NoteMatchesContent(string noteText, string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return false;
 
         var noteLines = new HashSet<string>(
-            (noteText ?? "").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0),
+            (noteText ?? "").Split('\r', '\n').Select(l => l.Trim()).Where(l => l.Length > 0),
             StringComparer.OrdinalIgnoreCase);
 
-        foreach (var line in content.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0))
+        foreach (var line in content.Split('\r', '\n').Select(l => l.Trim()).Where(l => l.Length > 0))
             if (!noteLines.Contains(line)) return false;
         return true;
     }
