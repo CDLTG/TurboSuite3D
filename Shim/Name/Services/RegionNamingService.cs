@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Autodesk.Revit.DB;
 using TurboSuite.Name.Models;
+using TurboSuite.Name.Regions;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Name.Services;
@@ -230,42 +230,10 @@ public static class RegionNamingService
         return new NamingResult(processed, skipped, ambiguous, unmatched, ambiguousDetails, unmatchedRegionIds);
     }
 
-    private static readonly string[] PreservedCeilingWords =
-    {
-        "Vault", "Slope", "Barrel", "Tray", "Tin",
-        "Suspend", "Drop", "Cathedral", "Coffer", "Dome", "Groin", "Varie"
-    };
-
-    /// <summary>
-    /// Strips alphabetical characters, spaces, and periods from ceiling height values.
-    /// Returns the cleaned numeric height and any preserved ceiling description keywords separately.
-    /// E.g., "10' - 0\" CLG." → ("10'-0\"", "")
-    /// E.g., "10' - 0\" Vaulted" → ("10'-0\"", "VAULTED")
-    /// </summary>
+    // Numeric parse + round-to-nearest-inch + descriptor split now lives in the Revit-free Core (unit-tested).
+    // E.g. "10' - 0\" CLG." → ("10'-0\"", ""); "10'-6 1/2\" Vaulted" → ("10'-7\"", "VAULTED").
     private static (string Height, string Description) CleanCeilingHeight(string value)
-    {
-        if (string.IsNullOrEmpty(value)) return (value, "");
-
-        // Strip leading '+' (e.g., "+10'-0\"" → "10'-0\"")
-        value = value.TrimStart('+');
-
-        // Extract words that match preserved keywords (case-insensitive substring match)
-        var words = Regex.Matches(value, @"[a-zA-Z]+")
-            .Cast<Match>()
-            .Select(m => m.Value)
-            .Where(w => PreservedCeilingWords.Any(k =>
-                w.IndexOf(k, System.StringComparison.OrdinalIgnoreCase) >= 0))
-            .ToList();
-
-        // Strip all alpha, periods, spaces
-        string cleaned = Regex.Replace(value, @"[a-zA-Z.\s]", "");
-
-        string description = words.Count > 0
-            ? string.Join(" ", words).ToUpper()
-            : "";
-
-        return (cleaned, description);
-    }
+        => CeilingHeightFormatter.Clean(value);
 
     private static string BuildTextContent(string roomName, string ceilingHeight)
     {

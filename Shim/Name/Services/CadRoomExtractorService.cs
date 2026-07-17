@@ -271,7 +271,12 @@ public static class CadRoomExtractorService
         // the literal escape instead of "3" (written to Comments AND stamped as a TextNote). Also accepts \F.
         // The class on the next line covers neither f nor F, so this is the only site that handles the font code.
         text = Regex.Replace(text, @"\{?\\[fF][^;]*;", "");
-        text = Regex.Replace(text, @"\\[HWQTCLOK][^;]*;", "");
+        // Split the code class by terminator shape: H/W/Q/T/C take a ;-terminated value (\H1.5x;), while
+        // L/O/K (underline/overline/strikethrough, both cases) are standalone toggles with NO terminator.
+        // Folding the toggles into the valued class let a bare \L run [^;]* forward and delete every character
+        // up to the next semicolon anywhere downstream.
+        text = Regex.Replace(text, @"\\[HWQTC][^;]*;", "");
+        text = Regex.Replace(text, @"\\[LlOoKk]", "");
         text = text.Replace("\\P", " ");
         text = Regex.Replace(text, @"\\p[^;]*;", "");
         text = Regex.Replace(text, @"\\A\d;", "");
