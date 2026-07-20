@@ -204,14 +204,51 @@
 
                 <!-- CAD settings above are dirty-tracked and auto-saved when the window closes. -->
 
-                <!-- Generate Regions section -->
+                <!-- Generate Regions section (merged from the former standalone GenerateRegions window) -->
                 <GroupBox Header="Generate Regions" Padding="12,8" Margin="0,0,0,12" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel>
-                        <TextBlock TextWrapping="Wrap"
+                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
                                    Text="Draw Room Region filled regions interactively (Rectangle / Polygon), or Auto-generate them from the CAD room labels."/>
-                        <Button Content="Generate" Width="80" HorizontalAlignment="Right" Margin="0,8,0,0"
-                                Style="{StaticResource RevitButtonStyle}"
-                                Command="{Binding RunGenerateCommand}"/>
+
+                        <!-- Result counts -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Created: " FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding CreatedCount}"/>
+                            <TextBlock Text="  |  Failed: " FontWeight="SemiBold" Margin="4,0,0,0"/>
+                            <TextBlock Text="{Binding FailedCount}"/>
+                        </StackPanel>
+
+                        <!-- Diagnostic status -->
+                        <TextBlock Text="{Binding StatusText}" Foreground="#888888" FontSize="9.5"
+                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="30"/>
+
+                        <!-- Picking hint (visible while a pick loop is live) -->
+                        <TextBlock Text="{Binding PickingHint}" Foreground="#555555" FontSize="11" Margin="0,4,0,0"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding IsPicking, Converter={StaticResource BoolToVis}}"/>
+
+                        <!-- Action buttons (hidden while picking) -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPicking}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Button Content="Auto-generate" Width="100" Margin="0,0,8,0"
+                                    Style="{StaticResource RevitButtonStyle}"
+                                    Command="{Binding AutoGenerateCommand}"/>
+                            <Button Content="Rectangle" Width="80" Margin="0,0,8,0"
+                                    Style="{StaticResource RevitButtonStyle}"
+                                    Command="{Binding RectangleCommand}"/>
+                            <Button Content="Polygon" Width="80"
+                                    Style="{StaticResource RevitButtonStyle}"
+                                    Command="{Binding PolygonCommand}"/>
+                        </StackPanel>
                     </StackPanel>
                 </GroupBox>
 
@@ -231,6 +268,6 @@
         <!-- Close button -->
         <Button Grid.Row="1" Content="Close" Width="80" HorizontalAlignment="Right" Margin="0,12,0,0"
                 Style="{StaticResource RevitButtonStyle}"
-                Click="CloseButton_Click" IsCancel="True"/>
+                Click="CloseButton_Click"/>
     </Grid>
 </Window>

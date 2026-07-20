@@ -86,19 +86,17 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
 
     public ICommand PickFromViewCommand { get; }
 
-    /// <summary>Set by the pick command; the host command reads it after the dialog closes, runs the pick in
-    /// clean context (no nested modal), and reopens the window bound to this same VM.</summary>
-    public bool PickRequested { get; set; }
-
-    /// <summary>Raised to ask the host window to close so a "Pick from view" round-trip can run.</summary>
-    public event Action CloseForPickRequested;
+    /// <summary>Raised when the user clicks "Pick from view" — the host ViewModel queues a
+    /// <see cref="Services.PickLayerRequest"/> on the shared external event whose pick action is
+    /// <see cref="RunPick"/> (which must run in a valid Revit API context).</summary>
+    public event Action PickFromViewRequested;
 
     public CadRoomSourceConfigViewModel(CadRoomSourceSettings cadSettings, UIDocument uidoc)
     {
         _uidoc = uidoc;
         PopulateSourceLinks();
         LoadCadSettings(cadSettings);
-        PickFromViewCommand = new RelayCommand(OnPickFromView, () => _canPick);
+        PickFromViewCommand = new RelayCommand(() => PickFromViewRequested?.Invoke(), () => _canPick);
 
         try
         {
@@ -124,16 +122,11 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         catch { /* leave just the all-links option */ }
     }
 
-    private void OnPickFromView()
-    {
-        PickRequested = true;
-        CloseForPickRequested?.Invoke();
-    }
-
     /// <summary>
-    /// The pick itself (called by the host command between window showings, so no modal dialog is on the
-    /// stack): user clicks a room label in the linked CAD; layer comes from Revit's GraphicsStyle, the
-    /// location from the pick point, then classify within that layer via ACadSharp and fill the fields.
+    /// The pick itself (raised on the shared external event as a <see cref="Services.PickLayerRequest"/>, so it
+    /// runs in a valid API context — no nested modal): user clicks a room label in the linked CAD; layer comes
+    /// from Revit's GraphicsStyle, the location from the pick point, then classify within that layer via
+    /// ACadSharp and fill the fields.
     /// </summary>
     public void RunPick()
     {
