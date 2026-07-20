@@ -27,6 +27,66 @@
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" MaxHeight="740">
             <StackPanel>
 
+                <!-- Linked CAD Layers — folded-in VG → Imported Categories (live show/hide) -->
+                <GroupBox Header="Linked CAD Layers (2D Workflow)" Margin="0,0,0,10" Padding="12,8"
+                          Style="{StaticResource BoldHeaderGroupBox}">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="Show or hide linked-CAD layers directly — mirrors Visibility/Graphics → Imported Categories. Changes apply live to this view and persist."
+                                   Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                        <!-- Find filter -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Find:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding LayerFilterText, UpdateSourceTrigger=PropertyChanged}"/>
+                        </Grid>
+
+                        <!-- Per-file collapsible groups of layer checkboxes -->
+                        <Border BorderBrush="#CCCCCC" BorderThickness="1">
+                            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding LayersView}">
+                                    <ItemsControl.GroupStyle>
+                                        <GroupStyle>
+                                            <GroupStyle.ContainerStyle>
+                                                <Style TargetType="{x:Type GroupItem}">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="{x:Type GroupItem}">
+                                                                <Expander IsExpanded="True" Padding="0"
+                                                                          Margin="0,2,0,0">
+                                                                    <Expander.Header>
+                                                                        <TextBlock Text="{Binding Name}"
+                                                                                   FontWeight="SemiBold"
+                                                                                   TextTrimming="CharacterEllipsis"/>
+                                                                    </Expander.Header>
+                                                                    <ItemsPresenter Margin="16,2,0,4"/>
+                                                                </Expander>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </GroupStyle.ContainerStyle>
+                                        </GroupStyle>
+                                    </ItemsControl.GroupStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                      Content="{Binding LayerName}"
+                                                      Margin="0,1" VerticalContentAlignment="Center"
+                                                      ToolTip="{Binding LayerName}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                </GroupBox>
+
                 <!-- CAD Room Source configuration -->
                 <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,10" Padding="12,8"
                           Style="{StaticResource BoldHeaderGroupBox}">

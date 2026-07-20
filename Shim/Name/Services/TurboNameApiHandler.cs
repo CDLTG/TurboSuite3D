@@ -63,6 +63,10 @@ public class TurboNameApiHandler : IExternalEventHandler
                     pick.Pick?.Invoke();
                     Finish(request);
                     break;
+                case SetLayerVisibilityRequest vis:
+                    RunSetVisibility(vis);
+                    Finish(request);
+                    break;
                 case SaveSettingsRequest save:
                     RunSave(save);
                     Finish(request);
@@ -423,6 +427,17 @@ public class TurboNameApiHandler : IExternalEventHandler
 
         Dispatch(() => TaskDialog.Show("TurboName", summary));
         Finish(request);
+    }
+
+    private void RunSetVisibility(SetLayerVisibilityRequest vis)
+    {
+        using (var tx = new Transaction(_doc, "TurboName - Toggle CAD Layer"))
+        {
+            tx.Start();
+            LinkedCadLayerService.ApplyHidden(_view, vis.SubId, vis.Hidden);
+            tx.Commit();
+        }
+        _uidoc.RefreshActiveView();
     }
 
     private void RunSave(SaveSettingsRequest save)

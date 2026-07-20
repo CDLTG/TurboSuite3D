@@ -55,5 +55,15 @@ public class SaveSettingsRequest : TurboNameRequest
     public Shared.Models.CadRoomSourceSettings Settings { get; set; }
 }
 
+/// <summary>
+/// Show/hide one linked-CAD layer (subcategory) in the locked view — the folded-in VG → Imported Categories
+/// checkbox. The hide persists (that's the point), so no revert on close.
+/// </summary>
+public class SetLayerVisibilityRequest : TurboNameRequest
+{
+    public Autodesk.Revit.DB.ElementId SubId { get; set; }
+    public bool Hidden { get; set; }
+}
+
 /// <summary>Status update sent from a pick/generate handler to the ViewModel during/after the loop.</summary>
 public record PickLoopUpdate(int TotalCreated, int TotalFailed, bool LoopEnded, string LastStatus = null);

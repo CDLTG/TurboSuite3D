@@ -1,6 +1,10 @@
 #nullable disable
 using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Windows.Data;
 using System.Windows.Input;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Name.Services;
 using TurboSuite.Shared.Models;
@@ -22,6 +26,20 @@ public class TurboNameViewModel : ViewModelBase
 
     /// <summary>CAD Room Source + region-layer configuration, edited inline in the TurboName window.</summary>
     public CadRoomSourceConfigViewModel CadConfig { get; }
+
+    // ── Linked CAD Layers (folded-in VG → Imported Categories) ──
+    /// <summary>Flat, file-then-layer sorted rows; the view groups them by <see cref="CadLayerRowViewModel.FileName"/>.</summary>
+    public ObservableCollection<CadLayerRowViewModel> Layers { get; } = new();
+
+    /// <summary>Grouped-by-file, Find-filtered projection of <see cref="Layers"/> bound by the window.</summary>
+    public ICollectionView LayersView { get; }
+
+    private string _layerFilterText = "";
+    public string LayerFilterText
+    {
+        get => _layerFilterText;
+        set { if (SetProperty(ref _layerFilterText, value)) LayersView.Refresh(); }
+    }
 
     // ── Shared-event gate + close/save coordination ──
     private bool _eventBusy;       // a request is queued/running on the shared event
@@ -52,7 +70,7 @@ public class TurboNameViewModel : ViewModelBase
     /// <summary>Raised to ask the window to actually close (after the on-close save has flushed).</summary>
     public event Action RequestClose;
 
-    public TurboNameViewModel(CadRoomSourceSettings cadSettings, UIDocument uidoc,
+    public TurboNameViewModel(CadRoomSourceSettings cadSettings, UIDocument uidoc, View view,
         ExternalEvent externalEvent, TurboNameApiHandler handler)
     {
         _event = externalEvent;
@@ -63,10 +81,37 @@ public class TurboNameViewModel : ViewModelBase
         CadConfig.PropertyChanged += (_, __) => SettingsDirty = true;
         CadConfig.PickFromViewRequested += OnPickFromView;
 
+        BuildLayers(uidoc?.Document, view);
+        LayersView = CollectionViewSource.GetDefaultView(Layers);
+        LayersView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(CadLayerRowViewModel.FileName)));
+        LayersView.Filter = LayerFilter;
+
         RunAssignCommand = new RelayCommand(OnAssign, () => !IsPicking);
         AutoGenerateCommand = new RelayCommand(OnAutoGenerate, () => !IsPicking);
         RectangleCommand = new RelayCommand(OnRectangle, () => !IsPicking);
         PolygonCommand = new RelayCommand(OnPolygon, () => !IsPicking);
+    }
+
+    // Built once in the command's (valid API) context — enumerating subcategories is a read, no DWG load.
+    private void BuildLayers(Document doc, View view)
+    {
+        if (doc == null || view == null) return;
+        foreach (var info in LinkedCadLayerService.Build(doc, view))
+            Layers.Add(new CadLayerRowViewModel(
+                info.FileName, info.LayerName, info.SubId, !info.Hidden, RequestToggleVisibility));
+    }
+
+    private bool LayerFilter(object item)
+    {
+        if (item is not CadLayerRowViewModel row) return false;
+        if (string.IsNullOrWhiteSpace(_layerFilterText)) return true;
+        return row.LayerName.IndexOf(_layerFilterText.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    // Returns false when the shared event is busy (the row reverts its checkbox). Hidden = the target state.
+    private bool RequestToggleVisibility(CadLayerRowViewModel row)
+    {
+        return RaiseUser(new SetLayerVisibilityRequest { SubId = row.SubId, Hidden = !row.IsVisible });
     }
 
     private void OnPickFromView()

@@ -62,7 +62,7 @@ namespace TurboSuite.Name
                     () => vm.CadConfig.ToModel(),
                     TextNoteTypeName, DescriptionTextNoteTypeName);
                 var externalEvent = ExternalEvent.Create(handler);
-                vm = new TurboNameViewModel(cadSettings, uidoc, externalEvent, handler);
+                vm = new TurboNameViewModel(cadSettings, uidoc, view, externalEvent, handler);
 
                 var window = new TurboNameWindow { DataContext = vm };
                 new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
