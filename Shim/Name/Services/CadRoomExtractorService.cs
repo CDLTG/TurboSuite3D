@@ -42,6 +42,14 @@ public static class CadRoomExtractorService
             string dwgPath = ModelPathUtils.ConvertModelPathToUserVisiblePath(extRef.GetAbsolutePath());
             if (!File.Exists(dwgPath)) continue;
 
+            // TurboName-9: scope names and heights to their own link independently. The room extractor used to
+            // read EVERY linked DWG, so a plan + RCP sharing a room-name layer seeded each room twice and split
+            // it in half. Blank scope = all links. Skip the (expensive) DWG read when this link supplies neither.
+            string dwgFile = Path.GetFileName(dwgPath);
+            bool includeNames = CadLinkScope.Includes(settings.RoomNameLinkName, dwgFile);
+            bool includeHeights = CadLinkScope.Includes(settings.CeilingHeightLinkName, dwgFile);
+            if (!includeNames && !includeHeights) continue;
+
             Transform cadTransform = import.GetTransform();
 
             CadDocument cadDoc;
@@ -63,16 +71,17 @@ public static class CadRoomExtractorService
             double unitToFeet = GetUnitToFeetFactor(cadDoc.Header.InsUnits);
 
             if (settings.Mode == "Block")
-                ExtractBlockMode(cadDoc, cadTransform, unitToFeet, settings, results);
+                ExtractBlockMode(cadDoc, cadTransform, unitToFeet, settings, includeNames, includeHeights, results);
             else
-                ExtractTextMode(cadDoc, cadTransform, unitToFeet, settings, results);
+                ExtractTextMode(cadDoc, cadTransform, unitToFeet, settings, includeNames, includeHeights, results);
         }
 
         return results;
     }
 
     private static void ExtractBlockMode(CadDocument cadDoc, Transform cadTransform,
-        double unitToFeet, CadRoomSourceSettings settings, List<CadRoomData> results)
+        double unitToFeet, CadRoomSourceSettings settings, bool includeNames, bool includeHeights,
+        List<CadRoomData> results)
     {
         foreach (var entity in cadDoc.Entities)
         {
@@ -92,9 +101,9 @@ public static class CadRoomExtractorService
                     attrDict[tag] = val;
             }
 
-            // Concatenate room name tags (space-separated)
+            // Concatenate room name tags (space-separated) — only when this link supplies names.
             string roomName = "";
-            if (settings.RoomNameTags != null && settings.RoomNameTags.Count > 0)
+            if (includeNames && settings.RoomNameTags != null && settings.RoomNameTags.Count > 0)
             {
                 var parts = settings.RoomNameTags
                     .Select(tag => attrDict.TryGetValue(tag, out var v) ? v.Trim() : "")
@@ -102,9 +111,9 @@ public static class CadRoomExtractorService
                 roomName = string.Join(" ", parts).Replace("#", "").ToUpper();
             }
 
-            // Read ceiling height
+            // Read ceiling height — only when this link supplies heights.
             string ceilingHeight = "";
-            if (!string.IsNullOrEmpty(settings.CeilingHeightTag)
+            if (includeHeights && !string.IsNullOrEmpty(settings.CeilingHeightTag)
                 && attrDict.TryGetValue(settings.CeilingHeightTag, out var ch))
             {
                 ceilingHeight = ch.Trim();
@@ -125,7 +134,8 @@ public static class CadRoomExtractorService
     }
 
     private static void ExtractTextMode(CadDocument cadDoc, Transform cadTransform,
-        double unitToFeet, CadRoomSourceSettings settings, List<CadRoomData> results)
+        double unitToFeet, CadRoomSourceSettings settings, bool includeNames, bool includeHeights,
+        List<CadRoomData> results)
     {
         // Room-name text is collected in CAD space (feet, pre-transform) because RoomLabelGrouping measures
         // along the TEXT's own axes — a DWG inserted into Revit at a rotation would tilt them. The cluster
@@ -153,7 +163,7 @@ public static class CadRoomExtractorService
                         if (string.Equals(attr.Tag, settings.CeilingHeightBlockTag, StringComparison.OrdinalIgnoreCase))
                         {
                             string heightVal = StripCadFormatting(attr.Value ?? "").Trim();
-                            if (!string.IsNullOrEmpty(heightVal))
+                            if (includeHeights && !string.IsNullOrEmpty(heightVal))
                             {
                                 double cadX = insert.InsertPoint.X;
                                 double cadY = insert.InsertPoint.Y;
@@ -183,9 +193,10 @@ public static class CadRoomExtractorService
                 // never hit for heights — two-layer/block modes capture them via the branch below / above.
                 if (sameLayer && CeilingHeightFormatter.LooksLikeHeight(text))
                 {
-                    ceilingTexts.Add((text, cadTransform.OfPoint(textPointFeet)));
+                    if (includeHeights)
+                        ceilingTexts.Add((text, cadTransform.OfPoint(textPointFeet)));
                 }
-                else
+                else if (includeNames)
                 {
                     // Normalize to the FINAL room name before grouping — the horizontal gate measures against
                     // string length, so it has to see the same string that ends up on the region.
@@ -196,7 +207,7 @@ public static class CadRoomExtractorService
                 }
             }
 
-            if (hasCeilingLayer && !sameLayer && !hasCeilingBlock
+            if (includeHeights && hasCeilingLayer && !sameLayer && !hasCeilingBlock
                 && string.Equals(layer, settings.CeilingHeightLayer, StringComparison.OrdinalIgnoreCase))
                 ceilingTexts.Add((text, cadTransform.OfPoint(textPointFeet)));
         }

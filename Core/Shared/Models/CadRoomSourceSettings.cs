@@ -58,11 +58,24 @@ public class CadRoomSourceSettings
     public string RegionTypeName { get; set; } = "Room Region";
 
     /// <summary>
-    /// File name (e.g. "x_Floor Plan.dwg") of the linked DWG the extractor should read. Empty = read every
-    /// linked CAD in the view (legacy behavior). Scopes extraction to the floor plan so a co-linked RCP
-    /// (which can share layer names) doesn't contribute stray geometry. Matched case-insensitively by file name.
+    /// File name (e.g. "x_Floor Plan.dwg") of the linked DWG the REGION-GENERATION extractor should read.
+    /// Empty = read every linked CAD in the view (legacy behavior). Scopes wall/door/area geometry to the
+    /// floor plan so a co-linked RCP (which can share layer names) doesn't contribute stray geometry. Matched
+    /// case-insensitively by file name. Also the legacy scope for any bare (unqualified) region-gen layer
+    /// entry — a <c>file|layer</c> entry carries its own file and ignores this.
     /// </summary>
     public string SourceLinkName { get; set; } = "";
+
+    // ── Per-purpose room-source link scopes (TurboName-9 fix) ──
+    // The room extractor historically read EVERY linked DWG, so a plan + RCP sharing a room-name layer double-
+    // seeded each room and split it in half. These two scopes disambiguate the name source from the height
+    // source independently. Blank = all links (case-insensitive filename match, via CadLinkScope.Includes).
+
+    /// <summary>File name of the linked DWG that supplies room NAMES. Blank = all links.</summary>
+    public string RoomNameLinkName { get; set; } = "";
+
+    /// <summary>File name of the linked DWG that supplies ceiling HEIGHTS. Blank = all links.</summary>
+    public string CeilingHeightLinkName { get; set; } = "";
 
     public static CadRoomSourceSettings CreateDefaults() => new()
     {
@@ -78,6 +91,8 @@ public class CadRoomSourceSettings
         DoorLayerNames = new List<string>(),
         AreaLayerNames = new List<string>(),
         RegionTypeName = "Room Region",
-        SourceLinkName = ""
+        SourceLinkName = "",
+        RoomNameLinkName = "",
+        CeilingHeightLinkName = ""
     };
 }

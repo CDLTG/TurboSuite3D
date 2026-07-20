@@ -44,6 +44,8 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     private string _areaLayerNamesText;
     private string _regionTypeName;
     private string _selectedSourceLink;
+    private string _selectedRoomNameLink;
+    private string _selectedCeilingHeightLink;
 
     public bool IsBlockMode
     {
@@ -73,7 +75,15 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     public string DoorLayerNamesText { get => _doorLayerNamesText; set => SetProperty(ref _doorLayerNamesText, value); }
     public string AreaLayerNamesText { get => _areaLayerNamesText; set => SetProperty(ref _areaLayerNamesText, value); }
     public string RegionTypeName { get => _regionTypeName; set => SetProperty(ref _regionTypeName, value); }
+
+    /// <summary>Region-generation source link (wall/door/area geometry) — legacy scope for bare region-gen layers.</summary>
     public string SelectedSourceLink { get => _selectedSourceLink; set => SetProperty(ref _selectedSourceLink, value); }
+
+    /// <summary>Which linked DWG supplies room NAMES. "(All links)" = every link. (TurboName-9 fix.)</summary>
+    public string SelectedRoomNameLink { get => _selectedRoomNameLink; set => SetProperty(ref _selectedRoomNameLink, value); }
+
+    /// <summary>Which linked DWG supplies ceiling HEIGHTS. "(All links)" = every link. (TurboName-9 fix.)</summary>
+    public string SelectedCeilingHeightLink { get => _selectedCeilingHeightLink; set => SetProperty(ref _selectedCeilingHeightLink, value); }
 
     /// <summary>Linked-DWG file names in the active view, plus the "(All links)" option at the top.</summary>
     public ObservableCollection<string> AvailableSourceLinks { get; } = new();
@@ -286,11 +296,23 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         AreaLayerNamesText = string.Join(", ", settings.AreaLayerNames ?? new List<string>());
         RegionTypeName = settings.RegionTypeName ?? "Room Region";
 
-        string link = (settings.SourceLinkName ?? "").Trim();
-        if (link.Length > 0 && !AvailableSourceLinks.Contains(link, StringComparer.OrdinalIgnoreCase))
-            AvailableSourceLinks.Add(link); // preserve a saved link even if it isn't currently in the view
-        SelectedSourceLink = link.Length == 0 ? AllLinksLabel : link;
+        SelectedSourceLink = ResolveLinkSelection(settings.SourceLinkName);
+        SelectedRoomNameLink = ResolveLinkSelection(settings.RoomNameLinkName);
+        SelectedCeilingHeightLink = ResolveLinkSelection(settings.CeilingHeightLinkName);
     }
+
+    /// <summary>Map a saved link file name to a dropdown selection, preserving a saved link even if it isn't
+    /// currently in the view. Blank ⇒ "(All links)".</summary>
+    private string ResolveLinkSelection(string saved)
+    {
+        string link = (saved ?? "").Trim();
+        if (link.Length > 0 && !AvailableSourceLinks.Contains(link, StringComparer.OrdinalIgnoreCase))
+            AvailableSourceLinks.Add(link);
+        return link.Length == 0 ? AllLinksLabel : link;
+    }
+
+    private static string LinkSelectionToModel(string selection)
+        => (selection == AllLinksLabel || selection == null) ? "" : selection.Trim();
 
     public CadRoomSourceSettings ToModel() => new()
     {
@@ -306,8 +328,9 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         DoorLayerNames = ParseCommaSeparated(DoorLayerNamesText),
         AreaLayerNames = ParseCommaSeparated(AreaLayerNamesText),
         RegionTypeName = (RegionTypeName ?? "Room Region").Trim(),
-        SourceLinkName = (SelectedSourceLink == AllLinksLabel || SelectedSourceLink == null)
-            ? "" : SelectedSourceLink.Trim()
+        SourceLinkName = LinkSelectionToModel(SelectedSourceLink),
+        RoomNameLinkName = LinkSelectionToModel(SelectedRoomNameLink),
+        CeilingHeightLinkName = LinkSelectionToModel(SelectedCeilingHeightLink)
     };
 
     private static List<string> ParseCommaSeparated(string text)

@@ -32,11 +32,14 @@ public static class CadWallExtractorService
         var doorPositions = new List<XYZ>();
         var areaSegments = new List<CadWallSegment>();
 
-        var wallLayers = new HashSet<string>(settings.WallLayerNames ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-        var doorLayers = new HashSet<string>(settings.DoorLayerNames ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-        var areaLayers = new HashSet<string>(settings.AreaLayerNames ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+        // Region-gen layers may be file|layer-qualified (a WALL_* in the plan is distinct from a same-named
+        // RCP layer). Parse once; the per-DWG sets are resolved inside the link loop.
+        var wallEntries = ParseEntries(settings.WallLayerNames);
+        var doorEntries = ParseEntries(settings.DoorLayerNames);
+        var areaEntries = ParseEntries(settings.AreaLayerNames);
+        string legacyScope = settings.SourceLinkName;
 
-        if (wallLayers.Count == 0)
+        if (wallEntries.Count == 0)
             return (wallSegments, doorPositions, areaSegments);
 
         var cadLinks = new FilteredElementCollector(doc, view.Id)
@@ -58,10 +61,15 @@ public static class CadWallExtractorService
             string dwgPath = ModelPathUtils.ConvertModelPathToUserVisiblePath(extRef.GetAbsolutePath());
             if (!File.Exists(dwgPath)) continue;
 
-            // Scope to the declared source link (blank = all links). Keeps a co-linked RCP that shares
-            // layer names from contributing stray door/wall geometry.
-            if (!string.IsNullOrWhiteSpace(settings.SourceLinkName) &&
-                !string.Equals(Path.GetFileName(dwgPath), settings.SourceLinkName.Trim(), StringComparison.OrdinalIgnoreCase))
+            // Resolve which layers this DWG contributes, honoring file|layer qualification and — for bare
+            // legacy entries — the SourceLinkName scope (blank = all links; keeps a co-linked RCP that shares
+            // layer names from contributing stray geometry). Built before the read so an irrelevant link is
+            // skipped without loading it.
+            string dwgFile = Path.GetFileName(dwgPath);
+            var wallLayers = BuildLayerSet(wallEntries, legacyScope, dwgFile);
+            var doorLayers = BuildLayerSet(doorEntries, legacyScope, dwgFile);
+            var areaLayers = BuildLayerSet(areaEntries, legacyScope, dwgFile);
+            if (wallLayers.Count == 0 && doorLayers.Count == 0 && areaLayers.Count == 0)
                 continue;
 
             Transform cadTransform = import.GetTransform();
@@ -115,6 +123,35 @@ public static class CadWallExtractorService
         LastLinkInfo = linkInfos.Count > 0 ? string.Join("  |  ", linkInfos) : "(no linked DWGs read)";
         LastDoorLayerInfo = $"door entities: {doorInserts} inserts, {doorLines} lines, {doorPolylines} polylines, {doorArcs} arcs";
         return (wallSegments, doorPositions, areaSegments);
+    }
+
+    // Parse each region-gen entry to (file, layer), dropping blanks. Bare entries carry a null file (legacy).
+    private static List<(string File, string Layer)> ParseEntries(List<string> raw)
+    {
+        var list = new List<(string File, string Layer)>();
+        if (raw == null) return list;
+        foreach (var entry in raw)
+        {
+            var (file, layer) = TurboSuite.Name.CadLinkScope.ParseScopedLayer(entry);
+            if (!string.IsNullOrEmpty(layer)) list.Add((file, layer));
+        }
+        return list;
+    }
+
+    // The layer names (from these entries) that apply to one DWG: a qualified entry only for its own file, a
+    // bare entry for any DWG the legacy SourceLinkName scope includes.
+    private static HashSet<string> BuildLayerSet(List<(string File, string Layer)> entries,
+        string legacyScope, string dwgFile)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (file, layer) in entries)
+        {
+            bool applies = file == null
+                ? TurboSuite.Name.CadLinkScope.Includes(legacyScope, dwgFile)
+                : string.Equals(file, dwgFile, StringComparison.OrdinalIgnoreCase);
+            if (applies) set.Add(layer);
+        }
+        return set;
     }
 
     private static void ExtractWallEntity(Entity entity, double unitToFeet, Transform cadTransform,

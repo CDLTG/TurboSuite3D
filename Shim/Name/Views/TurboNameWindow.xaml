@@ -94,17 +94,34 @@
                         <TextBlock Text="Configure how room names and ceiling heights are extracted from the linked CAD file."
                                    Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                        <!-- Source link scope -->
+                        <!-- Link scopes: region-gen source + per-purpose room-name / ceiling-height links -->
                         <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Source Link:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox Grid.Column="1"
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Region-Gen Link:" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,6"
                                       ItemsSource="{Binding CadConfig.AvailableSourceLinks}"
                                       SelectedItem="{Binding CadConfig.SelectedSourceLink}"
-                                      ToolTip="Which linked DWG to read. Choose the floor plan so a co-linked RCP (sharing layer names) doesn't add stray geometry. (All links) reads every linked CAD."/>
+                                      ToolTip="Which linked DWG supplies wall/door/area geometry for region generation. Choose the floor plan so a co-linked RCP (sharing layer names) doesn't add stray geometry. (All links) reads every linked CAD."/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Room Name Link:" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,6"
+                                      ItemsSource="{Binding CadConfig.AvailableSourceLinks}"
+                                      SelectedItem="{Binding CadConfig.SelectedRoomNameLink}"
+                                      ToolTip="Which linked DWG supplies room NAMES. Choose the plan (or RCP) that carries the room-name text/blocks so a co-linked drawing sharing the layer doesn't double-seed each room. (All links) reads every linked CAD."/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Link:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox Grid.Row="2" Grid.Column="1"
+                                      ItemsSource="{Binding CadConfig.AvailableSourceLinks}"
+                                      SelectedItem="{Binding CadConfig.SelectedCeilingHeightLink}"
+                                      ToolTip="Which linked DWG supplies ceiling HEIGHTS (may differ from the room-name link). (All links) reads every linked CAD."/>
                         </Grid>
 
                         <!-- Pick-from-view discovery -->
