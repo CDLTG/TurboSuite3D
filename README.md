@@ -55,7 +55,7 @@ The "TurboSuite" ribbon tab has three panels:
 | Button | Description |
 |--------|-------------|
 | [TurboSetup](Shim/Setup/README.md) | Set up a new project from the linked architectural model (levels, views, link graphics) |
-| [TurboName](Shim/Name/README.md) | Assign CAD room names and ceiling heights to filled regions |
+| [TurboName](Shim/Name/README.md) | Modeless 2D job setup: linked-CAD layer show/hide + role tagging, region generation, and CAD room-name/ceiling-height assignment to filled regions |
 | [TurboSchedule](Shim/Schedule/README.md) | Edit lighting fixture and driver type specs, one Type Mark per page |
 | [TurboZones](Shim/Zones/README.md) | Manage circuit load names and visualize dimmer panel allocation |
 | [TurboNumber](Shim/Number/README.md) | Manage circuit numbers, keypad and power supply Switch IDs |
