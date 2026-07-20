@@ -25,6 +25,10 @@ public class TurboNameApiHandler : IExternalEventHandler
     private readonly string _textNoteTypeName;
     private readonly string _descTextNoteTypeName;
 
+    /// <summary>Transient red role-preview overlay, owned here so its snapshots survive across requests and can
+    /// be reverted in one place on close.</summary>
+    public LayerRolePreviewService RolePreview { get; } = new();
+
     public TurboNameRequest CurrentRequest { get; set; }
 
     public TurboNameApiHandler(Document doc, UIDocument uidoc, View view,
@@ -67,8 +71,12 @@ public class TurboNameApiHandler : IExternalEventHandler
                     RunSetVisibility(vis);
                     Finish(request);
                     break;
-                case SaveSettingsRequest save:
-                    RunSave(save);
+                case SetLayerRolePreviewRequest preview:
+                    RunRolePreview(preview);
+                    Finish(request);
+                    break;
+                case CloseCleanupRequest cleanup:
+                    RunCloseCleanup(cleanup);
                     Finish(request);
                     break;
             }
@@ -440,11 +448,43 @@ public class TurboNameApiHandler : IExternalEventHandler
         _uidoc.RefreshActiveView();
     }
 
-    private void RunSave(SaveSettingsRequest save)
+    private void RunRolePreview(SetLayerRolePreviewRequest preview)
     {
-        if (save.Settings == null) return;
-        Shared.Services.CadRoomSourceStorageService.Save(_doc, save.Settings);
-        Shared.Services.CadRoomSourceSettingsCache.Invalidate();
+        using (var tx = new Transaction(_doc, "TurboName - Layer Role Preview"))
+        {
+            tx.Start();
+            if (preview.Painted)
+            {
+                if (preview.EnsureVisible)
+                    LinkedCadLayerService.ApplyHidden(_view, preview.SubId, false); // un-hide so red shows
+                RolePreview.Paint(_view, preview.SubId);
+            }
+            else
+            {
+                RolePreview.Unpaint(_view, preview.SubId);
+            }
+            tx.Commit();
+        }
+        _uidoc.RefreshActiveView();
+    }
+
+    private void RunCloseCleanup(CloseCleanupRequest cleanup)
+    {
+        // Revert the transient red previews first (own transaction), then persist settings if dirty.
+        if (cleanup.RevertPreviews && RolePreview.HasActive)
+        {
+            using var tx = new Transaction(_doc, "TurboName - Revert Layer Previews");
+            tx.Start();
+            RolePreview.RevertAll(_doc);
+            tx.Commit();
+            _uidoc.RefreshActiveView();
+        }
+
+        if (cleanup.Settings != null)
+        {
+            Shared.Services.CadRoomSourceStorageService.Save(_doc, cleanup.Settings);
+            Shared.Services.CadRoomSourceSettingsCache.Invalidate();
+        }
     }
 
     private void ReportError(TurboNameRequest request, string message)

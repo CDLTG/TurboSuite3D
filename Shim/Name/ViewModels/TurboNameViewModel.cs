@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Data;
@@ -41,10 +42,13 @@ public class TurboNameViewModel : ViewModelBase
         set { if (SetProperty(ref _layerFilterText, value)) LayersView.Refresh(); }
     }
 
+    // Subcategories currently painted red (region-gen tagged) — drives the paint/unpaint diff and close revert.
+    private readonly HashSet<ElementId> _painted = new();
+
     // ── Shared-event gate + close/save coordination ──
     private bool _eventBusy;       // a request is queued/running on the shared event
     private bool _closeAfterCurrent; // close was requested while a request was in flight
-    private bool _saveThenClose;   // the on-close save has been raised; the next close attempt may proceed
+    private bool _saveThenClose;   // the on-close cleanup has been raised; the next close attempt may proceed
 
     /// <summary>True once any CAD setting changed — the config is saved once when the window closes.</summary>
     public bool SettingsDirty { get; private set; }
@@ -82,6 +86,7 @@ public class TurboNameViewModel : ViewModelBase
         CadConfig.PickFromViewRequested += OnPickFromView;
 
         BuildLayers(uidoc?.Document, view);
+        SyncRolesFromConfig(); // seed each row's role toggles from the loaded settings
         LayersView = CollectionViewSource.GetDefaultView(Layers);
         LayersView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(CadLayerRowViewModel.FileName)));
         LayersView.Filter = LayerFilter;
@@ -98,7 +103,52 @@ public class TurboNameViewModel : ViewModelBase
         if (doc == null || view == null) return;
         foreach (var info in LinkedCadLayerService.Build(doc, view))
             Layers.Add(new CadLayerRowViewModel(
-                info.FileName, info.LayerName, info.SubId, !info.Hidden, RequestToggleVisibility));
+                info.FileName, info.LayerName, info.SubId, !info.Hidden, RequestToggleVisibility, OnRole));
+    }
+
+    // Re-seed every row's role toggles from the config (the single source of truth). Silent — no callbacks.
+    private void SyncRolesFromConfig()
+    {
+        foreach (var row in Layers)
+            foreach (LayerRole role in Enum.GetValues(typeof(LayerRole)))
+                row.SetRoleSilently(role, CadConfig.HasRole(role, row.FileName, row.LayerName));
+    }
+
+    // A row's role toggle changed: write it into the config, enforce single-select for Name/Ht, and diff the
+    // red preview for region-gen roles.
+    private void OnRole(CadLayerRowViewModel row, LayerRole role, bool value)
+    {
+        CadConfig.SetRole(role, row.FileName, row.LayerName, value); // fires PropertyChanged → SettingsDirty
+
+        if (value && role is LayerRole.Name or LayerRole.Height)
+            foreach (var other in Layers)
+                if (!ReferenceEquals(other, row))
+                    other.SetRoleSilently(role, false); // single-select across all rows
+
+        if (role is LayerRole.Wall or LayerRole.Door or LayerRole.Area)
+            UpdatePreview(row);
+    }
+
+    // Paint a row red when it first gains a region-gen role; un-paint when it loses the last one.
+    private void UpdatePreview(CadLayerRowViewModel row)
+    {
+        bool nowTagged = row.IsRegionGenTagged;
+        bool wasPainted = _painted.Contains(row.SubId);
+
+        if (nowTagged && !wasPainted)
+        {
+            bool ensureVisible = !row.IsVisible;
+            if (ensureVisible) row.SetVisibleSilently(true); // reflect the auto-show; the request un-hides too
+            if (RaiseUser(new SetLayerRolePreviewRequest { SubId = row.SubId, Painted = true, EnsureVisible = ensureVisible }))
+                _painted.Add(row.SubId);
+            else if (ensureVisible)
+                row.SetVisibleSilently(false); // event busy — undo the optimistic checkbox flip
+        }
+        else if (!nowTagged && wasPainted)
+        {
+            if (RaiseUser(new SetLayerRolePreviewRequest { SubId = row.SubId, Painted = false }))
+                _painted.Remove(row.SubId);
+        }
     }
 
     private bool LayerFilter(object item)
@@ -116,7 +166,8 @@ public class TurboNameViewModel : ViewModelBase
 
     private void OnPickFromView()
     {
-        RaiseUser(new PickLayerRequest { Pick = CadConfig.RunPick });
+        // After the pick stamps RoomNameLayer/link (or block scope), re-light the matching row's Name tag.
+        RaiseUser(new PickLayerRequest { Pick = CadConfig.RunPick, OnFinished = SyncRolesFromConfig });
     }
 
     private void OnAssign()
@@ -162,22 +213,27 @@ public class TurboNameViewModel : ViewModelBase
             IsPicking = false; // event busy — undo the optimistic picking state
     }
 
-    // ── Close flow: save once (if dirty), then let the window close ──
+    // ── Close flow: revert red previews + save once (if dirty), then let the window close ──
 
     /// <summary>Called from the window's Closing handler. Returns true to allow the close, false to cancel it
-    /// (a save is raised first; its completion re-requests the close, which then passes).</summary>
+    /// (a cleanup pass — revert previews + save — is raised first; its completion re-requests the close).</summary>
     public bool TryClose()
     {
-        if (!SettingsDirty || _saveThenClose) return true;
+        if (_saveThenClose) return true;
         if (_eventBusy)
         {
             _closeAfterCurrent = true; // defer until the in-flight request finishes
             return false;
         }
+        bool needsSave = SettingsDirty;
+        bool needsRevert = _painted.Count > 0;
+        if (!needsSave && !needsRevert) return true;
+
         _saveThenClose = true;
-        RaiseInternal(new SaveSettingsRequest
+        RaiseInternal(new CloseCleanupRequest
         {
-            Settings = CadConfig.ToModel(),
+            Settings = needsSave ? CadConfig.ToModel() : null,
+            RevertPreviews = needsRevert,
             OnFinished = () => { SettingsDirty = false; RequestClose?.Invoke(); }
         });
         return false;

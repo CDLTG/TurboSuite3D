@@ -49,10 +49,18 @@ public class PickLayerRequest : TurboNameRequest
     public Action Pick { get; set; }
 }
 
-/// <summary>Persist the current CAD Room Source settings (own transaction) — coalesced by the ViewModel.</summary>
-public class SaveSettingsRequest : TurboNameRequest
+/// <summary>
+/// Window-close cleanup in one API pass: revert the transient red role previews (if any) and persist the CAD
+/// Room Source settings (if dirty). Raised once from the ViewModel's close flow; its completion closes the
+/// window. The doc-close guard's forceClose bypasses this entirely (never touches a closing document).
+/// </summary>
+public class CloseCleanupRequest : TurboNameRequest
 {
+    /// <summary>Non-null ⇒ save these settings. Null ⇒ nothing dirty, skip the save.</summary>
     public Shared.Models.CadRoomSourceSettings Settings { get; set; }
+
+    /// <summary>True ⇒ revert every painted red role preview to its snapshotted prior override.</summary>
+    public bool RevertPreviews { get; set; }
 }
 
 /// <summary>
@@ -63,6 +71,18 @@ public class SetLayerVisibilityRequest : TurboNameRequest
 {
     public Autodesk.Revit.DB.ElementId SubId { get; set; }
     public bool Hidden { get; set; }
+}
+
+/// <summary>
+/// Paint or un-paint the transient red watershed preview on one region-gen-tagged layer. When painting,
+/// <see cref="EnsureVisible"/> un-hides the layer first so the red actually shows. Reverted on close (not
+/// persisted). See <see cref="LayerRolePreviewService"/>.
+/// </summary>
+public class SetLayerRolePreviewRequest : TurboNameRequest
+{
+    public Autodesk.Revit.DB.ElementId SubId { get; set; }
+    public bool Painted { get; set; }
+    public bool EnsureVisible { get; set; }
 }
 
 /// <summary>Status update sent from a pick/generate handler to the ViewModel during/after the loop.</summary>

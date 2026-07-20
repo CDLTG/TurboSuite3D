@@ -16,14 +16,14 @@ using TurboSuite.Shared.ViewModels;
 namespace TurboSuite.Name.ViewModels;
 
 /// <summary>
-/// CAD Room Source + Region-Generation-Layers configuration, extracted out of the global Settings dialog
-/// and hosted directly in the TurboName window (this config is consumed by nothing but TurboName). Owns the
-/// ACadSharp-backed discovery dropdowns, the "Pick from view" round-trip, and the linked-DWG source picker.
+/// CAD Room Source configuration, hosted directly in the TurboName window (consumed by nothing but
+/// TurboName). Holds the Block-mode fields + the mode toggle, the ACadSharp-backed block/tag discovery, and
+/// the "Pick from view" probe. The region-gen (W/D/A) and text-scope (Name/Ht) scopes are driven by the
+/// layer-table role tags via <see cref="SetRole"/>/<see cref="HasRole"/> — there are no typed layer boxes or
+/// link dropdowns.
 /// </summary>
 public class CadRoomSourceConfigViewModel : ViewModelBase
 {
-    public const string AllLinksLabel = "(All links)";
-
     private readonly UIDocument _uidoc;
     private readonly Dictionary<string, CadDocument> _docCache = new(StringComparer.OrdinalIgnoreCase);
     private bool _discoveryLoaded;
@@ -39,13 +39,16 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     private string _ceilingHeightLayer;
     private string _ceilingHeightBlockName;
     private string _ceilingHeightBlockTag;
-    private string _wallLayerNamesText;
-    private string _doorLayerNamesText;
-    private string _areaLayerNamesText;
     private string _regionTypeName;
-    private string _selectedSourceLink;
-    private string _selectedRoomNameLink;
-    private string _selectedCeilingHeightLink;
+    private string _roomNameLinkName = "";
+    private string _ceilingHeightLinkName = "";
+
+    // Region-gen scopes as file|layer entries (driven by the layer-table W/D/A toggles, no typed boxes).
+    private readonly List<string> _wallScopes = new();
+    private readonly List<string> _doorScopes = new();
+    private readonly List<string> _areaScopes = new();
+    // Legacy region-gen scope for any bare (unqualified) entry loaded from old settings; no UI, passed through.
+    private string _sourceLinkName = "";
 
     public bool IsBlockMode
     {
@@ -71,25 +74,15 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     public string CeilingHeightLayer { get => _ceilingHeightLayer; set => SetProperty(ref _ceilingHeightLayer, value); }
     public string CeilingHeightBlockName { get => _ceilingHeightBlockName; set => SetProperty(ref _ceilingHeightBlockName, value); }
     public string CeilingHeightBlockTag { get => _ceilingHeightBlockTag; set => SetProperty(ref _ceilingHeightBlockTag, value); }
-    public string WallLayerNamesText { get => _wallLayerNamesText; set => SetProperty(ref _wallLayerNamesText, value); }
-    public string DoorLayerNamesText { get => _doorLayerNamesText; set => SetProperty(ref _doorLayerNamesText, value); }
-    public string AreaLayerNamesText { get => _areaLayerNamesText; set => SetProperty(ref _areaLayerNamesText, value); }
     public string RegionTypeName { get => _regionTypeName; set => SetProperty(ref _regionTypeName, value); }
 
-    /// <summary>Region-generation source link (wall/door/area geometry) — legacy scope for bare region-gen layers.</summary>
-    public string SelectedSourceLink { get => _selectedSourceLink; set => SetProperty(ref _selectedSourceLink, value); }
+    /// <summary>Which linked DWG supplies room NAMES (set by the Name role tag on a layer row). "" = all links.</summary>
+    public string RoomNameLinkName { get => _roomNameLinkName; set => SetProperty(ref _roomNameLinkName, value); }
 
-    /// <summary>Which linked DWG supplies room NAMES. "(All links)" = every link. (TurboName-9 fix.)</summary>
-    public string SelectedRoomNameLink { get => _selectedRoomNameLink; set => SetProperty(ref _selectedRoomNameLink, value); }
-
-    /// <summary>Which linked DWG supplies ceiling HEIGHTS. "(All links)" = every link. (TurboName-9 fix.)</summary>
-    public string SelectedCeilingHeightLink { get => _selectedCeilingHeightLink; set => SetProperty(ref _selectedCeilingHeightLink, value); }
-
-    /// <summary>Linked-DWG file names in the active view, plus the "(All links)" option at the top.</summary>
-    public ObservableCollection<string> AvailableSourceLinks { get; } = new();
+    /// <summary>Which linked DWG supplies ceiling HEIGHTS (set by the Ht role tag). "" = all links.</summary>
+    public string CeilingHeightLinkName { get => _ceilingHeightLinkName; set => SetProperty(ref _ceilingHeightLinkName, value); }
 
     public ObservableCollection<string> AvailableBlockNames { get; } = new();
-    public ObservableCollection<string> AvailableLayers { get; } = new();
     public ObservableCollection<string> AvailableTags { get; } = new();
 
     public string DetectedText { get => _detectedText; set => SetProperty(ref _detectedText, value); }
@@ -104,7 +97,6 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     public CadRoomSourceConfigViewModel(CadRoomSourceSettings cadSettings, UIDocument uidoc)
     {
         _uidoc = uidoc;
-        PopulateSourceLinks();
         LoadCadSettings(cadSettings);
         PickFromViewCommand = new RelayCommand(() => PickFromViewRequested?.Invoke(), () => _canPick);
 
@@ -116,21 +108,73 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         catch { _canPick = false; }
     }
 
-    private void PopulateSourceLinks()
+    // ── Role-tag scope API (the layer table drives these; there are no typed boxes / link dropdowns) ──
+
+    /// <summary>Is the layer (<paramref name="file"/>,<paramref name="layer"/>) currently tagged with
+    /// <paramref name="role"/>? Used to seed each row's toggle state from saved settings.</summary>
+    public bool HasRole(LayerRole role, string file, string layer) => role switch
     {
-        AvailableSourceLinks.Add(AllLinksLabel);
-        if (_uidoc == null) return;
-        try
+        LayerRole.Wall => HasRegionGen(_wallScopes, file, layer),
+        LayerRole.Door => HasRegionGen(_doorScopes, file, layer),
+        LayerRole.Area => HasRegionGen(_areaScopes, file, layer),
+        LayerRole.Name => MatchesTextScope(_roomNameLinkName, RoomNameLayer, file, layer),
+        LayerRole.Height => MatchesTextScope(_ceilingHeightLinkName, CeilingHeightLayer, file, layer),
+        _ => false,
+    };
+
+    /// <summary>Apply a role toggle from the layer table. Region-gen roles (W/D/A) accumulate file|layer
+    /// entries; Name/Ht are single scopes that clicking sets (or clears). Fires a change notification so the
+    /// host marks the config dirty.</summary>
+    public void SetRole(LayerRole role, string file, string layer, bool on)
+    {
+        switch (role)
         {
-            var doc = _uidoc.Document;
-            var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var import in CadLinkResolver.GetLinkedImports(doc, doc.ActiveView))
-                if (CadLinkResolver.TryGetDwgPath(doc, import, out string path))
-                    names.Add(Path.GetFileName(path));
-            foreach (var n in names) AvailableSourceLinks.Add(n);
+            case LayerRole.Wall: SetRegionGen(_wallScopes, file, layer, on); break;
+            case LayerRole.Door: SetRegionGen(_doorScopes, file, layer, on); break;
+            case LayerRole.Area: SetRegionGen(_areaScopes, file, layer, on); break;
+            case LayerRole.Name:
+                RoomNameLayer = on ? layer : "";
+                RoomNameLinkName = on ? (file ?? "") : "";
+                break;
+            case LayerRole.Height:
+                CeilingHeightLayer = on ? layer : "";
+                CeilingHeightLinkName = on ? (file ?? "") : "";
+                break;
         }
-        catch { /* leave just the all-links option */ }
+        OnPropertyChanged(nameof(RegionTypeName)); // any notify marks the config dirty
     }
+
+    private static string ScopeKey(string file, string layer) =>
+        string.IsNullOrEmpty(file) ? layer : $"{file}|{layer}";
+
+    private bool HasRegionGen(List<string> scopes, string file, string layer)
+    {
+        foreach (var entry in scopes)
+        {
+            var (entryFile, entryLayer) = CadLinkScope.ParseScopedLayer(entry);
+            if (CadLinkScope.MatchesLayer(entryFile, entryLayer, layer, _sourceLinkName, file))
+                return true;
+        }
+        return false;
+    }
+
+    private void SetRegionGen(List<string> scopes, string file, string layer, bool on)
+    {
+        // Drop any entry (qualified or legacy-bare) that matches this row, then add the canonical file|layer.
+        scopes.RemoveAll(entry =>
+        {
+            var (ef, el) = CadLinkScope.ParseScopedLayer(entry);
+            return CadLinkScope.MatchesLayer(ef, el, layer, _sourceLinkName, file);
+        });
+        if (on) scopes.Add(ScopeKey(file, layer));
+    }
+
+    // A Name/Ht text scope matches a row when its layer matches AND its link includes the row's file
+    // (blank link = all links).
+    private static bool MatchesTextScope(string linkName, string scopeLayer, string file, string layer)
+        => !string.IsNullOrEmpty(scopeLayer)
+           && string.Equals(scopeLayer, layer, StringComparison.OrdinalIgnoreCase)
+           && CadLinkScope.Includes(linkName, file);
 
     /// <summary>
     /// The pick itself (raised on the shared external event as a <see cref="Services.PickLayerRequest"/>, so it
@@ -167,16 +211,17 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
 
             if (string.IsNullOrEmpty(layerName))
             {
-                DetectedText = "Detected: couldn't resolve a CAD layer here — use the dropdowns.";
+                DetectedText = "Detected: couldn't resolve a CAD layer here — use the layer list.";
                 return;
             }
 
             if (!CadLinkResolver.TryGetDwgPath(doc, import, out string dwgPath))
             {
-                DetectedText = "Detected: linked DWG not found on disk — use the dropdowns.";
+                DetectedText = "Detected: linked DWG not found on disk — use the layer list.";
                 return;
             }
 
+            string dwgFile = Path.GetFileName(dwgPath);
             var cadDoc = GetOrLoadCadDoc(dwgPath);
             double unitToFeet = CadLinkResolver.GetUnitToFeetFactor(cadDoc.Header.InsUnits);
 
@@ -187,7 +232,7 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
             var result = CadIntrospectionService.ResolveAtPoint(cadDoc, dwgX, dwgY, layerName);
             if (result == null)
             {
-                DetectedText = $"Detected: nothing on layer \"{layerName}\" here — use the dropdowns.";
+                DetectedText = $"Detected: nothing on layer \"{layerName}\" here — use the layer list.";
                 return;
             }
 
@@ -197,6 +242,9 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
             {
                 IsBlockMode = true;
                 BlockName = result.BlockName;
+                // Block carries both name and height — scope both to the picked DWG.
+                RoomNameLinkName = dwgFile;
+                CeilingHeightLinkName = dwgFile;
                 if (AvailableTags.Count == 0 && result.Tags != null)
                     foreach (var t in result.Tags) AvailableTags.Add(t);
 
@@ -209,9 +257,11 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
             }
             else
             {
+                // Text room name on this layer + link — the Name role tag on the matching row lights up.
                 IsTextMode = true;
                 RoomNameLayer = layerName;
-                DetectedText = $"Detected: Text on layer \"{layerName}\".";
+                RoomNameLinkName = dwgFile;
+                DetectedText = $"Detected: Text on layer \"{layerName}\" in {dwgFile}.";
             }
         }
         catch (IOException ex)
@@ -220,7 +270,7 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         }
         catch (Exception)
         {
-            DetectedText = "Detected: couldn't read the linked CAD here — use the dropdowns.";
+            DetectedText = "Detected: couldn't read the linked CAD here — use the layer list.";
         }
     }
 
@@ -235,7 +285,6 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         var doc = _uidoc.Document;
         var view = doc.ActiveView;
 
-        var layers = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var blocks = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var import in CadLinkResolver.GetLinkedImports(doc, view))
@@ -244,12 +293,9 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
             CadDocument cadDoc;
             try { cadDoc = GetOrLoadCadDoc(path); }
             catch { continue; }
-            foreach (var l in CadIntrospectionService.GetLayers(cadDoc)) layers.Add(l);
             foreach (var b in CadIntrospectionService.GetReferencedBlockNames(cadDoc)) blocks.Add(b);
         }
 
-        AvailableLayers.Clear();
-        foreach (var l in layers) AvailableLayers.Add(l);
         AvailableBlockNames.Clear();
         foreach (var b in blocks) AvailableBlockNames.Add(b);
         RefreshAvailableTags();
@@ -291,28 +337,16 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         CeilingHeightLayer = settings.CeilingHeightLayer ?? "";
         CeilingHeightBlockName = settings.CeilingHeightBlockName ?? "";
         CeilingHeightBlockTag = settings.CeilingHeightBlockTag ?? "";
-        WallLayerNamesText = string.Join(", ", settings.WallLayerNames ?? new List<string>());
-        DoorLayerNamesText = string.Join(", ", settings.DoorLayerNames ?? new List<string>());
-        AreaLayerNamesText = string.Join(", ", settings.AreaLayerNames ?? new List<string>());
         RegionTypeName = settings.RegionTypeName ?? "Room Region";
 
-        SelectedSourceLink = ResolveLinkSelection(settings.SourceLinkName);
-        SelectedRoomNameLink = ResolveLinkSelection(settings.RoomNameLinkName);
-        SelectedCeilingHeightLink = ResolveLinkSelection(settings.CeilingHeightLinkName);
-    }
+        _wallScopes.Clear(); _wallScopes.AddRange(settings.WallLayerNames ?? new List<string>());
+        _doorScopes.Clear(); _doorScopes.AddRange(settings.DoorLayerNames ?? new List<string>());
+        _areaScopes.Clear(); _areaScopes.AddRange(settings.AreaLayerNames ?? new List<string>());
 
-    /// <summary>Map a saved link file name to a dropdown selection, preserving a saved link even if it isn't
-    /// currently in the view. Blank ⇒ "(All links)".</summary>
-    private string ResolveLinkSelection(string saved)
-    {
-        string link = (saved ?? "").Trim();
-        if (link.Length > 0 && !AvailableSourceLinks.Contains(link, StringComparer.OrdinalIgnoreCase))
-            AvailableSourceLinks.Add(link);
-        return link.Length == 0 ? AllLinksLabel : link;
+        _sourceLinkName = settings.SourceLinkName ?? "";
+        RoomNameLinkName = settings.RoomNameLinkName ?? "";
+        CeilingHeightLinkName = settings.CeilingHeightLinkName ?? "";
     }
-
-    private static string LinkSelectionToModel(string selection)
-        => (selection == AllLinksLabel || selection == null) ? "" : selection.Trim();
 
     public CadRoomSourceSettings ToModel() => new()
     {
@@ -324,13 +358,13 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         CeilingHeightLayer = (CeilingHeightLayer ?? "").Trim(),
         CeilingHeightBlockName = (CeilingHeightBlockName ?? "").Trim(),
         CeilingHeightBlockTag = (CeilingHeightBlockTag ?? "").Trim(),
-        WallLayerNames = ParseCommaSeparated(WallLayerNamesText),
-        DoorLayerNames = ParseCommaSeparated(DoorLayerNamesText),
-        AreaLayerNames = ParseCommaSeparated(AreaLayerNamesText),
+        WallLayerNames = new List<string>(_wallScopes),
+        DoorLayerNames = new List<string>(_doorScopes),
+        AreaLayerNames = new List<string>(_areaScopes),
         RegionTypeName = (RegionTypeName ?? "Room Region").Trim(),
-        SourceLinkName = LinkSelectionToModel(SelectedSourceLink),
-        RoomNameLinkName = LinkSelectionToModel(SelectedRoomNameLink),
-        CeilingHeightLinkName = LinkSelectionToModel(SelectedCeilingHeightLink)
+        SourceLinkName = (_sourceLinkName ?? "").Trim(),
+        RoomNameLinkName = (RoomNameLinkName ?? "").Trim(),
+        CeilingHeightLinkName = (CeilingHeightLinkName ?? "").Trim()
     };
 
     private static List<string> ParseCommaSeparated(string text)
