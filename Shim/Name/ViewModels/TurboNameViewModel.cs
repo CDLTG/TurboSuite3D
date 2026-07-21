@@ -84,6 +84,7 @@ public class TurboNameViewModel : ViewModelBase
         // Subscribe AFTER construction/LoadCadSettings so the initial load doesn't mark the config dirty.
         CadConfig.PropertyChanged += (_, __) => SettingsDirty = true;
         CadConfig.PickFromViewRequested += OnPickFromView;
+        CadConfig.PickHeightBlockRequested += OnPickHeightBlock;
 
         BuildLayers(uidoc?.Document, view);
         SyncRolesFromConfig(); // seed each row's role toggles from the loaded settings
@@ -151,6 +152,33 @@ public class TurboNameViewModel : ViewModelBase
         }
     }
 
+    // Paint-on-load (TurboName-10): when the window opens against a job whose W/D/A tags were saved last
+    // session, SyncRolesFromConfig re-lights the toggles silently — but the transient red preview is off, so the
+    // toggles and the view drift apart. Re-establish the red for every tagged layer in ONE batched raise (a
+    // per-row loop would drop every raise after the first past the shared-event gate). Called once, on window
+    // load. After this, the live per-toggle paint path in UpdatePreview keeps them in sync.
+    public void PaintTaggedPreviewsOnLoad()
+    {
+        var toPaint = new List<CadLayerRowViewModel>();
+        foreach (var row in Layers)
+            if (row.IsRegionGenTagged && !_painted.Contains(row.SubId))
+                toPaint.Add(row);
+        if (toPaint.Count == 0) return;
+
+        var subIds = new List<ElementId>();
+        var flipped = new List<CadLayerRowViewModel>();
+        foreach (var row in toPaint)
+        {
+            if (!row.IsVisible) { row.SetVisibleSilently(true); flipped.Add(row); } // request un-hides too
+            subIds.Add(row.SubId);
+        }
+
+        if (RaiseUser(new PaintRolePreviewsRequest { SubIds = subIds }))
+            foreach (var row in toPaint) _painted.Add(row.SubId);
+        else
+            foreach (var row in flipped) row.SetVisibleSilently(false); // event busy — undo optimistic show
+    }
+
     private bool LayerFilter(object item)
     {
         if (item is not CadLayerRowViewModel row) return false;
@@ -168,6 +196,12 @@ public class TurboNameViewModel : ViewModelBase
     {
         // After the pick stamps RoomNameLayer/link (or block scope), re-light the matching row's Name tag.
         RaiseUser(new PickLayerRequest { Pick = CadConfig.RunPick, OnFinished = SyncRolesFromConfig });
+    }
+
+    private void OnPickHeightBlock()
+    {
+        // Text-mode height block: sets its own block + tag pool; no row role to re-sync.
+        RaiseUser(new PickLayerRequest { Pick = CadConfig.RunHeightBlockPick });
     }
 
     private void OnAssign()

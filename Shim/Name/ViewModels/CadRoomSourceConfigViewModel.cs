@@ -33,7 +33,6 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     private bool _isBlockMode = true;
     private bool _isTextMode;
     private string _blockName;
-    private string _roomNameTagsText;
     private string _ceilingHeightTag;
     private string _roomNameLayer;
     private string _ceilingHeightLayer;
@@ -68,12 +67,27 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         set { if (SetProperty(ref _blockName, value)) RefreshAvailableTags(); }
     }
 
-    public string RoomNameTagsText { get => _roomNameTagsText; set => SetProperty(ref _roomNameTagsText, value); }
-    public string CeilingHeightTag { get => _ceilingHeightTag; set => SetProperty(ref _ceilingHeightTag, value); }
+    /// <summary>Attribute tags (ordered) whose values concatenate into the room name — no free typing; the user
+    /// adds/removes them from the block's attribute pool via the chips control. Pick-only workflow.</summary>
+    public ObservableCollection<string> RoomNameTags { get; } = new();
+
+    public string CeilingHeightTag
+    {
+        get => _ceilingHeightTag;
+        set { if (SetProperty(ref _ceilingHeightTag, value)) RefreshUnassignedTags(); }
+    }
     public string RoomNameLayer { get => _roomNameLayer; set => SetProperty(ref _roomNameLayer, value); }
     public string CeilingHeightLayer { get => _ceilingHeightLayer; set => SetProperty(ref _ceilingHeightLayer, value); }
-    public string CeilingHeightBlockName { get => _ceilingHeightBlockName; set => SetProperty(ref _ceilingHeightBlockName, value); }
-    public string CeilingHeightBlockTag { get => _ceilingHeightBlockTag; set => SetProperty(ref _ceilingHeightBlockTag, value); }
+    public string CeilingHeightBlockName
+    {
+        get => _ceilingHeightBlockName;
+        set { if (SetProperty(ref _ceilingHeightBlockName, value)) RefreshAvailableCeilingBlockTags(); }
+    }
+    public string CeilingHeightBlockTag
+    {
+        get => _ceilingHeightBlockTag;
+        set { if (SetProperty(ref _ceilingHeightBlockTag, value)) RefreshUnassignedCeilingBlockTags(); }
+    }
     public string RegionTypeName { get => _regionTypeName; set => SetProperty(ref _regionTypeName, value); }
 
     /// <summary>Which linked DWG supplies room NAMES (set by the Name role tag on a layer row). "" = all links.</summary>
@@ -82,23 +96,51 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     /// <summary>Which linked DWG supplies ceiling HEIGHTS (set by the Ht role tag). "" = all links.</summary>
     public string CeilingHeightLinkName { get => _ceilingHeightLinkName; set => SetProperty(ref _ceilingHeightLinkName, value); }
 
-    public ObservableCollection<string> AvailableBlockNames { get; } = new();
+    /// <summary>Full attribute-tag pool of the main (room-name) block — the source for the two block-mode
+    /// dropdowns below. Populated by discovery / Pick.</summary>
     public ObservableCollection<string> AvailableTags { get; } = new();
+
+    /// <summary>Unassigned tags = pool − room-name tags − the ceiling-height tag. Both block-mode dropdowns (add
+    /// room-name tag, pick ceiling-height tag) offer this same set; each assigned tag shows as a pill instead.</summary>
+    public ObservableCollection<string> UnassignedTags { get; } = new();
+
+    /// <summary>Attribute-tag pool of the separate text-mode height block (its own block ⇒ its own pool, no
+    /// shared exclusion). Populated by "Pick height block".</summary>
+    public ObservableCollection<string> AvailableCeilingBlockTags { get; } = new();
+
+    /// <summary>Height-block pool minus the currently-selected height-block tag — offered by that dropdown; the
+    /// selected tag shows as a pill instead (mirrors the block-mode room-name / ceiling-height pattern).</summary>
+    public ObservableCollection<string> UnassignedCeilingBlockTags { get; } = new();
 
     public string DetectedText { get => _detectedText; set => SetProperty(ref _detectedText, value); }
 
     public ICommand PickFromViewCommand { get; }
+    public ICommand PickHeightBlockCommand { get; }
+    public ICommand RemoveRoomNameTagCommand { get; }
+    // ✕-clear affordances for the single-select dropdowns (they have no blank entry — this is how you un-set).
+    public ICommand ClearCeilingHeightTagCommand { get; }
+    public ICommand ClearHeightBlockCommand { get; }
+    public ICommand ClearHeightBlockTagCommand { get; }
 
     /// <summary>Raised when the user clicks "Pick from view" — the host ViewModel queues a
     /// <see cref="Services.PickLayerRequest"/> on the shared external event whose pick action is
     /// <see cref="RunPick"/> (which must run in a valid Revit API context).</summary>
     public event Action PickFromViewRequested;
 
+    /// <summary>Raised when the user clicks "Pick height block" (text mode) — same shared-event pick path, but
+    /// the action is <see cref="RunHeightBlockPick"/>.</summary>
+    public event Action PickHeightBlockRequested;
+
     public CadRoomSourceConfigViewModel(CadRoomSourceSettings cadSettings, UIDocument uidoc)
     {
         _uidoc = uidoc;
         LoadCadSettings(cadSettings);
         PickFromViewCommand = new RelayCommand(() => PickFromViewRequested?.Invoke(), () => _canPick);
+        PickHeightBlockCommand = new RelayCommand(() => PickHeightBlockRequested?.Invoke(), () => _canPick);
+        RemoveRoomNameTagCommand = new RelayCommand<string>(RemoveRoomNameTag);
+        ClearCeilingHeightTagCommand = new RelayCommand(() => CeilingHeightTag = "");
+        ClearHeightBlockTagCommand = new RelayCommand(() => CeilingHeightBlockTag = "");
+        ClearHeightBlockCommand = new RelayCommand(() => { CeilingHeightBlockName = ""; CeilingHeightBlockTag = ""; });
 
         try
         {
@@ -106,6 +148,55 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
                 && CadLinkResolver.GetLinkedImports(_uidoc.Document, _uidoc.Document.ActiveView).Count > 0;
         }
         catch { _canPick = false; }
+    }
+
+    // ── Block-mode attribute-tag assignment (chips + add-dropdown; no free typing) ──
+
+    /// <summary>Append a tag to the ordered room-name list and refresh both dropdowns' candidate pools.</summary>
+    public void AddRoomNameTag(string tag)
+    {
+        tag = (tag ?? "").Trim();
+        if (tag.Length == 0 || RoomNameTags.Contains(tag)) return;
+        RoomNameTags.Add(tag);
+        RefreshUnassignedTags();
+        OnPropertyChanged(nameof(RoomNameTags)); // mark the config dirty (collection change isn't auto-observed)
+    }
+
+    /// <summary>Remove a tag from the room-name list, returning it to the candidate pools.</summary>
+    public void RemoveRoomNameTag(string tag)
+    {
+        if (tag == null || !RoomNameTags.Remove(tag)) return;
+        RefreshUnassignedTags();
+        OnPropertyChanged(nameof(RoomNameTags));
+    }
+
+    // Recompute the single unassigned-tags pool both block-mode dropdowns offer = tag pool − room-name tags −
+    // the ceiling-height tag. Each assigned tag shows as a pill instead. Non-clearing sync so an open dropdown
+    // isn't disturbed mid-refresh.
+    private void RefreshUnassignedTags()
+    {
+        var height = (CeilingHeightTag ?? "").Trim();
+        SyncCollection(UnassignedTags, AvailableTags.Where(t =>
+            !RoomNameTags.Contains(t) && !t.Equals(height, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    // Height-block dropdown pool = its block's tags − the selected height-block tag (shown as a pill instead).
+    private void RefreshUnassignedCeilingBlockTags()
+    {
+        var selected = (CeilingHeightBlockTag ?? "").Trim();
+        SyncCollection(UnassignedCeilingBlockTags,
+            AvailableCeilingBlockTags.Where(t => !t.Equals(selected, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    // Reconcile an ObservableCollection to a desired set in place — remove what's gone, append what's new —
+    // without a full Clear(), so a ComboBox bound to it keeps its selection through the update.
+    private static void SyncCollection(ObservableCollection<string> target, IEnumerable<string> desired)
+    {
+        var want = desired.ToList();
+        for (int i = target.Count - 1; i >= 0; i--)
+            if (!want.Contains(target[i], StringComparer.OrdinalIgnoreCase)) target.RemoveAt(i);
+        foreach (var t in want)
+            if (!target.Contains(t, StringComparer.OrdinalIgnoreCase)) target.Add(t);
     }
 
     // ── Role-tag scope API (the layer table drives these; there are no typed boxes / link dropdowns) ──
@@ -241,12 +332,18 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
             if (result.IsBlock)
             {
                 IsBlockMode = true;
-                BlockName = result.BlockName;
+                bool blockChanged = !string.Equals((BlockName ?? "").Trim(),
+                    (result.BlockName ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+                BlockName = result.BlockName; // setter repopulates AvailableTags for the picked block
+                // A different block ⇒ the old tag assignments belong to a block that's no longer selected.
+                if (blockChanged) { RoomNameTags.Clear(); CeilingHeightTag = ""; }
                 // Block carries both name and height — scope both to the picked DWG.
                 RoomNameLinkName = dwgFile;
                 CeilingHeightLinkName = dwgFile;
                 if (AvailableTags.Count == 0 && result.Tags != null)
                     foreach (var t in result.Tags) AvailableTags.Add(t);
+                RefreshUnassignedTags();
+                OnPropertyChanged(nameof(RoomNameTags));
 
                 string attrs = (result.TagValues != null && result.TagValues.Count > 0)
                     ? "  →  " + string.Join(",  ",
@@ -274,6 +371,80 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Text-mode "Pick height block": click an INSERT in the linked CAD to set the separate
+    /// ceiling-height block and load its own attribute-tag pool. Room names still come from the N layer, so this
+    /// block's tag stands alone (no shared exclusion). Runs in a valid API context via the shared event.</summary>
+    public void RunHeightBlockPick()
+    {
+        if (_uidoc == null) return;
+        var doc = _uidoc.Document;
+
+        Reference reference;
+        try
+        {
+            reference = _uidoc.Selection.PickObject(
+                Autodesk.Revit.UI.Selection.ObjectType.PointOnElement,
+                new ImportInstanceSelectionFilter(_uidoc.Document),
+                "Click the ceiling-height block in the linked CAD");
+        }
+        catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+        {
+            return; // Esc — leave everything as-is
+        }
+
+        try
+        {
+            if (doc.GetElement(reference.ElementId) is not ImportInstance import) return;
+
+            string layerName = null;
+            var geomObj = import.GetGeometryObjectFromReference(reference);
+            if (geomObj != null && doc.GetElement(geomObj.GraphicsStyleId) is GraphicsStyle style)
+                layerName = style.GraphicsStyleCategory?.Name;
+
+            if (!CadLinkResolver.TryGetDwgPath(doc, import, out string dwgPath))
+            {
+                DetectedText = "Height block: linked DWG not found on disk.";
+                return;
+            }
+
+            var cadDoc = GetOrLoadCadDoc(dwgPath);
+            double unitToFeet = CadLinkResolver.GetUnitToFeetFactor(cadDoc.Header.InsUnits);
+            XYZ local = import.GetTransform().Inverse.OfPoint(reference.GlobalPoint);
+            var result = CadIntrospectionService.ResolveAtPoint(
+                cadDoc, local.X / unitToFeet, local.Y / unitToFeet, layerName);
+
+            if (result == null || !result.IsBlock)
+            {
+                DetectedText = "Height block: that isn't a block — click an INSERT (block reference).";
+                return;
+            }
+
+            EnsureDiscoveryLoaded();
+            bool changed = !string.Equals((CeilingHeightBlockName ?? "").Trim(),
+                (result.BlockName ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+            CeilingHeightBlockName = result.BlockName; // setter repopulates AvailableCeilingBlockTags
+            if (changed) CeilingHeightBlockTag = "";
+            if (AvailableCeilingBlockTags.Count == 0 && result.Tags != null)
+                foreach (var t in result.Tags) AvailableCeilingBlockTags.Add(t);
+            RefreshUnassignedCeilingBlockTags();
+
+            string attrs = (result.TagValues != null && result.TagValues.Count > 0)
+                ? "  →  " + string.Join(",  ",
+                    result.TagValues.Select(kv =>
+                        $"{(string.IsNullOrEmpty(kv.Value) ? "(empty)" : kv.Value)}={kv.Key}"))
+                : "";
+            DetectedText = $"Height block: \"{result.BlockName}\".{attrs}";
+        }
+        catch (IOException ex)
+        {
+            DetectedText = ex.Message;
+        }
+        catch (Exception)
+        {
+            DetectedText = "Height block: couldn't read the linked CAD here.";
+        }
+    }
+
     /// <summary>Lazily unions layers + block names across every linked import in the active view (first
     /// dropdown open / first pick — not on window open, to avoid a multi-second freeze).</summary>
     public void EnsureDiscoveryLoaded()
@@ -285,20 +456,17 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         var doc = _uidoc.Document;
         var view = doc.ActiveView;
 
-        var blocks = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-
+        // Warm the DWG cache for every linked import so the tag pools (read per-block below) resolve. Block
+        // names themselves are no longer listed — blocks are chosen only by Pick-from-view, never typed.
         foreach (var import in CadLinkResolver.GetLinkedImports(doc, view))
         {
             if (!CadLinkResolver.TryGetDwgPath(doc, import, out string path)) continue;
-            CadDocument cadDoc;
-            try { cadDoc = GetOrLoadCadDoc(path); }
-            catch { continue; }
-            foreach (var b in CadIntrospectionService.GetReferencedBlockNames(cadDoc)) blocks.Add(b);
+            try { GetOrLoadCadDoc(path); }
+            catch { /* skip unreadable/locked DWGs */ }
         }
 
-        AvailableBlockNames.Clear();
-        foreach (var b in blocks) AvailableBlockNames.Add(b);
         RefreshAvailableTags();
+        RefreshAvailableCeilingBlockTags();
     }
 
     private CadDocument GetOrLoadCadDoc(string path)
@@ -314,16 +482,31 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     private void RefreshAvailableTags()
     {
         AvailableTags.Clear();
-        if (!_discoveryLoaded) return;
-
         string block = (BlockName ?? "").Trim();
-        if (block.Length == 0) return;
+        if (_discoveryLoaded && block.Length > 0)
+        {
+            var tags = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cadDoc in _docCache.Values)
+                foreach (var t in CadIntrospectionService.GetAttributeTags(cadDoc, block))
+                    tags.Add(t);
+            foreach (var t in tags) AvailableTags.Add(t);
+        }
+        RefreshUnassignedTags(); // keep the shared unassigned pool in sync with the tag pool
+    }
 
-        var tags = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var cadDoc in _docCache.Values)
-            foreach (var t in CadIntrospectionService.GetAttributeTags(cadDoc, block))
-                tags.Add(t);
-        foreach (var t in tags) AvailableTags.Add(t);
+    private void RefreshAvailableCeilingBlockTags()
+    {
+        AvailableCeilingBlockTags.Clear();
+        string block = (CeilingHeightBlockName ?? "").Trim();
+        if (_discoveryLoaded && block.Length > 0)
+        {
+            var tags = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cadDoc in _docCache.Values)
+                foreach (var t in CadIntrospectionService.GetAttributeTags(cadDoc, block))
+                    tags.Add(t);
+            foreach (var t in tags) AvailableCeilingBlockTags.Add(t);
+        }
+        RefreshUnassignedCeilingBlockTags();
     }
 
     private void LoadCadSettings(CadRoomSourceSettings settings)
@@ -331,7 +514,8 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         IsBlockMode = settings.Mode != "Text";
         IsTextMode = settings.Mode == "Text";
         BlockName = settings.BlockName ?? "";
-        RoomNameTagsText = string.Join(", ", settings.RoomNameTags ?? new List<string>());
+        RoomNameTags.Clear();
+        foreach (var t in settings.RoomNameTags ?? new List<string>()) RoomNameTags.Add(t);
         CeilingHeightTag = settings.CeilingHeightTag ?? "";
         RoomNameLayer = settings.RoomNameLayer ?? "";
         CeilingHeightLayer = settings.CeilingHeightLayer ?? "";
@@ -346,13 +530,24 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         _sourceLinkName = settings.SourceLinkName ?? "";
         RoomNameLinkName = settings.RoomNameLinkName ?? "";
         CeilingHeightLinkName = settings.CeilingHeightLinkName ?? "";
+
+        // Seed the tag pools from saved assignments so the dropdowns can show their selected values before the
+        // (deferred, multi-second) CAD discovery runs. Discovery later unions in the rest of the block's tags.
+        foreach (var t in RoomNameTags)
+            if (!AvailableTags.Contains(t)) AvailableTags.Add(t);
+        if (CeilingHeightTag.Length > 0 && !AvailableTags.Contains(CeilingHeightTag))
+            AvailableTags.Add(CeilingHeightTag);
+        if (CeilingHeightBlockTag.Length > 0 && !AvailableCeilingBlockTags.Contains(CeilingHeightBlockTag))
+            AvailableCeilingBlockTags.Add(CeilingHeightBlockTag);
+        RefreshUnassignedTags();
+        RefreshUnassignedCeilingBlockTags();
     }
 
     public CadRoomSourceSettings ToModel() => new()
     {
         Mode = IsTextMode ? "Text" : "Block",
         BlockName = (BlockName ?? "").Trim(),
-        RoomNameTags = ParseCommaSeparated(RoomNameTagsText),
+        RoomNameTags = new List<string>(RoomNameTags),
         CeilingHeightTag = (CeilingHeightTag ?? "").Trim(),
         RoomNameLayer = (RoomNameLayer ?? "").Trim(),
         CeilingHeightLayer = (CeilingHeightLayer ?? "").Trim(),
@@ -367,10 +562,4 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         CeilingHeightLinkName = (CeilingHeightLinkName ?? "").Trim()
     };
 
-    private static List<string> ParseCommaSeparated(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return new List<string>();
-        return text.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-    }
 }

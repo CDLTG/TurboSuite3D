@@ -75,6 +75,10 @@ public class TurboNameApiHandler : IExternalEventHandler
                     RunRolePreview(preview);
                     Finish(request);
                     break;
+                case PaintRolePreviewsRequest paintAll:
+                    RunPaintRolePreviews(paintAll);
+                    Finish(request);
+                    break;
                 case CloseCleanupRequest cleanup:
                     RunCloseCleanup(cleanup);
                     Finish(request);
@@ -462,6 +466,24 @@ public class TurboNameApiHandler : IExternalEventHandler
             else
             {
                 RolePreview.Unpaint(_view, preview.SubId);
+            }
+            tx.Commit();
+        }
+        _uidoc.RefreshActiveView();
+    }
+
+    // Paint-on-load (TurboName-10): re-establish the red preview for every already-tagged layer in one
+    // transaction, un-hiding each first so the red shows — mirrors RunRolePreview's paint branch, batched.
+    private void RunPaintRolePreviews(PaintRolePreviewsRequest request)
+    {
+        if (request.SubIds == null || request.SubIds.Count == 0) return;
+        using (var tx = new Transaction(_doc, "TurboName - Restore Layer Previews"))
+        {
+            tx.Start();
+            foreach (var subId in request.SubIds)
+            {
+                LinkedCadLayerService.ApplyHidden(_view, subId, false); // un-hide so red shows
+                RolePreview.Paint(_view, subId);
             }
             tx.Commit();
         }

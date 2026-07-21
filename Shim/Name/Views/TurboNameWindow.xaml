@@ -5,7 +5,7 @@
     Title="TurboName"
     SizeToContent="Height" Width="520"
     MinWidth="500"
-    WindowStartupLocation="CenterScreen"
+    WindowStartupLocation="Manual"
     FontFamily="Segoe UI" FontSize="11"
     ResizeMode="NoResize">
 
@@ -54,6 +54,42 @@
             <Style x:Key="RoleToggleBlue" TargetType="ToggleButton" BasedOn="{StaticResource RoleToggleBase}">
                 <Setter Property="Tag">
                     <Setter.Value><SolidColorBrush Color="#2B579A"/></Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Rounded, borderless pill for assigned tags (Room Name chips + the Ceiling Height value). Muted
+                 fill, no border — deliberately unlike the squared, bordered buttons elsewhere. -->
+            <Style x:Key="TagPill" TargetType="Border">
+                <Setter Property="Background" Value="#EDEFF2"/>
+                <Setter Property="CornerRadius" Value="9"/>
+                <Setter Property="Padding" Value="9,2"/>
+                <Setter Property="Margin" Value="0,0,5,3"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+
+            <!-- Borderless glyph button (the ✕ on chips and the clear-affordance beside single-selects). No
+                 button chrome — just the glyph, muted, darkening on hover — so it never reads as a button. -->
+            <Style x:Key="IconButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Foreground" Value="#999999"/>
+                <Setter Property="FontSize" Value="10"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="#D01E1E"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
                 </Setter>
             </Style>
         </ResourceDictionary>
@@ -173,12 +209,13 @@
                                        Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- Block mode fields -->
+                        <!-- Block mode fields (pick-driven; no free typing) -->
                         <StackPanel Visibility="{Binding CadConfig.IsBlockMode, Converter={StaticResource BoolToVis}}"
                                     Margin="0,0,0,4">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -189,27 +226,68 @@
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Block Name:"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <ComboBox Grid.Row="0" Grid.Column="1"
-                                          IsEditable="True" IsTextSearchEnabled="True"
-                                          ItemsSource="{Binding CadConfig.AvailableBlockNames}"
-                                          Text="{Binding CadConfig.BlockName, UpdateSourceTrigger=PropertyChanged}"
-                                          DropDownOpened="OnDiscoveryDropDownOpened" Margin="0,0,0,6"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center"
+                                           Margin="0,0,0,6" FontWeight="SemiBold" Text="{Binding CadConfig.BlockName}"/>
 
+                                <!-- Row: dropdown (left) assigns; pills (right) show what's assigned -->
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Room Name Tags:"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <TextBox Grid.Row="1" Grid.Column="1"
-                                         Text="{Binding CadConfig.RoomNameTagsText, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,0,0,6"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="RoomNameAddCombo"
+                                          VerticalAlignment="Center" Margin="0,0,8,6"
+                                          ItemsSource="{Binding CadConfig.UnassignedTags}"
+                                          SelectionChanged="RoomNameAddCombo_SelectionChanged"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"
+                                          ToolTip="Add an attribute to the room name (joined in the order you add them)"/>
+                                <ItemsControl Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Margin="0,0,0,6"
+                                              ItemsSource="{Binding CadConfig.RoomNameTags}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource TagPill}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="#333333"/>
+                                                    <Button Content="✕" Margin="6,0,0,0" ToolTip="Remove"
+                                                            Style="{StaticResource IconButton}"
+                                                            Command="{Binding DataContext.CadConfig.RemoveRoomNameTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Ceiling Height Tag:"
                                            VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox Grid.Row="2" Grid.Column="1"
-                                          IsEditable="True" IsTextSearchEnabled="True"
-                                          ItemsSource="{Binding CadConfig.AvailableTags}"
-                                          Text="{Binding CadConfig.CeilingHeightTag, UpdateSourceTrigger=PropertyChanged}"
-                                          DropDownOpened="OnDiscoveryDropDownOpened"/>
+                                <ComboBox Grid.Row="2" Grid.Column="1" x:Name="CeilingHeightCombo"
+                                          VerticalAlignment="Center" Margin="0,0,8,0"
+                                          ItemsSource="{Binding CadConfig.UnassignedTags}"
+                                          SelectionChanged="CeilingHeightCombo_SelectionChanged"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"
+                                          ToolTip="Pick the attribute that holds the ceiling height"/>
+                                <Border Grid.Row="2" Grid.Column="2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource TagPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CadConfig.CeilingHeightTag}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CadConfig.CeilingHeightTag}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding CadConfig.CeilingHeightTag}" VerticalAlignment="Center" Foreground="#333333"/>
+                                        <Button Content="✕" Margin="6,0,0,0" ToolTip="Clear"
+                                                Style="{StaticResource IconButton}"
+                                                Command="{Binding CadConfig.ClearCeilingHeightTagCommand}"/>
+                                    </StackPanel>
+                                </Border>
                             </Grid>
-                            <TextBlock Text="Room Name Tags: comma-separated, concatenated in order (e.g., 003, 002)"
+                            <TextBlock Text="Room name = the tag values joined in the order added. All tags come from the picked block — no typing."
                                        Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -220,6 +298,7 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -228,18 +307,59 @@
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Height Block (opt):"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <ComboBox Grid.Row="0" Grid.Column="1"
-                                          IsEditable="True" IsTextSearchEnabled="True"
-                                          ItemsSource="{Binding CadConfig.AvailableBlockNames}"
-                                          Text="{Binding CadConfig.CeilingHeightBlockName, UpdateSourceTrigger=PropertyChanged}"
-                                          DropDownOpened="OnDiscoveryDropDownOpened" Margin="0,0,0,6"/>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Button Content="Pick height block…" Command="{Binding CadConfig.PickHeightBlockCommand}"
+                                            Style="{StaticResource RevitButtonStyle}" Padding="10,3"
+                                            ToolTip="Click the ceiling-height block in the linked CAD."/>
+                                    <TextBlock Text="{Binding CadConfig.CeilingHeightBlockName}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    <Button Content="✕" Margin="6,0,0,0" ToolTip="Clear height block"
+                                            Command="{Binding CadConfig.ClearHeightBlockCommand}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CadConfig.CeilingHeightBlockName}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding CadConfig.CeilingHeightBlockName}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Height Block Tag:"
                                            VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Grid.Row="1" Grid.Column="1"
-                                         Text="{Binding CadConfig.CeilingHeightBlockTag, UpdateSourceTrigger=PropertyChanged}"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="HeightBlockTagCombo"
+                                          VerticalAlignment="Center" Margin="0,0,8,0"
+                                          ItemsSource="{Binding CadConfig.UnassignedCeilingBlockTags}"
+                                          SelectionChanged="HeightBlockTagCombo_SelectionChanged"
+                                          DropDownOpened="OnDiscoveryDropDownOpened"
+                                          ToolTip="Pick the attribute that holds the ceiling height"/>
+                                <Border Grid.Row="1" Grid.Column="2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource TagPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CadConfig.CeilingHeightBlockTag}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CadConfig.CeilingHeightBlockTag}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding CadConfig.CeilingHeightBlockTag}" VerticalAlignment="Center" Foreground="#333333"/>
+                                        <Button Content="✕" Margin="6,0,0,0" ToolTip="Clear"
+                                                Style="{StaticResource IconButton}"
+                                                Command="{Binding CadConfig.ClearHeightBlockTagCommand}"/>
+                                    </StackPanel>
+                                </Border>
                             </Grid>
-                            <TextBlock Text="Tag the room-name layer N and the height layer H on the rows above. Optionally, heights can instead come from a block — set it here (leave blank to use the H layer)."
+                            <TextBlock Text="Tag the room-name layer N and the height layer H on the rows above. Optionally, heights can instead come from a block — Pick it here (leave blank to use the H layer)."
                                        Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </StackPanel>
@@ -293,13 +413,13 @@
                                     </Style.Triggers>
                                 </Style>
                             </StackPanel.Style>
-                            <Button Content="Auto-generate" Width="100" Margin="0,0,8,0"
+                            <Button Content="Auto-generate" MinWidth="100" Margin="0,0,8,0"
                                     Style="{StaticResource RevitButtonStyle}"
                                     Command="{Binding AutoGenerateCommand}"/>
-                            <Button Content="Rectangle" Width="80" Margin="0,0,8,0"
+                            <Button Content="Rectangle" MinWidth="80" Margin="0,0,8,0"
                                     Style="{StaticResource RevitButtonStyle}"
                                     Command="{Binding RectangleCommand}"/>
-                            <Button Content="Polygon" Width="80"
+                            <Button Content="Polygon" MinWidth="80"
                                     Style="{StaticResource RevitButtonStyle}"
                                     Command="{Binding PolygonCommand}"/>
                         </StackPanel>
