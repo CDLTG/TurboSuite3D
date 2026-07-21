@@ -66,7 +66,7 @@ public class CadRoomSourceSettings
     /// </summary>
     public string SourceLinkName { get; set; } = "";
 
-    // ── Per-purpose room-source link scopes (TurboName-9 fix) ──
+    // ── Per-purpose room-source link scopes (plan+RCP double-seed fix) ──
     // The room extractor historically read EVERY linked DWG, so a plan + RCP sharing a room-name layer double-
     // seeded each room and split it in half. These two scopes disambiguate the name source from the height
     // source independently. Blank = all links (case-insensitive filename match, via CadLinkScope.Includes).

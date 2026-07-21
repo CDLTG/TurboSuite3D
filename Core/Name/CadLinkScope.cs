@@ -5,8 +5,8 @@ namespace TurboSuite.Name;
 /// <summary>
 /// Pure link-scope matching for TurboName's per-purpose CAD scopes (room-name / ceiling-height / region-gen
 /// source) and for the <c>file|layer</c>-qualified region-gen layer entries. Kept Revit-free in Core so the
-/// disambiguation that kills TurboName-9 (a plan + RCP sharing a room-name layer double-seeding each room) is
-/// pinned by unit tests. The shim extractors resolve live subcategory ids and DWG paths, then call these.
+/// disambiguation that kills the plan+RCP double-seed (a plan + RCP sharing a room-name layer double-seeding
+/// each room) is pinned by unit tests. The shim extractors resolve live subcategory ids and DWG paths, then call these.
 /// </summary>
 public static class CadLinkScope
 {

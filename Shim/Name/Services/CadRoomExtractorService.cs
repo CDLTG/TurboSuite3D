@@ -42,7 +42,7 @@ public static class CadRoomExtractorService
             string dwgPath = ModelPathUtils.ConvertModelPathToUserVisiblePath(extRef.GetAbsolutePath());
             if (!File.Exists(dwgPath)) continue;
 
-            // TurboName-9: scope names and heights to their own link independently. The room extractor used to
+            // Scope names and heights to their own link independently. The room extractor used to
             // read EVERY linked DWG, so a plan + RCP sharing a room-name layer seeded each room twice and split
             // it in half. Blank scope = all links. Skip the (expensive) DWG read when this link supplies neither.
             string dwgFile = Path.GetFileName(dwgPath);

@@ -5,7 +5,7 @@ namespace TurboSuite.Tests
 {
     /// <summary>
     /// Oracle tests for TurboName's Revit-free link-scope matching (Core/Name/CadLinkScope.cs) — the
-    /// disambiguation that kills TurboName-9 (a plan + RCP sharing a room-name layer double-seeding each room).
+    /// disambiguation that kills the plan+RCP double-seed (a plan + RCP sharing a room-name layer double-seeding each room).
     /// </summary>
     public class CadLinkScopeTests
     {
@@ -73,7 +73,7 @@ namespace TurboSuite.Tests
         [Fact]
         public void MatchesLayer_QualifiedEntry_MatchesOnlyItsOwnFile()
         {
-            // Entry scoped to the plan must not match the same layer name in the RCP — this is TurboName-9.
+            // Entry scoped to the plan must not match the same layer name in the RCP — this is the plan+RCP double-seed.
             Assert.True(CadLinkScope.MatchesLayer("Floor Plan.dwg", "WALL_INTR", "wall_intr",
                 legacyScope: "", dwgFileName: "Floor Plan.dwg"));
             Assert.False(CadLinkScope.MatchesLayer("Floor Plan.dwg", "WALL_INTR", "WALL_INTR",
