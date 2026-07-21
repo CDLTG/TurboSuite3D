@@ -10,9 +10,9 @@ The window has three sections in job-setup order — all editing happens inline;
 
 1. **Linked CAD Layers** — the config surface. Every layer of every linked CAD (grouped per file, `Find`-filtered) with:
    - a **visibility checkbox** that mirrors VG → Imported Categories and toggles the layer live in the view (persists — `LinkedCadLayerService`);
-   - per-row **role toggles**: `W`/`D`/`A` = region-gen wall/door/area (tagging **paints the layer red** in the view as a watershed preview, reverted on window close), and `N`/`H` = room-name / ceiling-height text (Text mode only). A **Text/Block** mode toggle sits at the top of this section.
+   - per-row **role toggles**: `W`/`D`/`A` = region-gen wall/door/area (tagging **paints the layer red** in the view as a watershed preview, reverted on window close), and `N`/`H` = room-name / ceiling-height text (Text mode only). The **room-source mode** (Text vs Block) shows at the top of this section as a **read-only status** — it's set automatically by **Pick from view** (click a block → Block, click room-label text → Text) and restored from saved settings, not a manual toggle.
    - Tagging writes the layer's `(file, layer)` into the matching scope — **the picked layer's DWG becomes the link scope**, so a co-linked RCP sharing a layer no longer double-seeds each room (TurboName-9, fixed). See "Per-link scoping" below.
-2. **Generate Regions** — **Auto-generate** (watershed), **Rectangle**, and **Polygon**, inline (no sub-window). Uses the `W`/`D`/`A`-tagged layers. Includes the **Region Type Name** field.
+2. **Generate Regions** — **Auto-generate** (watershed), **Rectangle**, and **Polygon**, inline (no sub-window). Uses the `W`/`D`/`A`-tagged layers. Includes the **Region Type Name** dropdown — the project's existing `FilledRegionType`s (a region type must already exist; region-gen never creates one), defaulting to `Room Region`, refreshed on dropdown-open.
 3. **Assign Room Names** (**Run**) — collects "Room Region" filled regions + linked DWG data, assigns room names to Comments, places TextNotes, and shows a processed/skipped/ambiguous/unmatched summary.
 
 ### Per-link scoping (TurboName-9)
@@ -32,6 +32,7 @@ Room names and ceiling heights are each scoped to their own link independently (
 - **Region flagging**: Ambiguous regions (multiple distinct room names) are changed to "Room Region (Flagged)". Unmatched regions (no CAD data) are changed to "Room Region (Empty)". Both are unflagged back to "Room Region" on subsequent successful runs.
 - **Deferred extraction**: Expensive operations (region collection, CAD extraction) are deferred behind button clicks to keep the initial dialog fast.
 - **Single transaction**: All changes roll back cleanly with Ctrl+Z.
+- **CAD redraw after region creation**: New filled regions draw over the linked CAD until Revit regenerates the import, hiding the room-name text underneath (`RefreshActiveView` only repaints — it doesn't trigger the regen). TurboName automates the manual pin/unpin workaround (`NudgeImportGraphics`): it toggles each linked import's `Pinned` state and restores it, forcing the regen so labels stay visible without reopening the view. Best-effort — wrapped so it can never break generation.
 
 ### CAD Source Modes
 

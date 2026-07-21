@@ -111,15 +111,13 @@
                         <TextBlock Text="Check to show/hide a layer (mirrors VG → Imported Categories, persists). Tag roles per layer: W/D/A = region-gen wall/door/area (paints red), N/H = room name / ceiling height text."
                                    Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                        <!-- Room-source mode toggle (drives Name/Ht columns + the room-source sub-panel below) -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <!-- Room-source mode: read-only status (auto-detected by "Pick from view…"); drives Name/Ht columns + the room-source sub-panel below -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
+                                    ToolTip="Block vs. Text is detected automatically when you Pick from view — Block Attributes if you click a block, Text on Layer if you click room-label text.">
                             <TextBlock Text="Room source:" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="SemiBold"/>
-                            <RadioButton Content="Text on Layer" IsChecked="{Binding CadConfig.IsTextMode}"
-                                         Margin="0,0,14,0" VerticalContentAlignment="Center"
-                                         ToolTip="Room names come from text on a layer — tag it Name (N), heights Ht (H)."/>
-                            <RadioButton Content="Block Attributes" IsChecked="{Binding CadConfig.IsBlockMode}"
-                                         VerticalContentAlignment="Center"
-                                         ToolTip="Room names come from block attributes — configure the block below."/>
+                            <TextBlock Text="{Binding CadConfig.RoomSourceModeDisplay}" VerticalAlignment="Center"
+                                       FontWeight="SemiBold" Foreground="#2B579A"/>
+                            <TextBlock Text="&#160;— set by “Pick from view…”" VerticalAlignment="Center" Foreground="#888888"/>
                         </StackPanel>
 
                         <!-- Find filter -->
@@ -215,7 +213,8 @@
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <!-- Dropdown shrunk to 0.75x its former even-split width (0.6*/1* = 0.375 vs 0.5); pills take the rest -->
+                                    <ColumnDefinition Width="0.6*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -297,7 +296,8 @@
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <!-- Dropdown shrunk to 0.75x its former even-split width (0.6*/1* = 0.375 vs 0.5); pills take the rest -->
+                                    <ColumnDefinition Width="0.6*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -307,12 +307,15 @@
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Height Block (opt):"
                                            VerticalAlignment="Center" Margin="0,0,8,6"/>
-                                <StackPanel Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Button Content="Pick height block…" Command="{Binding CadConfig.PickHeightBlockCommand}"
-                                            Style="{StaticResource RevitButtonStyle}" Padding="10,3"
-                                            ToolTip="Click the ceiling-height block in the linked CAD."/>
+                                <!-- Button alone in col 1 (stretched) so it matches the dropdown width below; name + clear live in col 2 -->
+                                <Button Grid.Row="0" Grid.Column="1" Content="Pick height block…"
+                                        Command="{Binding CadConfig.PickHeightBlockCommand}"
+                                        Style="{StaticResource RevitButtonStyle}" Padding="10,3"
+                                        HorizontalAlignment="Stretch" Margin="0,0,8,6"
+                                        ToolTip="Click the ceiling-height block in the linked CAD."/>
+                                <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="{Binding CadConfig.CeilingHeightBlockName}" FontWeight="SemiBold"
-                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                               VerticalAlignment="Center"/>
                                     <Button Content="✕" Margin="6,0,0,0" ToolTip="Clear height block"
                                             Command="{Binding CadConfig.ClearHeightBlockCommand}">
                                         <Button.Style>
@@ -380,8 +383,11 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Region Type Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Grid.Column="1"
-                                     Text="{Binding CadConfig.RegionTypeName, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox Grid.Column="1" x:Name="RegionTypeCombo"
+                                      ItemsSource="{Binding CadConfig.RegionTypeNames}"
+                                      SelectedItem="{Binding CadConfig.RegionTypeName, Mode=TwoWay}"
+                                      DropDownOpened="RegionTypeCombo_DropDownOpened"
+                                      ToolTip="The FilledRegionType generated regions are created as. Only types that already exist in the project are listed."/>
                         </Grid>
 
                         <!-- Result counts -->

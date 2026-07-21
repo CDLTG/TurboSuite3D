@@ -52,14 +52,19 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     public bool IsBlockMode
     {
         get => _isBlockMode;
-        set { if (SetProperty(ref _isBlockMode, value) && value) IsTextMode = false; }
+        set { if (SetProperty(ref _isBlockMode, value)) { if (value) IsTextMode = false; OnPropertyChanged(nameof(RoomSourceModeDisplay)); } }
     }
 
     public bool IsTextMode
     {
         get => _isTextMode;
-        set { if (SetProperty(ref _isTextMode, value) && value) IsBlockMode = false; }
+        set { if (SetProperty(ref _isTextMode, value)) { if (value) IsBlockMode = false; OnPropertyChanged(nameof(RoomSourceModeDisplay)); } }
     }
+
+    /// <summary>Read-only label for the room-source mode. The mode is no longer a user toggle — it's set by
+    /// "Pick from view" (block vs. text is auto-detected) and restored from saved settings — so the window shows
+    /// it rather than letting the user flip it.</summary>
+    public string RoomSourceModeDisplay => IsTextMode ? "Text on Layer" : "Block Attributes";
 
     public string BlockName
     {
@@ -89,6 +94,11 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
         set { if (SetProperty(ref _ceilingHeightBlockTag, value)) RefreshUnassignedCeilingBlockTags(); }
     }
     public string RegionTypeName { get => _regionTypeName; set => SetProperty(ref _regionTypeName, value); }
+
+    /// <summary>The project's FilledRegionType names — the dropdown source for <see cref="RegionTypeName"/>. A
+    /// region type must already exist (region-gen never creates one), so the user picks from this set instead of
+    /// typing a name that might not exist. Populated from the doc; refreshed on dropdown-open.</summary>
+    public ObservableCollection<string> RegionTypeNames { get; } = new();
 
     /// <summary>Which linked DWG supplies room NAMES (set by the Name role tag on a layer row). "" = all links.</summary>
     public string RoomNameLinkName { get => _roomNameLinkName; set => SetProperty(ref _roomNameLinkName, value); }
@@ -148,6 +158,34 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
                 && CadLinkResolver.GetLinkedImports(_uidoc.Document, _uidoc.Document.ActiveView).Count > 0;
         }
         catch { _canPick = false; }
+
+        RefreshRegionTypeNames();
+    }
+
+    /// <summary>Populate <see cref="RegionTypeNames"/> from the project's FilledRegionTypes (the same set
+    /// <see cref="Services.TurboNameApiHandler.ResolveRegionTypeId"/> matches against). If the saved/current
+    /// selection isn't a real type, fall back to "Room Region" (else the first type) so the dropdown never shows
+    /// a name that would fail at generation. Cheap enough to re-run on every dropdown-open.</summary>
+    public void RefreshRegionTypeNames()
+    {
+        var doc = _uidoc?.Document;
+        if (doc == null) return;
+
+        var names = new FilteredElementCollector(doc)
+            .OfClass(typeof(FilledRegionType))
+            .Cast<FilledRegionType>()
+            .Select(t => t.Name)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        SyncCollection(RegionTypeNames, names);
+
+        if (!RegionTypeNames.Any(n => string.Equals(n, RegionTypeName, StringComparison.OrdinalIgnoreCase)))
+            RegionTypeName =
+                RegionTypeNames.FirstOrDefault(n => n.Equals("Room Region", StringComparison.OrdinalIgnoreCase))
+                ?? RegionTypeNames.FirstOrDefault()
+                ?? RegionTypeName;
     }
 
     // ── Block-mode attribute-tag assignment (chips + add-dropdown; no free typing) ──

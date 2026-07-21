@@ -316,6 +316,7 @@ public class TurboNameApiHandler : IExternalEventHandler
                     }
                 }
                 tx.Commit();
+                NudgeImportGraphics();
                 report += $"\n\nCreated {created} region(s)" + (failed > 0 ? $", {failed} failed" : "") + ".";
                 if (failures.Count > 0)
                     report += "\nFailures:\n" + string.Join("\n", failures);
@@ -521,9 +522,32 @@ public class TurboNameApiHandler : IExternalEventHandler
 
     private void NotifyLoopEnded(TurboNameRequest request, int created, int failed)
     {
+        if (created > 0) NudgeImportGraphics();
         int c = created, f = failed;
         Dispatch(() => request.OnComplete?.Invoke(new PickLoopUpdate(c, f, true)));
         Finish(request);
+    }
+
+    // New filled regions draw over the linked CAD until Revit rebuilds the import's graphics, hiding the
+    // room-name text underneath (RefreshActiveView repaints but doesn't regenerate the import). This automates
+    // the manual "pin/unpin the CAD" workaround: toggling an import's Pinned state and putting it back forces
+    // that regen. Two commits (flip, restore) so each regenerates and the pin state is left unchanged. Best-
+    // effort — a quirk cosmetic must never break generation.
+    private void NudgeImportGraphics()
+    {
+        try
+        {
+            var imports = CadLinkResolver.GetLinkedImports(_doc, _view);
+            if (imports.Count == 0) return;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                using var tx = new Transaction(_doc, "TurboName - Refresh CAD");
+                tx.Start();
+                foreach (var imp in imports) imp.Pinned = !imp.Pinned;
+                tx.Commit();
+            }
+        }
+        catch { /* cosmetic only */ }
     }
 
     private static void Finish(TurboNameRequest request)

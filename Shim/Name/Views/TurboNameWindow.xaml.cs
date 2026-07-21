@@ -110,6 +110,14 @@ public partial class TurboNameWindow : Window
             vm.CadConfig.EnsureDiscoveryLoaded();
     }
 
+    // Re-read the project's FilledRegionTypes each time the Region Type dropdown opens, so a type added
+    // mid-session shows up without reopening the window.
+    private void RegionTypeCombo_DropDownOpened(object sender, System.EventArgs e)
+    {
+        if (DataContext is TurboNameViewModel vm)
+            vm.CadConfig.RefreshRegionTypeNames();
+    }
+
     // Both block-mode tag dropdowns act as action menus: picking an attribute assigns it (Room Name appends to
     // the ordered chips; Ceiling Height replaces its single value), then the combo resets to no-selection — the
     // chosen tag leaves the shared candidate list anyway. The guard suppresses the re-fire that reset triggers.
