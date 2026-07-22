@@ -3,6 +3,30 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="clr-namespace:TurboSuite.Shared.Converters">
 
+    <!--
+      TurboSuite shared style dictionary — merged by every windowed command, so a change here reaches all
+      fifteen. There is no separate style guide document: the house rules live in this header, next to the
+      styles they govern, because a sibling .md would drift the first time anyone edited this file.
+
+      HOUSE RULES
+      1. Squared corners. Buttons and button-like toggles use CornerRadius="0" — no rounded chrome anywhere
+         (standing user preference). The CornerRadius="2"/"3"/"4" values in TurboRPS / TurboZones are on
+         <Border>/<Expander> CARD chrome, not buttons; that's the only sanctioned exception.
+      2. Templates must not hardcode what a Style setter can carry. If a control template pins a value the
+         consumer might reasonably want to change — content alignment, foreground, cursor — TemplateBind it and
+         set the default via a <Setter> in the same Style instead. A hardcoded template value silently beats the
+         property on the control, so the consumer sets it, sees nothing happen, and has no way to tell why.
+         This bit us once: RevitButtonStyle hardcoded HorizontalAlignment="Center" on its ContentPresenter, and
+         TurboName's Line Graphics color row (a swatch + label that reads left) set HorizontalContentAlignment
+         to no effect. Both button styles now TemplateBind both content alignments with Center as the setter
+         default — same rendering as before, but overridable.
+      3. Color comes from the brushes below, not from literals in a window. New window chrome should reach for
+         an existing brush; add one here if none fits.
+      4. This dictionary is shared, so a change is a cross-command change. Before editing a style used broadly
+         (RevitButtonStyle, PrimaryButtonStyle, BoldHeaderGroupBox), confirm the change is behavior-preserving
+         for consumers that never opted in — the pattern in rule 2 is how you do that.
+    -->
+
     <!-- Converters -->
     <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
     <converters:IntEqualConverter x:Key="IntEqualConverter"/>
@@ -27,10 +51,7 @@
         <Setter Property="Padding" Value="16,4"/>
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <!-- Centered content is the default (what every button in the suite expects), but it's set HERE rather
-             than hardcoded in the template below, so a button that needs otherwise — e.g. the swatch+label color
-             button in TurboName's Line Graphics flyout — can just set HorizontalContentAlignment="Left" and have
-             it actually take effect. -->
+        <!-- Content alignment: default here, TemplateBound below (house rule 2) so a button can opt out. -->
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Template">
@@ -75,6 +96,9 @@
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <!-- Content alignment: default here, TemplateBound below (house rule 2) so a button can opt out. -->
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -82,7 +106,8 @@
                             Background="{TemplateBinding Background}"
                             CornerRadius="0"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
