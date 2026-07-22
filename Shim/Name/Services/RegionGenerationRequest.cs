@@ -74,28 +74,35 @@ public class SetLayerVisibilityRequest : TurboNameRequest
 }
 
 /// <summary>
-/// Paint or un-paint the transient red watershed preview on one region-gen-tagged layer. When painting,
-/// <see cref="EnsureVisible"/> un-hides the layer first so the red actually shows. Reverted on close (not
-/// persisted). See <see cref="LayerRolePreviewService"/>.
-/// </summary>
-public class SetLayerRolePreviewRequest : TurboNameRequest
-{
-    public Autodesk.Revit.DB.ElementId SubId { get; set; }
-    public bool Painted { get; set; }
-    public bool EnsureVisible { get; set; }
-}
-
-/// <summary>
-/// Re-establish the red watershed preview for every already-region-gen-tagged layer, in one API pass, when the
-/// window opens against a job whose W/D/A tags were saved last session (TurboName-10). The role toggles are
-/// re-lit silently from the saved config, but the red paint is transient (reverted on close) and would
-/// otherwise stay off until each row is re-toggled — so the toggles and the view drift apart. Painting the
-/// whole set in one raise (one transaction, one refresh) obeys the shared-event single-raise rule; a per-row
-/// loop would drop every raise after the first. Un-hides each layer first, exactly like the live paint path.
+/// Drives the global red watershed Preview toggle in one API pass. Toggle ON (<see cref="Revert"/> = false):
+/// snapshot each flagged layer's current override slot — preserving its persistent line settings — un-hide any
+/// hidden one so the red shows, and paint them all red. Toggle OFF (<see cref="Revert"/> = true): restore every
+/// snapshotted slot verbatim (<see cref="LayerRolePreviewService.RevertAll"/>), composing the base line
+/// settings back. Batching the whole set in one raise obeys the shared-event single-raise rule (a per-row loop
+/// would drop every raise after the first). Red is transient — never persisted — so a toggle left ON at close is
+/// reverted by the close cleanup. See <see cref="LayerRolePreviewService"/>.
 /// </summary>
 public class PaintRolePreviewsRequest : TurboNameRequest
 {
+    /// <summary>Flagged subcategories to paint red. Ignored when <see cref="Revert"/> is true.</summary>
     public System.Collections.Generic.List<Autodesk.Revit.DB.ElementId> SubIds { get; set; }
+
+    /// <summary>True ⇒ toggle OFF: revert every painted layer instead of painting.</summary>
+    public bool Revert { get; set; }
+}
+
+/// <summary>
+/// Apply the per-layer VG → Imported Categories *Lines* override (color / weight / pattern) built by the Line
+/// Graphics flyout (TurboName-12). The <see cref="Overrides"/> object is composed on the WPF thread (a pure
+/// value object — clearing a field = <c>SetProjectionLineWeight(-1)</c> / <c>SetProjectionLineColor(Color
+/// .InvalidColorValue)</c> / <c>SetProjectionLinePatternId(ElementId.InvalidElementId)</c>, all spike-confirmed)
+/// off a clone of the layer's current override, so surface/halftone overrides are preserved. Persists on the
+/// view like the visibility checkbox — never reverted on close (unlike the transient red preview).
+/// </summary>
+public class ApplyLineGraphicsRequest : TurboNameRequest
+{
+    public Autodesk.Revit.DB.ElementId SubId { get; set; }
+    public Autodesk.Revit.DB.OverrideGraphicSettings Overrides { get; set; }
 }
 
 /// <summary>Status update sent from a pick/generate handler to the ViewModel during/after the loop.</summary>

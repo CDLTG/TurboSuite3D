@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms> <!-- native ColorDialog for the TurboName Line Graphics flyout -->
     <!-- net48's SDK default LangVersion is 7.3; the codebase uses records/init/
          switch-expressions/target-typed new, so force latest (matches Core). -->
     <LangVersion>latest</LangVersion>
@@ -19,6 +20,13 @@
     <!-- Updater/Installer/Abstractions/Core live at the repo root (one level up),
          outside this project's compile cone, so no DefaultItemExcludes are needed. -->
   </PropertyGroup>
+  <!-- UseWindowsForms (for the native ColorDialog) injects System.Drawing + System.Windows.Forms as global
+       usings, which collide with Autodesk.Revit.DB / System.Windows types (View, Color, KeyEventArgs, …) repo-
+       wide. WinForms is used only in one file (LineGraphicsDialog), fully qualified, so drop those globals. -->
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="ACadSharp" Version="3.6.35" />
     <!-- ClosedXML — see note in Core/TurboSuite.Core.csproj (0.105.0's formula

@@ -71,12 +71,12 @@ public class TurboNameApiHandler : IExternalEventHandler
                     RunSetVisibility(vis);
                     Finish(request);
                     break;
-                case SetLayerRolePreviewRequest preview:
-                    RunRolePreview(preview);
-                    Finish(request);
-                    break;
                 case PaintRolePreviewsRequest paintAll:
                     RunPaintRolePreviews(paintAll);
+                    Finish(request);
+                    break;
+                case ApplyLineGraphicsRequest lineGfx:
+                    RunApplyLineGraphics(lineGfx);
                     Finish(request);
                     break;
                 case CloseCleanupRequest cleanup:
@@ -453,32 +453,24 @@ public class TurboNameApiHandler : IExternalEventHandler
         _uidoc.RefreshActiveView();
     }
 
-    private void RunRolePreview(SetLayerRolePreviewRequest preview)
-    {
-        using (var tx = new Transaction(_doc, "TurboName - Layer Role Preview"))
-        {
-            tx.Start();
-            if (preview.Painted)
-            {
-                if (preview.EnsureVisible)
-                    LinkedCadLayerService.ApplyHidden(_view, preview.SubId, false); // un-hide so red shows
-                RolePreview.Paint(_view, preview.SubId);
-            }
-            else
-            {
-                RolePreview.Unpaint(_view, preview.SubId);
-            }
-            tx.Commit();
-        }
-        _uidoc.RefreshActiveView();
-    }
-
-    // Paint-on-load (TurboName-10): re-establish the red preview for every already-tagged layer in one
-    // transaction, un-hiding each first so the red shows — mirrors RunRolePreview's paint branch, batched.
+    // Global red Preview toggle. ON: un-hide + paint each flagged layer red in one transaction (snapshotting its
+    // prior override, which carries any persistent line settings). OFF (Revert): restore every snapshot verbatim,
+    // composing the base line settings back. One raise = one transaction = one refresh.
     private void RunPaintRolePreviews(PaintRolePreviewsRequest request)
     {
+        if (request.Revert)
+        {
+            if (!RolePreview.HasActive) return;
+            using var revertTx = new Transaction(_doc, "TurboName - Hide Watershed Preview");
+            revertTx.Start();
+            RolePreview.RevertAll(_doc);
+            revertTx.Commit();
+            _uidoc.RefreshActiveView();
+            return;
+        }
+
         if (request.SubIds == null || request.SubIds.Count == 0) return;
-        using (var tx = new Transaction(_doc, "TurboName - Restore Layer Previews"))
+        using (var tx = new Transaction(_doc, "TurboName - Show Watershed Preview"))
         {
             tx.Start();
             foreach (var subId in request.SubIds)
@@ -486,6 +478,21 @@ public class TurboNameApiHandler : IExternalEventHandler
                 LinkedCadLayerService.ApplyHidden(_view, subId, false); // un-hide so red shows
                 RolePreview.Paint(_view, subId);
             }
+            tx.Commit();
+        }
+        _uidoc.RefreshActiveView();
+    }
+
+    // Apply a per-layer Lines override (TurboName-12). Persistent — written straight to the view slot like the
+    // visibility checkbox, never reverted on close. The OGS was composed on the WPF thread off a clone of the
+    // layer's current override, so surface/halftone survive.
+    private void RunApplyLineGraphics(ApplyLineGraphicsRequest request)
+    {
+        if (request.SubId == null || request.Overrides == null) return;
+        using (var tx = new Transaction(_doc, "TurboName - Layer Line Graphics"))
+        {
+            tx.Start();
+            _view.SetCategoryOverrides(request.SubId, request.Overrides);
             tx.Commit();
         }
         _uidoc.RefreshActiveView();

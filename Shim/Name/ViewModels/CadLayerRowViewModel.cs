@@ -1,7 +1,12 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using TurboSuite.Shared.ViewModels;
+using MediaBrush = System.Windows.Media.Brush;
+using MediaSolidBrush = System.Windows.Media.SolidColorBrush;
+using MediaColor = System.Windows.Media.Color;
+using MediaDashes = System.Windows.Media.DoubleCollection;
 
 namespace TurboSuite.Name.ViewModels;
 
@@ -31,7 +36,22 @@ public class CadLayerRowViewModel : ViewModelBase
     public string LayerName { get; }
     public ElementId SubId { get; }
 
+    // Per-pattern on/off feet arrays (shared, read once in a valid API context) — drives the preview dash array.
+    private readonly IReadOnlyDictionary<ElementId, double[]> _dashArrays;
+
+    private OverrideGraphicSettings _lineOverride;
+    /// <summary>Snapshot of the layer's current per-view graphic override — seeds the Line Graphics flyout and,
+    /// mutated + written back, is updated here on a successful apply (TurboName-12). Read once in a valid API
+    /// context (view overrides aren't safe to query off the Revit thread). Setting it re-renders the preview
+    /// swatch.</summary>
+    public OverrideGraphicSettings LineOverride
+    {
+        get => _lineOverride;
+        set { _lineOverride = value; RecomputePreview(); }
+    }
+
     public CadLayerRowViewModel(string fileName, string layerName, ElementId subId, bool isVisible,
+        OverrideGraphicSettings lineOverride, IReadOnlyDictionary<ElementId, double[]> dashArrays,
         Func<CadLayerRowViewModel, bool> requestToggle,
         Action<CadLayerRowViewModel, LayerRole, bool> onRole)
     {
@@ -39,8 +59,68 @@ public class CadLayerRowViewModel : ViewModelBase
         LayerName = layerName;
         SubId = subId;
         _isVisible = isVisible;
+        _dashArrays = dashArrays ?? new Dictionary<ElementId, double[]>();
         _requestToggle = requestToggle;
         _onRole = onRole;
+        LineOverride = lineOverride; // sets field + renders the initial swatch
+    }
+
+    // ── Line-preview swatch (TurboName-12): color / weight-as-thickness / pattern-as-dash, rendered from the
+    //    cached override so the row shows the layer's line style without opening the flyout. ──
+
+    private MediaBrush _linePreviewBrush;
+    private double _linePreviewThickness;
+    private MediaDashes _linePreviewDashArray;
+
+    /// <summary>Swatch stroke color — the override's color, or a neutral gray when the layer carries none.</summary>
+    public MediaBrush LinePreviewBrush => _linePreviewBrush;
+    /// <summary>Swatch stroke thickness (px) — a schematic map of line weight 1–16 (not exact millimeters).</summary>
+    public double LinePreviewThickness => _linePreviewThickness;
+    /// <summary>Swatch dash array in stroke-thickness units, or null for a solid line (Solid / no override).</summary>
+    public MediaDashes LinePreviewDashArray => _linePreviewDashArray;
+
+    private void RecomputePreview()
+    {
+        var ogs = _lineOverride;
+
+        var rc = ogs?.ProjectionLineColor;
+        _linePreviewBrush = new MediaSolidBrush(rc != null && rc.IsValid
+            ? MediaColor.FromRgb(rc.Red, rc.Green, rc.Blue)
+            : MediaColor.FromRgb(0x44, 0x44, 0x44));
+
+        _linePreviewThickness = WeightToPx(ogs?.ProjectionLineWeight ?? -1);
+
+        var pid = ogs?.ProjectionLinePatternId;
+        _linePreviewDashArray = pid != null && _dashArrays.TryGetValue(pid, out var feet)
+            ? BuildDashUnits(feet, _linePreviewThickness) : null;
+
+        OnPropertyChanged(nameof(LinePreviewBrush));
+        OnPropertyChanged(nameof(LinePreviewThickness));
+        OnPropertyChanged(nameof(LinePreviewDashArray));
+    }
+
+    // Line weight 1..16 → a 1.0–4.0 px schematic thickness. No override (-1) reads as the thinnest.
+    private static double WeightToPx(int weight)
+    {
+        if (weight < 1) return 1.0;
+        int w = Math.Min(weight, 16);
+        return 1.0 + (w - 1) / 15.0 * 3.0;
+    }
+
+    // Scale a pattern's on/off feet array to a WPF dash array (units of stroke thickness), normalized so the
+    // whole repeat spans a fixed on-screen length — a few cycles fit the swatch regardless of the real scale.
+    private static MediaDashes BuildDashUnits(double[] feet, double thickness)
+    {
+        if (feet == null || feet.Length < 2 || thickness <= 0) return null;
+        double repeat = 0;
+        foreach (var f in feet) repeat += f;
+        if (repeat <= 1e-9) return null;
+
+        const double targetRepeatPx = 22.0;
+        double pxPerFt = targetRepeatPx / repeat;
+        var dc = new MediaDashes();
+        foreach (var f in feet) dc.Add(Math.Max(0.0, f * pxPerFt / thickness));
+        return dc;
     }
 
     public bool IsVisible

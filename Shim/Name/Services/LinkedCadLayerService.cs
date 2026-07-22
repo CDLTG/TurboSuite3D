@@ -8,10 +8,14 @@ namespace TurboSuite.Name.Services;
 
 /// <summary>
 /// One layer row folded from Revit's VG → Imported Categories for a linked DWG: the file it belongs to,
-/// the layer (subcategory) name, its live subcategory <see cref="ElementId"/>, and whether it is currently
-/// hidden in the locked view. <see cref="SubId"/> is a live host-document subcategory id (never persisted).
+/// the layer (subcategory) name, its live subcategory <see cref="ElementId"/>, whether it is currently
+/// hidden in the locked view, and a snapshot of its current per-view graphic override (seeds the Line Graphics
+/// flyout and, mutated, is written back). <see cref="SubId"/> is a live host-document subcategory id (never
+/// persisted); <see cref="LineOverride"/> is read once in a valid API context (view overrides aren't safe to
+/// query off the Revit thread).
 /// </summary>
-public sealed record CadLayerInfo(string FileName, string LayerName, ElementId SubId, bool Hidden);
+public sealed record CadLayerInfo(string FileName, string LayerName, ElementId SubId, bool Hidden,
+    OverrideGraphicSettings LineOverride);
 
 /// <summary>
 /// Folds the VG → Imported Categories checklist into TurboName. Imported-DWG layers are host-document
@@ -43,7 +47,9 @@ public static class LinkedCadLayerService
                 if (sub == null || !seen.Add(sub.Id)) continue;
                 bool hidden = false;
                 try { hidden = view.GetCategoryHidden(sub.Id); } catch { /* leave visible */ }
-                rows.Add(new CadLayerInfo(fileName, sub.Name, sub.Id, hidden));
+                OverrideGraphicSettings ogs = null;
+                try { ogs = view.GetCategoryOverrides(sub.Id); } catch { /* no override readable */ }
+                rows.Add(new CadLayerInfo(fileName, sub.Name, sub.Id, hidden, ogs ?? new OverrideGraphicSettings()));
             }
         }
 

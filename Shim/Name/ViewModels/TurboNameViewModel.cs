@@ -62,14 +62,32 @@ public class TurboNameViewModel : ViewModelBase
 
     public int CreatedCount { get => _createdCount; set => SetProperty(ref _createdCount, value); }
     public int FailedCount { get => _failedCount; set => SetProperty(ref _failedCount, value); }
-    public bool IsPicking { get => _isPicking; set => SetProperty(ref _isPicking, value); }
+    public bool IsPicking
+    {
+        get => _isPicking;
+        set { if (SetProperty(ref _isPicking, value)) OnPropertyChanged(nameof(LineEditingEnabled)); }
+    }
     public string StatusText { get => _statusText; set => SetProperty(ref _statusText, value); }
     public string PickingHint { get => _pickingHint; set => SetProperty(ref _pickingHint, value); }
+
+    private bool _isPreviewActive;
+    /// <summary>True while the global red watershed preview is showing (off by default). While on, per-layer
+    /// line editing is disabled — the red overlay and the line settings share one override slot.</summary>
+    public bool IsPreviewActive
+    {
+        get => _isPreviewActive;
+        private set { if (SetProperty(ref _isPreviewActive, value)) OnPropertyChanged(nameof(LineEditingEnabled)); }
+    }
+
+    /// <summary>Bound by the per-row line-edit (✎) buttons' IsEnabled. Off while the red preview is showing (they
+    /// share the override slot) or a pick loop is running (the shared event is busy, so an apply would drop).</summary>
+    public bool LineEditingEnabled => !_isPreviewActive && !_isPicking;
 
     public ICommand RunAssignCommand { get; }
     public ICommand AutoGenerateCommand { get; }
     public ICommand RectangleCommand { get; }
     public ICommand PolygonCommand { get; }
+    public ICommand TogglePreviewCommand { get; }
 
     /// <summary>Raised to ask the window to actually close (after the on-close save has flushed).</summary>
     public event Action RequestClose;
@@ -96,15 +114,32 @@ public class TurboNameViewModel : ViewModelBase
         AutoGenerateCommand = new RelayCommand(OnAutoGenerate, () => !IsPicking);
         RectangleCommand = new RelayCommand(OnRectangle, () => !IsPicking);
         PolygonCommand = new RelayCommand(OnPolygon, () => !IsPicking);
+        TogglePreviewCommand = new RelayCommand(TogglePreview, () => !IsPicking);
     }
 
-    // Built once in the command's (valid API) context — enumerating subcategories is a read, no DWG load.
+    /// <summary>Pattern-dropdown roster for the Line Graphics flyout, read once in a valid API context.</summary>
+    public IReadOnlyList<LinePatternOption> LinePatternOptions { get; private set; } = new List<LinePatternOption>();
+
+    // Built once in the command's (valid API) context — enumerating subcategories + reading their overrides, the
+    // line-pattern roster, and the per-pattern dash shapes are all reads, no DWG load.
     private void BuildLayers(Document doc, View view)
     {
         if (doc == null || view == null) return;
+        LinePatternOptions = LayerLineGraphicsService.GetPatternOptions(doc);
+        var dashArrays = LayerLineGraphicsService.GetPatternDashArrays(doc);
         foreach (var info in LinkedCadLayerService.Build(doc, view))
             Layers.Add(new CadLayerRowViewModel(
-                info.FileName, info.LayerName, info.SubId, !info.Hidden, RequestToggleVisibility, OnRole));
+                info.FileName, info.LayerName, info.SubId, !info.Hidden, info.LineOverride, dashArrays,
+                RequestToggleVisibility, OnRole));
+    }
+
+    /// <summary>Apply the Line Graphics flyout's composed override to a layer (persistent — never reverted on
+    /// close). On success the row caches the new override so reopening the flyout shows the current state.</summary>
+    public void ApplyLineGraphics(CadLayerRowViewModel row, OverrideGraphicSettings overrides)
+    {
+        if (row == null || overrides == null) return;
+        if (RaiseUser(new ApplyLineGraphicsRequest { SubId = row.SubId, Overrides = overrides }))
+            row.LineOverride = overrides;
     }
 
     // Re-seed every row's role toggles from the config (the single source of truth). Silent — no callbacks.
@@ -115,8 +150,8 @@ public class TurboNameViewModel : ViewModelBase
                 row.SetRoleSilently(role, CadConfig.HasRole(role, row.FileName, row.LayerName));
     }
 
-    // A row's role toggle changed: write it into the config, enforce single-select for Name/Ht, and diff the
-    // red preview for region-gen roles.
+    // A row's role toggle changed: pure data — write it into the config and enforce single-select for Name/Ht.
+    // Region-gen (W/D/A) tags no longer paint on toggle; the red is shown on demand by the Preview toggle.
     private void OnRole(CadLayerRowViewModel row, LayerRole role, bool value)
     {
         CadConfig.SetRole(role, row.FileName, row.LayerName, value); // fires PropertyChanged → SettingsDirty
@@ -126,44 +161,33 @@ public class TurboNameViewModel : ViewModelBase
                 if (!ReferenceEquals(other, row))
                     other.SetRoleSilently(role, false); // single-select across all rows
 
-        if (role is LayerRole.Wall or LayerRole.Door or LayerRole.Area)
-            UpdatePreview(row);
+        // A retag while the preview is showing makes the red stale (snapshot-of-the-moment): auto-revert it so
+        // the view never lies. The user re-presses Preview to check the new set.
+        if (IsPreviewActive && role is LayerRole.Wall or LayerRole.Door or LayerRole.Area)
+            RevertPreview("Preview turned off — W/D/A tags changed. Press Preview to re-check.");
     }
 
-    // Paint a row red when it first gains a region-gen role; un-paint when it loses the last one.
-    private void UpdatePreview(CadLayerRowViewModel row)
-    {
-        bool nowTagged = row.IsRegionGenTagged;
-        bool wasPainted = _painted.Contains(row.SubId);
+    // ── Global red watershed Preview toggle (off by default) ──
 
-        if (nowTagged && !wasPainted)
-        {
-            bool ensureVisible = !row.IsVisible;
-            if (ensureVisible) row.SetVisibleSilently(true); // reflect the auto-show; the request un-hides too
-            if (RaiseUser(new SetLayerRolePreviewRequest { SubId = row.SubId, Painted = true, EnsureVisible = ensureVisible }))
-                _painted.Add(row.SubId);
-            else if (ensureVisible)
-                row.SetVisibleSilently(false); // event busy — undo the optimistic checkbox flip
-        }
-        else if (!nowTagged && wasPainted)
-        {
-            if (RaiseUser(new SetLayerRolePreviewRequest { SubId = row.SubId, Painted = false }))
-                _painted.Remove(row.SubId);
-        }
-    }
-
-    // Paint-on-load (TurboName-10): when the window opens against a job whose W/D/A tags were saved last
-    // session, SyncRolesFromConfig re-lights the toggles silently — but the transient red preview is off, so the
-    // toggles and the view drift apart. Re-establish the red for every tagged layer in ONE batched raise (a
-    // per-row loop would drop every raise after the first past the shared-event gate). Called once, on window
-    // load. After this, the live per-toggle paint path in UpdatePreview keeps them in sync.
-    public void PaintTaggedPreviewsOnLoad()
+    // ON: paint every currently W/D/A-tagged layer red in one batched raise, auto-showing any hidden one (the
+    // checkbox reflects it, same as before). OFF: revert them all. Snapshot-of-the-moment — retag then re-toggle
+    // to refresh. While ON, per-layer line editing is disabled (they share the same override slot).
+    private void TogglePreview()
     {
+        if (IsPreviewActive)
+        {
+            RevertPreview(null);
+            return;
+        }
+
         var toPaint = new List<CadLayerRowViewModel>();
         foreach (var row in Layers)
-            if (row.IsRegionGenTagged && !_painted.Contains(row.SubId))
-                toPaint.Add(row);
-        if (toPaint.Count == 0) return;
+            if (row.IsRegionGenTagged) toPaint.Add(row);
+        if (toPaint.Count == 0)
+        {
+            StatusText = "Tag one or more layers W/D/A first — nothing to preview.";
+            return;
+        }
 
         var subIds = new List<ElementId>();
         var flipped = new List<CadLayerRowViewModel>();
@@ -174,9 +198,26 @@ public class TurboNameViewModel : ViewModelBase
         }
 
         if (RaiseUser(new PaintRolePreviewsRequest { SubIds = subIds }))
+        {
             foreach (var row in toPaint) _painted.Add(row.SubId);
+            IsPreviewActive = true;
+        }
         else
             foreach (var row in flipped) row.SetVisibleSilently(false); // event busy — undo optimistic show
+    }
+
+    // Turn the preview off (manual toggle-off or auto-off on a W/D/A change): revert every painted layer and
+    // clear the active flag. No-op when already off. If the shared event is busy the red lingers until the next
+    // action — a benign edge, since a role click rarely coincides with an in-flight request.
+    private void RevertPreview(string status)
+    {
+        if (!IsPreviewActive) return;
+        if (RaiseUser(new PaintRolePreviewsRequest { Revert = true }))
+        {
+            _painted.Clear();
+            IsPreviewActive = false;
+            if (status != null) StatusText = status;
+        }
     }
 
     private bool LayerFilter(object item)

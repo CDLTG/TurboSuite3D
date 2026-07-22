@@ -57,6 +57,77 @@
                 </Setter>
             </Style>
 
+            <!-- Squared toggle for the global red watershed preview. Matches RevitButtonStyle (the "Pick from
+                 view…" look: same bg/border, hand cursor, blue hover); when checked it turns red to signal the
+                 preview is live in the view. -->
+            <Style x:Key="WatershedToggle" TargetType="ToggleButton">
+                <Setter Property="Background" Value="{StaticResource ButtonBgBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource ButtonBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="16,4"/>
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="bd"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="0"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#DCECFC"/>
+                                    <Setter TargetName="bd" Property="BorderBrush" Value="#7EB4EA"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#C4E0FC"/>
+                                    <Setter TargetName="bd" Property="BorderBrush" Value="#569DE5"/>
+                                </Trigger>
+                                <!-- Checked wins over hover: the live preview reads red no matter the pointer. -->
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#D01E1E"/>
+                                    <Setter TargetName="bd" Property="BorderBrush" Value="#8E1414"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Line-preview swatch that doubles as the Line Graphics button (native "Lines" column). Chromeless
+                 so the rendered line reads clean; subtle hover, dimmed when disabled (preview on / picking). -->
+            <Style x:Key="LineSwatchButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="wrap" Background="Transparent" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="wrap" Property="Background" Value="#EEF3FB"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.4"/>
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- Rounded, borderless pill for assigned tags (Room Name chips + the Ceiling Height value). Muted
                  fill, no border — deliberately unlike the squared, bordered buttons elsewhere. -->
             <Style x:Key="TagPill" TargetType="Border">
@@ -120,6 +191,14 @@
                             <TextBlock Text="&#160;— set by “Pick from view…”" VerticalAlignment="Center" Foreground="#888888"/>
                         </StackPanel>
 
+                        <!-- Global red watershed preview: paints the W/D/A-tagged layers red to verify structure.
+                             Off by default; snapshot-of-the-moment (retag → toggle off/on to refresh). -->
+                        <ToggleButton Content="Preview Watershed" Style="{StaticResource WatershedToggle}"
+                                      HorizontalAlignment="Left" Margin="0,0,0,8"
+                                      IsChecked="{Binding IsPreviewActive, Mode=OneWay}"
+                                      Command="{Binding TogglePreviewCommand}"
+                                      ToolTip="Paints every W/D/A-tagged layer red so you can verify the watershed structure will hold. Off by default; turns off automatically if you change the W/D/A tags — press again to re-check. Line editing is disabled while this is on."/>
+
                         <!-- Find filter -->
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
@@ -161,26 +240,51 @@
                                     </ItemsControl.GroupStyle>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                                <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                                          VerticalAlignment="Center" Margin="0,0,4,0"
-                                                          ToolTip="Show/hide this layer in the view"/>
-                                                <ToggleButton Content="W" Style="{StaticResource RoleToggleRed}"
-                                                              IsChecked="{Binding IsWall}" ToolTip="Wall layer (region-gen)"/>
-                                                <ToggleButton Content="D" Style="{StaticResource RoleToggleRed}"
-                                                              IsChecked="{Binding IsDoor}" ToolTip="Door layer (region-gen)"/>
-                                                <ToggleButton Content="A" Style="{StaticResource RoleToggleRed}"
-                                                              IsChecked="{Binding IsArea}" ToolTip="Area/envelope layer (region-gen)"/>
-                                                <ToggleButton Content="N" Style="{StaticResource RoleToggleBlue}"
-                                                              IsChecked="{Binding IsName}" ToolTip="Room-name text layer"
-                                                              Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
-                                                <ToggleButton Content="H" Style="{StaticResource RoleToggleBlue}"
-                                                              IsChecked="{Binding IsHeight}" ToolTip="Ceiling-height text layer"
-                                                              Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
-                                                <TextBlock Text="{Binding LayerName}" VerticalAlignment="Center"
-                                                           Margin="6,0,0,0" TextTrimming="CharacterEllipsis"
+                                            <!-- Native layout: [vis + W/D/A/N/H] | Layer Name (fills, ellipsizes) | line swatch -->
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                    <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                              VerticalAlignment="Center" Margin="0,0,4,0"
+                                                              ToolTip="Show/hide this layer in the view"/>
+                                                    <ToggleButton Content="W" Style="{StaticResource RoleToggleRed}"
+                                                                  IsChecked="{Binding IsWall}" ToolTip="Wall layer (region-gen)"/>
+                                                    <ToggleButton Content="D" Style="{StaticResource RoleToggleRed}"
+                                                                  IsChecked="{Binding IsDoor}" ToolTip="Door layer (region-gen)"/>
+                                                    <ToggleButton Content="A" Style="{StaticResource RoleToggleRed}"
+                                                                  IsChecked="{Binding IsArea}" ToolTip="Area/envelope layer (region-gen)"/>
+                                                    <ToggleButton Content="N" Style="{StaticResource RoleToggleBlue}"
+                                                                  IsChecked="{Binding IsName}" ToolTip="Room-name text layer"
+                                                                  Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
+                                                    <ToggleButton Content="H" Style="{StaticResource RoleToggleBlue}"
+                                                                  IsChecked="{Binding IsHeight}" ToolTip="Ceiling-height text layer"
+                                                                  Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
+                                                </StackPanel>
+
+                                                <TextBlock Grid.Column="1" Text="{Binding LayerName}" VerticalAlignment="Center"
+                                                           Margin="6,0,8,0" TextTrimming="CharacterEllipsis"
                                                            ToolTip="{Binding LayerName}"/>
-                                            </StackPanel>
+
+                                                <!-- Line-preview swatch = the Line Graphics button. Disabled while preview on / picking. -->
+                                                <Button Grid.Column="2" Style="{StaticResource LineSwatchButton}"
+                                                        Click="LineGraphicsButton_Click"
+                                                        IsEnabled="{Binding DataContext.LineEditingEnabled, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                                        ToolTip="Edit this layer's line color / weight / pattern (VG override)">
+                                                    <Border Width="120" Height="16" BorderBrush="#BBBBBB"
+                                                            BorderThickness="1" Background="White">
+                                                        <Line X1="5" Y1="8" X2="113" Y2="8"
+                                                              Stroke="{Binding LinePreviewBrush}"
+                                                              StrokeThickness="{Binding LinePreviewThickness}"
+                                                              StrokeDashArray="{Binding LinePreviewDashArray}"
+                                                              StrokeDashCap="Round" SnapsToDevicePixels="True"/>
+                                                    </Border>
+                                                </Button>
+                                            </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>

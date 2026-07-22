@@ -24,10 +24,7 @@ public partial class TurboNameWindow : Window
         PositionInsideOwner();
 
         if (DataContext is TurboNameViewModel vm)
-        {
             vm.RequestClose += () => { _closingConfirmed = true; Close(); };
-            vm.PaintTaggedPreviewsOnLoad(); // TurboName-10: repaint red for tags restored from saved settings
-        }
     }
 
     // Pin the window's bottom-right corner to Revit's client bottom-right (clear of the scroll bars + status
@@ -144,6 +141,20 @@ public partial class TurboNameWindow : Window
             assign(vm, tag);
             combo.SelectedIndex = -1;
             _assigningTag = false;
+        }
+    }
+
+    // Per-layer Line Graphics editor (TurboName-12): opens the native-style Pattern/Color/Weight dialog seeded
+    // from the row's cached override, and on OK applies the composed override through the shared external event.
+    private void LineGraphicsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button btn
+            && btn.DataContext is CadLayerRowViewModel row
+            && DataContext is TurboNameViewModel vm)
+        {
+            var dlg = new LineGraphicsDialog(row.LayerName, row.LineOverride, vm.LinePatternOptions) { Owner = this };
+            if (dlg.ShowDialog() == true && dlg.Result != null)
+                vm.ApplyLineGraphics(row, dlg.Result);
         }
     }
 
