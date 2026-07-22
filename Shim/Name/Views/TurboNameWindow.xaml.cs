@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -21,10 +22,25 @@ public partial class TurboNameWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        CapContentToScreen();
         PositionInsideOwner();
 
         if (DataContext is TurboNameViewModel vm)
             vm.RequestClose += () => { _closingConfirmed = true; Close(); };
+    }
+
+    // The window sizes to its content and grows upward from the bottom-right anchor — there's no fixed content
+    // height, because a hardcoded cap either wastes space on a tall display or clips one on a short one. This is
+    // the only bound: never let the content region exceed what the screen can show, so the scroll bar returns on
+    // a short display instead of the title bar running off the top. Reserve covers the title bar, the outer
+    // margins, the Close row, and a little breathing room from the screen edges. Runs before PositionInsideOwner
+    // so that method measures the final height.
+    private void CapContentToScreen()
+    {
+        const double reserve = 110;
+        double available = SystemParameters.WorkArea.Height - reserve;
+        ContentScroll.MaxHeight = Math.Max(400, available);
+        UpdateLayout();
     }
 
     // Pin the window's bottom-right corner to Revit's client bottom-right (clear of the scroll bars + status
@@ -144,15 +160,26 @@ public partial class TurboNameWindow : Window
         }
     }
 
+    // ListBox.SelectedItems can't be bound in XAML (same limitation as DataGrid — see CLAUDE.md), so push the
+    // multi-selection to the ViewModel, which decides whether a row edit hits one layer or all of them.
+    private void LayerList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.ListBox list && DataContext is TurboNameViewModel vm)
+            vm.SetSelectedLayers(list.SelectedItems.OfType<CadLayerRowViewModel>());
+    }
+
     // Per-layer Line Graphics editor (TurboName-12): opens the native-style Pattern/Color/Weight dialog seeded
     // from the row's cached override, and on OK applies the composed override through the shared external event.
+    // With a multi-selection the same override lands on every selected layer, so the title says how many.
     private void LineGraphicsButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button btn
             && btn.DataContext is CadLayerRowViewModel row
             && DataContext is TurboNameViewModel vm)
         {
-            var dlg = new LineGraphicsDialog(row.LayerName, row.LineOverride, vm.LinePatternOptions) { Owner = this };
+            int count = vm.LineGraphicsTargetCount(row);
+            string label = count > 1 ? $"{count} layers" : row.LayerName;
+            var dlg = new LineGraphicsDialog(label, row.LineOverride, vm.LinePatternOptions) { Owner = this };
             if (dlg.ShowDialog() == true && dlg.Result != null)
                 vm.ApplyLineGraphics(row, dlg.Result);
         }

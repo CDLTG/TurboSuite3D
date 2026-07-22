@@ -71,6 +71,9 @@ public class TurboNameApiHandler : IExternalEventHandler
                     RunSetVisibility(vis);
                     Finish(request);
                     break;
+                case HideLayerPickRequest hidePick:
+                    RunHideLayerPickLoop(hidePick);
+                    break;
                 case PaintRolePreviewsRequest paintAll:
                     RunPaintRolePreviews(paintAll);
                     Finish(request);
@@ -444,13 +447,92 @@ public class TurboNameApiHandler : IExternalEventHandler
 
     private void RunSetVisibility(SetLayerVisibilityRequest vis)
     {
+        if (vis.SubIds == null || vis.SubIds.Count == 0) return;
         using (var tx = new Transaction(_doc, "TurboName - Toggle CAD Layer"))
         {
             tx.Start();
-            LinkedCadLayerService.ApplyHidden(_view, vis.SubId, vis.Hidden);
+            foreach (var subId in vis.SubIds)
+                LinkedCadLayerService.ApplyHidden(_view, subId, vis.Hidden);
             tx.Commit();
         }
         _uidoc.RefreshActiveView();
+    }
+
+    // "Hide by picking" loop (native Query ▸ "Hide in view"): click CAD geometry → resolve the layer behind it →
+    // hide that layer in the view, and keep going until Escape. Each hide commits + refreshes on its own so the
+    // geometry disappears under the cursor and the next pick can't land on it again. Unresolvable picks (the
+    // GraphicsStyle didn't map to a listed layer row) report and keep the loop alive rather than ending it.
+    private void RunHideLayerPickLoop(HideLayerPickRequest request)
+    {
+        var hideable = request.HideableSubIds ?? new HashSet<ElementId>();
+        int hidden = 0;
+
+        while (true)
+        {
+            Reference reference;
+            try
+            {
+                reference = _uidoc.Selection.PickObject(
+                    Autodesk.Revit.UI.Selection.ObjectType.PointOnElement,
+                    new Shared.Filters.ImportInstanceSelectionFilter(_doc),
+                    "Click CAD geometry to hide its layer (Escape to finish)");
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+            {
+                break;
+            }
+
+            ElementId subId;
+            string layerName;
+            try { subId = ResolveLayerSubcategory(reference, hideable, out layerName); }
+            catch (Exception) { subId = null; layerName = null; }
+
+            if (subId == null)
+            {
+                Dispatch(() => request.OnComplete?.Invoke(new LayerHiddenUpdate(
+                    null, "Couldn't resolve a CAD layer there — try clicking the geometry itself.")));
+                continue;
+            }
+
+            using (var tx = new Transaction(_doc, "TurboName - Hide CAD Layer"))
+            {
+                tx.Start();
+                LinkedCadLayerService.ApplyHidden(_view, subId, true);
+                tx.Commit();
+            }
+            _uidoc.RefreshActiveView();
+
+            hidden++;
+            var doneId = subId;
+            string status = $"Hid layer \"{layerName}\" — {hidden} hidden this session.";
+            Dispatch(() => request.OnComplete?.Invoke(new LayerHiddenUpdate(doneId, status)));
+        }
+
+        int total = hidden;
+        Dispatch(() => request.OnComplete?.Invoke(new LayerHiddenUpdate(
+            null, total == 0 ? "Hide by picking: nothing hidden." : $"Hide by picking: {total} layer(s) hidden.")));
+        Finish(request);
+    }
+
+    // The picked point → the layer subcategory behind it. Same resolution the CAD Room Source pick uses
+    // (geometry → GraphicsStyle → GraphicsStyleCategory), but returning the id rather than the name, and gated
+    // on the caller's roster: an id we don't recognize as a listed layer is refused, because the one thing that
+    // must never happen is hiding the import's PARENT category (the whole DWG). Spike-confirmed that ordinary
+    // linework, arcs, text, hatch faces, and block-internal layer-0 geometry all resolve to a real layer.
+    private ElementId ResolveLayerSubcategory(Reference reference, HashSet<ElementId> hideable, out string layerName)
+    {
+        layerName = null;
+        if (_doc.GetElement(reference.ElementId) is not ImportInstance import) return null;
+
+        var geomObj = import.GetGeometryObjectFromReference(reference);
+        if (geomObj == null) return null;
+        if (_doc.GetElement(geomObj.GraphicsStyleId) is not GraphicsStyle style) return null;
+
+        var cat = style.GraphicsStyleCategory;
+        if (cat == null || !hideable.Contains(cat.Id)) return null;
+
+        layerName = cat.Name;
+        return cat.Id;
     }
 
     // Global red Preview toggle. ON: un-hide + paint each flagged layer red in one transaction (snapshotting its
@@ -488,11 +570,12 @@ public class TurboNameApiHandler : IExternalEventHandler
     // layer's current override, so surface/halftone survive.
     private void RunApplyLineGraphics(ApplyLineGraphicsRequest request)
     {
-        if (request.SubId == null || request.Overrides == null) return;
+        if (request.SubIds == null || request.SubIds.Count == 0 || request.Overrides == null) return;
         using (var tx = new Transaction(_doc, "TurboName - Layer Line Graphics"))
         {
             tx.Start();
-            _view.SetCategoryOverrides(request.SubId, request.Overrides);
+            foreach (var subId in request.SubIds)
+                _view.SetCategoryOverrides(subId, request.Overrides);
             tx.Commit();
         }
         _uidoc.RefreshActiveView();

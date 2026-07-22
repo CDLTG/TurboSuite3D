@@ -172,15 +172,22 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" MaxHeight="740">
+        <!-- No hardcoded height cap: the window grows upward from its bottom-right anchor to fit the content.
+             MaxHeight is set at load from the screen's work area (OnLoaded) purely as a last-resort guard, so a
+             shorter display gets a scrollbar instead of a window running off the top. -->
+        <ScrollViewer x:Name="ContentScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto">
             <StackPanel>
 
                 <!-- Linked CAD Layers — the config surface: live show/hide + role tagging -->
-                <GroupBox Header="Linked CAD Layers (2D Workflow)" Margin="0,0,0,10" Padding="12,8"
+                <GroupBox Header="Linked CAD Layers (2D Workflow)" Margin="0,0,0,8" Padding="10,6"
                           Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="Check to show/hide a layer (mirrors VG → Imported Categories, persists). Tag roles per layer: W/D/A = region-gen wall/door/area (paints red), N/H = room name / ceiling height text."
-                                   Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <StackPanel>
+                        <!-- Legend only. Everything else this used to spell out (the checkbox mirroring VG,
+                             Ctrl/Shift multi-select, what the red preview does) now lives in the tooltips of the
+                             controls that do it — vertical space in this window is worth more than prose. -->
+                        <TextBlock Foreground="#555555" Margin="0,0,0,6" TextWrapping="Wrap"
+                                   Text="W/D/A = wall / door / area (region-gen)  ·  N/H = room name / ceiling height"
+                                   ToolTip="Check a layer to show/hide it in the view (mirrors VG → Imported Categories, and persists). Tag roles per layer with the W/D/A/N/H buttons. Ctrl/Shift-click layer names to select several — the checkbox, tags, and line edits then apply to the whole selection."/>
 
                         <!-- Room-source mode: read-only status (auto-detected by "Pick from view…"); drives Name/Ht columns + the room-source sub-panel below -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
@@ -191,13 +198,20 @@
                             <TextBlock Text="&#160;— set by “Pick from view…”" VerticalAlignment="Center" Foreground="#888888"/>
                         </StackPanel>
 
-                        <!-- Global red watershed preview: paints the W/D/A-tagged layers red to verify structure.
-                             Off by default; snapshot-of-the-moment (retag → toggle off/on to refresh). -->
-                        <ToggleButton Content="Preview Watershed" Style="{StaticResource WatershedToggle}"
-                                      HorizontalAlignment="Left" Margin="0,0,0,8"
-                                      IsChecked="{Binding IsPreviewActive, Mode=OneWay}"
-                                      Command="{Binding TogglePreviewCommand}"
-                                      ToolTip="Paints every W/D/A-tagged layer red so you can verify the watershed structure will hold. Off by default; turns off automatically if you change the W/D/A tags — press again to re-check. Line editing is disabled while this is on."/>
+                        <!-- Global red watershed preview + click-to-hide. Both light up red while live. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <ToggleButton Content="Preview watershed" Style="{StaticResource WatershedToggle}"
+                                          Margin="0,0,8,0"
+                                          IsChecked="{Binding IsPreviewActive, Mode=OneWay}"
+                                          Command="{Binding TogglePreviewCommand}"
+                                          ToolTip="Paints every W/D/A-tagged layer red so you can verify the watershed structure will hold. Off by default; turns off automatically if you change the W/D/A tags — press again to re-check. Line editing is disabled while this is on."/>
+                            <!-- Native Import Instance ▸ Query ▸ "Hide in view", as a loop. Escape ends it — a
+                                 running pick can't be cancelled from this window, so the button disables while lit. -->
+                            <ToggleButton Content="Hide by picking" Style="{StaticResource WatershedToggle}"
+                                          IsChecked="{Binding IsHidePicking, Mode=OneWay}"
+                                          Command="{Binding HideByPickCommand}"
+                                          ToolTip="Click CAD geometry in the view and its layer is hidden (same as Revit's Query ▸ Hide in view, and the same as unchecking it here). Keeps going until you press Escape."/>
+                        </StackPanel>
 
                         <!-- Find filter -->
                         <Grid Margin="0,0,0,6">
@@ -210,103 +224,116 @@
                                      Text="{Binding LayerFilterText, UpdateSourceTrigger=PropertyChanged}"/>
                         </Grid>
 
-                        <!-- Per-file collapsible groups: [vis] [W][D][A][N][H] LayerName -->
+                        <!-- Per-file collapsible groups: [vis] [W][D][A][N][H] LayerName.
+                             ListBox (not ItemsControl) for native-VG-style Ctrl/Shift multi-select; SelectedItems
+                             isn't bindable, so the code-behind pushes it to the VM. The in-row controls handle
+                             their own mouse-down, so clicking a checkbox/tag/swatch edits without disturbing the
+                             selection — selection is made by clicking the layer name or the empty row space. -->
                         <Border BorderBrush="#CCCCCC" BorderThickness="1">
-                            <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled">
-                                <ItemsControl ItemsSource="{Binding LayersView}">
-                                    <ItemsControl.GroupStyle>
-                                        <GroupStyle>
-                                            <GroupStyle.ContainerStyle>
-                                                <Style TargetType="{x:Type GroupItem}">
-                                                    <Setter Property="Template">
-                                                        <Setter.Value>
-                                                            <ControlTemplate TargetType="{x:Type GroupItem}">
-                                                                <Expander IsExpanded="True" Padding="0"
-                                                                          Margin="0,2,0,0">
-                                                                    <Expander.Header>
-                                                                        <TextBlock Text="{Binding Name}"
-                                                                                   FontWeight="SemiBold"
-                                                                                   TextTrimming="CharacterEllipsis"/>
-                                                                    </Expander.Header>
-                                                                    <ItemsPresenter Margin="16,2,0,4"/>
-                                                                </Expander>
-                                                            </ControlTemplate>
-                                                        </Setter.Value>
-                                                    </Setter>
-                                                </Style>
-                                            </GroupStyle.ContainerStyle>
-                                        </GroupStyle>
-                                    </ItemsControl.GroupStyle>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <!-- Native layout: [vis + W/D/A/N/H] | Layer Name (fills, ellipsizes) | line swatch -->
-                                            <Grid Margin="0,1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
+                            <ListBox x:Name="LayerList" ItemsSource="{Binding LayersView}"
+                                     MaxHeight="380" BorderThickness="0"
+                                     SelectionMode="Extended"
+                                     SelectionChanged="LayerList_SelectionChanged"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="Margin" Value="0"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ItemsControl.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.ContainerStyle>
+                                            <Style TargetType="{x:Type GroupItem}">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="{x:Type GroupItem}">
+                                                            <Expander IsExpanded="True" Padding="0"
+                                                                      Margin="0,2,0,0">
+                                                                <Expander.Header>
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               FontWeight="SemiBold"
+                                                                               TextTrimming="CharacterEllipsis"/>
+                                                                </Expander.Header>
+                                                                <ItemsPresenter Margin="16,2,0,4"/>
+                                                            </Expander>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </GroupStyle.ContainerStyle>
+                                    </GroupStyle>
+                                </ItemsControl.GroupStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <!-- Native layout: [vis + W/D/A/N/H] | Layer Name (fills, ellipsizes) | line swatch -->
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
 
-                                                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                                    <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                                              VerticalAlignment="Center" Margin="0,0,4,0"
-                                                              ToolTip="Show/hide this layer in the view"/>
-                                                    <ToggleButton Content="W" Style="{StaticResource RoleToggleRed}"
-                                                                  IsChecked="{Binding IsWall}" ToolTip="Wall layer (region-gen)"/>
-                                                    <ToggleButton Content="D" Style="{StaticResource RoleToggleRed}"
-                                                                  IsChecked="{Binding IsDoor}" ToolTip="Door layer (region-gen)"/>
-                                                    <ToggleButton Content="A" Style="{StaticResource RoleToggleRed}"
-                                                                  IsChecked="{Binding IsArea}" ToolTip="Area/envelope layer (region-gen)"/>
-                                                    <ToggleButton Content="N" Style="{StaticResource RoleToggleBlue}"
-                                                                  IsChecked="{Binding IsName}" ToolTip="Room-name text layer"
-                                                                  Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
-                                                    <ToggleButton Content="H" Style="{StaticResource RoleToggleBlue}"
-                                                                  IsChecked="{Binding IsHeight}" ToolTip="Ceiling-height text layer"
-                                                                  Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
-                                                </StackPanel>
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                          VerticalAlignment="Center" Margin="0,0,4,0"
+                                                          ToolTip="Show/hide this layer in the view"/>
+                                                <ToggleButton Content="W" Style="{StaticResource RoleToggleRed}"
+                                                              IsChecked="{Binding IsWall}" ToolTip="Wall layer (region-gen)"/>
+                                                <ToggleButton Content="D" Style="{StaticResource RoleToggleRed}"
+                                                              IsChecked="{Binding IsDoor}" ToolTip="Door layer (region-gen)"/>
+                                                <ToggleButton Content="A" Style="{StaticResource RoleToggleRed}"
+                                                              IsChecked="{Binding IsArea}" ToolTip="Area/envelope layer (region-gen)"/>
+                                                <ToggleButton Content="N" Style="{StaticResource RoleToggleBlue}"
+                                                              IsChecked="{Binding IsName}" ToolTip="Room-name text layer"
+                                                              Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
+                                                <ToggleButton Content="H" Style="{StaticResource RoleToggleBlue}"
+                                                              IsChecked="{Binding IsHeight}" ToolTip="Ceiling-height text layer"
+                                                              Visibility="{Binding DataContext.CadConfig.IsTextMode, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}, Converter={StaticResource BoolToVis}}"/>
+                                            </StackPanel>
 
-                                                <TextBlock Grid.Column="1" Text="{Binding LayerName}" VerticalAlignment="Center"
-                                                           Margin="6,0,8,0" TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding LayerName}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding LayerName}" VerticalAlignment="Center"
+                                                       Margin="6,0,8,0" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding LayerName}"/>
 
-                                                <!-- Line-preview swatch = the Line Graphics button. Disabled while preview on / picking. -->
-                                                <Button Grid.Column="2" Style="{StaticResource LineSwatchButton}"
-                                                        Click="LineGraphicsButton_Click"
-                                                        IsEnabled="{Binding DataContext.LineEditingEnabled, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
-                                                        ToolTip="Edit this layer's line color / weight / pattern (VG override)">
-                                                    <Border Width="120" Height="16" BorderBrush="#BBBBBB"
-                                                            BorderThickness="1" Background="White">
-                                                        <Line X1="5" Y1="8" X2="113" Y2="8"
-                                                              Stroke="{Binding LinePreviewBrush}"
-                                                              StrokeThickness="{Binding LinePreviewThickness}"
-                                                              StrokeDashArray="{Binding LinePreviewDashArray}"
-                                                              StrokeDashCap="Round" SnapsToDevicePixels="True"/>
-                                                    </Border>
-                                                </Button>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                                            <!-- Line-preview swatch = the Line Graphics button. Disabled while preview on / picking. -->
+                                            <Button Grid.Column="2" Style="{StaticResource LineSwatchButton}"
+                                                    Click="LineGraphicsButton_Click"
+                                                    IsEnabled="{Binding DataContext.LineEditingEnabled, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                                    ToolTip="Edit this layer's line color / weight / pattern (VG override)">
+                                                <Border Width="120" Height="16" BorderBrush="#BBBBBB"
+                                                        BorderThickness="1" Background="White">
+                                                    <Line X1="5" Y1="8" X2="113" Y2="8"
+                                                          Stroke="{Binding LinePreviewBrush}"
+                                                          StrokeThickness="{Binding LinePreviewThickness}"
+                                                          StrokeDashArray="{Binding LinePreviewDashArray}"
+                                                          StrokeDashCap="Round" SnapsToDevicePixels="True"/>
+                                                </Border>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ListBox>
                         </Border>
                     </StackPanel>
                 </GroupBox>
 
                 <!-- CAD Room Source configuration -->
-                <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,10" Padding="12,8"
+                <GroupBox Header="CAD Room Source (2D Workflow)" Margin="0,0,0,8" Padding="10,6"
                           Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="Room names/heights are scoped by the N/H (Text) or block (below) tags — the picked layer's DWG becomes the link scope, so a co-linked RCP sharing a layer no longer double-seeds each room."
-                                   Foreground="#555555" Margin="0,0,0,8" TextWrapping="Wrap"/>
-
-                        <!-- Pick-from-view discovery -->
+                    <StackPanel>
+                        <!-- Pick-from-view discovery. (The per-link scoping note that used to sit here described
+                             a fixed bug rather than how to drive the section — it's on the button's tooltip.) -->
                         <StackPanel Margin="0,0,0,8">
                             <Button Content="Pick from view…" HorizontalAlignment="Left"
                                     Command="{Binding CadConfig.PickFromViewCommand}"
                                     Style="{StaticResource RevitButtonStyle}"
                                     Padding="12,5" MinWidth="120"
-                                    ToolTip="Click a room label in the linked CAD. The block/text mode, layer, and DWG scope are detected automatically."/>
+                                    ToolTip="Click a room label in the linked CAD. The block/text mode, layer, and DWG scope are detected automatically — the picked layer's DWG becomes the link scope, so a co-linked RCP sharing a layer doesn't double-seed each room."/>
                             <TextBlock Text="{Binding CadConfig.DetectedText}" Foreground="#2B579A" FontSize="10"
                                        Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
@@ -340,7 +367,7 @@
                                           ItemsSource="{Binding CadConfig.UnassignedTags}"
                                           SelectionChanged="RoomNameAddCombo_SelectionChanged"
                                           DropDownOpened="OnDiscoveryDropDownOpened"
-                                          ToolTip="Add an attribute to the room name (joined in the order you add them)"/>
+                                          ToolTip="Add an attribute to the room name — the values are joined in the order you add them. All tags come from the picked block; there's no typing."/>
                                 <ItemsControl Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Margin="0,0,0,6"
                                               ItemsSource="{Binding CadConfig.RoomNameTags}">
                                     <ItemsControl.ItemsPanel>
@@ -390,8 +417,6 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
-                            <TextBlock Text="Room name = the tag values joined in the order added. All tags come from the picked block — no typing."
-                                       Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
 
                         <!-- Text mode: optional ceiling-height-from-block override (names/heights layers are row tags) -->
@@ -466,21 +491,21 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
-                            <TextBlock Text="Tag the room-name layer N and the height layer H on the rows above. Optionally, heights can instead come from a block — Pick it here (leave blank to use the H layer)."
-                                       Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="Heights come from the H layer, or from a block picked here."
+                                       Foreground="#888888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       ToolTip="Tag the room-name layer N and the height layer H on the rows above. Leave the height block blank to use the H layer."/>
                         </StackPanel>
                     </StackPanel>
                 </GroupBox>
 
                 <!-- CAD settings above are dirty-tracked and saved when the window closes. -->
 
-                <!-- Generate Regions section (merged from the former standalone GenerateRegions window) -->
-                <GroupBox Header="Generate Regions" Padding="12,8" Margin="0,0,0,12" Style="{StaticResource BoldHeaderGroupBox}">
+                <!-- Generate Regions section (merged from the former standalone GenerateRegions window). Also
+                     carries Assign names — it was a whole GroupBox for one button, and it's the same workflow:
+                     make the regions, then name them. -->
+                <GroupBox Header="Generate Regions &amp; Names" Padding="10,6" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel>
-                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Text="Draw Room Region filled regions interactively (Rectangle / Polygon), or Auto-generate them from the CAD room labels (uses the W/D/A-tagged layers above)."/>
-
-                        <!-- Region type -->
+                        <!-- Region type. (What the three buttons do is on the buttons themselves + their tooltips.) -->
                         <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -511,10 +536,11 @@
                                    TextWrapping="Wrap"
                                    Visibility="{Binding IsPicking, Converter={StaticResource BoolToVis}}"/>
 
-                        <!-- Action buttons (hidden while picking) -->
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
+                        <!-- Action buttons (hidden while picking). Left = the naming pass, right = the three
+                             region-drawing modes, so the row reads in workflow order: draw regions → name them. -->
+                        <Grid Margin="0,8,0,0">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
                                     <Setter Property="Visibility" Value="Visible"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsPicking}" Value="True">
@@ -522,28 +548,26 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </StackPanel.Style>
-                            <Button Content="Auto-generate" MinWidth="100" Margin="0,0,8,0"
+                            </Grid.Style>
+                            <Button Content="Assign names" MinWidth="90" HorizontalAlignment="Left"
                                     Style="{StaticResource RevitButtonStyle}"
-                                    Command="{Binding AutoGenerateCommand}"/>
-                            <Button Content="Rectangle" MinWidth="80" Margin="0,0,8,0"
-                                    Style="{StaticResource RevitButtonStyle}"
-                                    Command="{Binding RectangleCommand}"/>
-                            <Button Content="Polygon" MinWidth="80"
-                                    Style="{StaticResource RevitButtonStyle}"
-                                    Command="{Binding PolygonCommand}"/>
-                        </StackPanel>
-                    </StackPanel>
-                </GroupBox>
-
-                <!-- Assign Room Names section -->
-                <GroupBox Header="Assign Room Names" Padding="12,8" Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel>
-                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Text="Reads the linked DWG to extract room names and ceiling heights, assigns them to Room Region filled regions, and places TextNotes."/>
-                        <Button Content="Run" Width="80" HorizontalAlignment="Right" Margin="0,8,0,0"
-                                Style="{StaticResource RevitButtonStyle}"
-                                Command="{Binding RunAssignCommand}"/>
+                                    Command="{Binding RunAssignCommand}"
+                                    ToolTip="Reads the linked DWG to extract room names and ceiling heights, assigns them to the Room Region filled regions, and places TextNotes. Run this after the regions exist."/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Auto-generate" MinWidth="100" Margin="0,0,8,0"
+                                        Style="{StaticResource RevitButtonStyle}"
+                                        Command="{Binding AutoGenerateCommand}"
+                                        ToolTip="Generate a region per room in one pass, from the CAD room labels — bounded by the W/D/A-tagged layers above. Anything it can't cut cleanly is listed as “Needs manual” instead of being created wrong."/>
+                                <Button Content="Rectangle" MinWidth="80" Margin="0,0,8,0"
+                                        Style="{StaticResource RevitButtonStyle}"
+                                        Command="{Binding RectangleCommand}"
+                                        ToolTip="Draw regions by clicking two opposite corners, repeatedly. Escape to finish."/>
+                                <Button Content="Polygon" MinWidth="80"
+                                        Style="{StaticResource RevitButtonStyle}"
+                                        Command="{Binding PolygonCommand}"
+                                        ToolTip="Trace regions corner by corner. Escape closes the current shape; Escape again finishes."/>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </GroupBox>
             </StackPanel>

@@ -27,6 +27,12 @@
         <Setter Property="Padding" Value="16,4"/>
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <!-- Centered content is the default (what every button in the suite expects), but it's set HERE rather
+             than hardcoded in the template below, so a button that needs otherwise — e.g. the swatch+label color
+             button in TurboName's Line Graphics flyout — can just set HorizontalContentAlignment="Left" and have
+             it actually take effect. -->
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -36,7 +42,8 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="0"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">

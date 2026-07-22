@@ -64,14 +64,37 @@ public class CloseCleanupRequest : TurboNameRequest
 }
 
 /// <summary>
-/// Show/hide one linked-CAD layer (subcategory) in the locked view — the folded-in VG → Imported Categories
-/// checkbox. The hide persists (that's the point), so no revert on close.
+/// Show/hide linked-CAD layers (subcategories) in the locked view — the folded-in VG → Imported Categories
+/// checkbox. Carries a LIST because the layer table is multi-select: checking one row of a selection applies to
+/// the whole selection, and the shared event drops every raise after the first, so a per-row loop would lose all
+/// but one. The hide persists (that's the point), so no revert on close.
 /// </summary>
 public class SetLayerVisibilityRequest : TurboNameRequest
 {
-    public Autodesk.Revit.DB.ElementId SubId { get; set; }
+    public System.Collections.Generic.List<Autodesk.Revit.DB.ElementId> SubIds { get; set; }
     public bool Hidden { get; set; }
 }
+
+/// <summary>
+/// "Hide by picking" — the native Import Instance ▸ Query ▸ "Hide in view" workflow, as a loop: click linked-CAD
+/// geometry, its LAYER goes hidden in the view, repeat until Escape. Same shape as the region pick loops (one
+/// request owns the whole loop; each hide is its own transaction + refresh, so the layer vanishes under the
+/// cursor), and it writes the exact same view slot as the row checkbox — so the row just unchecks.
+///
+/// <see cref="HideableSubIds"/> is the guard: a pick is only honored when the geometry's GraphicsStyle resolves
+/// to a subcategory that's actually a listed layer row. Spike-confirmed on 2D SETUP TEST (5 picks: polyline,
+/// arc, text, hatch face, and block-internal geometry on layer "0") — every one resolved to a layer subcategory
+/// whose <c>.Parent</c> is the import's category, never to the parent itself. The guard still refuses anything
+/// unrecognized, because resolving to the parent would blank the entire DWG rather than one layer.
+/// </summary>
+public class HideLayerPickRequest : TurboNameRequest
+{
+    /// <summary>The layer subcategories the table knows about — the only ids the loop will hide.</summary>
+    public System.Collections.Generic.HashSet<Autodesk.Revit.DB.ElementId> HideableSubIds { get; set; }
+}
+
+/// <summary>One layer hidden by the pick loop: the row to uncheck, plus a status line for the window.</summary>
+public record LayerHiddenUpdate(Autodesk.Revit.DB.ElementId SubId, string Status);
 
 /// <summary>
 /// Drives the global red watershed Preview toggle in one API pass. Toggle ON (<see cref="Revert"/> = false):
@@ -98,10 +121,15 @@ public class PaintRolePreviewsRequest : TurboNameRequest
 /// .InvalidColorValue)</c> / <c>SetProjectionLinePatternId(ElementId.InvalidElementId)</c>, all spike-confirmed)
 /// off a clone of the layer's current override, so surface/halftone overrides are preserved. Persists on the
 /// view like the visibility checkbox — never reverted on close (unlike the transient red preview).
+///
+/// Carries a LIST for the multi-select table: editing one row of a selection stamps the same composed override
+/// on every selected layer (what native VG multi-select does). The clone is of the CLICKED row's override, so a
+/// bulk apply also normalizes the others' surface/halftone bits to that row's — accepted, and the reason the
+/// flyout titles itself "N layers" when it's about to do that.
 /// </summary>
 public class ApplyLineGraphicsRequest : TurboNameRequest
 {
-    public Autodesk.Revit.DB.ElementId SubId { get; set; }
+    public System.Collections.Generic.List<Autodesk.Revit.DB.ElementId> SubIds { get; set; }
     public Autodesk.Revit.DB.OverrideGraphicSettings Overrides { get; set; }
 }
 

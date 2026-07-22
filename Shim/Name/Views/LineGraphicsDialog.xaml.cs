@@ -17,7 +17,9 @@ namespace TurboSuite.Name.Views;
 /// and OK/Cancel. Seeded from the layer's current <see cref="OverrideGraphicSettings"/> (cloned, so surface /
 /// halftone overrides survive), it composes a new override on OK and exposes it via <see cref="Result"/>; the
 /// caller writes it through the shared external event. All value-object work — no Revit API context needed here
-/// (spike-confirmed). Color is picked with the native Windows <see cref="System.Windows.Forms.ColorDialog"/>.
+/// (spike-confirmed). Color is picked with the native Windows <see cref="System.Windows.Forms.ColorDialog"/>,
+/// pre-seeded with the firm template's three grayscale custom colors in the same bottom-right slots Revit's own
+/// color dialog shows them in.
 /// </summary>
 public partial class LineGraphicsDialog : Window
 {
@@ -70,12 +72,38 @@ public partial class LineGraphicsDialog : Window
         }
     }
 
+    // ── Custom-colors palette (mirrors the firm template's Revit color dialog) ──
+    // The Windows color dialog's "Custom colors" panel is 16 slots laid out 2 rows × 8 columns, filled
+    // left-to-right, top row first — so indices 13/14/15 are the bottom-right corner, where the shipped project
+    // template puts the three common grayscales. Slots are packed BGR (0x00BBGGRR), NOT RGB.
+    // Static so a color the user adds mid-session survives to the next open (each click builds a fresh dialog);
+    // it resets with Revit, which is the same lifetime as the rest of this window's transient state.
+    private static int[] _customColors = BuildCustomColors();
+
+    private static int[] BuildCustomColors()
+    {
+        var slots = new int[16];
+        for (int i = 0; i < slots.Length; i++) slots[i] = Win32Bgr(255, 255, 255); // unset reads as white
+        slots[13] = Win32Bgr(221, 221, 221);
+        slots[14] = Win32Bgr(187, 187, 187);
+        slots[15] = Win32Bgr(102, 102, 102);
+        return slots;
+    }
+
+    private static int Win32Bgr(int r, int g, int b) => r | (g << 8) | (b << 16);
+
     private void ColorButton_Click(object sender, RoutedEventArgs e)
     {
-        using var dlg = new System.Windows.Forms.ColorDialog { FullOpen = true, AnyColor = true };
+        using var dlg = new System.Windows.Forms.ColorDialog
+        {
+            FullOpen = true,
+            AnyColor = true,
+            CustomColors = _customColors
+        };
         if (_hasColor) dlg.Color = DrawingColor.FromArgb(_color.Red, _color.Green, _color.Blue);
         if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
         {
+            _customColors = dlg.CustomColors; // keep anything the user added via "Add to Custom Colors"
             _color = new RevitColor(dlg.Color.R, dlg.Color.G, dlg.Color.B);
             _hasColor = true;
             UpdateColorDisplay();

@@ -42,6 +42,28 @@ public class TurboNameViewModel : ViewModelBase
         set { if (SetProperty(ref _layerFilterText, value)) LayersView.Refresh(); }
     }
 
+    // ── Multi-select (mirrors native VG's bulk edits) ──
+    // The layer list is a ListBox with SelectionMode=Extended; its SelectedItems can't be bound (same limitation
+    // as DataGrid — see CLAUDE.md), so the view pushes the selection here on SelectionChanged. Every row edit
+    // then asks TargetRows() whether it applies to one row or the whole selection.
+    private readonly List<CadLayerRowViewModel> _selected = new();
+
+    /// <summary>Called from the view's SelectionChanged. Replaces the tracked selection. Nothing in the window
+    /// binds the selection itself — the ListBox's own highlight is the only feedback it needs.</summary>
+    public void SetSelectedLayers(IEnumerable<CadLayerRowViewModel> rows)
+    {
+        _selected.Clear();
+        if (rows != null) _selected.AddRange(rows);
+    }
+
+    // Which rows an edit on <paramref name="row"/> hits: the whole selection when the row is part of a
+    // multi-selection (native VG behavior), otherwise just that row. Never returns an empty list.
+    private List<CadLayerRowViewModel> TargetRows(CadLayerRowViewModel row)
+    {
+        if (_selected.Count > 1 && _selected.Contains(row)) return new List<CadLayerRowViewModel>(_selected);
+        return new List<CadLayerRowViewModel> { row };
+    }
+
     // Subcategories currently painted red (region-gen tagged) — drives the paint/unpaint diff and close revert.
     private readonly HashSet<ElementId> _painted = new();
 
@@ -83,11 +105,18 @@ public class TurboNameViewModel : ViewModelBase
     /// share the override slot) or a pick loop is running (the shared event is busy, so an apply would drop).</summary>
     public bool LineEditingEnabled => !_isPreviewActive && !_isPicking;
 
+    private bool _isHidePicking;
+    /// <summary>True while the "Hide by picking" loop owns the cursor — drives the button's lit state. The loop
+    /// only ends on Escape (a running <c>PickObject</c> can't be cancelled from the window), so the button is
+    /// disabled, not clickable-off, while it's on.</summary>
+    public bool IsHidePicking { get => _isHidePicking; private set => SetProperty(ref _isHidePicking, value); }
+
     public ICommand RunAssignCommand { get; }
     public ICommand AutoGenerateCommand { get; }
     public ICommand RectangleCommand { get; }
     public ICommand PolygonCommand { get; }
     public ICommand TogglePreviewCommand { get; }
+    public ICommand HideByPickCommand { get; }
 
     /// <summary>Raised to ask the window to actually close (after the on-close save has flushed).</summary>
     public event Action RequestClose;
@@ -115,6 +144,7 @@ public class TurboNameViewModel : ViewModelBase
         RectangleCommand = new RelayCommand(OnRectangle, () => !IsPicking);
         PolygonCommand = new RelayCommand(OnPolygon, () => !IsPicking);
         TogglePreviewCommand = new RelayCommand(TogglePreview, () => !IsPicking);
+        HideByPickCommand = new RelayCommand(OnHideByPick, () => !IsPicking && Layers.Count > 0);
     }
 
     /// <summary>Pattern-dropdown roster for the Line Graphics flyout, read once in a valid API context.</summary>
@@ -133,14 +163,21 @@ public class TurboNameViewModel : ViewModelBase
                 RequestToggleVisibility, OnRole));
     }
 
-    /// <summary>Apply the Line Graphics flyout's composed override to a layer (persistent — never reverted on
-    /// close). On success the row caches the new override so reopening the flyout shows the current state.</summary>
+    /// <summary>Apply the Line Graphics flyout's composed override (persistent — never reverted on close). Hits
+    /// every selected layer when the edited row is part of a multi-selection. On success each row caches the new
+    /// override so reopening the flyout shows the current state.</summary>
     public void ApplyLineGraphics(CadLayerRowViewModel row, OverrideGraphicSettings overrides)
     {
         if (row == null || overrides == null) return;
-        if (RaiseUser(new ApplyLineGraphicsRequest { SubId = row.SubId, Overrides = overrides }))
-            row.LineOverride = overrides;
+        var targets = TargetRows(row);
+        var subIds = targets.ConvertAll(r => r.SubId);
+        if (RaiseUser(new ApplyLineGraphicsRequest { SubIds = subIds, Overrides = overrides }))
+            foreach (var target in targets) target.LineOverride = overrides;
     }
+
+    /// <summary>How many layers a Line Graphics edit started on <paramref name="row"/> would touch — the flyout
+    /// titles itself with this so a bulk apply is never a surprise.</summary>
+    public int LineGraphicsTargetCount(CadLayerRowViewModel row) => row == null ? 0 : TargetRows(row).Count;
 
     // Re-seed every row's role toggles from the config (the single source of truth). Silent — no callbacks.
     private void SyncRolesFromConfig()
@@ -152,9 +189,19 @@ public class TurboNameViewModel : ViewModelBase
 
     // A row's role toggle changed: pure data — write it into the config and enforce single-select for Name/Ht.
     // Region-gen (W/D/A) tags no longer paint on toggle; the red is shown on demand by the Preview toggle.
+    // W/D/A tags bulk across a multi-selection (tagging a dozen wall layers at once); Name/Ht deliberately do
+    // NOT — they're single-value scopes, so a bulk tag would silently keep only the last row.
     private void OnRole(CadLayerRowViewModel row, LayerRole role, bool value)
     {
         CadConfig.SetRole(role, row.FileName, row.LayerName, value); // fires PropertyChanged → SettingsDirty
+
+        if (role is LayerRole.Wall or LayerRole.Door or LayerRole.Area)
+            foreach (var target in TargetRows(row))
+            {
+                if (ReferenceEquals(target, row)) continue;
+                target.SetRoleSilently(role, value);
+                CadConfig.SetRole(role, target.FileName, target.LayerName, value);
+            }
 
         if (value && role is LayerRole.Name or LayerRole.Height)
             foreach (var other in Layers)
@@ -227,10 +274,62 @@ public class TurboNameViewModel : ViewModelBase
         return row.LayerName.IndexOf(_layerFilterText.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    // Returns false when the shared event is busy (the row reverts its checkbox). Hidden = the target state.
+    // Returns false when the shared event is busy (the row reverts its checkbox). The row's IsVisible has already
+    // been flipped optimistically by the binding, so it IS the target state — the rest of a multi-selection is
+    // driven to match it (silently: the request below covers them all in one transaction). On a busy event the
+    // followers are rolled back here, the clicked row by its own setter.
     private bool RequestToggleVisibility(CadLayerRowViewModel row)
     {
-        return RaiseUser(new SetLayerVisibilityRequest { SubId = row.SubId, Hidden = !row.IsVisible });
+        bool visible = row.IsVisible;
+        var targets = TargetRows(row);
+        var flipped = new List<CadLayerRowViewModel>();
+        foreach (var target in targets)
+        {
+            if (ReferenceEquals(target, row) || target.IsVisible == visible) continue;
+            target.SetVisibleSilently(visible);
+            flipped.Add(target);
+        }
+
+        if (RaiseUser(new SetLayerVisibilityRequest
+        {
+            SubIds = targets.ConvertAll(r => r.SubId),
+            Hidden = !visible
+        })) return true;
+
+        foreach (var target in flipped) target.SetVisibleSilently(!visible);
+        return false;
+    }
+
+    // ── "Hide by picking" (native Import Instance ▸ Query ▸ "Hide in view") ──
+    // One request owns the whole click-to-hide loop; each hit unchecks its row as the layer goes hidden. Exits on
+    // Escape only, so the button lights up and disables rather than offering a toggle-off that couldn't work.
+    private void OnHideByPick()
+    {
+        var hideable = new HashSet<ElementId>();
+        foreach (var row in Layers) hideable.Add(row.SubId);
+        if (hideable.Count == 0) return;
+
+        IsPicking = true;
+        IsHidePicking = true;
+        PickingHint = "Click CAD geometry to hide its layer. Escape to finish.";
+
+        var request = new HideLayerPickRequest { HideableSubIds = hideable };
+        request.OnComplete = result =>
+        {
+            if (result is not LayerHiddenUpdate update) return;
+            StatusText = update.Status;
+            if (update.SubId == null) return;
+            foreach (var row in Layers)
+                if (update.SubId.Equals(row.SubId)) { row.SetVisibleSilently(false); break; }
+        };
+        request.OnFinished = () => { IsPicking = false; IsHidePicking = false; PickingHint = ""; };
+
+        if (!RaiseUser(request))
+        {
+            IsPicking = false;
+            IsHidePicking = false;
+            PickingHint = "";
+        }
     }
 
     private void OnPickFromView()
