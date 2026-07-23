@@ -150,6 +150,25 @@ namespace TurboSuite.Name.Regions
             double ppf = TargetPixelsPerFoot;
             if (widthFt * heightFt * ppf * ppf > GridPixelCap)
                 ppf = Math.Sqrt(GridPixelCap / (widthFt * heightFt));
+
+            // ── Phase lock: snap the origin onto the ABSOLUTE 1/ppf lattice. Px/Py are origin-relative, so
+            //    without this a bbox that merely grows (a stray line, a resized crop, a second floor left in
+            //    an uncropped view) shifts every pixel by a sub-pixel amount and re-quantizes the whole floor
+            //    — same ppf, different raster. That silently flips marginal features across a threshold: a
+            //    ~4.5" pocket-door cavity lands on 4 px in one phase (fully sealed by SlotWidthPx, clean) and
+            //    5 px in the other (partial seal, 1 px fringe per face ⇒ needle finger ⇒ self-touching loop
+            //    the vectorizer must skip). With bMin on the lattice, Px(x) = round(x*ppf) - a for integer a,
+            //    so the pixelation is a pure translation and ToModel round-trips to absolute coordinates.
+            //
+            //    Scope — this locks RASTERIZATION, not the whole pipeline. The priority flood's equal-distance
+            //    tie-break is the packed pixel index (y*w + x), so it still moves with grid width: a contested
+            //    throat where two owners arrive at the same distance can resolve differently. That only shifts
+            //    a seam, never a seal/trace threshold, so it is far weaker than the phase shift fixed here —
+            //    but do not read this snap as making the engine bbox-independent end to end. ──
+            bMinX = Math.Floor(bMinX * ppf) / ppf;
+            bMinY = Math.Floor(bMinY * ppf) / ppf;
+            widthFt = bMaxX - bMinX; heightFt = bMaxY - bMinY;
+
             int w = (int)Math.Ceiling(widthFt * ppf) + 1;
             int h = (int)Math.Ceiling(heightFt * ppf) + 1;
 

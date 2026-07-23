@@ -118,6 +118,53 @@ namespace TurboSuite.Tests
         }
 
         [Fact]
+        public void Engine_RegionsAreUnchangedByFarAwayGeometry()
+        {
+            // Phase lock. The raster origin is snapped to the absolute 1/ppf lattice, so growing the bbox
+            // must not re-quantize the floor. Second run adds a stray segment ~200 ft away (a second level
+            // left in an uncropped view) offset by a deliberately non-integer number of pixels — 0.31 ft is
+            // 3.72 px at 12 px/ft, so a naive origin-relative raster would shift every wall by 0.72 px and
+            // flip marginal features (pocket-door cavities, small jogs) across the seal/trace thresholds.
+            //
+            // The stray is kept close enough that the padded bbox stays under GridPixelCap (~347k sqft), so
+            // ppf is pinned at 12 in BOTH runs. That is the point: this pins phase invariance at a FIXED
+            // resolution. Push the stray out past the cap and ppf itself drops (a separate, coarser-raster
+            // failure the lattice snap cannot and should not mask).
+            var envelope = Rect(0, 0, 20, 10);
+            var walls = new List<WallSeg>
+            {
+                new WallSeg(new Pt(10, 0), new Pt(10, 4)),
+                new WallSeg(new Pt(10, 6), new Pt(10, 10)),
+            };
+            var doors = new List<Pt> { new Pt(10, 5) };
+            var seeds = new List<Seed>
+            {
+                new Seed(new Pt(5, 5), "LEFT"),
+                new Seed(new Pt(15, 5), "RIGHT"),
+            };
+
+            var near = RegionWatershedEngine.Run(walls, doors, envelope, seeds);
+
+            var strayWalls = new List<WallSeg>(walls)
+            {
+                new WallSeg(new Pt(-200.31, -200.31), new Pt(-190.31, -200.31)),
+            };
+            var far = RegionWatershedEngine.Run(strayWalls, doors, envelope, seeds);
+
+            // Same rooms, and every boundary vertex identical in model space — not merely similar.
+            Assert.Equal(near.Regions.Select(r => r.RoomName), far.Regions.Select(r => r.RoomName));
+            foreach (var (a, b) in near.Regions.Zip(far.Regions, (a, b) => (a, b)))
+            {
+                Assert.Equal(a.Boundary.Count, b.Boundary.Count);
+                for (int i = 0; i < a.Boundary.Count; i++)
+                {
+                    Assert.Equal(a.Boundary[i].X, b.Boundary[i].X, 9);
+                    Assert.Equal(a.Boundary[i].Y, b.Boundary[i].Y, 9);
+                }
+            }
+        }
+
+        [Fact]
         public void Engine_ReturnsEmptyWhenNoSeeds()
         {
             var output = RegionWatershedEngine.Run(
