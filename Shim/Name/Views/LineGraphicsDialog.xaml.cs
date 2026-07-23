@@ -1,7 +1,10 @@
 #nullable disable
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using Autodesk.Revit.DB;
 using TurboSuite.Name.Services;
 using RevitColor = Autodesk.Revit.DB.Color;
@@ -94,14 +97,15 @@ public partial class LineGraphicsDialog : Window
 
     private void ColorButton_Click(object sender, RoutedEventArgs e)
     {
-        using var dlg = new System.Windows.Forms.ColorDialog
+        var owner = new WindowInteropHelper(this).Handle;
+        using var dlg = new AnchoredColorDialog(owner)
         {
             FullOpen = true,
             AnyColor = true,
             CustomColors = _customColors
         };
         if (_hasColor) dlg.Color = DrawingColor.FromArgb(_color.Red, _color.Green, _color.Blue);
-        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        if (dlg.ShowDialog(new Win32Window(owner)) == System.Windows.Forms.DialogResult.OK)
         {
             _customColors = dlg.CustomColors; // keep anything the user added via "Add to Custom Colors"
             _color = new RevitColor(dlg.Color.R, dlg.Color.G, dlg.Color.B);
@@ -145,4 +149,94 @@ public partial class LineGraphicsDialog : Window
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    /// <summary>Minimal <see cref="System.Windows.Forms.IWin32Window"/> so a WPF HWND can own a WinForms dialog.</summary>
+    private sealed class Win32Window : System.Windows.Forms.IWin32Window
+    {
+        public Win32Window(IntPtr handle) => Handle = handle;
+        public IntPtr Handle { get; }
+    }
+
+    /// <summary>
+    /// The native color picker, opened centred on this dialog instead of adrift on the screen.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="System.Windows.Forms.ColorDialog"/> wraps Win32 <c>ChooseColor</c> and exposes no position
+    /// API — and it does not merely *default* to somewhere unhelpful, it actively moves itself:
+    /// <c>CommonDialog.HookProc</c> handles <c>WM_INITDIALOG</c> by calling <c>MoveToScreenCenter</c>, which
+    /// places the dialog at one THIRD of the working area's height. That is the upper-middle-of-screen landing
+    /// spot, on the monitor holding the mouse, no matter where the Line Graphics window actually is.
+    ///
+    /// Because the placement is done in the hook, an owner handle alone will not move it — the hook runs last
+    /// and overrides whatever the owner implied. So the fix has to be the hook too: let the base class run
+    /// (it also seeds the initial color and caption), then reposition. <c>WM_INITDIALOG</c> fires once the
+    /// dialog exists at its final size but before it is painted, so there is no visible jump.
+    ///
+    /// The owner passed to <c>ShowDialog</c> is still worth setting, for the other half of the problem: an
+    /// unowned picker is a sibling of the Line Graphics window and can fall behind it.
+    ///
+    /// Sizes come from <c>GetWindowRect</c> (device pixels) rather than WPF's DIP-based Left/Top/Width/Height,
+    /// which would need per-monitor DPI correction to land right on a scaled display.
+    /// </remarks>
+    private sealed class AnchoredColorDialog : System.Windows.Forms.ColorDialog
+    {
+        private const int WM_INITDIALOG = 0x0110;
+        private const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+        private readonly IntPtr _anchor;
+
+        public AnchoredColorDialog(IntPtr anchor) => _anchor = anchor;
+
+        protected override IntPtr HookProc(IntPtr hWnd, int msg, IntPtr wparam, IntPtr lparam)
+        {
+            var result = base.HookProc(hWnd, msg, wparam, lparam);
+            if (msg == WM_INITDIALOG) CentreOnAnchor(hWnd);
+            return result;
+        }
+
+        private void CentreOnAnchor(IntPtr hWnd)
+        {
+            if (_anchor == IntPtr.Zero) return;
+            if (!GetWindowRect(_anchor, out RECT a) || !GetWindowRect(hWnd, out RECT d)) return;
+
+            int w = d.Right - d.Left, h = d.Bottom - d.Top;
+            int x = a.Left + ((a.Right - a.Left) - w) / 2;
+            int y = a.Top + ((a.Bottom - a.Top) - h) / 2;
+
+            // Clamp to the anchor's monitor work area. The picker is taller than the Line Graphics window, so
+            // centring on a window near the top or bottom of the screen pushes its OK button off the edge —
+            // and the failure mode is a modal dialog the user cannot dismiss with the mouse.
+            var mi = new MONITORINFO { cbSize = Marshal.SizeOf(typeof(MONITORINFO)) };
+            if (GetMonitorInfo(MonitorFromWindow(_anchor, MONITOR_DEFAULTTONEAREST), ref mi))
+            {
+                x = Math.Max(mi.rcWork.Left, Math.Min(x, mi.rcWork.Right - w));
+                y = Math.Max(mi.rcWork.Top, Math.Min(y, mi.rcWork.Bottom - h));
+            }
+
+            SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+    }
 }

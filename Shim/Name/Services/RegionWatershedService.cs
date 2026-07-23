@@ -59,13 +59,14 @@ public static class RegionWatershedService
         sb.AppendLine($"Door layers: [{string.Join(", ", settings.DoorLayerNames ?? new List<string>())}]  ({CadWallExtractorService.LastDoorLayerInfo})");
 
         // ── Crop-box clip: isolate this floor from a multi-floor stacked DWG ──
-        if (view.CropBoxActive)
+        // Same CropScope the clear planner uses, so "which floor is this?" has exactly one answer.
+        var crop = CropScope.For(view);
+        if (crop.IsActive)
         {
-            var (minX, minY, maxX, maxY) = CropAabb(view);
-            walls = walls.Where(s => SegInBox(s.StartPoint, s.EndPoint, minX, minY, maxX, maxY)).ToList();
-            area = area.Where(s => SegInBox(s.StartPoint, s.EndPoint, minX, minY, maxX, maxY)).ToList();
-            doors = doors.Where(p => PointInBox(p, minX, minY, maxX, maxY)).ToList();
-            rooms = rooms.Where(r => PointInBox(r.RevitPoint, minX, minY, maxX, maxY)).ToList();
+            walls = walls.Where(s => crop.OverlapsSegment(s.StartPoint, s.EndPoint)).ToList();
+            area = area.Where(s => crop.OverlapsSegment(s.StartPoint, s.EndPoint)).ToList();
+            doors = doors.Where(crop.Contains).ToList();
+            rooms = rooms.Where(r => crop.Contains(r.RevitPoint)).ToList();
             sb.AppendLine($"Crop-clipped: walls {walls.Count}, doors {doors.Count}, area {area.Count}, seeds {rooms.Count}");
         }
         else
@@ -120,33 +121,4 @@ public static class RegionWatershedService
     private static XYZ ToXyz(Pt p) => new XYZ(p.X, p.Y, 0);
     private static WallSeg ToWallSeg(CadWallSegment s) => new WallSeg(ToPt(s.StartPoint), ToPt(s.EndPoint), s.IsVirtual);
 
-    // Model-space AABB of the active view's crop box (8 transformed corners → XY min/max).
-    private static (double minX, double minY, double maxX, double maxY) CropAabb(View view)
-    {
-        var cb = view.CropBox;
-        var t = cb.Transform;
-        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-        for (int i = 0; i < 8; i++)
-        {
-            var local = new XYZ(
-                (i & 1) == 0 ? cb.Min.X : cb.Max.X,
-                (i & 2) == 0 ? cb.Min.Y : cb.Max.Y,
-                (i & 4) == 0 ? cb.Min.Z : cb.Max.Z);
-            var p = t.OfPoint(local);
-            minX = Math.Min(minX, p.X); minY = Math.Min(minY, p.Y);
-            maxX = Math.Max(maxX, p.X); maxY = Math.Max(maxY, p.Y);
-        }
-        return (minX, minY, maxX, maxY);
-    }
-
-    private static bool PointInBox(XYZ p, double minX, double minY, double maxX, double maxY)
-        => p.X >= minX && p.X <= maxX && p.Y >= minY && p.Y <= maxY;
-
-    // Keep a segment if its bbox overlaps the crop bbox.
-    private static bool SegInBox(XYZ a, XYZ b, double minX, double minY, double maxX, double maxY)
-    {
-        double sMinX = Math.Min(a.X, b.X), sMaxX = Math.Max(a.X, b.X);
-        double sMinY = Math.Min(a.Y, b.Y), sMaxY = Math.Max(a.Y, b.Y);
-        return sMinX <= maxX && sMaxX >= minX && sMinY <= maxY && sMaxY >= minY;
-    }
 }

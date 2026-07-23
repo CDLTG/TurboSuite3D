@@ -330,7 +330,11 @@ public class TurboNameApiHandler : IExternalEventHandler
 
             // Territories already covered by a region that SURVIVES the clear are skipped. Load-bearing for
             // "Clear selected": the watershed re-partitions the whole floor regardless of what was cleared, so
-            // this is the only thing keeping the survivors from being duplicated. A no-op after "Clear all".
+            // this is the only thing keeping the survivors from being duplicated.
+            //
+            // Collected UNSCOPED, unlike the clear planner, and it costs nothing: every generated seed is
+            // crop-clipped, so an out-of-crop survivor can never contain one and never suppresses anything.
+            // After "Clear all" the in-crop survivors are gone, which leaves this a no-op on this floor.
             //
             // Point test, so it prevents a duplicate per seed — not geometric overlap. Where a newly generated
             // territory abuts a surviving HAND-DRAWN region, expect a hairline gap or overlap on the shared
@@ -419,13 +423,22 @@ public class TurboNameApiHandler : IExternalEventHandler
     {
         plan = new ClearPlan();
 
-        var clearable = RegionClearService.CollectClearableRegions(_doc, _view);
-        if (clearable.Count == 0) return true;   // empty view — generate exactly as before, no prompt
+        // Everything here is scoped to the crop box, because the crop is what says which floor of a stacked
+        // DWG the user is on and the regenerate that follows is crop-clipped too. A view-scoped collector is
+        // NOT crop-aware, so without this the prompt counted every floor's regions and "Clear all" deleted
+        // them — while the watershed rebuilt only the cropped floor. Inactive crop ⇒ no-op, as before.
+        var crop = CropScope.For(_view);
+
+        var clearable = RegionClearService.CollectClearableRegions(_doc, _view, crop);
+        if (clearable.Count == 0) return true;   // nothing on this floor — generate exactly as before, no prompt
 
         // Boundaries for the containment tests. CollectRegions drops boundary-less regions, so this is a
         // subset of `clearable` — which is why the DELETE set comes from `clearable` and only the note
-        // containment comes from here.
-        var withBoundaries = RegionCollectorService.CollectRegions(_doc, _view);
+        // containment comes from here. Crop-scoped to match: it feeds the orphan test, and a note is only an
+        // orphan relative to the regions of its own floor.
+        var withBoundaries = RegionCollectorService.CollectRegions(_doc, _view)
+            .Where(r => crop.ContainsElement(_doc.GetElement(r.RegionId), _view))
+            .ToList();
         var nameTypeId = ResolveTextNoteTypeId(_textNoteTypeName);
         var descTypeId = ResolveTextNoteTypeId(_descTextNoteTypeName);
 
@@ -435,6 +448,11 @@ public class TurboNameApiHandler : IExternalEventHandler
         // into the modeless window: 3 regions selected, clicked into the window, read from inside this
         // handler → GetElementIds().Count = 3, all resolving to FilledRegion/"Room Region" owned by the
         // active view. Without that the second command link could never appear.
+        //
+        // Intersected with the crop-scoped `clearable`, so a selection made BEFORE the crop moved cannot leak
+        // in. Those regions are invisible under the current crop and would not be regenerated — clearing them
+        // is the same silent floor-deletion the crop scoping exists to prevent, just arrived at via a stale
+        // selection instead of via "Clear all".
         var selectedIds = new HashSet<ElementId>(_uidoc.Selection.GetElementIds());
         var selectedRegions = clearable.Where(selectedIds.Contains).ToList();
 
@@ -443,7 +461,7 @@ public class TurboNameApiHandler : IExternalEventHandler
         {
             RegionIds = clearable,
             NoteIds = RegionClearService.CollectNotes(_doc, _view, withBoundaries, withBoundaries,
-                nameTypeId, descTypeId, includeOrphans: true),
+                nameTypeId, descTypeId, includeOrphans: true, crop: crop),
         };
 
         ClearPlan selected = null;
@@ -455,15 +473,20 @@ public class TurboNameApiHandler : IExternalEventHandler
             {
                 RegionIds = selectedRegions,
                 NoteIds = RegionClearService.CollectNotes(_doc, _view, withBoundaries, selectedWithBoundaries,
-                    nameTypeId, descTypeId, includeOrphans: false),
+                    nameTypeId, descTypeId, includeOrphans: false, crop: crop),
             };
         }
 
         var dlg = new TaskDialog("TurboName — Auto-generate")
         {
-            MainInstruction = $"{clearable.Count} room region(s) already exist in this view.",
+            MainInstruction = $"{clearable.Count} room region(s) already exist "
+                            + (crop.IsActive ? "inside this view's crop." : "in this view."),
             MainContent = "Auto-generate re-partitions the whole floor, so generating on top of them "
-                        + "would create a duplicate set. Clearing and regenerating is one undo step.",
+                        + "would create a duplicate set. Clearing and regenerating is one undo step."
+                        + (crop.IsActive
+                            ? "\n\nOnly what the crop box covers is counted, cleared, or regenerated — "
+                              + "regions on other floors of a stacked DWG are left alone."
+                            : ""),
             CommonButtons = TaskDialogCommonButtons.Cancel,
             DefaultButton = TaskDialogResult.Cancel,
         };

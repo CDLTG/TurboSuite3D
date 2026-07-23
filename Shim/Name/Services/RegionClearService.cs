@@ -33,15 +33,22 @@ public static class RegionClearService
     };
 
     /// <summary>
-    /// Every clearable FilledRegion in the view, by id.
+    /// Every clearable FilledRegion in the view, by id — optionally narrowed to the crop box.
     /// </summary>
+    /// <param name="crop">
+    /// When active, drops regions belonging to another floor of a stacked DWG. <b>Required for correctness,
+    /// not a nicety:</b> a view-scoped <c>FilteredElementCollector</c> ignores the crop entirely, so without
+    /// this the clear set spans every floor in the view while the regenerate that follows only ever covers
+    /// the cropped one — accepting "Clear all" from level 2 deleted level 1 and never rebuilt it. Pass
+    /// <c>null</c> for the un-narrowed set (see the selection path in <c>TurboNameApiHandler.TryPlanClear</c>).
+    /// </param>
     /// <remarks>
     /// Deliberately NOT <see cref="RegionCollectorService.CollectRegions"/>: that one drops any region whose
     /// <c>GetBoundaries()</c> is null/empty, which is right for naming but would silently spare a degenerate
     /// region from the clear — and a spared region goes on to block a seed in the auto-generate skip test,
     /// leaving a permanent hole no regenerate can fill. Type match only, so nothing escapes.
     /// </remarks>
-    public static List<ElementId> CollectClearableRegions(Document doc, View view)
+    public static List<ElementId> CollectClearableRegions(Document doc, View view, CropScope crop = null)
     {
         return new FilteredElementCollector(doc, view.Id)
             .OfClass(typeof(FilledRegion))
@@ -54,6 +61,7 @@ public static class RegionClearService
                 string typeName = doc.GetElement(typeId)?.Name;
                 return typeName != null && ClearableTypeNames.Contains(typeName);
             })
+            .Where(r => crop == null || crop.ContainsElement(r, view))
             .Select(r => r.Id)
             .ToList();
     }
@@ -72,12 +80,21 @@ public static class RegionClearService
     /// left behind when a user hand-deleted a region earlier and its notes stayed. Never set in selection mode:
     /// sweeping notes far outside the selected wing would be a surprise.
     /// </param>
+    /// <param name="crop">
+    /// Bounds the ORPHAN sweep only. Every note on another floor of a stacked DWG is an orphan as far as this
+    /// view is concerned — <paramref name="allRegionsInView"/> is itself crop-scoped — so an unbounded sweep
+    /// would delete the neighbouring floor's labels wholesale. Notes inside a region actually being cleared are
+    /// deliberately NOT crop-tested: if the region goes, its notes go, even where a region straddling the crop
+    /// edge put one just outside the box. Leaving those behind is how you manufacture the very orphans this
+    /// sweep exists to collect.
+    /// </param>
     public static List<ElementId> CollectNotes(
         Document doc, View view,
         List<RegionData> allRegionsInView,
         List<RegionData> regionsBeingCleared,
         ElementId nameTypeId, ElementId descTypeId,
-        bool includeOrphans)
+        bool includeOrphans,
+        CropScope crop = null)
     {
         var notes = new List<ElementId>();
 
@@ -98,6 +115,7 @@ public static class RegionClearService
             }
 
             if (includeOrphans &&
+                (crop == null || crop.Contains(note.Coord)) &&
                 !allRegionsInView.Any(r => RegionNamingService.IsPointInZone(r.BoundaryLoops, note.Coord)))
             {
                 notes.Add(note.Id);
