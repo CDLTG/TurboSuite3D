@@ -169,9 +169,17 @@ namespace TurboSuite.Driver
                         if (circuit == null)
                         {
                             TaskDialog.Show("TurboDriver",
-                                "The electrical circuit was lost during fixture splitting.\n" +
-                                "The fixtures were split but power supply deployment was skipped.");
-                            return Result.Failed;
+                                "The electrical circuit was lost during fixture splitting.\n\n" +
+                                "The fixtures were split but power supply deployment was skipped. " +
+                                "Run TurboDriver again on the split fixtures to circuit and deploy them.");
+
+                            // Succeeded, NOT Failed: the split committed above, and Revit discards a
+                            // command's committed changes when Execute returns Cancelled/Failed (see
+                            // CLAUDE.md "Command return value rolls back saves"). Returning Failed here
+                            // reverted the split — putting the model back into the exact state that
+                            // triggers this branch, so a re-run failed identically, forever. Keeping the
+                            // split leaves the fixtures uncircuited, which the re-run above resolves.
+                            return Result.Succeeded;
                         }
                     }
                 }
