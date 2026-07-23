@@ -170,16 +170,18 @@ namespace TurboSuite.Driver
                         {
                             TaskDialog.Show("TurboDriver",
                                 "The electrical circuit was lost during fixture splitting.\n\n" +
-                                "The fixtures were split but power supply deployment was skipped. " +
-                                "Run TurboDriver again on the split fixtures to circuit and deploy them.");
+                                "No changes were made.");
 
-                            // Succeeded, NOT Failed: the split committed above, and Revit discards a
-                            // command's committed changes when Execute returns Cancelled/Failed (see
-                            // CLAUDE.md "Command return value rolls back saves"). Returning Failed here
-                            // reverted the split — putting the model back into the exact state that
-                            // triggers this branch, so a re-run failed identically, forever. Keeping the
-                            // split leaves the fixtures uncircuited, which the re-run above resolves.
-                            return Result.Succeeded;
+                            // Failed is DELIBERATE — do not "fix" this to Succeeded. Revit discards a
+                            // command's committed changes on a Cancelled/Failed return (see CLAUDE.md
+                            // "Command return value rolls back saves"), which here is exactly what we
+                            // want: the split above already deleted the user's original fixture, so
+                            // persisting this state would leave them with orphaned, uncircuited segments
+                            // and no original to recover. Rolling back restores the known-good fixture.
+                            // The cost is that a re-run hits the same failure — the real fix is to detect
+                            // the copy/AddToCircuit failure in FixtureSplitService BEFORE it deletes the
+                            // original (see its "prevent empty circuit" guard), so this state can't arise.
+                            return Result.Failed;
                         }
                     }
                 }
