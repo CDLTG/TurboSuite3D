@@ -73,7 +73,7 @@ namespace TurboSuite.Driver
                 if (circuitData.LightingFixtures.Count == 0)
                 {
                     TaskDialog.Show("TurboDriver",
-                        $"Circuit {circuitData.CircuitNumber} has no lighting fixtures.");
+                        "No lighting fixtures found on the circuit.");
                     return Result.Cancelled;
                 }
 
@@ -108,8 +108,12 @@ namespace TurboSuite.Driver
 
                 if (!recommendation.HasMatch)
                 {
+                    // Deliberately does NOT name the circuit. Every abort above this point returns
+                    // Cancelled, which makes Revit discard whatever GetOrCreateCircuit committed — so
+                    // when it created the circuit, its number refers to something that stops existing
+                    // the moment this dialog closes. Don't send the user looking for it.
                     TaskDialog.Show("TurboDriver",
-                        $"Circuit {circuitData.CircuitNumber}: No matching power supply found.\n\n" +
+                        "No matching power supply found for the selected fixtures.\n\n" +
                         recommendation.WarningMessage);
                     return Result.Cancelled;
                 }
@@ -223,7 +227,11 @@ namespace TurboSuite.Driver
             catch (Exception ex)
             {
                 message = ex.Message;
-                TaskDialog.Show("TurboDriver Error", $"An unexpected error occurred:\n{ex.Message}");
+                // The Failed return discards every transaction this run committed — device deletion,
+                // fixture splits, deployment — so the model is back where it started. Say so: after a
+                // mid-operation crash the user's first question is what state their model is in.
+                TaskDialog.Show("TurboDriver Error",
+                    $"An unexpected error occurred:\n{ex.Message}\n\nNo changes were made.");
                 return Result.Failed;
             }
         }
