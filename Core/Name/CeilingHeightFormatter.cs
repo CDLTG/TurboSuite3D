@@ -46,6 +46,37 @@ namespace TurboSuite.Name.Regions
         }
 
         /// <summary>
+        /// Could this TextNote text have been produced as a ceiling <b>description</b> line by
+        /// <see cref="Clean"/>? True iff every whitespace-separated token is letters-only AND contains one of
+        /// the <see cref="PreservedWords"/> (case-insensitive).
+        /// </summary>
+        /// <remarks>
+        /// This reproduces the exact output shape of <see cref="Clean"/>, which is the only producer of these
+        /// notes: it joins the <c>[a-zA-Z]+</c> tokens that matched a keyword and upper-cases the result — so
+        /// nothing with a digit, a slash, a period, or a non-keyword word can ever come out of it.
+        ///
+        /// TurboName's Clear &amp; Regenerate needs this because the description type (<c>AL_Annotation_3"</c>)
+        /// is a general-purpose annotation type used for lots of other text — unlike the room-name type, its
+        /// type id alone is NOT evidence that TurboName placed the note. Requiring EVERY token to qualify (not
+        /// any) is what keeps "SLOPED CEILING" out: <i>CEILING</i> carries no keyword.
+        ///
+        /// Residual overlap: a hand-placed note whose entire content is a bare descriptor ("DROP", "TRAY")
+        /// is indistinguishable from a generated one. Accepted — the clear reports its note count before
+        /// deleting anything, and the whole clear+regenerate is one transaction, so Ctrl+Z restores it.
+        /// </remarks>
+        public static bool LooksLikeDescriptionNote(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            var tokens = text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0) return false;
+
+            return tokens.All(t =>
+                t.All(char.IsLetter) &&
+                PreservedWords.Any(k => t.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0));
+        }
+
+        /// <summary>
         /// Returns the rounded, reformatted numeric height (e.g. <c>10'-7"</c>, or <c>""</c> when the value
         /// carries no foot/inch measurement) and any preserved descriptor keywords, upper-cased.
         /// </summary>

@@ -1,14 +1,15 @@
 #nullable disable
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using TurboSuite.Name.Services;
-using TurboSuite.Shared.Filters;
+// Autodesk.Revit.UI.TextBox is the ribbon control — this probe wants the WPF one.
+using TextBox = System.Windows.Controls.TextBox;
 
 namespace TurboSuite.Spike;
 
@@ -28,17 +29,27 @@ namespace TurboSuite.Spike;
 /// and change the attribute for the duration of that spike — then revert. This file is scratch space; the
 /// body below is only a clean stub — overwrite it freely with whatever probe the current investigation needs.
 ///
-/// CURRENT PROBE — "click-to-hide-layer" resolution (TurboName QoL).
-/// Question: when you pick a point on a linked-CAD import, does the geometry's GraphicsStyle resolve to a
-/// LAYER subcategory (safe to SetCategoryHidden — hides one layer) or to the import's PARENT category
-/// (dangerous — would blank the whole DWG)? Especially for geometry inside a nested block drawn on layer 0.
-/// Read-only: reports what it WOULD hide, hides nothing.
+/// CURRENT PROBE — does the Revit SELECTION survive the modeless round-trip? (TurboName Clear &amp; Regenerate.)
+/// Question: TurboName's planned "Clear selected &amp; regenerate" mode reads
+/// <c>uidoc.Selection.GetElementIds()</c> from inside its external-event handler, at a moment when the user
+/// has (a) selected regions in the view, then (b) clicked into the modeless WPF window to press a button.
+/// Does the selection still exist at that point, or does the focus change to the window clear it?
+///
+/// This probe replicates that exact architecture — a modeless window whose button raises an ExternalEvent
+/// whose handler reads the selection — rather than reading it from a modal command, because a modal command
+/// never gives up focus and so cannot answer the question.
+///
+/// Read-only: reports the selection, changes nothing.
 /// </summary>
 [Transaction(TransactionMode.ReadOnly)]
 public class SpikeCommand : IExternalCommand
 {
+    private static Window _activeWindow;
+
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
+        if (_activeWindow != null) { _activeWindow.Activate(); return Result.Succeeded; }
+
         UIDocument uidoc = commandData.Application.ActiveUIDocument;
         if (uidoc?.Document == null)
         {
@@ -46,127 +57,110 @@ public class SpikeCommand : IExternalCommand
             return Result.Cancelled;
         }
 
-        Document doc = uidoc.Document;
-        View view = doc.ActiveView;
-
-        // ── Roster: every layer subcategory TurboName's layer list would show, keyed by id ──
-        var rows = new Dictionary<ElementId, string>();      // subId  → "file :: layer"
-        var parentIds = new Dictionary<ElementId, string>(); // catId  → import category (file) name
-        var imports = CadLinkResolver.GetLinkedImports(doc, view);
-        foreach (var import in imports)
+        var log = new TextBox
         {
-            var cat = import.Category;
-            if (cat == null) continue;
-            parentIds[cat.Id] = cat.Name;
-            foreach (Category sub in cat.SubCategories)
-                if (sub != null) rows[sub.Id] = $"{cat.Name} :: {sub.Name}";
+            IsReadOnly = true,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            FontSize = 11,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            TextWrapping = TextWrapping.NoWrap,
+            Text = "1. Select some filled regions in the view.\r\n"
+                 + "2. Click into THIS window (that's the focus change under test).\r\n"
+                 + "3. Press \"Read selection\".\r\n"
+                 + "4. Repeat after clicking the view again, to compare.\r\n"
+                 + new string('=', 64) + "\r\n"
+        };
+
+        var handler = new SelectionProbeHandler(uidoc, line =>
+            log.Dispatcher.Invoke(() => { log.AppendText(line); log.ScrollToEnd(); }));
+        var externalEvent = ExternalEvent.Create(handler);
+
+        var button = new Button { Content = "Read selection", Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(0, 0, 0, 8), HorizontalAlignment = HorizontalAlignment.Left };
+        button.Click += (s, e) => externalEvent.Raise();
+
+        var panel = new DockPanel { Margin = new Thickness(10) };
+        DockPanel.SetDock(button, Dock.Top);
+        panel.Children.Add(button);
+        panel.Children.Add(log);
+
+        var window = new Window
+        {
+            Title = "TurboSpike — selection survival probe",
+            Width = 560,
+            Height = 420,
+            Content = panel,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen
+        };
+        new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
+        window.Closed += (s, e) => { _activeWindow = null; externalEvent.Dispose(); };
+        _activeWindow = window;
+        window.Show();
+
+        return Result.Succeeded;
+    }
+
+    /// <summary>
+    /// Reads the selection from inside a valid API context — the same place TurboNameApiHandler would.
+    /// Reports the count, and for each element enough to tell a clearable Room Region from anything else.
+    /// </summary>
+    private class SelectionProbeHandler : IExternalEventHandler
+    {
+        private readonly UIDocument _uidoc;
+        private readonly Action<string> _report;
+        private int _n;
+
+        public SelectionProbeHandler(UIDocument uidoc, Action<string> report)
+        {
+            _uidoc = uidoc;
+            _report = report;
         }
 
-        var sb = new StringBuilder();
-        sb.AppendLine($"Doc: {doc.Title}   View: {view.Name} ({view.ViewType})");
-        sb.AppendLine($"Revit: {commandData.Application.Application.VersionNumber}");
-        sb.AppendLine($"Linked imports in view: {imports.Count}   layer subcategories: {rows.Count}");
-        sb.AppendLine();
-        sb.AppendLine("Click CAD geometry to probe it. Escape to finish.");
-        sb.AppendLine("Try: (1) an ordinary layer line, (2) something inside a nested BLOCK,");
-        sb.AppendLine("     (3) anything you know draws on layer 0, (4) text / a hatch.");
-        sb.AppendLine(new string('=', 70));
+        public string GetName() => "TurboSpike selection probe";
 
-        int n = 0;
-        while (true)
+        public void Execute(UIApplication app)
         {
-            Reference reference;
-            try
-            {
-                reference = uidoc.Selection.PickObject(
-                    Autodesk.Revit.UI.Selection.ObjectType.PointOnElement,
-                    new ImportInstanceSelectionFilter(doc),
-                    $"SPIKE pick #{n + 1} — click linked CAD geometry (Escape to finish)");
-            }
-            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
-            {
-                break;
-            }
-
-            n++;
+            _n++;
+            var sb = new StringBuilder();
             sb.AppendLine();
-            sb.AppendLine($"── PICK #{n} ────────────────────────────────────────────");
+            sb.AppendLine($"── READ #{_n} @ {DateTime.Now:HH:mm:ss} ───────────────────");
+
             try
             {
-                sb.AppendLine(ProbeOne(doc, view, reference, rows, parentIds));
+                var doc = _uidoc.Document;
+                var ids = _uidoc.Selection.GetElementIds();
+                sb.AppendLine($"  GetElementIds().Count = {ids.Count}"
+                            + (ids.Count == 0 ? "   *** EMPTY — selection did NOT survive ***" : ""));
+
+                foreach (var id in ids)
+                {
+                    var el = doc.GetElement(id);
+                    if (el == null) { sb.AppendLine($"    {id} → (null element)"); continue; }
+
+                    string typeName = "(none)";
+                    var typeId = el.GetTypeId();
+                    if (typeId != ElementId.InvalidElementId)
+                        typeName = doc.GetElement(typeId)?.Name ?? "(null type)";
+
+                    sb.AppendLine($"    {id}  cat={el.Category?.Name ?? "(null)"}"
+                                + $"  class={el.GetType().Name}  type=\"{typeName}\"");
+
+                    if (el is FilledRegion fr)
+                        sb.AppendLine($"        FilledRegion  IsMasking={fr.IsMasking}  ownerView={fr.OwnerViewId}");
+                }
+
+                // The production code intersects the selection against the view's clearable regions —
+                // confirm that intersection is non-empty for the same picks.
+                int clearable = ids.Select(doc.GetElement)
+                    .OfType<FilledRegion>()
+                    .Count(fr => !fr.IsMasking && fr.OwnerViewId == doc.ActiveView.Id);
+                sb.AppendLine($"  → filled regions owned by the active view: {clearable}");
             }
             catch (Exception ex)
             {
                 sb.AppendLine($"  THREW: {ex.GetType().Name}: {ex.Message}");
             }
+
+            _report(sb.ToString());
         }
-
-        sb.AppendLine();
-        sb.AppendLine($"({n} pick(s) probed — nothing was hidden; this probe is read-only.)");
-
-        string report = sb.ToString();
-        string path = Path.Combine(Path.GetTempPath(), "TurboSpike-layer-probe.txt");
-        try { File.WriteAllText(path, report); } catch { path = "(could not write temp file)"; }
-
-        var dlg = new TaskDialog("TurboSpike — layer resolution")
-        {
-            MainInstruction = $"{n} pick(s) probed",
-            MainContent = "Full report written to:\n" + path,
-            ExpandedContent = report,
-            CommonButtons = TaskDialogCommonButtons.Close
-        };
-        dlg.Show();
-
-        return Result.Succeeded;
-    }
-
-    // What one pick resolves to: the import, the GeometryObject, its GraphicsStyle, and — the actual question —
-    // whether the style's Category is a LAYER subcategory in the roster (safe to hide) or the import's parent
-    // category (would blank the whole DWG).
-    private static string ProbeOne(Document doc, View view, Reference reference,
-        Dictionary<ElementId, string> rows, Dictionary<ElementId, string> parentIds)
-    {
-        var sb = new StringBuilder();
-
-        if (doc.GetElement(reference.ElementId) is not ImportInstance import)
-            return "  picked element is not an ImportInstance (unexpected — filter should prevent this)";
-
-        sb.AppendLine($"  ImportInstance id : {import.Id}");
-        sb.AppendLine($"  import.Category   : {import.Category?.Name ?? "(null)"}  id={import.Category?.Id}");
-
-        var geomObj = import.GetGeometryObjectFromReference(reference);
-        if (geomObj == null) return sb + "  GetGeometryObjectFromReference → null";
-
-        sb.AppendLine($"  GeometryObject    : {geomObj.GetType().Name}");
-        sb.AppendLine($"  GraphicsStyleId   : {geomObj.GraphicsStyleId}");
-
-        if (doc.GetElement(geomObj.GraphicsStyleId) is not GraphicsStyle style)
-            return sb + "  GraphicsStyleId does NOT resolve to a GraphicsStyle  → nothing hideable";
-
-        var cat = style.GraphicsStyleCategory;
-        sb.AppendLine($"  GraphicsStyle     : \"{style.Name}\"  type={style.GraphicsStyleType}");
-        if (cat == null) return sb + "  GraphicsStyleCategory → null  → nothing hideable";
-
-        sb.AppendLine($"  StyleCategory     : \"{cat.Name}\"  id={cat.Id}");
-        sb.AppendLine($"    .Parent         : {(cat.Parent == null ? "(null — this is a TOP-LEVEL category)" : $"\"{cat.Parent.Name}\"  id={cat.Parent.Id}")}");
-
-        // ── The verdict the production guard will key off ──
-        bool inRoster = rows.TryGetValue(cat.Id, out string rosterLabel);
-        bool isParent = parentIds.TryGetValue(cat.Id, out string parentLabel);
-
-        sb.AppendLine($"    in layer roster : {(inRoster ? $"YES → {rosterLabel}" : "no")}");
-        sb.AppendLine($"    is import parent: {(isParent ? $"YES → \"{parentLabel}\"  *** would hide the WHOLE DWG ***" : "no")}");
-
-        bool canHide = false, hiddenNow = false;
-        try { canHide = view.CanCategoryBeHidden(cat.Id); } catch { }
-        try { hiddenNow = view.GetCategoryHidden(cat.Id); } catch { }
-        sb.AppendLine($"    CanCategoryBeHidden={canHide}   GetCategoryHidden={hiddenNow}");
-
-        sb.Append("  VERDICT: " + (inRoster
-            ? "safe — hides exactly one layer row"
-            : isParent
-                ? "REJECT — parent category; guard must refuse this pick"
-                : "unknown category (not a listed layer, not the import parent) — guard must refuse"));
-        return sb.ToString();
     }
 }

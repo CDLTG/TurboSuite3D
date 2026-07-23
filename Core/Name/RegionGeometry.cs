@@ -44,8 +44,18 @@ namespace TurboSuite.Name.Regions
     /// <summary>One room seed: an interior point (the CAD room-label location) + the room name.</summary>
     public sealed record Seed(Pt Point, string Name);
 
-    /// <summary>A vectorized room territory: its seed room name + the closed boundary polygon (model feet).</summary>
-    public sealed record GenRegion(string RoomName, List<Pt> Boundary);
+    /// <summary>
+    /// A vectorized room territory: its seed room name + the closed boundary polygon (model feet), plus the
+    /// <see cref="Seed"/> point the territory flooded out from.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Seed"/> is the model point of the pixel that was actually seeded — NOT the raw CAD label
+    /// location. When a label lands on a wall the engine spirals to the nearest free pixel, so only the
+    /// spiralled pixel is guaranteed to lie inside the territory. Callers use it as a representative interior
+    /// point (TurboName's "is this territory already covered by an existing region?" test); a boundary
+    /// centroid would not do, because an L-shaped room's centroid can fall outside its own boundary.
+    /// </remarks>
+    public sealed record GenRegion(string RoomName, List<Pt> Boundary, Pt Seed);
 
     /// <summary>
     /// The engine's result: the diagnostics report + the vectorized boundaries the caller turns into

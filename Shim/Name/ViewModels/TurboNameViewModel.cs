@@ -84,10 +84,27 @@ public class TurboNameViewModel : ViewModelBase
 
     public int CreatedCount { get => _createdCount; set => SetProperty(ref _createdCount, value); }
     public int FailedCount { get => _failedCount; set => SetProperty(ref _failedCount, value); }
+    /// <summary>
+    /// True while a request owns the shared external event. Gates every button's <c>CanExecute</c> and hides
+    /// the action row.
+    /// </summary>
+    /// <remarks>
+    /// The explicit <see cref="CommandManager.InvalidateRequerySuggested"/> is load-bearing.
+    /// <see cref="RelayCommand.CanExecuteChanged"/> rides only <see cref="CommandManager.RequerySuggested"/>,
+    /// which WPF raises off ITS OWN input/focus events — so when a flow ends while a Revit-owned window has
+    /// focus, nothing re-queries and every button stays greyed out until the user clicks back into this window
+    /// or into the Revit view. Auto-generate's clear prompt made that reliably reproducible (cancelling the
+    /// TaskDialog returns focus to Revit, not to us), but any Revit-focused ending had the same latent bug.
+    /// </remarks>
     public bool IsPicking
     {
         get => _isPicking;
-        set { if (SetProperty(ref _isPicking, value)) OnPropertyChanged(nameof(LineEditingEnabled)); }
+        set
+        {
+            if (!SetProperty(ref _isPicking, value)) return;
+            OnPropertyChanged(nameof(LineEditingEnabled));
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
     public string StatusText { get => _statusText; set => SetProperty(ref _statusText, value); }
     public string PickingHint { get => _pickingHint; set => SetProperty(ref _pickingHint, value); }

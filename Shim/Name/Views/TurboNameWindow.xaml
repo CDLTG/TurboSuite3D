@@ -557,7 +557,7 @@
                                 <Button Content="Auto-generate" MinWidth="100" Margin="0,0,8,0"
                                         Style="{StaticResource RevitButtonStyle}"
                                         Command="{Binding AutoGenerateCommand}"
-                                        ToolTip="Generate a region per room in one pass, from the CAD room labels — bounded by the W/D/A-tagged layers above. Anything it can't cut cleanly is listed as “Needs manual” instead of being created wrong."/>
+                                        ToolTip="Generate a region per room in one pass, from the CAD room labels — bounded by the W/D/A-tagged layers above. Anything it can't cut cleanly is listed as “Needs manual” instead of being created wrong.&#x0a;&#x0a;If regions already exist, it asks first: clear them all, or clear just the ones you have selected in the view, and regenerate. Either way the clear and the regenerate are a single undo."/>
                                 <Button Content="Rectangle" MinWidth="80" Margin="0,0,8,0"
                                         Style="{StaticResource RevitButtonStyle}"
                                         Command="{Binding RectangleCommand}"

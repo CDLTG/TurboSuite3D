@@ -297,6 +297,9 @@ namespace TurboSuite.Name.Regions
 
             // One room per label; spiral to nearest free pixel if a label lands on a wall.
             var ownerName = new Dictionary<int, string>();
+            // Seeded PIXEL per owner, not seed.Point — a label on a wall spirals to a different pixel, and only
+            // the spiralled one is guaranteed inside the territory. Converted to model coords at vectorize time.
+            var ownerSeedPx = new Dictionary<int, int>();
             int owner = FirstRoomOwner;
             int seededRooms = 0, skippedRooms = 0;
             int spiralRadius = (int)Math.Ceiling(ppf * 2);
@@ -312,6 +315,7 @@ namespace TurboSuite.Name.Regions
                 }
                 grid[si] = owner;
                 ownerName[owner] = seed.Name;
+                ownerSeedPx[owner] = si;
                 HeapPush(dist[si], si);
                 owner++;
                 seededRooms++;
@@ -427,7 +431,12 @@ namespace TurboSuite.Name.Regions
                     traceFails.Add(string.IsNullOrWhiteSpace(why) ? nm : $"{nm} — {why}");
                     continue;
                 }
-                regions.Add(new GenRegion(ownerName.GetValueOrDefault(own, ""), boundary));
+                // Seed reported at the pixel CENTRE, not ToModel's corner: a seed that spiralled against a wall
+                // sits at the territory edge, and its corner can land exactly on the traced boundary — which a
+                // point-in-polygon test may call either way. Half a pixel in puts it unambiguously inside.
+                int seedPx = ownerSeedPx[own];
+                var seedCentre = ToModel(seedPx % w, seedPx / w) + new Pt(0.5 / ppf, 0.5 / ppf);
+                regions.Add(new GenRegion(ownerName.GetValueOrDefault(own, ""), boundary, seedCentre));
                 vectorized++;
             }
             sb.AppendLine($"Vectorized: {vectorized} region(s)  ({vecSkipped} skipped: leak/noise/trace-fail)");

@@ -173,6 +173,91 @@ namespace TurboSuite.Tests
             Assert.Null(output.Grid);
         }
 
+        // ── GenRegion.Seed — the representative interior point TurboName's "already covered?" test keys on ──
+
+        [Fact]
+        public void Engine_SeedLiesInsideItsOwnBoundary()
+        {
+            var envelope = Rect(0, 0, 20, 10);
+            var walls = new List<WallSeg>
+            {
+                new WallSeg(new Pt(10, 0), new Pt(10, 4)),
+                new WallSeg(new Pt(10, 6), new Pt(10, 10)),
+            };
+            var doors = new List<Pt> { new Pt(10, 5) };
+            var seeds = new List<Seed>
+            {
+                new Seed(new Pt(5, 5), "LEFT"),
+                new Seed(new Pt(15, 5), "RIGHT"),
+            };
+
+            var output = RegionWatershedEngine.Run(walls, doors, envelope, seeds);
+
+            Assert.Equal(2, output.Regions.Count);
+            Assert.All(output.Regions, r => Assert.True(InPolygon(r.Boundary, r.Seed),
+                $"{r.RoomName}: seed {r.Seed} fell outside its own boundary"));
+        }
+
+        [Fact]
+        public void Engine_SeedIsInsideEvenForAConcaveRoom()
+        {
+            // An L-shaped room whose BOUNDARY CENTROID falls in the missing quadrant — the case that rules
+            // out using a centroid as the "is this territory already covered?" probe point. The L occupies
+            // everything except the top-right 10x10 quadrant of a 20x20 envelope; the centroid of that L
+            // lands near (7.5, 7.5)... which is inside, so we place the seed far from it and instead assert
+            // the returned seed is interior while pinning that the L really is concave.
+            var envelope = Rect(0, 0, 20, 20);
+            var walls = new List<WallSeg>
+            {
+                new WallSeg(new Pt(10, 20), new Pt(10, 10)), // vertical leg of the notch
+                new WallSeg(new Pt(10, 10), new Pt(20, 10)), // horizontal leg of the notch
+            };
+            var seeds = new List<Seed> { new Seed(new Pt(3, 3), "L SHAPE") };
+
+            var output = RegionWatershedEngine.Run(walls, new List<Pt>(), envelope, seeds);
+
+            var region = Assert.Single(output.Regions);
+            Assert.True(InPolygon(region.Boundary, region.Seed),
+                $"seed {region.Seed} fell outside the L-shaped boundary");
+            // Pin that this really is the concave case: the top-right quadrant is NOT part of the region.
+            Assert.False(InPolygon(region.Boundary, new Pt(15, 15)),
+                "the notch quadrant is inside the boundary — this is no longer a concave test");
+        }
+
+        [Fact]
+        public void Engine_SeedIsTheSpiralledPixelWhenTheLabelLandsOnAWall()
+        {
+            // A label drawn on top of the wall poché. The engine spirals to the nearest free pixel; the
+            // reported seed must be THAT pixel (inside the territory), not the raw label point (inside a
+            // wall, and outside every traced boundary).
+            var envelope = Rect(0, 0, 20, 10);
+            var walls = new List<WallSeg> { new WallSeg(new Pt(10, 0), new Pt(10, 10)) };
+            var onTheWall = new Pt(10, 5);
+            var seeds = new List<Seed> { new Seed(onTheWall, "ON WALL") };
+
+            var output = RegionWatershedEngine.Run(walls, new List<Pt>(), envelope, seeds);
+
+            var region = Assert.Single(output.Regions);
+            Assert.NotEqual(onTheWall.X, region.Seed.X, 6);   // moved off the wall
+            Assert.True(InPolygon(region.Boundary, region.Seed),
+                $"spiralled seed {region.Seed} fell outside its own boundary");
+        }
+
+        // Even-odd ray cast, mirroring the Shim's IsPointInPolygon2D — the test asserts the property the
+        // production containment check actually relies on, not a looser bbox approximation.
+        private static bool InPolygon(List<Pt> polygon, Pt p)
+        {
+            bool inside = false;
+            for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+            {
+                if (polygon[i].Y > p.Y != polygon[j].Y > p.Y &&
+                    p.X < (polygon[j].X - polygon[i].X) * (p.Y - polygon[i].Y)
+                          / (polygon[j].Y - polygon[i].Y) + polygon[i].X)
+                    inside = !inside;
+            }
+            return inside;
+        }
+
         // Four wall segments forming a closed axis-aligned rectangle loop.
         private static List<WallSeg> Rect(double x0, double y0, double x1, double y1) => new List<WallSeg>
         {

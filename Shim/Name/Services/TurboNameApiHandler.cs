@@ -286,13 +286,40 @@ public class TurboNameApiHandler : IExternalEventHandler
         Dispatch(() => request.OnComplete?.Invoke(new PickLoopUpdate(c, f, false)));
     }
 
+    /// <summary>What a Clear &amp; regenerate is about to delete — resolved before the prompt so the counts
+    /// shown to the user are the real ones, and reused verbatim as the delete set if they accept.</summary>
+    private sealed class ClearPlan
+    {
+        public List<ElementId> RegionIds = new();
+        public List<ElementId> NoteIds = new();
+        public int Count => RegionIds.Count + NoteIds.Count;
+        public string Describe() => $"Deletes {RegionIds.Count} region(s) + {NoteIds.Count} text note(s).";
+    }
+
     // One-shot watershed partition of the whole floor (no pick loop): partition + vectorize, then create
     // every territory as a FilledRegion in a single transaction (one Ctrl+Z; individual failures skipped).
+    //
+    // When regions already exist we stop and ask first, because the partition is whole-floor and
+    // unconditional: generating on top of a populated view stacks a second complete set, and two coincident
+    // FilledRegions are near-invisible. The chosen clear runs in the SAME transaction as the creation, so a
+    // bad regenerate is one Ctrl+Z away and that undo restores the deleted regions AND their notes.
     private void RunAutoGenerate(TurboNameRequest request)
     {
         var settings = _settingsProvider();
         var regionTypeId = ResolveRegionTypeId(settings, out string error);
         if (regionTypeId == ElementId.InvalidElementId) { ReportError(request, error); return; }
+
+        // ── Decide what (if anything) to clear, before touching the model ──
+        ClearPlan clear;
+        try
+        {
+            if (!TryPlanClear(out clear)) { Finish(request); return; }   // user cancelled
+        }
+        catch (Exception ex)
+        {
+            ReportError(request, $"Could not inspect the existing regions:\n{ex.Message}");
+            return;
+        }
 
         string report;
         int created = 0, failed = 0;
@@ -301,25 +328,70 @@ public class TurboNameApiHandler : IExternalEventHandler
             var result = RegionWatershedService.Run(_doc, _view, settings);
             report = result.Report;
 
-            if (result.Regions.Count > 0)
+            // Territories already covered by a region that SURVIVES the clear are skipped. Load-bearing for
+            // "Clear selected": the watershed re-partitions the whole floor regardless of what was cleared, so
+            // this is the only thing keeping the survivors from being duplicated. A no-op after "Clear all".
+            //
+            // Point test, so it prevents a duplicate per seed — not geometric overlap. Where a newly generated
+            // territory abuts a surviving HAND-DRAWN region, expect a hairline gap or overlap on the shared
+            // edge: the hand-drawn edge is wherever the user clicked, the new one is wall-aligned by
+            // RegionVectorizer. Against a surviving auto-generated neighbour on an unchanged wall they match.
+            var cleared = new HashSet<ElementId>(clear.RegionIds);
+            var survivors = RegionCollectorService.CollectRegions(_doc, _view)
+                .Where(r => !cleared.Contains(r.RegionId))
+                .ToList();
+
+            var toCreate = result.Regions
+                .Where(r => !survivors.Any(s => RegionNamingService.IsPointInZone(s.BoundaryLoops, r.Seed)))
+                .ToList();
+            int covered = result.Regions.Count - toCreate.Count;
+
+            if (clear.Count > 0 || toCreate.Count > 0)
             {
                 var failures = new List<string>();
-                using var tx = new Transaction(_doc, "TurboName - Auto-generate Regions");
-                tx.Start();
-                foreach (var region in result.Regions)
+
+                // TransactionGroup + Assimilate so the whole thing is ONE undo entry. Without it the stack
+                // ends up [Auto-generate Regions][Refresh CAD][Refresh CAD] — NudgeImportGraphics commits two
+                // more transactions of its own, and it has to, because the CAD regen it forces only happens
+                // post-commit. Ctrl+Z would then just toggle a pin. That was survivable when this only ever
+                // ADDED regions; it is not, now that one keystroke is the advertised way back from a clear.
+                //
+                // Assimilate is used here purely to collapse the undo stack. It buys nothing against the
+                // return-value discard documented in CLAUDE.md — irrelevant anyway, since a modeless handler
+                // never returns a Result.
+                using var group = new TransactionGroup(_doc, "TurboName - Auto-generate Regions");
+                group.Start();
+
+                using (var tx = new Transaction(_doc, "TurboName - Auto-generate Regions"))
                 {
-                    var id = RegionCreationService.CreateRegion(_doc, _view, region.Boundary,
-                        regionTypeId, out string reason);
-                    if (id != ElementId.InvalidElementId) created++;
-                    else
+                    tx.Start();
+
+                    // Delete first, then create — same transaction, so the clear and the regenerate undo together.
+                    if (clear.NoteIds.Count > 0) _doc.Delete(clear.NoteIds);
+                    if (clear.RegionIds.Count > 0) _doc.Delete(clear.RegionIds);
+
+                    foreach (var region in toCreate)
                     {
-                        failed++;
-                        string name = string.IsNullOrWhiteSpace(region.RoomName) ? "(unnamed)" : region.RoomName;
-                        failures.Add($"    {name}: {reason} [{region.Boundary.Count} pts]");
+                        var id = RegionCreationService.CreateRegion(_doc, _view, region.Boundary,
+                            regionTypeId, out string reason);
+                        if (id != ElementId.InvalidElementId) created++;
+                        else
+                        {
+                            failed++;
+                            string name = string.IsNullOrWhiteSpace(region.RoomName) ? "(unnamed)" : region.RoomName;
+                            failures.Add($"    {name}: {reason} [{region.Boundary.Count} pts]");
+                        }
                     }
+                    tx.Commit();
                 }
-                tx.Commit();
+
                 NudgeImportGraphics();
+                group.Assimilate();
+
+                if (clear.Count > 0)
+                    report += $"\n\nCleared {clear.RegionIds.Count} region(s) + {clear.NoteIds.Count} text note(s).";
+                if (covered > 0)
+                    report += $"\nSkipped {covered} territor{(covered == 1 ? "y" : "ies")} already covered by an existing region.";
                 report += $"\n\nCreated {created} region(s)" + (failed > 0 ? $", {failed} failed" : "") + ".";
                 if (failures.Count > 0)
                     report += "\nFailures:\n" + string.Join("\n", failures);
@@ -338,6 +410,85 @@ public class TurboNameApiHandler : IExternalEventHandler
         });
         Finish(request);
     }
+
+    /// <summary>
+    /// Builds the clear plan, prompting when the view already holds regions. Returns false only if the user
+    /// cancelled; an empty plan (nothing to clear, or nothing there to begin with) returns true.
+    /// </summary>
+    private bool TryPlanClear(out ClearPlan plan)
+    {
+        plan = new ClearPlan();
+
+        var clearable = RegionClearService.CollectClearableRegions(_doc, _view);
+        if (clearable.Count == 0) return true;   // empty view — generate exactly as before, no prompt
+
+        // Boundaries for the containment tests. CollectRegions drops boundary-less regions, so this is a
+        // subset of `clearable` — which is why the DELETE set comes from `clearable` and only the note
+        // containment comes from here.
+        var withBoundaries = RegionCollectorService.CollectRegions(_doc, _view);
+        var nameTypeId = ResolveTextNoteTypeId(_textNoteTypeName);
+        var descTypeId = ResolveTextNoteTypeId(_descTextNoteTypeName);
+
+        // Pre-selection, not a pick loop: the user selects regions in the view, then presses Auto-generate.
+        // A pick loop would hide the button row and can't be cancelled from the window, so it fights the
+        // modeless architecture. Spike-confirmed (Revit 2025) that the selection SURVIVES the focus change
+        // into the modeless window: 3 regions selected, clicked into the window, read from inside this
+        // handler → GetElementIds().Count = 3, all resolving to FilledRegion/"Room Region" owned by the
+        // active view. Without that the second command link could never appear.
+        var selectedIds = new HashSet<ElementId>(_uidoc.Selection.GetElementIds());
+        var selectedRegions = clearable.Where(selectedIds.Contains).ToList();
+
+        // Both plans costed up front so neither command link is a blind press.
+        var all = new ClearPlan
+        {
+            RegionIds = clearable,
+            NoteIds = RegionClearService.CollectNotes(_doc, _view, withBoundaries, withBoundaries,
+                nameTypeId, descTypeId, includeOrphans: true),
+        };
+
+        ClearPlan selected = null;
+        if (selectedRegions.Count > 0)
+        {
+            var selectedWithBoundaries = withBoundaries
+                .Where(r => selectedIds.Contains(r.RegionId)).ToList();
+            selected = new ClearPlan
+            {
+                RegionIds = selectedRegions,
+                NoteIds = RegionClearService.CollectNotes(_doc, _view, withBoundaries, selectedWithBoundaries,
+                    nameTypeId, descTypeId, includeOrphans: false),
+            };
+        }
+
+        var dlg = new TaskDialog("TurboName — Auto-generate")
+        {
+            MainInstruction = $"{clearable.Count} room region(s) already exist in this view.",
+            MainContent = "Auto-generate re-partitions the whole floor, so generating on top of them "
+                        + "would create a duplicate set. Clearing and regenerating is one undo step.",
+            CommonButtons = TaskDialogCommonButtons.Cancel,
+            DefaultButton = TaskDialogResult.Cancel,
+        };
+        // "and", not "&": TaskDialog command-link text goes through Win32's mnemonic parser, which eats a bare
+        // '&' as an accelerator prefix ("Clear all & regenerate" rendered as "Clear all  regenerate"). Escaping
+        // it as "&&" works but is obscure enough to get "fixed" back into a single & later.
+        dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink1,
+            "Clear all and regenerate", all.Describe());
+        if (selected != null)
+            dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink2,
+                $"Clear selected ({selected.RegionIds.Count}) and regenerate", selected.Describe());
+
+        switch (dlg.Show())
+        {
+            case TaskDialogResult.CommandLink1: plan = all; return true;
+            case TaskDialogResult.CommandLink2: plan = selected; return true;
+            default: return false;
+        }
+    }
+
+    private ElementId ResolveTextNoteTypeId(string typeName) =>
+        new FilteredElementCollector(_doc)
+            .OfClass(typeof(TextNoteType))
+            .Cast<TextNoteType>()
+            .FirstOrDefault(t => t.Name == typeName)?.Id ?? ElementId.InvalidElementId;
 
     // Assign Room Names — moved out of NameCommand.Execute when TurboName went modeless. Collects Room Region
     // filled regions, extracts CAD room data, assigns names + places TextNotes in one transaction, flags

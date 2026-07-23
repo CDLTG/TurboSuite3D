@@ -308,8 +308,16 @@ public static class RegionNamingService
         return new XYZ(x / n, y / n, z / n);
     }
 
-    private static bool IsPointInZone(List<List<XYZ>> loops, XYZ point)
+    /// <summary>
+    /// True if <paramref name="point"/> is inside the region's outer loop and not inside any inner (hole)
+    /// loop. Internal rather than private because <see cref="RegionClearService"/> and the auto-generate
+    /// skip test key off the SAME containment rule the naming pass uses — a second copy would be free to
+    /// drift. (A third copy of the ray cast already exists in Shim/Shared/Services/RegionRoomLookupService;
+    /// unifying those two is out of scope here.)
+    /// </summary>
+    internal static bool IsPointInZone(List<List<XYZ>> loops, XYZ point)
     {
+        if (loops == null || loops.Count == 0) return false;
         bool hit = IsPointInPolygon2D(loops[0], point);
         if (hit && loops.Count > 1)
         {

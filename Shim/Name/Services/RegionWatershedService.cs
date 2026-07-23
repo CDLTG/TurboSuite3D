@@ -27,8 +27,12 @@ namespace TurboSuite.Name.Services;
 /// </summary>
 public static class RegionWatershedService
 {
-    /// <summary>A vectorized room territory: its seed room name + the closed boundary polygon (Revit coords).</summary>
-    public sealed record GeneratedRegion(string RoomName, List<XYZ> Boundary);
+    /// <summary>
+    /// A vectorized room territory: its seed room name + the closed boundary polygon (Revit coords), plus the
+    /// interior <see cref="Seed"/> point it flooded out from — see <see cref="GenRegion.Seed"/> for why that
+    /// is the seeded pixel's centre and not the raw CAD label location.
+    /// </summary>
+    public sealed record GeneratedRegion(string RoomName, List<XYZ> Boundary, XYZ Seed);
 
     /// <summary>Diagnostics report + the vectorized boundaries the caller turns into FilledRegions.</summary>
     public sealed record WatershedResult(string Report, List<GeneratedRegion> Regions);
@@ -106,7 +110,7 @@ public static class RegionWatershedService
 #endif
 
         var regions = output.Regions
-            .Select(r => new GeneratedRegion(r.RoomName, r.Boundary.Select(ToXyz).ToList()))
+            .Select(r => new GeneratedRegion(r.RoomName, r.Boundary.Select(ToXyz).ToList(), ToXyz(r.Seed)))
             .ToList();
         return new WatershedResult(sb.ToString(), regions);
     }
