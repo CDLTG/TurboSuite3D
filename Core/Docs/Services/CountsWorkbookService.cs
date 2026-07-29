@@ -3632,6 +3632,7 @@ public static class CountsWorkbookService
                 bool isExpanded = CatalogLengthTokenResolver.HasToken(template);
                 var stockSizes = isExpanded ? CatalogLengthTokenResolver.ParseSizes(template) : null;
                 int? maxInches = isExpanded && stockSizes is null ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
+                int? minInches = isExpanded && stockSizes is null ? CatalogLengthTokenResolver.ParseMinInches(template) : null;
 
                 if (isExpanded)
                 {
@@ -3641,7 +3642,7 @@ public static class CountsWorkbookService
                     {
                         var pieces = stockSizes is not null
                             ? CatalogLengthTokenResolver.CoverInstance(kv.Key, stockSizes)
-                            : CatalogLengthTokenResolver.SplitInstance(kv.Key, maxInches);
+                            : CatalogLengthTokenResolver.SplitInstance(kv.Key, maxInches, minInches);
                         foreach (int cut in pieces)
                         {
                             pooled.TryGetValue(cut, out var n);

@@ -370,7 +370,7 @@
     <!-- ============================ LENGTH TOKENS ============================ -->
     <span class="section-label">Part 1 · Catalog Number</span>
     <h2>Length tokens</h2>
-    <p class="lead">Drop a <code>{…}</code> token into <code>Catalog Number1</code>–<code>Catalog Number6</code> to stamp each instance's <code>Linear Length</code> into the part number. A bare format produces one row per unique resolved length; a cut-list mode (<code>max</code> / <code>sizes</code> / <code>pool</code>) splits each run into orderable pieces.</p>
+    <p class="lead">Drop a <code>{…}</code> token into <code>Catalog Number1</code>–<code>Catalog Number6</code> to stamp each instance's <code>Linear Length</code> into the part number. A bare format produces one row per unique resolved length; a cut-list mode (<code>max</code> / <code>sizes</code> / <code>pool</code>) splits each run into orderable pieces. The <code>min=N</code> modifier floors the shortest cut those pieces may be.</p>
 
     <h3>Pick a cut mode</h3>
     <div class="grid-modes">
@@ -412,6 +412,10 @@
       </div>
 
     </div>
+
+    <p class="note" style="margin-top:20px;">
+      <strong>Modifier · <code>min=N</code></strong> — a floor on the emitted cut length, <em>not</em> a fourth mode. Add it to <code>max=</code> (or to a bare token) and any piece shorter than N&quot; — a short made-to-length remainder, or a whole instance under N&quot; — is clamped <em>up</em> to N&quot;, over-supplying by a few inches rather than shipping an unbuyable sub-minimum cut. E.g. <code>{xx&quot;,max=197,min=12}</code> for tape with a 197&quot; reel and a 12&quot; minimum order. Not valid with <code>sizes=</code>/<code>pool=</code> (their stock lengths already clear any floor), and <code>min</code> may not exceed <code>max</code>.
+    </p>
 
     <div class="two-col" style="margin-top:24px;">
 
@@ -480,6 +484,11 @@
               <td class="example">LUT-RBN-{xxFT-xxIN,max=96}</td>
               <td><span class="mode-pill max">max</span></td>
               <td class="example">LUT-RBN-8FT-0IN + LUT-RBN-2FT-4IN</td>
+            </tr>
+            <tr>
+              <td class="example">PLX-HTL67COB-12MM-TW-{xx&quot;,max=197,min=12}</td>
+              <td><span class="mode-pill max">max</span> + min</td>
+              <td class="example">…TW-197&quot; + …TW-12&quot; (200&quot; instance: 197&quot; cut + 3&quot; remainder floored up to 12&quot;)</td>
             </tr>
             <tr>
               <td class="example">TEK4{ft,sizes=48|96|144}</td>
@@ -653,8 +662,8 @@
     <span class="section-label">Reference</span>
     <h2>Rules</h2>
     <ul class="rules">
-      <li>Within a Catalog Number token, <code>max</code>, <code>sizes</code>, and <code>pool</code> are mutually exclusive.</li>
-      <li>All <code>max</code>, <code>sizes</code>, and <code>pool</code> values are positive integers in inches, regardless of the display format.</li>
+      <li>Within a Catalog Number token, <code>max</code>, <code>sizes</code>, and <code>pool</code> are mutually exclusive. <code>min</code> is a modifier — it pairs with <code>max</code> or a bare token, but never with <code>sizes</code>/<code>pool</code>, and it may not exceed <code>max</code>.</li>
+      <li>All <code>max</code>, <code>sizes</code>, <code>pool</code>, and <code>min</code> values are positive integers in inches, regardless of the display format.</li>
       <li><strong>Units are explicit, never guessed.</strong> Catalog Number cut-list tokens (<code>max</code>/<code>sizes</code>/<code>pool</code>) are always inches; Catalog Qty stock length states its own unit — <code>@ft</code> or <code>@in</code>. There is no unit-less length keyword.</li>
       <li>A slot cannot carry both a length token (in Catalog Number) and a Catalog Qty value — pick one per slot.</li>
       <li><code>N @ft</code> / <code>N @in</code> require the type to have instances with a positive <code>Linear Length</code>; otherwise it's a validation error.</li>

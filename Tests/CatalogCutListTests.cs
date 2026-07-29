@@ -81,6 +81,18 @@ namespace TurboSuite.Tests.Docs
         [Fact] public void UnderMax_SinglePiece() => Assert.Equal(new[] { 40 }, Split(40, 91));
         [Fact] public void NoMax_WholeInstance() => Assert.Equal(new[] { 120 }, Split(120, null));
         [Fact] public void NonPositive_Empty() => Assert.Empty(Split(0, 91));
+
+        // min= floor: a sub-minimum piece (trailing remainder, or a whole under-min instance)
+        // is clamped UP to the floor. Full max-sized pieces are untouched (validation bars min>max).
+        private static List<int> Split(int len, int? max, int? min)
+            => CatalogLengthTokenResolver.SplitInstance(len, max, min).ToList();
+
+        [Fact] public void Min_ClampsShortRemainderUp() => Assert.Equal(new[] { 197, 12 }, Split(200, 197, 12)); // rem 3 → 12
+        [Fact] public void Min_ClampsWholeUnderMinInstanceUp() => Assert.Equal(new[] { 12 }, Split(8, 197, 12));  // 8 ≤ max → single piece 8 → 12
+        [Fact] public void Min_NoMax_ClampsWholeInstance() => Assert.Equal(new[] { 12 }, Split(8, null, 12));     // plain + min
+        [Fact] public void Min_LegalRemainder_Unchanged() => Assert.Equal(new[] { 197, 40 }, Split(237, 197, 12));// rem 40 ≥ 12
+        [Fact] public void Min_ExactMultiple_NoClampNeeded() => Assert.Equal(new[] { 197, 197 }, Split(394, 197, 12));
+        [Fact] public void Min_InstanceEqualsMax_SinglePiece() => Assert.Equal(new[] { 197 }, Split(197, 197, 12));
     }
 
     /// <summary>Discrete-stock cover (sizes=): exact-fit wins on principle even when it costs more
@@ -199,6 +211,23 @@ namespace TurboSuite.Tests.Docs
         }
 
         [Fact]
+        public void MaxWithMin_ClampsShortRemainder_AndPoolsIntoTheFloorRow()
+        {
+            // PLX tape shape: {xx",max=197,min=12}. L=200 → 197 + (rem 3 clamped to 12).
+            // Rows keyed by cut, ascending: 12"(×1), 197"(×1).
+            var rows = Expand(Fx("PLX-{xx\",max=197,min=12}", buckets: (200, 1)));
+            Assert.Equal(new[] { ("PLX-12\"", 1), ("PLX-197\"", 1) }, rows);
+        }
+
+        [Fact]
+        public void MaxWithMin_ClampedRemaindersPoolWithNaturalFloorCuts()
+        {
+            // L=200 → [197,12(clamped from 3)]; L=12 → [12]. The two 12" cuts pool into one row ×2.
+            var rows = Expand(Fx("PLX-{xx\",max=197,min=12}", buckets: new[] { (200, 1), (12, 1) }));
+            Assert.Equal(new[] { ("PLX-12\"", 2), ("PLX-197\"", 1) }, rows);
+        }
+
+        [Fact]
         public void SizesMode_PoolsIdenticalCutsAcrossInstanceCount()
         {
             // Two L=192 instances, sizes=94|48 → each covers as 48*4; qty = 4 cuts × 2 instances = 8.
@@ -233,6 +262,11 @@ namespace TurboSuite.Tests.Docs
         [InlineData("T-{xx,sizes=48|48}")]    // duplicate sizes entry
         [InlineData("T-{xx,max=48,sizes=94}")]// mutually exclusive
         [InlineData("T-{xx,pool=96,sizes=48}")]
+        [InlineData("T-{xx,min=abc}")]        // non-integer min
+        [InlineData("T-{xx,min=0}")]          // non-positive min
+        [InlineData("T-{xx,max=48,min=96}")]  // min > max
+        [InlineData("T-{xx,sizes=94,min=12}")]// min not allowed with sizes
+        [InlineData("T-{xx,pool=96,min=12}")] // min not allowed with pool
         public void RejectsMalformed(string template) => Bad(template);
 
         [Theory]
@@ -240,6 +274,9 @@ namespace TurboSuite.Tests.Docs
         [InlineData("T-{xx,max=48}")]
         [InlineData("T-{xx,sizes=94|48}")]
         [InlineData("T-{xx,pool=96|48}")]
+        [InlineData("T-{xx\",max=197,min=12}")] // max + min modifier
+        [InlineData("T-{xx\",min=197,max=197}")]// min order-independent; min == max is legal
+        [InlineData("T-{xx\",min=12}")]          // min on a bare token (no mode)
         [InlineData("PLAIN-SKU")]             // no token → nothing to validate
         [InlineData("")]
         [InlineData(null)]
@@ -252,6 +289,10 @@ namespace TurboSuite.Tests.Docs
     {
         [Fact] public void ParseMaxInches_ReadsValue() => Assert.Equal(48, CatalogLengthTokenResolver.ParseMaxInches("{xx,max=48}"));
         [Fact] public void ParseMaxInches_NoOption_Null() => Assert.Null(CatalogLengthTokenResolver.ParseMaxInches("{xx}"));
+
+        [Fact] public void ParseMinInches_ReadsValue() => Assert.Equal(12, CatalogLengthTokenResolver.ParseMinInches("{xx\",max=197,min=12}"));
+        [Fact] public void ParseMinInches_OrderIndependent() => Assert.Equal(12, CatalogLengthTokenResolver.ParseMinInches("{xx\",min=12,max=197}"));
+        [Fact] public void ParseMinInches_NoOption_Null() => Assert.Null(CatalogLengthTokenResolver.ParseMinInches("{xx,max=48}"));
 
         [Fact]
         public void ParseSizes_ReturnsDescending()
@@ -297,6 +338,17 @@ namespace TurboSuite.Tests.Docs
             var w = CatalogWasteAnalyzer.ComputeSlotWaste(Fx("{xx,max=48}", (100, 1)), 0);
             Assert.Equal("max", w.Mode);
             Assert.Equal(0, w.WasteInches);
+        }
+
+        [Fact]
+        public void MaxWithMin_ClampedRemainderCountsAsWaste()
+        {
+            // L=200, max=197, min=12 → supplied 197+12 = 209, used 200, waste 9 (the 3"→12" clamp).
+            var w = CatalogWasteAnalyzer.ComputeSlotWaste(Fx("{xx\",max=197,min=12}", (200, 1)), 0);
+            Assert.Equal("max", w.Mode);
+            Assert.Equal(200, w.UsedInches);
+            Assert.Equal(209, w.SuppliedInches);
+            Assert.Equal(9, w.WasteInches);
         }
 
         [Fact]

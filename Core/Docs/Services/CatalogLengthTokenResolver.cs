@@ -14,14 +14,20 @@ namespace TurboSuite.Docs.Services;
 /// <c>ft</c> → <c>4</c> (unitless feet); <c>xx'</c> → <c>4'</c>; <c>xxFT</c> → <c>4FT</c>;
 /// <c>xx'-xx"</c> → <c>4'-0"</c>; <c>xxFT-xxIN</c> → <c>4FT-0IN</c>.
 /// Feet formats truncate (integer divide by 12).
-/// Options (mutually exclusive):
+/// Options:
 ///   <c>max=N</c> — made-to-length: greedy-splits each instance into N-sized cuts plus one remainder.
 ///   <c>sizes=N1|N2|...</c> — discrete stock sizes (e.g. 96|48): covers each instance with the
 ///     fewest sticks whose sum ≥ instance length, tie-breaking on least overage.
 ///   <c>pool=N1|N2|...</c> — same stock sizes as sizes=, but reuses offcuts across instances.
 ///     Use when offcuts are physically fungible with fresh-stick cut ends (raw aluminum channel,
 ///     raw track without factory-finished ends). Hardcoded 18" minimum reusable offcut.
-/// Unknown formats / option keys / non-integer values / any combination of max, sizes, pool fail validation.
+///   <c>min=N</c> — floor on the emitted cut length: any piece below N (a short made-to-length
+///     remainder, or a whole instance shorter than N) is clamped UP to N, over-supplying rather
+///     than shipping a sub-minimum cut. A modifier, not a mode — it combines with max= or a bare
+///     token, and is the one thing that lets the max/plain paths strand material.
+/// max=, sizes=, and pool= are mutually exclusive; min= combines only with max= or a bare token
+/// (not sizes=/pool=, whose stock lengths already clear any sane floor). Unknown formats / option
+/// keys / non-integer values / min &gt; max / illegal option combinations fail validation.
 /// </summary>
 public static class CatalogLengthTokenResolver
 {
@@ -72,7 +78,7 @@ public static class CatalogLengthTokenResolver
             else break;
             var m = TokenRegex.Match(catalogNumber, idx);
             if (!m.Success || m.Index != idx)
-                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected {xx}, {xx\"}, {xxIN}, {ft}, {xx'}, {xxFT}, {xx'-xx\"}, {xxFT-xxIN}, optionally with ',max=N' / ',sizes=N|N|...' / ',pool=N|N|...')");
+                throw new CatalogLengthTokenParseException(catalogNumber, "Malformed length token (expected {xx}, {xx\"}, {xxIN}, {ft}, {xx'}, {xxFT}, {xx'-xx\"}, {xxFT-xxIN}, optionally with ',max=N' / ',sizes=N|N|...' / ',pool=N|N|...' / ',min=N')");
             ValidateToken(catalogNumber, m);
             cursor = m.Index + m.Length;
         }
@@ -87,12 +93,13 @@ public static class CatalogLengthTokenResolver
         if (!m.Groups["opts"].Success) return;
 
         string opts = m.Groups["opts"].Value;
-        bool sawMax = false, sawSizes = false, sawPool = false;
+        bool sawMax = false, sawSizes = false, sawPool = false, sawMin = false;
+        int maxVal = 0, minVal = 0;
         foreach (var part in opts.Split(','))
         {
             var kv = part.Split('=', 2);
             if (kv.Length != 2)
-                throw new CatalogLengthTokenParseException(raw, $"Malformed option '{part}' (expected 'max=<int>' or 'sizes=N|N|...' or 'pool=N|N|...')");
+                throw new CatalogLengthTokenParseException(raw, $"Malformed option '{part}' (expected 'max=<int>' or 'sizes=N|N|...' or 'pool=N|N|...' or 'min=<int>')");
             string key = kv[0].Trim();
             string val = kv[1].Trim();
 
@@ -103,6 +110,16 @@ public static class CatalogLengthTokenResolver
                 if (n <= 0)
                     throw new CatalogLengthTokenParseException(raw, "max must be greater than zero");
                 sawMax = true;
+                maxVal = n;
+            }
+            else if (string.Equals(key, "min", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
+                    throw new CatalogLengthTokenParseException(raw, $"min='{val}' must be a bare positive integer (inches)");
+                if (n <= 0)
+                    throw new CatalogLengthTokenParseException(raw, "min must be greater than zero");
+                sawMin = true;
+                minVal = n;
             }
             else if (string.Equals(key, "sizes", StringComparison.OrdinalIgnoreCase)
                   || string.Equals(key, "pool", StringComparison.OrdinalIgnoreCase))
@@ -125,13 +142,18 @@ public static class CatalogLengthTokenResolver
             }
             else
             {
-                throw new CatalogLengthTokenParseException(raw, $"Unknown option '{key}' (supported: max, sizes, pool)");
+                throw new CatalogLengthTokenParseException(raw, $"Unknown option '{key}' (supported: max, sizes, pool, min)");
             }
         }
 
         int modes = (sawMax ? 1 : 0) + (sawSizes ? 1 : 0) + (sawPool ? 1 : 0);
         if (modes > 1)
             throw new CatalogLengthTokenParseException(raw, "max, sizes, and pool are mutually exclusive on the same token");
+
+        if (sawMin && (sawSizes || sawPool))
+            throw new CatalogLengthTokenParseException(raw, "min combines only with max= or a bare token, not sizes=/pool=");
+        if (sawMin && sawMax && minVal > maxVal)
+            throw new CatalogLengthTokenParseException(raw, $"min ({minVal}) cannot exceed max ({maxVal})");
     }
 
     /// <summary>
@@ -148,6 +170,27 @@ public static class CatalogLengthTokenResolver
             var kv = part.Split('=', 2);
             if (kv.Length == 2
                 && string.Equals(kv[0].Trim(), "max", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(kv[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
+                && n > 0)
+                return n;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Reads the first token's min= value, or null if no floor. Caller must have already
+    /// validated the template (this method assumes well-formed input on the token path).
+    /// </summary>
+    public static int? ParseMinInches(string? template)
+    {
+        if (string.IsNullOrEmpty(template)) return null;
+        var m = TokenRegex.Match(template);
+        if (!m.Success || !m.Groups["opts"].Success) return null;
+        foreach (var part in m.Groups["opts"].Value.Split(','))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length == 2
+                && string.Equals(kv[0].Trim(), "min", StringComparison.OrdinalIgnoreCase)
                 && int.TryParse(kv[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
                 && n > 0)
                 return n;
@@ -239,21 +282,26 @@ public static class CatalogLengthTokenResolver
 
     /// <summary>
     /// Greedy fill-max split. L=120, max=91 → [91, 29]; L=91, max=91 → [91];
-    /// L=120, max=null → [120].
+    /// L=120, max=null → [120]. When <paramref name="minInches"/> is set, any emitted piece below
+    /// it — the trailing remainder, or a whole under-min instance — is clamped UP to the floor
+    /// (over-supplying rather than shipping a sub-minimum cut). Full max-sized pieces are never
+    /// below the floor because validation rejects min &gt; max. L=200, max=197, min=12 → [197, 12];
+    /// L=8, min=12 → [12].
     /// </summary>
-    public static IEnumerable<int> SplitInstance(int instanceInches, int? maxInches)
+    public static IEnumerable<int> SplitInstance(int instanceInches, int? maxInches, int? minInches = null)
     {
         if (instanceInches <= 0) yield break;
+        int floor = minInches.GetValueOrDefault(0);
         if (!maxInches.HasValue || instanceInches <= maxInches.Value)
         {
-            yield return instanceInches;
+            yield return Math.Max(instanceInches, floor);
             yield break;
         }
         int n = maxInches.Value;
         int full = instanceInches / n;
         int rem = instanceInches % n;
         for (int i = 0; i < full; i++) yield return n;
-        if (rem > 0) yield return rem;
+        if (rem > 0) yield return Math.Max(rem, floor);
     }
 
     /// <summary>
@@ -426,13 +474,14 @@ public static class CatalogLengthTokenResolver
 
         var sizes = ParseSizes(template);
         int? max = sizes is null ? ParseMaxInches(template) : null;
+        int? min = sizes is null ? ParseMinInches(template) : null;
         var pooled = new Dictionary<int, int>();
         foreach (var kv in fixture.LinearLengthBuckets)
         {
             int instanceInches = kv.Key;
             int instanceCount = kv.Value;
             var pieces = sizes is null
-                ? SplitInstance(instanceInches, max)
+                ? SplitInstance(instanceInches, max, min)
                 : CoverInstance(instanceInches, sizes);
             foreach (int cut in pieces)
             {
@@ -449,7 +498,9 @@ public static class CatalogLengthTokenResolver
 /// <summary>
 /// Per-slot length math summary used by the Length section of the hidden Calculations sheet.
 /// Mode is "" when the slot has
-/// no length token; "sizes"/"max"/"plain" otherwise. Only the sizes mode can produce waste &gt; 0.
+/// no length token; "sizes"/"max"/"plain" otherwise (min= is a modifier, not a distinct mode).
+/// sizes= and pool= strand material by over-covering; the max/plain paths strand material only
+/// when a min= floor clamps a short cut up.
 /// </summary>
 public sealed record SlotWasteStats(string Mode, int InstanceCount, int UsedInches, int SuppliedInches)
 {
@@ -466,7 +517,9 @@ public static class CatalogWasteAnalyzer
 
         var pool = CatalogLengthTokenResolver.ParsePool(template);
         var sizes = pool is null ? CatalogLengthTokenResolver.ParseSizes(template) : null;
-        int? max = (pool is null && sizes is null) ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
+        bool splitPath = pool is null && sizes is null;
+        int? max = splitPath ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
+        int? min = splitPath ? CatalogLengthTokenResolver.ParseMinInches(template) : null;
         string mode = pool is not null ? "pool"
                     : sizes is not null ? "sizes"
                     : max.HasValue ? "max" : "plain";
@@ -495,7 +548,7 @@ public static class CatalogWasteAnalyzer
                 if (L <= 0) continue;
                 int suppliedForThis = 0;
                 var pieces = sizes is null
-                    ? CatalogLengthTokenResolver.SplitInstance(L, max)
+                    ? CatalogLengthTokenResolver.SplitInstance(L, max, min)
                     : CatalogLengthTokenResolver.CoverInstance(L, sizes);
                 foreach (int p in pieces) suppliedForThis += p;
                 supplied += suppliedForThis * N;
