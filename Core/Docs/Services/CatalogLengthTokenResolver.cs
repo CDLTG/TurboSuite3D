@@ -448,27 +448,29 @@ public static class CatalogLengthTokenResolver
     }
 
     /// <summary>
-    /// Single source of truth for slot expansion. Yields (ResolvedSku, Qty) pairs sorted
-    /// by length ascending for token templates, or one (template, fixture.Count) pair for
-    /// untokenized templates. Blank templates yield nothing.
+    /// Single source of truth for how a length token splits a slot's instances: yields
+    /// (CutInches, Qty) buckets — the resolved cut LENGTHS and their pooled quantities — sorted by
+    /// length ascending. Dispatches the pool= / sizes= / max+min (and bare-token) sub-modes.
+    /// <para>
+    /// Callers that want part strings render each bucket through <see cref="Resolve"/> (see
+    /// <see cref="ExpandSlot"/>); the Worksheet-sync path reads CutInches directly to sort rows.
+    /// Keeping the split here — not duplicated per caller — is what stops the SKU/qty/sort of a
+    /// rebuild and an incremental update from drifting apart (the pool= mode in particular has no
+    /// standalone re-derivation to forget).
+    /// </para>
+    /// Precondition: <see cref="HasToken"/> is true for <paramref name="template"/>; blank and
+    /// untokenized templates are the caller's concern. A tokened template with no cut mode (a bare
+    /// <c>{xx"}</c>) yields one bucket per unique instance length.
     /// </summary>
-    public static IEnumerable<(string ResolvedSku, int Qty)> ExpandSlot(CountsFixtureModel fixture, int slotIndex)
+    public static IEnumerable<(int CutInches, int Qty)> ExpandTokenBuckets(
+        string template, IReadOnlyDictionary<int, int> linearLengthBuckets)
     {
-        string template = fixture.CatalogNumbers[slotIndex] ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(template)) yield break;
-
-        if (!HasToken(template))
-        {
-            yield return (template, fixture.Count);
-            yield break;
-        }
-
         var pool = ParsePool(template);
         if (pool is not null)
         {
-            var sticks = PoolCoverSlot(fixture.LinearLengthBuckets, pool);
+            var sticks = PoolCoverSlot(linearLengthBuckets, pool);
             foreach (var kv in sticks.Where(p => p.Value > 0).OrderBy(p => p.Key))
-                yield return (Resolve(template, kv.Key), kv.Value);
+                yield return (kv.Key, kv.Value);
             yield break;
         }
 
@@ -476,7 +478,7 @@ public static class CatalogLengthTokenResolver
         int? max = sizes is null ? ParseMaxInches(template) : null;
         int? min = sizes is null ? ParseMinInches(template) : null;
         var pooled = new Dictionary<int, int>();
-        foreach (var kv in fixture.LinearLengthBuckets)
+        foreach (var kv in linearLengthBuckets)
         {
             int instanceInches = kv.Key;
             int instanceCount = kv.Value;
@@ -491,7 +493,28 @@ public static class CatalogLengthTokenResolver
         }
 
         foreach (var kv in pooled.OrderBy(p => p.Key))
-            yield return (Resolve(template, kv.Key), kv.Value);
+            yield return (kv.Key, kv.Value);
+    }
+
+    /// <summary>
+    /// Single source of truth for slot expansion into part strings. Yields (ResolvedSku, Qty) pairs
+    /// sorted by length ascending for token templates, or one (template, fixture.Count) pair for
+    /// untokenized templates. Blank templates yield nothing. The length split is delegated to
+    /// <see cref="ExpandTokenBuckets"/>; this method only renders each bucket to a SKU.
+    /// </summary>
+    public static IEnumerable<(string ResolvedSku, int Qty)> ExpandSlot(CountsFixtureModel fixture, int slotIndex)
+    {
+        string template = fixture.CatalogNumbers[slotIndex] ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(template)) yield break;
+
+        if (!HasToken(template))
+        {
+            yield return (template, fixture.Count);
+            yield break;
+        }
+
+        foreach (var (cutInches, qty) in ExpandTokenBuckets(template, fixture.LinearLengthBuckets))
+            yield return (Resolve(template, cutInches), qty);
     }
 }
 

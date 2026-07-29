@@ -3630,31 +3630,19 @@ public static class CountsWorkbookService
                 string template = f.CatalogNumbers[c] ?? "";
                 if (string.IsNullOrWhiteSpace(template)) continue;
                 bool isExpanded = CatalogLengthTokenResolver.HasToken(template);
-                var stockSizes = isExpanded ? CatalogLengthTokenResolver.ParseSizes(template) : null;
-                int? maxInches = isExpanded && stockSizes is null ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
-                int? minInches = isExpanded && stockSizes is null ? CatalogLengthTokenResolver.ParseMinInches(template) : null;
 
                 if (isExpanded)
                 {
-                    // Re-derive (sku, qty, cutInches) so we can drive the in-slot sort by cut length.
-                    var pooled = new Dictionary<int, int>();
-                    foreach (var kv in f.LinearLengthBuckets)
+                    // Expand through the shared token core so the SKU/qty/cut-inches here match
+                    // ExpandSlot's rebuild output exactly (covers pool=/sizes=/max+min uniformly).
+                    // CutInches drives the in-slot sort by cut length.
+                    foreach (var (cutInches, qty) in
+                             CatalogLengthTokenResolver.ExpandTokenBuckets(template, f.LinearLengthBuckets))
                     {
-                        var pieces = stockSizes is not null
-                            ? CatalogLengthTokenResolver.CoverInstance(kv.Key, stockSizes)
-                            : CatalogLengthTokenResolver.SplitInstance(kv.Key, maxInches, minInches);
-                        foreach (int cut in pieces)
-                        {
-                            pooled.TryGetValue(cut, out var n);
-                            pooled[cut] = n + kv.Value;
-                        }
-                    }
-                    foreach (var kv in pooled.OrderBy(p => p.Key))
-                    {
-                        string sku = CatalogLengthTokenResolver.Resolve(template, kv.Key);
+                        string sku = CatalogLengthTokenResolver.Resolve(template, cutInches);
                         var key = (f.TypeMark.ToUpperInvariant(), sku.ToUpperInvariant());
                         newKeys.Add(key);
-                        newRowEntries.Add((f.TypeMark, f.Manufacturer, sku, c, kv.Key, kv.Value, true));
+                        newRowEntries.Add((f.TypeMark, f.Manufacturer, sku, c, cutInches, qty, true));
                     }
                 }
                 else

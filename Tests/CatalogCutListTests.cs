@@ -244,6 +244,49 @@ namespace TurboSuite.Tests.Docs
         }
     }
 
+    /// <summary>ExpandTokenBuckets is the shared split core behind both ExpandSlot (rebuild) and the
+    /// Worksheet-sync re-derivation. These pin that the two never drift: the buckets it yields,
+    /// rendered through Resolve, must equal ExpandSlot's rows for every cut mode — pool= included,
+    /// which the old sync path silently mishandled.</summary>
+    public class ExpandTokenBucketsTests
+    {
+        private static CountsFixtureModel Fx(string slot0, int count, params (int inches, int n)[] buckets)
+        {
+            var f = new CountsFixtureModel { Count = count };
+            f.CatalogNumbers[0] = slot0;
+            foreach (var (inches, n) in buckets) f.LinearLengthBuckets[inches] = n;
+            return f;
+        }
+
+        // The SKU/qty a caller gets by rendering ExpandTokenBuckets must equal ExpandSlot's rows.
+        [Theory]
+        [InlineData("PLX-{xx\",max=197,min=12}")]   // max + min modifier
+        [InlineData("T-{xx\",sizes=94|48}")]         // discrete stock
+        [InlineData("P-{xx\",pool=94|48}")]          // pooled offcuts — the drift-prone mode
+        [InlineData("B-{xx\"}")]                     // bare token, no mode
+        public void RenderedBuckets_MatchExpandSlot(string template)
+        {
+            var f = Fx(template, count: 0, buckets: new[] { (200, 1), (130, 1), (48, 2) });
+            var viaSlot = CatalogLengthTokenResolver.ExpandSlot(f, 0).ToList();
+            var viaBuckets = CatalogLengthTokenResolver
+                .ExpandTokenBuckets(template, f.LinearLengthBuckets)
+                .Select(b => (CatalogLengthTokenResolver.Resolve(template, b.CutInches), b.Qty))
+                .ToList();
+            Assert.Equal(viaSlot, viaBuckets);
+        }
+
+        [Fact]
+        public void PoolMode_YieldsStickBuckets_NotWholeInstances()
+        {
+            // Regression guard for the old sync path, which lacked a pool= branch and would have
+            // emitted whole-instance lengths. pool=96 over L=100 + L=20 → 2 sticks of 96", one bucket.
+            var buckets = CatalogLengthTokenResolver
+                .ExpandTokenBuckets("P-{xx\",pool=96}", new Dictionary<int, int> { { 100, 1 }, { 20, 1 } })
+                .ToList();
+            Assert.Equal(new[] { (96, 2) }, buckets);
+        }
+    }
+
     /// <summary>Validate is the gatekeeper for malformed templates — its rejections become the
     /// user-facing "fix the family and re-export" errors, so pin the trigger for each.</summary>
     public class LengthTokenValidateTests
