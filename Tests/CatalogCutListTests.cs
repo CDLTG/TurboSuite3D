@@ -93,6 +93,18 @@ namespace TurboSuite.Tests.Docs
         [Fact] public void Min_LegalRemainder_Unchanged() => Assert.Equal(new[] { 197, 40 }, Split(237, 197, 12));// rem 40 ≥ 12
         [Fact] public void Min_ExactMultiple_NoClampNeeded() => Assert.Equal(new[] { 197, 197 }, Split(394, 197, 12));
         [Fact] public void Min_InstanceEqualsMax_SinglePiece() => Assert.Equal(new[] { 197 }, Split(197, 197, 12));
+
+        // granularity: made-to-length pieces round UP to the orderable increment (12 for whole-foot
+        // formats); full max-sized sticks stay put because validation forces max onto the increment.
+        private static List<int> Split(int len, int? max, int? min, int gran)
+            => CatalogLengthTokenResolver.SplitInstance(len, max, min, gran).ToList();
+
+        [Fact] public void Gran_RoundsRemainderUpToFoot() => Assert.Equal(new[] { 96, 36 }, Split(126, 96, null, 12)); // rem 30 → 36
+        [Fact] public void Gran_RoundsWholeInstanceUp_NeverZero() => Assert.Equal(new[] { 12 }, Split(8, null, null, 12)); // 8 → 12, not 0
+        [Fact] public void Gran_FullSticksNotRounded() => Assert.Equal(new[] { 96, 96, 12 }, Split(200, 96, null, 12));    // rem 8 → 12; 96s untouched
+        [Fact] public void Gran_ExactFoot_Unchanged() => Assert.Equal(new[] { 24 }, Split(24, 96, null, 12));            // 24 = 2' already
+        [Fact] public void Gran_ClampsToMinThenRoundsToFoot() => Assert.Equal(new[] { 96, 36 }, Split(130, 96, 24, 12)); // rem 34 → 36 (≥ min 24)
+        [Fact] public void Gran_One_IsNoOp() => Assert.Equal(new[] { 96, 30 }, Split(126, 96, null, 1));                 // inch format unaffected
     }
 
     /// <summary>Discrete-stock cover (sizes=): exact-fit wins on principle even when it costs more
@@ -242,6 +254,43 @@ namespace TurboSuite.Tests.Docs
             var rows = Expand(Fx("P-{xx,pool=96}", buckets: new[] { (100, 1), (20, 1) }));
             Assert.Equal(new[] { ("P-96", 2) }, rows);
         }
+
+        [Fact]
+        public void WholeFootFormat_RoundsCutsUpToWholeFeet_DistinctLengthsAreDistinctRows()
+        {
+            // xx' orders in whole feet, rounding UP. A 10" instance clamps to min 24" = 2'; a 30"
+            // instance rounds up to 3' (NOT floored to 2'). They are different ordered parts, so the
+            // quote shows one 2' AND one 3' — the field's "duplicate 2'-DAL" was a 30" piece the old
+            // floor mislabeled as 2'.
+            var rows = Expand(Fx("LITE-{xx',min=24,max=96}-DAL", buckets: new[] { (10, 1), (30, 1) }));
+            Assert.Equal(new[] { ("LITE-2'-DAL", 1), ("LITE-3'-DAL", 1) }, rows);
+        }
+
+        [Fact]
+        public void WholeFootFormat_GenuineDuplicateCutsPoolIntoOneRow()
+        {
+            // The user's "if it really WAS a duplicate" case: an 8" instance clamps up to 24" (2')
+            // and a natural 24" instance is already 2'. Both land on 24" and pool into a single
+            // 2'×2 row — real duplicates still merge, now at the inch-pooling level.
+            var rows = Expand(Fx("LITE-{xx',min=24,max=96}-DAL", buckets: new[] { (8, 1), (24, 1) }));
+            Assert.Equal(new[] { ("LITE-2'-DAL", 2) }, rows);
+        }
+
+        [Fact]
+        public void WholeFootFormat_ShortCutNeverRendersZeroFeet()
+        {
+            // A bare {xx'} whole instance of 8" rounds up to 1' — never the un-orderable 0'.
+            var rows = Expand(Fx("X-{xx'}", buckets: (8, 1)));
+            Assert.Equal(new[] { ("X-1'", 1) }, rows);
+        }
+
+        [Fact]
+        public void WholeFootFormat_FullSticksUnrounded_RemainderRoundsUp_SortedAscending()
+        {
+            // L=200, max=96 → two full 8' sticks (untouched) + an 8" remainder rounded up to 1'.
+            var rows = Expand(Fx("X-{xx',max=96}", buckets: (200, 1)));
+            Assert.Equal(new[] { ("X-1'", 1), ("X-8'", 2) }, rows);
+        }
     }
 
     /// <summary>ExpandTokenBuckets is the shared split core behind both ExpandSlot (rebuild) and the
@@ -264,6 +313,7 @@ namespace TurboSuite.Tests.Docs
         [InlineData("T-{xx\",sizes=94|48}")]         // discrete stock
         [InlineData("P-{xx\",pool=94|48}")]          // pooled offcuts — the drift-prone mode
         [InlineData("B-{xx\"}")]                     // bare token, no mode
+        [InlineData("F-{xx',min=24,max=96}")]        // truncating feet — distinct inches share a SKU
         public void RenderedBuckets_MatchExpandSlot(string template)
         {
             var f = Fx(template, count: 0, buckets: new[] { (200, 1), (130, 1), (48, 2) });
@@ -310,6 +360,12 @@ namespace TurboSuite.Tests.Docs
         [InlineData("T-{xx,max=48,min=96}")]  // min > max
         [InlineData("T-{xx,sizes=94,min=12}")]// min not allowed with sizes
         [InlineData("T-{xx,pool=96,min=12}")] // min not allowed with pool
+        [InlineData("T-{xx',max=90}")]        // whole-foot format: max not a foot multiple
+        [InlineData("T-{xx',min=18,max=96}")] // whole-foot format: min not a foot multiple
+        [InlineData("T-{ft,max=90}")]         // ft is whole-foot too
+        [InlineData("T-{xxFT,max=90}")]       // xxFT is whole-foot too
+        [InlineData("T-{xx',sizes=94|48}")]   // whole-foot format: sizes entry not a foot multiple
+        [InlineData("T-{xx',pool=90}")]       // whole-foot format: pool entry not a foot multiple
         public void RejectsMalformed(string template) => Bad(template);
 
         [Theory]
@@ -320,6 +376,8 @@ namespace TurboSuite.Tests.Docs
         [InlineData("T-{xx\",max=197,min=12}")] // max + min modifier
         [InlineData("T-{xx\",min=197,max=197}")]// min order-independent; min == max is legal
         [InlineData("T-{xx\",min=12}")]          // min on a bare token (no mode)
+        [InlineData("T-{xx',min=24,max=96}")]    // whole-foot format: foot-multiple max/min OK
+        [InlineData("T-{xx',sizes=96|48}")]      // whole-foot format: foot-multiple stock OK
         [InlineData("PLAIN-SKU")]             // no token → nothing to validate
         [InlineData("")]
         [InlineData(null)]
@@ -392,6 +450,18 @@ namespace TurboSuite.Tests.Docs
             Assert.Equal(200, w.UsedInches);
             Assert.Equal(209, w.SuppliedInches);
             Assert.Equal(9, w.WasteInches);
+        }
+
+        [Fact]
+        public void WholeFootFormat_SuppliedCountsRoundedUpFeet()
+        {
+            // L=30 under {xx',max=96} orders as 3' (36"), not 30" — the foot-rounding overage is
+            // real waste the Calc sheet must show. used 30, supplied 36, waste 6.
+            var w = CatalogWasteAnalyzer.ComputeSlotWaste(Fx("{xx',max=96}", (30, 1)), 0);
+            Assert.Equal("max", w.Mode);
+            Assert.Equal(30, w.UsedInches);
+            Assert.Equal(36, w.SuppliedInches);
+            Assert.Equal(6, w.WasteInches);
         }
 
         [Fact]

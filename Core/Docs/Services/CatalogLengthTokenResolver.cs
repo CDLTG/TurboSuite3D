@@ -90,6 +90,12 @@ public static class CatalogLengthTokenResolver
         if (!KnownFormats.Contains(fmt))
             throw new CatalogLengthTokenParseException(raw, $"Unknown length format '{fmt}' (supported: xx, xx\", xxIN, ft, xx', xxFT, xx'-xx\", xxFT-xxIN)");
 
+        // Whole-foot formats render only whole feet, so every explicit length they carry (max, min,
+        // sizes/pool stock) must land on a foot boundary — otherwise the SKU would misstate what's
+        // ordered. Cuts round UP to a foot at resolve time; these length knobs are author-supplied
+        // and must be exact.
+        bool isWholeFoot = WholeFootFormats.Contains(fmt);
+
         if (!m.Groups["opts"].Success) return;
 
         string opts = m.Groups["opts"].Value;
@@ -109,6 +115,8 @@ public static class CatalogLengthTokenResolver
                     throw new CatalogLengthTokenParseException(raw, $"max='{val}' must be a bare positive integer (inches)");
                 if (n <= 0)
                     throw new CatalogLengthTokenParseException(raw, "max must be greater than zero");
+                if (isWholeFoot && n % 12 != 0)
+                    throw new CatalogLengthTokenParseException(raw, $"max ({n}) must be a whole number of feet (a multiple of 12) for a '{fmt}' format");
                 sawMax = true;
                 maxVal = n;
             }
@@ -118,6 +126,8 @@ public static class CatalogLengthTokenResolver
                     throw new CatalogLengthTokenParseException(raw, $"min='{val}' must be a bare positive integer (inches)");
                 if (n <= 0)
                     throw new CatalogLengthTokenParseException(raw, "min must be greater than zero");
+                if (isWholeFoot && n % 12 != 0)
+                    throw new CatalogLengthTokenParseException(raw, $"min ({n}) must be a whole number of feet (a multiple of 12) for a '{fmt}' format");
                 sawMin = true;
                 minVal = n;
             }
@@ -135,6 +145,8 @@ public static class CatalogLengthTokenResolver
                         throw new CatalogLengthTokenParseException(raw, $"{kind} entry '{s.Trim()}' must be a positive integer (inches)");
                     if (sn <= 0)
                         throw new CatalogLengthTokenParseException(raw, $"{kind} entries must be greater than zero");
+                    if (isWholeFoot && sn % 12 != 0)
+                        throw new CatalogLengthTokenParseException(raw, $"{kind} entry '{sn}' must be a whole number of feet (a multiple of 12) for a '{fmt}' format");
                     if (!seen.Add(sn))
                         throw new CatalogLengthTokenParseException(raw, $"{kind} entry '{sn}' is duplicated");
                 }
@@ -287,21 +299,52 @@ public static class CatalogLengthTokenResolver
     /// (over-supplying rather than shipping a sub-minimum cut). Full max-sized pieces are never
     /// below the floor because validation rejects min &gt; max. L=200, max=197, min=12 → [197, 12];
     /// L=8, min=12 → [12].
+    /// <para>
+    /// <paramref name="granularity"/> is the orderable increment of the render format (12" for the
+    /// whole-foot formats, 1" otherwise — see <see cref="GranularityInches"/>). The made-to-length
+    /// pieces (trailing remainder, whole under-max instance) round UP to it, because a whole-foot SKU
+    /// can only be ordered in whole feet and ordering short isn't an option — L=30, gran=12 → [36];
+    /// L=8, gran=12 → [12] (never a 0' cut). Full max-sized sticks are NOT rounded: validation forces
+    /// max to be a granularity multiple for the foot formats, so they already sit on the increment.
+    /// </para>
     /// </summary>
-    public static IEnumerable<int> SplitInstance(int instanceInches, int? maxInches, int? minInches = null)
+    public static IEnumerable<int> SplitInstance(int instanceInches, int? maxInches, int? minInches = null, int granularity = 1)
     {
         if (instanceInches <= 0) yield break;
         int floor = minInches.GetValueOrDefault(0);
         if (!maxInches.HasValue || instanceInches <= maxInches.Value)
         {
-            yield return Math.Max(instanceInches, floor);
+            yield return RoundUp(Math.Max(instanceInches, floor), granularity);
             yield break;
         }
         int n = maxInches.Value;
         int full = instanceInches / n;
         int rem = instanceInches % n;
         for (int i = 0; i < full; i++) yield return n;
-        if (rem > 0) yield return Math.Max(rem, floor);
+        if (rem > 0) yield return RoundUp(Math.Max(rem, floor), granularity);
+    }
+
+    // Round UP to the next multiple of granularity (a no-op for the 1" inch formats).
+    private static int RoundUp(int value, int granularity)
+        => granularity <= 1 ? value : ((value + granularity - 1) / granularity) * granularity;
+
+    private static readonly HashSet<string> WholeFootFormats = new(StringComparer.Ordinal)
+    {
+        "ft", "xx'", "xxFT",
+    };
+
+    /// <summary>
+    /// The orderable increment of a template's render format, in inches: 12 for the whole-foot
+    /// formats (<c>ft</c>, <c>xx'</c>, <c>xxFT</c>), which can only carry whole feet, else 1. Cuts
+    /// round UP to this so a feet SKU never ships a sub-foot (or 0') length. Reads the first token;
+    /// callers must have validated the template.
+    /// </summary>
+    public static int GranularityInches(string? template)
+    {
+        if (string.IsNullOrEmpty(template)) return 1;
+        var m = TokenRegex.Match(template);
+        if (!m.Success) return 1;
+        return WholeFootFormats.Contains(m.Groups["fmt"].Value) ? 12 : 1;
     }
 
     /// <summary>
@@ -461,6 +504,14 @@ public static class CatalogLengthTokenResolver
     /// Precondition: <see cref="HasToken"/> is true for <paramref name="template"/>; blank and
     /// untokenized templates are the caller's concern. A tokened template with no cut mode (a bare
     /// <c>{xx"}</c>) yields one bucket per unique instance length.
+    /// <para>
+    /// For the whole-foot formats every made-to-length cut rounds UP to a foot (see
+    /// <see cref="SplitInstance"/>), so cuts already sit on the orderable increment before being
+    /// pooled on inches — two instances that both land on 2' (e.g. one clamped up from 8", one a
+    /// natural 24") pool into a single 2'×2 bucket right here. <see cref="MergeByRenderedSku"/> is a
+    /// final safety net over the result: it guarantees one row per rendered SKU even for an odd
+    /// <c>sizes=</c>/<c>pool=</c> template whose distinct stock lengths happen to share a foot band.
+    /// </para>
     /// </summary>
     public static IEnumerable<(int CutInches, int Qty)> ExpandTokenBuckets(
         string template, IReadOnlyDictionary<int, int> linearLengthBuckets)
@@ -469,21 +520,20 @@ public static class CatalogLengthTokenResolver
         if (pool is not null)
         {
             var sticks = PoolCoverSlot(linearLengthBuckets, pool);
-            foreach (var kv in sticks.Where(p => p.Value > 0).OrderBy(p => p.Key))
-                yield return (kv.Key, kv.Value);
-            yield break;
+            return MergeByRenderedSku(template, sticks.Where(p => p.Value > 0).Select(p => (p.Key, p.Value)));
         }
 
         var sizes = ParseSizes(template);
         int? max = sizes is null ? ParseMaxInches(template) : null;
         int? min = sizes is null ? ParseMinInches(template) : null;
+        int gran = sizes is null ? GranularityInches(template) : 1;
         var pooled = new Dictionary<int, int>();
         foreach (var kv in linearLengthBuckets)
         {
             int instanceInches = kv.Key;
             int instanceCount = kv.Value;
             var pieces = sizes is null
-                ? SplitInstance(instanceInches, max, min)
+                ? SplitInstance(instanceInches, max, min, gran)
                 : CoverInstance(instanceInches, sizes);
             foreach (int cut in pieces)
             {
@@ -492,8 +542,35 @@ public static class CatalogLengthTokenResolver
             }
         }
 
-        foreach (var kv in pooled.OrderBy(p => p.Key))
-            yield return (kv.Key, kv.Value);
+        return MergeByRenderedSku(template, pooled.Select(p => (p.Key, p.Value)));
+    }
+
+    /// <summary>
+    /// Safety net that collapses cut buckets rendering to the SAME SKU into one bucket, summing qty,
+    /// so the quote never shows a part number on two lines. The split path (bare/max/min) rounds cuts
+    /// to the format's orderable increment before pooling, so its buckets already render one-to-one
+    /// and this is a no-op there; it earns its keep only when a <c>sizes=</c>/<c>pool=</c> template's
+    /// distinct stock lengths share a rendered SKU. The smallest contributing inch value is kept as
+    /// each group's representative so callers that render or sort by CutInches stay stable and
+    /// ascending-by-length.
+    /// </summary>
+    private static List<(int CutInches, int Qty)> MergeByRenderedSku(
+        string template, IEnumerable<(int CutInches, int Qty)> buckets)
+    {
+        // Ascending inch order guarantees the first insert for each SKU carries the smallest inches.
+        var bySku = new Dictionary<string, (int Inches, int Qty)>(StringComparer.Ordinal);
+        foreach (var (inches, qty) in buckets.OrderBy(b => b.CutInches))
+        {
+            string sku = Resolve(template, inches);
+            if (bySku.TryGetValue(sku, out var acc))
+                bySku[sku] = (acc.Inches, acc.Qty + qty);
+            else
+                bySku[sku] = (inches, qty);
+        }
+        return bySku.Values
+            .OrderBy(v => v.Inches)
+            .Select(v => (v.Inches, v.Qty))
+            .ToList();
     }
 
     /// <summary>
@@ -522,8 +599,9 @@ public static class CatalogLengthTokenResolver
 /// Per-slot length math summary used by the Length section of the hidden Calculations sheet.
 /// Mode is "" when the slot has
 /// no length token; "sizes"/"max"/"plain" otherwise (min= is a modifier, not a distinct mode).
-/// sizes= and pool= strand material by over-covering; the max/plain paths strand material only
-/// when a min= floor clamps a short cut up.
+/// sizes= and pool= strand material by over-covering; the max/plain paths strand material when a
+/// min= floor clamps a short cut up, or when a whole-foot format rounds a made-to-length cut up to
+/// the next foot — so SuppliedInches counts the ordered feet, not the raw inch cut.
 /// </summary>
 public sealed record SlotWasteStats(string Mode, int InstanceCount, int UsedInches, int SuppliedInches)
 {
@@ -543,6 +621,9 @@ public static class CatalogWasteAnalyzer
         bool splitPath = pool is null && sizes is null;
         int? max = splitPath ? CatalogLengthTokenResolver.ParseMaxInches(template) : null;
         int? min = splitPath ? CatalogLengthTokenResolver.ParseMinInches(template) : null;
+        // Whole-foot formats round each made-to-length cut up to a foot, so the material actually
+        // supplied (and thus waste) is measured in ordered feet, not the raw inch cut.
+        int gran = splitPath ? CatalogLengthTokenResolver.GranularityInches(template) : 1;
         string mode = pool is not null ? "pool"
                     : sizes is not null ? "sizes"
                     : max.HasValue ? "max" : "plain";
@@ -571,7 +652,7 @@ public static class CatalogWasteAnalyzer
                 if (L <= 0) continue;
                 int suppliedForThis = 0;
                 var pieces = sizes is null
-                    ? CatalogLengthTokenResolver.SplitInstance(L, max, min)
+                    ? CatalogLengthTokenResolver.SplitInstance(L, max, min, gran)
                     : CatalogLengthTokenResolver.CoverInstance(L, sizes);
                 foreach (int p in pieces) suppliedForThis += p;
                 supplied += suppliedForThis * N;

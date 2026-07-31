@@ -429,14 +429,14 @@
             <tr><td class="token">{xx}</td><td class="token">42</td></tr>
             <tr><td class="token">{xx&quot;}</td><td class="token">42&quot;</td></tr>
             <tr><td class="token">{xxIN}</td><td class="token">42IN</td></tr>
-            <tr><td class="token">{ft}</td><td class="token">3</td></tr>
-            <tr><td class="token">{xx'}</td><td class="token">3'</td></tr>
-            <tr><td class="token">{xxFT}</td><td class="token">3FT</td></tr>
+            <tr><td class="token">{ft}</td><td class="token">4</td></tr>
+            <tr><td class="token">{xx'}</td><td class="token">4'</td></tr>
+            <tr><td class="token">{xxFT}</td><td class="token">4FT</td></tr>
             <tr><td class="token">{xx'-xx&quot;}</td><td class="token">3'-6&quot;</td></tr>
             <tr><td class="token">{xxFT-xxIN}</td><td class="token">3FT-6IN</td></tr>
           </tbody>
         </table>
-        <p class="note">Feet formats (<code>ft</code>, <code>xx'</code>, <code>xxFT</code>) truncate via integer division by 12.</p>
+        <p class="note">Whole-foot formats (<code>ft</code>, <code>xx'</code>, <code>xxFT</code>) order in whole feet, rounding each cut <em>up</em> to the next foot — a 42&quot; run orders as <code>4'</code>, never a short <code>3'</code> or an un-orderable <code>0'</code>. Because they carry only whole feet, every explicit length in the token (<code>max</code>, <code>min</code>, <code>sizes</code>/<code>pool</code> stock) must itself be a multiple of 12. Need the exact length? Use <code>{xx'-xx&quot;}</code>, which renders feet + inches with no rounding.</p>
       </div>
 
       <div>
@@ -463,12 +463,12 @@
             <tr>
               <td class="example">LUT-RBN-{xx'}</td>
               <td><span class="mode-pill plain">plain</span></td>
-              <td class="example">LUT-RBN-3', LUT-RBN-6'</td>
+              <td class="example">LUT-RBN-4', LUT-RBN-7' (42&quot;→4', 78&quot;→7', rounded up)</td>
             </tr>
             <tr>
               <td class="example">LUT-RBN-{xxFT}</td>
               <td><span class="mode-pill plain">plain</span></td>
-              <td class="example">LUT-RBN-3FT, LUT-RBN-6FT</td>
+              <td class="example">LUT-RBN-4FT, LUT-RBN-7FT (rounded up to whole feet)</td>
             </tr>
             <tr>
               <td class="example">LUT-RBN-{xx'-xx&quot;}</td>
