@@ -25,7 +25,7 @@
     <Using Remove="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="ACadSharp" Version="3.6.35" />
+    <PackageReference Include="ACadSharp" Version="3.6.51" />
     <!-- ClosedXML — see note in Core/TurboSuite.Core.csproj (0.105.0's formula
          parser is satisfied by the LET-rewritten Counts formulas). -->
     <PackageReference Include="ClosedXML" Version="0.105.0" />
