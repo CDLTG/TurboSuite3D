@@ -42,7 +42,7 @@
          (the shipping Revit 2025 artifact) keeps using its built-in copy, so this package
          and its transitive graph never enter the production dependency closure. Version
          tracks the net8 in-box System.Text.Json so both TFMs serialize identically. -->
-    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+    <PackageReference Include="System.Text.Json" Version="10.0.10" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\TurboSuite.Abstractions.csproj" />
