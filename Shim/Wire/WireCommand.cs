@@ -291,7 +291,11 @@ public class WireCommand : IExternalCommand
 
         var existingComments = CircuitService.GetExistingComments(doc);
         var panels = CircuitService.GetAllPanels(doc);
-        var autoPanel = CircuitService.FindLastUsedPanel(doc);
+        // Default the panel dropdown to the last circuit's choice — a real panel, or
+        // <None> when the previous circuit was deliberately left unassigned. Exclude the
+        // circuits being wired now so they reflect the prior state, not themselves.
+        var (autoPanel, preferNone) = CircuitService.FindLastPanelChoice(
+            doc, circuits.Select(c => c.Id).ToList());
 
         // Resolve each circuit's live base room (linked Rooms, region fallback in 2D)
         // the same way TurboZones does — first lighting/electrical fixture on the
@@ -327,7 +331,7 @@ public class WireCommand : IExternalCommand
         var roomNames = CollectProjectRoomNames(doc, regionFallback);
 
         var dialog = new CommentsDialog(existingComments, panels, autoPanel, circuitNumbers,
-            resolvedRoom, roomNames);
+            resolvedRoom, roomNames, preferNone);
         if (dialog.ShowDialog() == true)
         {
             if (!string.IsNullOrEmpty(dialog.CommentsText))
@@ -366,7 +370,16 @@ public class WireCommand : IExternalCommand
                 }
             }
 
-            if (dialog.SelectedPanel != null)
+            if (dialog.UnassignPanel)
+            {
+                // User picked <None> — strip any auto-assigned panel (DMX/DALI etc.)
+                foreach (var circuit in circuits)
+                {
+                    if (circuit.BaseEquipment != null)
+                        CircuitService.ClearCircuitPanel(doc, circuit);
+                }
+            }
+            else if (dialog.SelectedPanel != null)
             {
                 // Re-assign panel if user picked a different one
                 foreach (var circuit in circuits)

@@ -74,9 +74,11 @@ public static class CircuitService
 
         if (assignPanel)
         {
-            // Assign to the most recently used panel (highest circuit number)
-            var lastPanel = FindLastUsedPanel(doc);
-            if (lastPanel != null)
+            // Mirror the last circuit's assignment (exclude the one we just created so it
+            // doesn't answer for itself). A deliberate <None> last time leaves this one
+            // unassigned too; the comments dialog then defaults to <None> to match.
+            var (lastPanel, preferNone) = FindLastPanelChoice(doc, new[] { circuit.Id });
+            if (!preferNone && lastPanel != null)
             {
                 try { circuit.SelectPanel(lastPanel); }
                 catch { /* Panel may be incompatible — leave unassigned */ }
@@ -119,20 +121,59 @@ public static class CircuitService
     }
 
     /// <summary>
-    /// Find the panel used by the most recently created circuit in the document
-    /// (highest ElementId), approximating Revit's "last selected panel" behavior.
+    /// Unassign a circuit from its panel (e.g. DMX/DALI circuits that never live on a
+    /// distribution board). No-op-safe: swallows if the circuit has no panel.
     /// </summary>
-    public static FamilyInstance? FindLastUsedPanel(Document doc)
+    public static void ClearCircuitPanel(Document doc, ElectricalSystem circuit)
     {
-        return new FilteredElementCollector(doc)
+        using var t = new Transaction(doc, "TurboWire — Unassign circuit panel");
+        t.Start();
+        try
+        {
+            circuit.DisconnectPanel();
+            t.Commit();
+        }
+        catch
+        {
+            t.RollBack();
+        }
+    }
+
+    /// <summary>
+    /// The panel default for a newly wired circuit, mirroring the most recent circuit
+    /// the user set up (highest ElementId) — Revit's "last selected panel" behavior,
+    /// extended to remember a deliberate &lt;None&gt;:
+    /// <list type="bullet">
+    /// <item><description><c>(panel, false)</c> — the newest circuit is on a panel.</description></item>
+    /// <item><description><c>(null, true)</c> — the newest circuit was left unassigned
+    /// (DMX/DALI etc.); default the next one to &lt;None&gt; too.</description></item>
+    /// <item><description><c>(null, false)</c> — nothing to go on yet; caller picks its
+    /// own default (first available panel).</description></item>
+    /// </list>
+    /// "Switched" circuits are skipped — they are unassigned by design (no dialog) and
+    /// must not poison the panel that regular wiring remembers. <paramref name="exclude"/>
+    /// omits circuits already being wired in the current run so they don't answer for
+    /// themselves.
+    /// </summary>
+    public static (FamilyInstance? Panel, bool PreferNone) FindLastPanelChoice(
+        Document doc, ICollection<ElementId>? exclude = null)
+    {
+        var newest = new FilteredElementCollector(doc)
             .OfClass(typeof(ElectricalSystem))
             .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
             .Cast<ElectricalSystem>()
-            .Where(c => c.BaseEquipment != null)
+            .Where(c => (exclude == null || !exclude.Contains(c.Id)) && !IsSwitchedCircuit(c))
             .OrderByDescending(c => c.Id.Value)
-            .FirstOrDefault()
-            ?.BaseEquipment;
+            .FirstOrDefault();
+
+        if (newest == null)
+            return (null, false);
+        return newest.BaseEquipment is FamilyInstance panel ? (panel, false) : (null, true);
     }
+
+    private static bool IsSwitchedCircuit(ElectricalSystem circuit) =>
+        string.Equals(ParameterHelper.GetCircuitComments(circuit), "switched",
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Add uncircuited fixtures to an existing circuit.

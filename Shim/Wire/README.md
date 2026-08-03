@@ -20,11 +20,13 @@ Creates electrical circuits and wire connections between lighting fixtures and e
 | All on same circuit | No circuit changes |
 | Multiple circuits | Error — no changes made |
 
-New circuits are automatically assigned to the last-used panel in the document (determined by the most recently created circuit with a panel).
+New circuits mirror the most recently set-up circuit's panel: the last-used panel in the document, or **left unassigned** when that circuit was deliberately set to `<None>` (DMX/DALI and other circuits that never live on a distribution board). "Switched" circuits are skipped when determining this default — they are unassigned by design and must not poison the remembered panel.
 
 ## Comments Dialog
 
 After circuit creation/wiring, a comments dialog appears if the circuit has no existing comment. The dialog displays the circuit number and offers autofill suggestions from all existing circuit comments in the document. The dialog can be disabled in TurboSuite Settings (`General > Show circuit comments dialog`).
+
+The dialog's **Panel** dropdown includes a `<None>` option so circuits that never belong on a panel (DMX/DALI, etc.) can be created unassigned in one step — picking it disconnects any auto-assigned panel via `ElectricalSystem.DisconnectPanel()`. The dropdown defaults to the last circuit's choice (a panel, or `<None>` if the previous one was left unassigned); see [Circuit Creation](#circuit-creation).
 
 The dialog also has a **Room Override** field. It prefills with the circuit's room — resolved from its first fixture the same way TurboZones does (linked Room, or a "Room Region" filled region in 2D drafting jobs), or an existing saved override — and offers project room names for autofill/search. Editing it stores a per-circuit room override in shared ExtensibleStorage (`RoomOverrideStorageService`, read by TurboZones for load naming); the base room is never written, so clearing the field falls back to the geometry. Leaving the field unchanged writes nothing. When a batch of circuits resolves to different rooms, the field shows `<varies>` and stays a no-op unless typed over.
 

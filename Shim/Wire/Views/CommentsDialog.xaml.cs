@@ -7,13 +7,37 @@ namespace TurboSuite.Wire.Views;
 
 public partial class CommentsDialog : Window
 {
+    /// <summary>
+    /// A panel dropdown entry. <see cref="Panel"/> is null for the "&lt;None&gt;" choice
+    /// (DMX/DALI and other circuits that never live on a distribution board).
+    /// </summary>
+    public sealed class PanelChoice
+    {
+        public string Name { get; }
+        public FamilyInstance? Panel { get; }
+
+        public PanelChoice(FamilyInstance panel)
+        {
+            Panel = panel;
+            Name = panel.Name;
+        }
+
+        private PanelChoice(string name) => Name = name;
+
+        public static readonly PanelChoice None = new("<None>");
+    }
+
     public string CommentsText { get; private set; } = string.Empty;
     public string RoomOverrideText { get; private set; } = string.Empty;
     public FamilyInstance? SelectedPanel { get; private set; }
 
+    /// <summary>True when the user explicitly picked "&lt;None&gt;" — the circuit should
+    /// be unassigned from any panel, not left on its auto-assigned one.</summary>
+    public bool UnassignPanel { get; private set; }
+
     public CommentsDialog(List<string> existingComments, List<FamilyInstance> panels,
         FamilyInstance? autoSelectedPanel, string circuitNumbers = "",
-        string resolvedRoom = "", List<string>? roomNames = null)
+        string resolvedRoom = "", List<string>? roomNames = null, bool defaultToNone = false)
     {
         InitializeComponent();
 
@@ -30,16 +54,29 @@ public partial class CommentsDialog : Window
             RoomOverrideComboBox.ItemsSource = roomNames;
         RoomOverrideComboBox.Text = resolvedRoom ?? string.Empty;
 
-        PanelComboBox.ItemsSource = panels;
-        if (autoSelectedPanel != null)
+        // "<None>" leads the list so circuits that never live on a panel can be
+        // created unassigned; real panels follow.
+        var choices = new List<PanelChoice> { PanelChoice.None };
+        choices.AddRange(panels.Select(p => new PanelChoice(p)));
+        PanelComboBox.ItemsSource = choices;
+
+        if (defaultToNone)
         {
-            // Match by ElementId since objects come from different collectors
-            var match = panels.FirstOrDefault(p => p.Id == autoSelectedPanel.Id);
-            if (match != null)
-                PanelComboBox.SelectedItem = match;
+            // The previous circuit was deliberately left unassigned — carry that forward.
+            PanelComboBox.SelectedItem = PanelChoice.None;
         }
-        else if (panels.Count > 0)
-            PanelComboBox.SelectedIndex = 0;
+        else
+        {
+            PanelChoice? match = autoSelectedPanel != null
+                // Match by ElementId since objects come from different collectors
+                ? choices.FirstOrDefault(c => c.Panel?.Id == autoSelectedPanel.Id)
+                : null;
+            // Default to the auto-selected panel, else the first real panel; fall back to
+            // <None> only when there are no panels at all.
+            PanelComboBox.SelectedItem = match
+                ?? choices.FirstOrDefault(c => c.Panel != null)
+                ?? PanelChoice.None;
+        }
 
         Loaded += (_, _) =>
         {
@@ -54,7 +91,9 @@ public partial class CommentsDialog : Window
     {
         CommentsText = CommentsComboBox.Text;
         RoomOverrideText = RoomOverrideComboBox.Text;
-        SelectedPanel = PanelComboBox.SelectedItem as FamilyInstance;
+        var choice = PanelComboBox.SelectedItem as PanelChoice;
+        SelectedPanel = choice?.Panel;
+        UnassignPanel = choice != null && choice.Panel == null;
         DialogResult = true;
     }
 }
