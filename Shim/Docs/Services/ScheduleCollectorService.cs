@@ -32,7 +32,10 @@ public static class ScheduleCollectorService
             for (int c = 1; c <= 6; c++)
             {
                 string val = ReadStringParam(symbol, $"Catalog Number{c}");
-                if (!string.IsNullOrWhiteSpace(val)) catParts.Add(val.Trim());
+                if (!string.IsNullOrWhiteSpace(val))
+                    // Length tokens are per-instance; the type-level schedule has no single
+                    // length, so show a generic [*] placeholder to the consumer.
+                    catParts.Add(CatalogLengthTokenResolver.StripTokensToPlaceholder(val.Trim()));
             }
 
             // Schedule Note1–6

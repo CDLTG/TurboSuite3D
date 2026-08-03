@@ -69,6 +69,23 @@ namespace TurboSuite.Tests.Docs
             => Assert.Equal(expected, CatalogLengthTokenResolver.HasToken(catalog));
     }
 
+    /// <summary>Consumer-facing fixture schedule: every length token collapses to <c>[*]</c>,
+    /// leaving the author's surrounding characters (framing dashes, prefix/suffix) intact.</summary>
+    public class StripTokensToPlaceholderTests
+    {
+        [Theory]
+        [InlineData("ILP-{xx\",max=48}-30K", "ILP-[*]-30K")]
+        [InlineData("T-{ft}", "T-[*]")]
+        [InlineData("{xx'-xx\"}", "[*]")]
+        [InlineData("A-{xx}-B-{xx}-C", "A-[*]-B-[*]-C")]  // every instance replaced
+        [InlineData("PLAIN-SKU-123", "PLAIN-SKU-123")]    // untokenized passes through
+        [InlineData("{xy}", "{xy}")]                       // not a length token — untouched
+        [InlineData("", "")]
+        [InlineData(null, "")]
+        public void Strip(string? catalog, string expected)
+            => Assert.Equal(expected, CatalogLengthTokenResolver.StripTokensToPlaceholder(catalog));
+    }
+
     /// <summary>Greedy made-to-length split (max=N): full N-sized cuts plus one remainder.</summary>
     public class SplitInstanceTests
     {

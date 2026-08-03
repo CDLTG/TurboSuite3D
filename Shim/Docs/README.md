@@ -10,7 +10,7 @@ Generates a fixture schedule PDF from lighting fixture type parameters.
 
 Each fixture entry is a card-style block:
 - **Type Mark** in a bordered box on the left (font auto-shrinks for long marks)
-- **Catalog Numbers** (pipe-separated, bold) on the first line
+- **Catalog Numbers** (pipe-separated, bold) on the first line — Counts length tokens (`{xx"…}`) collapse to a generic `[*]` placeholder here, since this consumer-facing type-level row has no single instance length
 - **Manufacturer**, **Description**, **Description2** on lines 2–4
 - Three spec sections to the right, each compacting independently (empty values shift remaining values up):
   - **Mechanical**: Finish, Listings, Mounting

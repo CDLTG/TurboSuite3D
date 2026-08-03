@@ -60,6 +60,19 @@ public static class CatalogLengthTokenResolver
     }
 
     /// <summary>
+    /// Replaces every length token with the consumer-facing placeholder <c>[*]</c> for
+    /// the type-level fixture schedule, where no single instance length exists. The author's
+    /// surrounding characters (e.g. the framing <c>-</c>) are left intact, so
+    /// <c>ILP-{xx",max=48}-30K</c> renders as <c>ILP-[*]-30K</c>. Output-only: the result is
+    /// never re-parsed as a template.
+    /// </summary>
+    public static string StripTokensToPlaceholder(string? catalogNumber)
+    {
+        if (string.IsNullOrEmpty(catalogNumber)) return catalogNumber ?? string.Empty;
+        return TokenRegex.Replace(catalogNumber!, _ => "[*]");
+    }
+
+    /// <summary>
     /// Validates every length token in <paramref name="catalogNumber"/>.
     /// Throws <see cref="CatalogLengthTokenParseException"/> on the first failure.
     /// </summary>
