@@ -10,8 +10,9 @@ namespace TurboSuite.Docs.Services;
 
 public static class RPSLookupPdfService
 {
-    // ── Page (Large = 8.5x28.5 construction strip, Small = 8.5x11 letter) ──
-    private const double LargePageWidth  = 8.5  * 72;   // 612 pt
+    // ── Page (Large = construction strip, Small = 8.5x11 letter) ──
+    // The strip's width is content-fit at generation time (see GeneratePages), so no
+    // fixed large width constant — only its 28.5" height is pinned here.
     private const double LargePageHeight = 28.5 * 72;   // 2052 pt
     private const double SmallPageWidth  = 8.5  * 72;   // 612 pt
     private const double SmallPageHeight = 11.0 * 72;   // 792 pt
@@ -34,7 +35,7 @@ public static class RPSLookupPdfService
     // Title reuses the size the project name previously used here, non-bold.
     private const double CompactTitleFontSize = 10;
     private const double CompactHeaderHeight  = 20;
-    private const double CompactHeaderSpacing = 6;
+    private const double CompactHeaderSpacing = 2;   // title/headers hug the rule
 
     // ── Table (letter) ──
     private const double RowHeight        = 18;
@@ -44,10 +45,14 @@ public static class RPSLookupPdfService
 
     // ── Table (large — condensed rows so more fits per strip) ──
     private const double CompactRowHeight       = 14;
-    private const double CompactHeaderRowHeight  = 16;
+    private const double CompactHeaderRowHeight  = 14;
     private const double CompactFontSize         = 7.5;
 
     private const double CellPaddingLeft  = 6;
+
+    // Trailing slack past each content-fit column on the strip — the main dial for how
+    // tightly columns pack (the next column's CellPaddingLeft adds to it). Large only.
+    private const double CompactColumnGap = 12;
 
     // ── Footer ──
     private const double FooterHeight = 28;
@@ -88,14 +93,11 @@ public static class RPSLookupPdfService
         // Format-dependent metrics. The 8.5x28.5 construction strip trades branding
         // for density: a one-line title band, tighter rows, and no footer (it is a
         // field reference, not a deliverable — matches the fixture/RPS schedules).
-        double pageWidth  = useLargeFormat ? LargePageWidth  : SmallPageWidth;
         double pageHeight = useLargeFormat ? LargePageHeight : SmallPageHeight;
         double rowHeight       = useLargeFormat ? CompactRowHeight      : RowHeight;
         double headerRowHeight = useLargeFormat ? CompactHeaderRowHeight : HeaderRowHeight;
         double cellFontSize    = useLargeFormat ? CompactFontSize       : FontSize;
         double footerReserve   = useLargeFormat ? 0                     : FooterHeight;
-
-        double contentWidth = pageWidth - MarginLeft - MarginRight;
 
         var fontHeader   = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
         var fontSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
@@ -116,9 +118,47 @@ public static class RPSLookupPdfService
             ("Circuit",        r => r.CircuitNumber,   1.0),
         };
 
-        // Calculate column widths proportionally
-        double totalWeight = columns.Sum(c => c.Weight);
-        double[] colWidths = columns.Select(c => contentWidth * c.Weight / totalWeight).ToArray();
+        // ── Column widths + page width ──
+        // Letter keeps fixed proportional shares of the page content width. The 8.5x28.5
+        // strip instead content-fits each column (measure the header and every cell) and
+        // lets the overall strip width follow — collapsing the wasted horizontal gaps
+        // while, because the widths come from measurement, never clipping content.
+        double pageWidth;
+        double contentWidth;
+        double[] colWidths = new double[columns.Length];
+
+        if (useLargeFormat)
+        {
+            using var tempPdf = new PdfDocument();
+            var tempPage = tempPdf.AddPage();
+            using var tempGfx = XGraphics.FromPdfPage(tempPage);
+
+            for (int c = 0; c < columns.Length; c++)
+            {
+                double maxWidth = tempGfx.MeasureString(columns[c].Header, fontColHead).Width;
+                foreach (var inst in instances)
+                {
+                    string value = columns[c].Selector(inst);
+                    if (string.IsNullOrEmpty(value)) continue;
+                    double w = tempGfx.MeasureString(value, fontCell).Width;
+                    if (w > maxWidth) maxWidth = w;
+                }
+                colWidths[c] = CellPaddingLeft + maxWidth + CompactColumnGap;
+            }
+
+            double tableWidth = colWidths.Sum();
+            double titleWidth = tempGfx.MeasureString("POWER SUPPLY LOOKUP TABLE", fontCompactTitle).Width;
+            contentWidth = Math.Max(tableWidth, titleWidth);
+            pageWidth = MarginLeft + contentWidth + MarginRight;
+        }
+        else
+        {
+            pageWidth = SmallPageWidth;
+            contentWidth = pageWidth - MarginLeft - MarginRight;
+            double totalWeight = columns.Sum(c => c.Weight);
+            colWidths = columns.Select(c => contentWidth * c.Weight / totalWeight).ToArray();
+        }
+
         double[] colX = new double[columns.Length];
         colX[0] = MarginLeft;
         for (int i = 1; i < columns.Length; i++)
@@ -300,10 +340,14 @@ public static class RPSLookupPdfService
     private static void DrawCompactHeader(XGraphics gfx, double contentWidth,
         XFont fontTitle, XPen penRule, ref double y)
     {
-        gfx.DrawString("POWER SUPPLY LOOKUP TABLE", fontTitle, XBrushes.Black,
-            new XPoint(MarginLeft, y + CompactTitleFontSize));
-
         double ruleY = y + CompactHeaderHeight - 2;
+
+        // Baseline just above the rule so the title hugs it (rather than floating at the
+        // top of the band). The header row below hugs the rule from the other side via
+        // the small CompactHeaderSpacing.
+        gfx.DrawString("POWER SUPPLY LOOKUP TABLE", fontTitle, XBrushes.Black,
+            new XPoint(MarginLeft, ruleY - 4));
+
         gfx.DrawLine(penRule, MarginLeft, ruleY, MarginLeft + contentWidth, ruleY);
 
         y += CompactHeaderHeight + CompactHeaderSpacing;
