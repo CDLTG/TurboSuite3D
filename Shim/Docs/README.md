@@ -124,7 +124,7 @@ Same visual format as the fixture schedule but with two spec sections: **Capacit
 
 ### Lookup Table
 
-Compact table with columns **Number | Type | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware). Letter size only. Dark header row with alternating row shading.
+Compact table with columns **Number | Type | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware), with alternating row shading. Honors the shared page-format toggle: on **8.5" x 11"** it carries the full branded header (project name + logo), a dark column-header band with white text, and a company/page-number footer. On the **8.5" x 28.5"** construction strip it goes fully utilitarian — just the "POWER SUPPLY LOOKUP TABLE" title (no project name, no logo), plain black column headers with no band, tighter rows, and no footer — a dense field reference that starts a fresh strip when it overruns (matching the fixture/RPS schedules). Construction-strip title design is intentionally minimal pending polish.
 
 ### Driver Breakdown
 

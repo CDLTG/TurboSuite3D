@@ -253,7 +253,7 @@ public class PowerSuppliesViewModel : ViewModelBase
                 {
                     StatusText = "Generating lookup table...";
                     Progress = 55;
-                    RPSLookupPdfService.GeneratePages(pdf, Instances, ProjectName, docsSettings);
+                    RPSLookupPdfService.GeneratePages(pdf, Instances, ProjectName, UseLargeFormat, docsSettings);
                 }
 
                 if (doBreakdown)
