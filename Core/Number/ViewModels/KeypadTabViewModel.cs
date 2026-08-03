@@ -53,7 +53,6 @@ namespace TurboSuite.Number.ViewModels
 
     public class KeypadTabViewModel : TabViewModelBase
     {
-        private readonly IRevitWorkQueue _workQueue;
         private readonly ISwitchIdWriter _switchIdWriter;
         private readonly IRoomOrderStore _roomOrderStore;
         private bool _isSidebarVisible;
@@ -112,10 +111,10 @@ namespace TurboSuite.Number.ViewModels
 
         public KeypadTabViewModel(IReadOnlyList<NumberableRowViewModel> rows,
             IReadOnlyList<(string Name, int ClickOrder)> savedRoomOrder, bool sidebarWasOpen,
-            IRevitWorkQueue workQueue, ISwitchIdWriter switchIdWriter, IRoomOrderStore roomOrderStore)
-            : base("Keypads")
+            IRevitWorkQueue workQueue, ISwitchIdWriter switchIdWriter, IRoomOrderStore roomOrderStore,
+            IDeviceSelector selector)
+            : base("Keypads", workQueue, selector)
         {
-            _workQueue = workQueue;
             _switchIdWriter = switchIdWriter;
             _roomOrderStore = roomOrderStore;
             ToggleSidebarCommand = new RelayCommand(ToggleSidebar);

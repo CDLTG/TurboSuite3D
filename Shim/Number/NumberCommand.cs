@@ -72,9 +72,10 @@ namespace TurboSuite.Number
                 var roomOrderStore = new RoomOrderStore(doc);
                 var circuitOps = new CircuitNumberOperations(doc, uidoc,
                     panelScheduleService, writerService, collectorService);
+                var deviceSelector = new DeviceSelector(uidoc);
 
                 var viewModel = new NumberMainViewModel(doc, circuits, keypads, powerSupplies,
-                    workQueue, switchIdWriter, prefixSuffixStore, roomOrderStore, circuitOps);
+                    workQueue, switchIdWriter, prefixSuffixStore, roomOrderStore, circuitOps, deviceSelector);
 
                 var window = new TurboNumberWindow
                 {

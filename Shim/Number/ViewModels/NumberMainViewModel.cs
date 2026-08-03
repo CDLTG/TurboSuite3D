@@ -24,7 +24,8 @@ namespace TurboSuite.Number.ViewModels
             ISwitchIdWriter switchIdWriter,
             IPrefixSuffixStore prefixSuffixStore,
             IRoomOrderStore roomOrderStore,
-            ICircuitNumberOperations circuitOps)
+            ICircuitNumberOperations circuitOps,
+            IDeviceSelector deviceSelector)
         {
             // All three tabs are Revit-free Core VMs driven by IRevitWorkQueue + the op
             // interfaces. This shim VM does the one-time Revit collection/projection and
@@ -44,7 +45,7 @@ namespace TurboSuite.Number.ViewModels
             var savedRoomOrder = RoomOrderStorageService.Load(doc);
             var sidebarWasOpen = RoomOrderStorageService.LoadSidebarVisible(doc);
             KeypadTab = new KeypadTabViewModel(keypadRows, savedRoomOrder, sidebarWasOpen,
-                workQueue, switchIdWriter, roomOrderStore);
+                workQueue, switchIdWriter, roomOrderStore, deviceSelector);
 
             var psRows = powerSupplies.Select(d => new NumberableRowViewModel(
                 d.ElementId.ToRef(),
@@ -58,7 +59,7 @@ namespace TurboSuite.Number.ViewModels
                 positionY: d.PositionY)).ToList();
             var (savedPrefix, savedSuffix) = RoomOrderStorageService.LoadPrefixSuffix(doc);
             PowerSupplyTab = new PowerSupplyTabViewModel(psRows, savedPrefix, savedSuffix,
-                workQueue, switchIdWriter, prefixSuffixStore);
+                workQueue, switchIdWriter, prefixSuffixStore, deviceSelector);
         }
 
         private static List<PanelSettingsModel> BuildPanelSettings(Document doc, List<CircuitNumberRow> circuits)

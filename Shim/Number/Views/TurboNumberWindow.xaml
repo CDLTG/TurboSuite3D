@@ -361,6 +361,7 @@
                         </Grid>
 
                         <DataGrid Grid.Row="1" ItemsSource="{Binding KeypadTab.Rows}"
+                                  SelectedItem="{Binding KeypadTab.SelectedRow}"
                                   AutoGenerateColumns="False"
                                   CanUserAddRows="False" CanUserDeleteRows="False"
                                   CanUserReorderColumns="False"
@@ -406,7 +407,10 @@
                         </DataGrid>
 
                         <DockPanel Grid.Row="2" Margin="4,6">
-<Button Content="Apply" Command="{Binding KeypadTab.ApplyCommand}"
+                            <Button Content="Select in Project" Command="{Binding KeypadTab.SelectInProjectCommand}"
+                                    Style="{StaticResource RevitButtonStyle}" Width="120" Height="28"
+                                    DockPanel.Dock="Left" HorizontalAlignment="Left"/>
+                            <Button Content="Apply" Command="{Binding KeypadTab.ApplyCommand}"
                                     Style="{StaticResource RevitButtonStyle}" Width="80" Height="28"
                                     DockPanel.Dock="Right" HorizontalAlignment="Right"/>
                         </DockPanel>
@@ -462,6 +466,7 @@
                     </StackPanel>
 
                     <DataGrid Grid.Row="1" ItemsSource="{Binding PowerSupplyTab.Rows}"
+                              SelectedItem="{Binding PowerSupplyTab.SelectedRow}"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               CanUserReorderColumns="False" CanUserSortColumns="True"
@@ -481,7 +486,10 @@
                     </DataGrid>
 
                     <DockPanel Grid.Row="2" Margin="4,6">
-<Button Content="Apply" Command="{Binding PowerSupplyTab.ApplyCommand}"
+                        <Button Content="Select in Project" Command="{Binding PowerSupplyTab.SelectInProjectCommand}"
+                                Style="{StaticResource RevitButtonStyle}" Width="120" Height="28"
+                                DockPanel.Dock="Left" HorizontalAlignment="Left"/>
+                        <Button Content="Apply" Command="{Binding PowerSupplyTab.ApplyCommand}"
                                 Style="{StaticResource RevitButtonStyle}" Width="80" Height="28"
                                 DockPanel.Dock="Right" HorizontalAlignment="Right"/>
                     </DockPanel>

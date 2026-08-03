@@ -7,14 +7,19 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Data;
 using System.Windows.Input;
+using TurboSuite.Abstractions;
+using TurboSuite.Number.Services;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
 {
     public abstract class TabViewModelBase : ViewModelBase
     {
+        protected readonly IRevitWorkQueue _workQueue;
+        private readonly IDeviceSelector _selector;
         protected bool _isUpdating;
         private bool _isCascadeEnabled = false;
+        private NumberableRowViewModel _selectedRow;
 
         public ObservableCollection<NumberableRowViewModel> Rows { get; } = new ObservableCollection<NumberableRowViewModel>();
 
@@ -28,16 +33,51 @@ namespace TurboSuite.Number.ViewModels
             set => SetProperty(ref _isCascadeEnabled, value);
         }
 
+        /// <summary>
+        /// Bound to the tab grid's <c>SelectedItem</c>; the target of
+        /// <see cref="SelectInProjectCommand"/>.
+        /// </summary>
+        public NumberableRowViewModel SelectedRow
+        {
+            get => _selectedRow;
+            set
+            {
+                if (SetProperty(ref _selectedRow, value))
+                    CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
         public ICommand AutoNumberCommand { get; }
         public ICommand ApplyCommand { get; }
         public ICommand ToggleCascadeCommand { get; }
+        public ICommand SelectInProjectCommand { get; }
 
-        protected TabViewModelBase(string tabHeader)
+        protected TabViewModelBase(string tabHeader, IRevitWorkQueue workQueue, IDeviceSelector selector)
         {
             TabHeader = tabHeader;
+            _workQueue = workQueue;
+            _selector = selector;
             AutoNumberCommand = new RelayCommand(DoAutoNumber);
             ApplyCommand = new RelayCommand(Apply);
             ToggleCascadeCommand = new RelayCommand(() => IsCascadeEnabled = !IsCascadeEnabled);
+            SelectInProjectCommand = new RelayCommand(SelectInProject, CanSelectInProject);
+        }
+
+        private bool CanSelectInProject() => _selectedRow != null && _selectedRow.ElementId.IsValid;
+
+        private void SelectInProject()
+        {
+            if (!CanSelectInProject()) return;
+            var elementRef = _selectedRow.ElementId;
+
+            _workQueue.Enqueue(
+                () => _selector.SelectInProject(elementRef),
+                result =>
+                {
+                    if (result is bool ok && !ok)
+                        System.Windows.MessageBox.Show(
+                            "This device no longer exists in the project.", "TurboNumber");
+                });
         }
 
         protected void AddRow(NumberableRowViewModel row)

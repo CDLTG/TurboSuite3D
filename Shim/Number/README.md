@@ -20,6 +20,7 @@ Lists all Lighting Devices whose family name contains "keypad".
 - Editable **Switch ID** column
 - **Drag-drop room ordering** sidebar (persisted per-document) controls sort order; while in **Reorder** mode a live name filter narrows the list (filters the view only — click-order and Apply still use the full room list)
 - **Auto-number** assigns sequential Switch IDs in sort order
+- **Select in Project** selects and reveals the highlighted keypad in the active view
 
 ## Tab 3 — Power Supplies
 
@@ -28,6 +29,7 @@ Lists all Lighting Devices with a `Sub-Driver Power` type parameter.
 - Editable **Switch ID** with configurable prefix/suffix (default prefix: `X`)
 - **Auto-number** assigns IDs in format `{prefix}{number}{suffix}`
 - Devices sharing a circuit are sub-lettered top-to-bottom by plan position (model Y), so the suffix matches the column TurboDriver stacks — e.g., X01a, X01b — regardless of grid sort order
+- **Select in Project** selects and reveals the highlighted power supply in the active view
 
 All tabs support **Apply** to write changes to Revit.
 

@@ -36,4 +36,16 @@ namespace TurboSuite.Number.Services
         void SaveRoomOrder(IReadOnlyList<(string Name, int ClickOrder)> roomOrder);
         void SaveSidebarVisible(bool isVisible);
     }
+
+    /// <summary>
+    /// Revit-free contract for selecting and revealing a device in the active project.
+    /// Implemented shim-side (wraps <c>UIDocument.Selection</c> + <c>ShowElements</c>);
+    /// the Core ViewModel calls it inside an
+    /// <see cref="TurboSuite.Abstractions.IRevitWorkQueue"/> work item so it runs on the
+    /// Revit API thread. Returns false when the element no longer exists.
+    /// </summary>
+    public interface IDeviceSelector
+    {
+        bool SelectInProject(TurboSuite.Abstractions.ElementRef elementRef);
+    }
 }

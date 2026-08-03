@@ -8,7 +8,6 @@ namespace TurboSuite.Number.ViewModels
 {
     public class PowerSupplyTabViewModel : TabViewModelBase
     {
-        private readonly IRevitWorkQueue _workQueue;
         private readonly ISwitchIdWriter _switchIdWriter;
         private readonly IPrefixSuffixStore _prefixSuffixStore;
         private string _prefix = "X";
@@ -37,10 +36,9 @@ namespace TurboSuite.Number.ViewModels
         public PowerSupplyTabViewModel(IReadOnlyList<NumberableRowViewModel> rows,
             string savedPrefix, string savedSuffix,
             IRevitWorkQueue workQueue, ISwitchIdWriter switchIdWriter,
-            IPrefixSuffixStore prefixSuffixStore)
-            : base("Power Supplies")
+            IPrefixSuffixStore prefixSuffixStore, IDeviceSelector selector)
+            : base("Power Supplies", workQueue, selector)
         {
-            _workQueue = workQueue;
             _switchIdWriter = switchIdWriter;
             _prefixSuffixStore = prefixSuffixStore;
 
