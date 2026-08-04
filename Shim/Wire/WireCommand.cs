@@ -13,7 +13,6 @@ using TurboSuite.Wire.Constants;
 using TurboSuite.Wire.Helpers;
 using TurboSuite.Wire.Services;
 using TurboSuite.Tag.Services;
-using TurboSuite.Wire.Views;
 
 namespace TurboSuite.Wire;
 
@@ -43,7 +42,7 @@ public class WireCommand : IExternalCommand
                     // Wire every fixture on the circuit as one nearest-neighbor run,
                     // regardless of category — a mixed circuit routes through all its
                     // members rather than as separate per-category clusters.
-                    List<FamilyInstance> fixturesOnCircuit = GetFixturesOnCircuit(circuit);
+                    List<FamilyInstance> fixturesOnCircuit = CircuitService.GetFixturesOnCircuit(circuit);
                     if (fixturesOnCircuit.Count >= 2)
                     {
                         Result result = WireMultipleFixtures(doc, fixturesOnCircuit, ref message);
@@ -55,17 +54,13 @@ public class WireCommand : IExternalCommand
                     }
                 }
 
-                // Show comments dialog for pre-selected circuits that have no comment
-                var circuitsToComment = preSelectedCircuits
-                    .Where(c => string.IsNullOrEmpty(ParameterHelper.GetCircuitComments(c)))
-                    .ToList();
-                if (circuitsToComment.Count > 0)
+                // Circuit-info dialog for every pre-selected circuit that was wired (switched
+                // circuits are filtered out inside the service). Setting-gated.
+                if (CircuitInfoService.PromptAndApply(doc, preSelectedCircuits, "TurboWire")
+                    == CircuitInfoResult.Cancelled)
                 {
-                    if (!ShowCommentsDialogAndApply(doc, circuitsToComment))
-                    {
-                        txGroup.RollBack();
-                        return Result.Cancelled;
-                    }
+                    txGroup.RollBack();
+                    return Result.Cancelled;
                 }
 
                 txGroup.Assimilate();
@@ -155,7 +150,8 @@ public class WireCommand : IExternalCommand
             return Result.Succeeded;
         }
 
-        if (!ShowCommentsDialogAndApply(doc, new List<ElectricalSystem> { circuit }))
+        if (CircuitInfoService.PromptAndApply(doc, new[] { circuit }, "TurboWire")
+            == CircuitInfoResult.Cancelled)
         {
             txGroup.RollBack();
             return Result.Cancelled;
@@ -221,8 +217,6 @@ public class WireCommand : IExternalCommand
         using var txGroup = new TransactionGroup(doc, "TurboWire");
         txGroup.Start();
 
-        var circuitsToComment = new List<ElectricalSystem>();
-
         // One circuit for the whole selection, regardless of fixture category — the API
         // accepts mixed Lighting + Electrical members (verified), so a relay-switched
         // closet's downlights + switched receptacles land on a single circuit rather
@@ -256,198 +250,18 @@ public class WireCommand : IExternalCommand
             }
         }
 
-        if (mixedCircuit != null)
+        // Circuit-info dialog for the wired circuit (created or joined). Setting-gated;
+        // shows even when a comment already exists so room/panel can be corrected.
+        if (mixedCircuit != null &&
+            CircuitInfoService.PromptAndApply(doc, new[] { mixedCircuit }, "TurboWire")
+                == CircuitInfoResult.Cancelled)
         {
-            string existingComment = ParameterHelper.GetCircuitComments(mixedCircuit);
-            if (string.IsNullOrEmpty(existingComment))
-                circuitsToComment.Add(mixedCircuit);
-        }
-
-        if (circuitsToComment.Count > 0)
-        {
-            if (!ShowCommentsDialogAndApply(doc, circuitsToComment))
-            {
-                txGroup.RollBack();
-                return Result.Cancelled;
-            }
+            txGroup.RollBack();
+            return Result.Cancelled;
         }
 
         txGroup.Assimilate();
         return Result.Succeeded;
-    }
-
-    /// <summary>
-    /// Returns false if the user cancelled the dialog (caller should roll back).
-    /// Returns true if comments were applied, dialog was skipped, or left empty.
-    /// </summary>
-    private static bool ShowCommentsDialogAndApply(Document doc, List<ElectricalSystem> circuits)
-    {
-        if (!GeneralSettingsCache.Get(doc).ShowCircuitCommentsDialog)
-            return true;
-
-        var circuitNumbers = string.Join(", ", circuits
-            .Select(c => ParameterHelper.GetCircuitNumber(c))
-            .Where(n => !string.IsNullOrEmpty(n)));
-
-        var existingComments = CircuitService.GetExistingComments(doc);
-        var panels = CircuitService.GetAllPanels(doc);
-        // Default the panel dropdown to the last circuit's choice — a real panel, or
-        // <None> when the previous circuit was deliberately left unassigned. Exclude the
-        // circuits being wired now so they reflect the prior state, not themselves.
-        var (autoPanel, preferNone) = CircuitService.FindLastPanelChoice(
-            doc, circuits.Select(c => c.Id).ToList());
-
-        // Resolve each circuit's live base room (linked Rooms, region fallback in 2D)
-        // the same way TurboZones does — first lighting/electrical fixture on the
-        // circuit. Blank is valid.
-        var regionFallback = new RegionRoomLookupService(doc);
-        var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
-        var baseRooms = circuits.ToDictionary(
-            c => c,
-            c => ResolveBaseRoom(c, roomCache));
-        var existingOverrides = RoomOverrideStorageService.Load(doc);
-
-        // Each circuit's effective room = its existing override if set, else its base
-        // room. Prefill that when all circuits agree (so a saved override is visible and
-        // preserved when the field is left alone); when they disagree, show <varies>
-        // rather than misleadingly stamping the first circuit's room across the batch.
-        // Left untouched, <varies> is a no-op (below); typing over it applies to all.
-        // Kept as plain ASCII so an accidental edit is trivial to retype/correct.
-        const string VariesPlaceholder = "<varies>";
-        string EffectiveRoom(ElectricalSystem c) =>
-            (existingOverrides.TryGetValue(c.UniqueId, out var ov) && !string.IsNullOrWhiteSpace(ov)
-                ? ov
-                : baseRooms[c]) ?? string.Empty;
-
-        string resolvedRoom = string.Empty;
-        if (circuits.Count > 0)
-        {
-            var distinctRooms = circuits
-                .Select(c => EffectiveRoom(c).Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            resolvedRoom = distinctRooms.Count == 1 ? distinctRooms[0] : VariesPlaceholder;
-        }
-        var roomNames = CollectProjectRoomNames(doc, regionFallback);
-
-        var dialog = new CommentsDialog(existingComments, panels, autoPanel, circuitNumbers,
-            resolvedRoom, roomNames, preferNone);
-        if (dialog.ShowDialog() == true)
-        {
-            if (!string.IsNullOrEmpty(dialog.CommentsText))
-            {
-                foreach (var circuit in circuits)
-                    CircuitService.SetCircuitComments(doc, circuit, dialog.CommentsText);
-            }
-
-            // Room Override: only act when the user actually changed the field from what
-            // was prefilled. An untouched field must be a true no-op — otherwise, in a
-            // multi-circuit batch it would stamp the first circuit's prefilled room onto
-            // circuits whose base room differs, and it would clear an existing override
-            // the user left alone. When the field IS changed, apply per-circuit: entered
-            // text that equals a circuit's own base room clears it (falls back to
-            // geometry); anything else (including blank) is written as-is / cleared.
-            string enteredRoom = (dialog.RoomOverrideText ?? string.Empty).Trim();
-            bool userChangedRoom = !string.Equals(enteredRoom,
-                (resolvedRoom ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
-            if (userChangedRoom)
-            {
-                var overrideChanges = new Dictionary<string, string>();
-                foreach (var circuit in circuits)
-                {
-                    string baseRoom = (baseRooms[circuit] ?? string.Empty).Trim();
-                    bool isOverride = enteredRoom.Length > 0
-                        && !string.Equals(enteredRoom, baseRoom, StringComparison.OrdinalIgnoreCase);
-                    overrideChanges[circuit.UniqueId] = isOverride ? enteredRoom : string.Empty;
-                }
-                if (overrideChanges.Values.Any(v => !string.IsNullOrEmpty(v))
-                    || existingOverrides.Keys.Any(k => overrideChanges.ContainsKey(k)))
-                {
-                    using var t = new Transaction(doc, "TurboWire — Room override");
-                    t.Start();
-                    RoomOverrideStorageService.Upsert(doc, overrideChanges);
-                    t.Commit();
-                }
-            }
-
-            if (dialog.UnassignPanel)
-            {
-                // User picked <None> — strip any auto-assigned panel (DMX/DALI etc.)
-                foreach (var circuit in circuits)
-                {
-                    if (circuit.BaseEquipment != null)
-                        CircuitService.ClearCircuitPanel(doc, circuit);
-                }
-            }
-            else if (dialog.SelectedPanel != null)
-            {
-                // Re-assign panel if user picked a different one
-                foreach (var circuit in circuits)
-                {
-                    if (circuit.BaseEquipment?.Id != dialog.SelectedPanel.Id)
-                        CircuitService.SetCircuitPanel(doc, circuit, dialog.SelectedPanel);
-                }
-            }
-
-            return true;
-        }
-
-        return false; // User cancelled
-    }
-
-    /// <summary>
-    /// Live base room for a circuit: the room resolved from its first
-    /// lighting/electrical fixture (matches TurboZones' convention). Empty if the
-    /// circuit has no such fixture or no room resolves.
-    /// </summary>
-    private static string ResolveBaseRoom(ElectricalSystem circuit,
-        LinkedRoomFinderService.RoomLookupCache roomCache)
-    {
-        var fixtures = GetFixturesOnCircuit(circuit);
-        if (fixtures.Count == 0)
-            return string.Empty;
-        return roomCache.FindRoomName(fixtures[0]) ?? string.Empty;
-    }
-
-    /// <summary>
-    /// Distinct, sorted room names for the Room Override search/autofill: real Rooms
-    /// across the host document and all linked models, plus "Room Region" names from
-    /// the 2D fallback so drafting jobs (which have no Rooms) still get suggestions.
-    /// </summary>
-    private static List<string> CollectProjectRoomNames(Document doc,
-        RegionRoomLookupService regionFallback)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void Collect(Document d)
-        {
-            foreach (var room in new FilteredElementCollector(d)
-                .OfCategory(BuiltInCategory.OST_Rooms)
-                .OfClass(typeof(SpatialElement))
-                .Cast<Autodesk.Revit.DB.Architecture.Room>())
-            {
-                string? name = room.get_Parameter(BuiltInParameter.ROOM_NAME)?.AsString();
-                if (!string.IsNullOrWhiteSpace(name))
-                    names.Add(name!.Trim());
-            }
-        }
-
-        Collect(doc);
-        foreach (var link in new FilteredElementCollector(doc)
-            .OfClass(typeof(RevitLinkInstance))
-            .Cast<RevitLinkInstance>())
-        {
-            var linkDoc = link.GetLinkDocument();
-            if (linkDoc != null)
-                Collect(linkDoc);
-        }
-
-        // 2D drafting: "Room Region" names, so jobs with no Room elements still list.
-        foreach (var name in regionFallback.RoomNames)
-            if (!string.IsNullOrWhiteSpace(name))
-                names.Add(name.Trim());
-
-        return names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static Result ManualSelection(UIDocument uiDoc, Document doc, ref string message)
@@ -477,23 +291,6 @@ public class WireCommand : IExternalCommand
             .Where(e => e is ElectricalSystem)
             .Cast<ElectricalSystem>()
             .ToList();
-    }
-
-    private static List<FamilyInstance> GetFixturesOnCircuit(ElectricalSystem circuit)
-    {
-        List<FamilyInstance> fixtures = new List<FamilyInstance>();
-
-        foreach (Element element in circuit.Elements)
-        {
-            if (element is FamilyInstance fi &&
-                (fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingFixtures ||
-                 fi.Category?.BuiltInCategory == BuiltInCategory.OST_ElectricalFixtures))
-            {
-                fixtures.Add(fi);
-            }
-        }
-
-        return fixtures;
     }
 
     private static List<FamilyInstance> GetPreSelectedFixtures(UIDocument uiDoc)

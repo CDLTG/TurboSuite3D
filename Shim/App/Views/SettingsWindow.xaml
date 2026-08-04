@@ -53,7 +53,7 @@
                 <GroupBox Header="General" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}"
                           BorderBrush="#2B579A" BorderThickness="1.5">
                     <StackPanel Margin="4">
-                        <CheckBox Content="Show circuit comments dialog when creating circuits (TurboWire)"
+                        <CheckBox Content="Show circuit info dialog when creating circuits (TurboWire, TurboDriver)"
                                   IsChecked="{Binding ShowCircuitCommentsDialog}"
                                   VerticalContentAlignment="Center"
                                   Margin="0,0,0,4"/>

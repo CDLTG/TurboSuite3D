@@ -3,9 +3,15 @@ using System.Linq;
 using System.Windows;
 using Autodesk.Revit.DB;
 
-namespace TurboSuite.Wire.Views;
+namespace TurboSuite.Shared.Views;
 
-public partial class CommentsDialog : Window
+/// <summary>
+/// The shared circuit-info dialog: circuit comment, room override, and panel assignment,
+/// shown after a command creates or wires a circuit (TurboWire, TurboDriver). Gated by the
+/// General setting; see <c>TurboSuite.Shared.Services.CircuitInfoService</c> for the
+/// resolve-defaults / apply pipeline. (Formerly <c>TurboSuite.Wire.Views.CommentsDialog</c>.)
+/// </summary>
+public partial class CircuitInfoDialog : Window
 {
     /// <summary>
     /// A panel dropdown entry. <see cref="Panel"/> is null for the "&lt;None&gt;" choice
@@ -29,13 +35,23 @@ public partial class CommentsDialog : Window
 
     public string CommentsText { get; private set; } = string.Empty;
     public string RoomOverrideText { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Prefills the comment field with the circuit's current (shared) comment so a re-wired,
+    /// already-commented circuit shows its comment rather than a blank box. Set via object
+    /// initializer after construction; blank leaves the field empty.
+    /// </summary>
+    public string CommentsPrefill
+    {
+        set => CommentsComboBox.Text = value ?? string.Empty;
+    }
     public FamilyInstance? SelectedPanel { get; private set; }
 
     /// <summary>True when the user explicitly picked "&lt;None&gt;" — the circuit should
     /// be unassigned from any panel, not left on its auto-assigned one.</summary>
     public bool UnassignPanel { get; private set; }
 
-    public CommentsDialog(List<string> existingComments, List<FamilyInstance> panels,
+    public CircuitInfoDialog(List<string> existingComments, List<FamilyInstance> panels,
         FamilyInstance? autoSelectedPanel, string circuitNumbers = "",
         string resolvedRoom = "", List<string>? roomNames = null, bool defaultToNone = false)
     {

@@ -4,18 +4,19 @@ Contains two commands that share the same services, models, and driver selection
 
 ## TurboDriver (DriverCommand)
 
-Headless command for deploying power supplies on a per-circuit basis.
+Near-headless command for deploying power supplies on a per-circuit basis.
 
 ### Workflow
 
 1. Pre-select lighting fixtures with `Remote Power Supply` type parameter enabled.
 2. Run TurboDriver (suggested shortcut: TD).
-3. Command creates an electrical circuit if one doesn't exist, or uses the existing one.
-4. Evaluates the circuit and determines the recommended power supply type and quantity.
-5. Deletes any existing power supplies on the circuit (preserving Switch ID).
-6. Prompts: select an existing power supply to stack below, or press Esc to pick a bare point.
-7. Places power supplies in a column (9" apart), connects to circuit, sets suffixed Switch IDs (e.g., X01a, X01b), and tags each with SwitchID and Switchleg tags.
-8. Re-selects the circuit's lighting fixtures on exit so the user can immediately assign them to switches without re-picking.
+3. Command creates an electrical circuit if one doesn't exist, or uses the existing one. New circuits inherit the remembered panel default and **honor a deliberate `<None>`** (DMX/DALI etc.) exactly like TurboWire — via the shared `CircuitService`.
+4. Evaluates the circuit and determines the recommended power supply type and quantity. If the fixtures can't be sized (no wattage, or no matching supply), it stops here — **before** any dialog or destructive change.
+5. **Circuit-info dialog** — the shared comment / room-override / panel dialog (`CircuitInfoService`, same as TurboWire, gated by `General > Show circuit info dialog`). Appears every run when the setting is on, prefilled so the happy path is a glance and Enter; skipped entirely when off (fully headless). This is where you add a missing comment or correct an unreliable 3D room — auto-resolution supplies the defaults, the dialog is the fallback. Nothing destructive has happened yet, so **Cancel discards a freshly created circuit cleanly**.
+6. Deletes any existing power supplies on the circuit (preserving Switch ID).
+7. Prompts: select an existing power supply to stack below, or press Esc to pick a bare point.
+8. Places power supplies in a column (9" apart), connects to circuit, sets suffixed Switch IDs (e.g., X01a, X01b), and tags each with SwitchID and Switchleg tags.
+9. Re-selects the circuit's lighting fixtures on exit so the user can immediately assign them to switches without re-picking.
 
 ## TurboRPS (RPSCommand)
 

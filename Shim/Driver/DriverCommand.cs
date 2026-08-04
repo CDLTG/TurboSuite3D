@@ -14,9 +14,10 @@ using TurboSuite.Shared.Services;
 namespace TurboSuite.Driver
 {
     /// <summary>
-    /// Headless command: pre-select lighting fixtures with Remote Power Supply,
-    /// ensure they share an electrical circuit (create one if needed),
-    /// then deploy the recommended power supplies.
+    /// Near-headless command: pre-select lighting fixtures with Remote Power Supply,
+    /// ensure they share an electrical circuit (create one if needed), optionally review the
+    /// circuit's comment / room override / panel via the shared circuit-info dialog (gated by
+    /// the General setting), then deploy the recommended power supplies.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -117,6 +118,14 @@ namespace TurboSuite.Driver
                         recommendation.WarningMessage);
                     return Result.Cancelled;
                 }
+
+                // Circuit-info dialog (comment / room override / panel), now that we know the
+                // circuit can actually be built. Setting-gated. Nothing destructive has happened
+                // yet, so cancelling here discards a freshly created circuit cleanly — the same
+                // Cancelled → Revit-rolls-back invariant every abort above relies on.
+                if (CircuitInfoService.PromptAndApply(doc, new[] { circuit }, "TurboDriver")
+                    == CircuitInfoResult.Cancelled)
+                    return Result.Cancelled;
 
                 // Preserve Switch ID before deleting existing power supplies
                 string switchId = CircuitCollectorService.GetCircuitSwitchId(doc, circuitData);
@@ -417,46 +426,13 @@ namespace TurboSuite.Driver
                 return existingCircuit;
             }
 
-            using (Transaction t = new Transaction(doc, "TurboDriver — Create electrical circuit"))
-            {
-                t.Start();
-
-                var fixtureIds = fixtures.Select(f => f.Id).ToList();
-                var newCircuit = ElectricalSystem.Create(doc, fixtureIds, ElectricalSystemType.PowerCircuit);
-                if (newCircuit == null)
-                {
-                    t.RollBack();
-                    TaskDialog.Show("TurboDriver", "Failed to create electrical circuit.");
-                    return null;
-                }
-
-                // Assign to the most recently used panel (same pattern as TurboWire)
-                var lastPanel = FindLastUsedPanel(doc);
-                if (lastPanel != null)
-                {
-                    try { newCircuit.SelectPanel(lastPanel); }
-                    catch { /* Panel may be incompatible — leave unassigned */ }
-                }
-
-                t.Commit();
-                return newCircuit;
-            }
-        }
-
-        /// <summary>
-        /// Find the panel used by the most recently created circuit in the document
-        /// (highest ElementId), approximating Revit's "last selected panel" behavior.
-        /// </summary>
-        private static FamilyInstance FindLastUsedPanel(Document doc)
-        {
-            return new FilteredElementCollector(doc)
-                .OfClass(typeof(ElectricalSystem))
-                .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
-                .Cast<ElectricalSystem>()
-                .Where(c => c.BaseEquipment != null)
-                .OrderByDescending(c => c.Id.Value)
-                .FirstOrDefault()
-                ?.BaseEquipment;
+            // None circuited — create a new circuit. CircuitService assigns the remembered
+            // panel default, honoring a deliberate <None> the same way TurboWire does (a DMX/
+            // DALI circuit left unassigned last time leaves this one unassigned too).
+            var newCircuit = CircuitService.CreateCircuit(doc, fixtures);
+            if (newCircuit == null)
+                TaskDialog.Show("TurboDriver", "Failed to create electrical circuit.");
+            return newCircuit;
         }
     }
 }
