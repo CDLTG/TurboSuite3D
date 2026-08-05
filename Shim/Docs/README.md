@@ -120,11 +120,11 @@ Generates documentation for remote power supplies (`OST_LightingDevices`) with t
 
 ### RPS Schedule
 
-Same visual format as the fixture schedule but with two spec sections: **Capacity** (Power, Sub-Driver, Max Fixtures) and **Electrical** (Dimming, Voltage). Supports classification grouping, specification notes, and small/large page format.
+Same visual format as the fixture schedule but with two spec sections: **Capacity** (Power, Sub-Driver, Max Fixtures) and **Electrical** (Dimming, Voltage). Supports classification grouping, specification notes, and small/large page format. Like the fixture schedule, the 8.5" × 28.5" construction strip drops the footer (letter format keeps it).
 
 ### Lookup Table
 
-Compact table with columns **Number | Type | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware), with alternating row shading. Honors the shared page-format toggle: on **8.5" x 11"** it carries the full branded header (project name + logo), a dark column-header band with white text, and a company/page-number footer. On the **8.5" x 28.5"** construction strip it goes fully utilitarian — just the "POWER SUPPLY LOOKUP TABLE" title (no project name, no logo), plain black column headers with no band, tighter rows, and no footer — a dense field reference that starts a fresh strip when it overruns (matching the fixture/RPS schedules). The strip's columns are **content-fit** (each width measured from its header and every cell) and the overall strip width follows, so wasted horizontal gaps collapse without clipping; the title and column headers hug the separator rule from either side.
+Compact table with columns **Number | Type | Catalog Number | Load Name | Circuit**, sorted by Switch ID (numeric-aware), with alternating row shading. Honors the shared page-format toggle: on **8.5" x 11"** it carries the full branded header (project name + logo), a dark column-header band with white text, and a company/page-number footer. On the **8.5" x 28.5"** construction strip it goes fully utilitarian — just the "POWER SUPPLY LOOKUP TABLE" title (no project name, no logo), plain black column headers with no band, tighter rows, and no footer — a dense field reference that starts a fresh strip when it overruns (matching the fixture/RPS schedules). The strip's columns are **content-fit** (each width measured from its header and every cell) and the overall strip width follows, so wasted horizontal gaps collapse without clipping; the title and column headers hug the separator rule from either side. The strip's page border is also trimmed to near-zero (a `CompactMargin` constant) so the content sits flush when it is placed on a large construction sheet.
 
 ### Driver Breakdown
 

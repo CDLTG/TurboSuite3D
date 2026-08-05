@@ -17,11 +17,17 @@ public static class RPSLookupPdfService
     private const double SmallPageWidth  = 8.5  * 72;   // 612 pt
     private const double SmallPageHeight = 11.0 * 72;   // 792 pt
 
-    // ── Margins ──
+    // ── Margins (letter — full page border) ──
     private const double MarginLeft   = 36;
     private const double MarginRight  = 36;
     private const double MarginTop    = 28;
     private const double MarginBottom = 28;
+
+    // ── Margins (large — construction strip trims the border to a hair) ──
+    // The strip is a flush field reference: virtually no page border, just the
+    // title/headers/table. Set to 0 for truly edge-to-edge (printers may clip);
+    // a few points keeps it from touching the physical page edge.
+    private const double CompactMargin = 2;
 
     // ── Header (letter — full branding) ──
     private const double HeaderProjectFontSize  = 18;
@@ -99,6 +105,11 @@ public static class RPSLookupPdfService
         double cellFontSize    = useLargeFormat ? CompactFontSize       : FontSize;
         double footerReserve   = useLargeFormat ? 0                     : FooterHeight;
 
+        double marginLeft   = useLargeFormat ? CompactMargin : MarginLeft;
+        double marginRight  = useLargeFormat ? CompactMargin : MarginRight;
+        double marginTop    = useLargeFormat ? CompactMargin : MarginTop;
+        double marginBottom = useLargeFormat ? CompactMargin : MarginBottom;
+
         var fontHeader   = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
         var fontSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
         var fontCompactTitle = new XFont("Segoe UI", CompactTitleFontSize);
@@ -149,18 +160,18 @@ public static class RPSLookupPdfService
             double tableWidth = colWidths.Sum();
             double titleWidth = tempGfx.MeasureString("POWER SUPPLY LOOKUP TABLE", fontCompactTitle).Width;
             contentWidth = Math.Max(tableWidth, titleWidth);
-            pageWidth = MarginLeft + contentWidth + MarginRight;
+            pageWidth = marginLeft + contentWidth + marginRight;
         }
         else
         {
             pageWidth = SmallPageWidth;
-            contentWidth = pageWidth - MarginLeft - MarginRight;
+            contentWidth = pageWidth - marginLeft - marginRight;
             double totalWeight = columns.Sum(c => c.Weight);
             colWidths = columns.Select(c => contentWidth * c.Weight / totalWeight).ToArray();
         }
 
         double[] colX = new double[columns.Length];
-        colX[0] = MarginLeft;
+        colX[0] = marginLeft;
         for (int i = 1; i < columns.Length; i++)
             colX[i] = colX[i - 1] + colWidths[i - 1];
 
@@ -195,10 +206,10 @@ public static class RPSLookupPdfService
             page.Width  = XUnit.FromPoint(pageWidth);
             page.Height = XUnit.FromPoint(pageHeight);
             gfx = XGraphics.FromPdfPage(page);
-            y = MarginTop;
+            y = marginTop;
 
             if (useLargeFormat)
-                DrawCompactHeader(gfx, contentWidth, fontCompactTitle, penRule, ref y);
+                DrawCompactHeader(gfx, marginLeft, contentWidth, fontCompactTitle, penRule, ref y);
             else
                 DrawLetterHeader(gfx, projectName, pageWidth,
                     fontHeader, fontSubtitle, logo, ref y);
@@ -214,7 +225,7 @@ public static class RPSLookupPdfService
             else
             {
                 gfx.DrawRectangle(new XSolidBrush(HeaderBgColor),
-                    MarginLeft, y, contentWidth, headerRowHeight);
+                    marginLeft, y, contentWidth, headerRowHeight);
                 for (int c = 0; c < columns.Length; c++)
                     gfx.DrawString(columns[c].Header, fontColHead, XBrushes.White,
                         new XPoint(colX[c] + CellPaddingLeft, y + headerRowHeight - 6));
@@ -237,12 +248,12 @@ public static class RPSLookupPdfService
         void DrawBottomBorder()
         {
             if (anyRowOnPage)
-                gfx!.DrawLine(penRule, MarginLeft, y, MarginLeft + contentWidth, y);
+                gfx!.DrawLine(penRule, marginLeft, y, marginLeft + contentWidth, y);
         }
 
         for (int r = 0; r < instances.Count; r++)
         {
-            if (y + rowHeight > pageHeight - MarginBottom - footerReserve)
+            if (y + rowHeight > pageHeight - marginBottom - footerReserve)
             {
                 DrawBottomBorder();
                 StartNewPage();
@@ -254,13 +265,13 @@ public static class RPSLookupPdfService
             if (r % 2 == 1)
             {
                 gfx!.DrawRectangle(new XSolidBrush(AltRowColor),
-                    MarginLeft, y, contentWidth, rowHeight);
+                    marginLeft, y, contentWidth, rowHeight);
             }
 
             // Separator rule (top of row, on top of the shading). None above the first
             // row on a page — the column header sits directly above it.
             if (!firstRowOnPage)
-                gfx!.DrawLine(penRule, MarginLeft, y, MarginLeft + contentWidth, y);
+                gfx!.DrawLine(penRule, marginLeft, y, marginLeft + contentWidth, y);
 
             // Cell values
             var instance = instances[r];
@@ -337,7 +348,7 @@ public static class RPSLookupPdfService
     /// (no project name, no logo) above a thin rule. Utilitarian field reference —
     /// deliberately minimal; polish is deferred.
     /// </summary>
-    private static void DrawCompactHeader(XGraphics gfx, double contentWidth,
+    private static void DrawCompactHeader(XGraphics gfx, double marginLeft, double contentWidth,
         XFont fontTitle, XPen penRule, ref double y)
     {
         double ruleY = y + CompactHeaderHeight - 2;
@@ -346,9 +357,9 @@ public static class RPSLookupPdfService
         // top of the band). The header row below hugs the rule from the other side via
         // the small CompactHeaderSpacing.
         gfx.DrawString("POWER SUPPLY LOOKUP TABLE", fontTitle, XBrushes.Black,
-            new XPoint(MarginLeft, ruleY - 4));
+            new XPoint(marginLeft, ruleY - 4));
 
-        gfx.DrawLine(penRule, MarginLeft, ruleY, MarginLeft + contentWidth, ruleY);
+        gfx.DrawLine(penRule, marginLeft, ruleY, marginLeft + contentWidth, ruleY);
 
         y += CompactHeaderHeight + CompactHeaderSpacing;
     }

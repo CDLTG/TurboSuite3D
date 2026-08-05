@@ -374,13 +374,17 @@ public static class RPSSchedulePdfService
         gfx?.Dispose();
         gfx = null;
 
-        // Footer + page numbers on the pages we added
-        int lastPageIndex = pdf.PageCount - 1;
-        int totalPages = lastPageIndex - firstPageIndex + 1;
-        for (int i = firstPageIndex; i <= lastPageIndex; i++)
+        // Footer + page numbers on the pages we added.
+        // The 8.5x28.5 construction strip drops the footer entirely.
+        if (!useLargeFormat)
         {
-            using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
-            DrawFooter(g, pageWidth, pageHeight, settings, fontPageNum, i - firstPageIndex + 1, totalPages);
+            int lastPageIndex = pdf.PageCount - 1;
+            int totalPages = lastPageIndex - firstPageIndex + 1;
+            for (int i = firstPageIndex; i <= lastPageIndex; i++)
+            {
+                using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
+                DrawFooter(g, pageWidth, pageHeight, settings, fontPageNum, i - firstPageIndex + 1, totalPages);
+            }
         }
 
         logoStream?.Dispose();
