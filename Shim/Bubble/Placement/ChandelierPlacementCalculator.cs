@@ -45,8 +45,10 @@ internal class ChandelierPlacementCalculator : PlacementCalculatorBase
             perpY = -perpY;
         }
 
+        // Bubble at the diagonal corner, plus a horizontal-only nudge further away from
+        // the fixture (along the corner's X sign, so it never lifts the bubble vertically).
         var newTagLocal = new XYZ(
-            FixtureLocal.X + d * dirX,
+            FixtureLocal.X + d * dirX + sx * BubbleConstants.ChandelierBubbleHorizontalNudgeFt,
             FixtureLocal.Y + d * dirY,
             FixtureLocal.Z);
 
