@@ -29,7 +29,7 @@ namespace TurboSuite.Zones.Services
                     .ToList();
 
                 var regionFallback = new RegionRoomLookupService(doc);
-                var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
+                var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
 
                 // Persisted per-circuit room overrides (keyed by circuit UniqueId).
                 var roomOverrides = RoomOverrideStorageService.Load(doc);

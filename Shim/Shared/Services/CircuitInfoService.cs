@@ -63,10 +63,10 @@ public static class CircuitInfoService
         var (autoPanel, preferNone) = CircuitService.FindLastPanelChoice(
             doc, targets.Select(c => c.Id).ToList());
 
-        // Resolve each circuit's live base room (linked Rooms, region fallback in 2D) the same
+        // Resolve each circuit's live base room (owned Spaces, region fallback in 2D) the same
         // way TurboZones does — first lighting/electrical fixture on the circuit.
         var regionFallback = new RegionRoomLookupService(doc);
-        var roomCache = new LinkedRoomFinderService.RoomLookupCache(doc, regionFallback);
+        var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
         var existingOverrides = RoomOverrideStorageService.Load(doc);
 
         var states = targets
@@ -183,7 +183,7 @@ public static class CircuitInfoService
     /// never skews the result.
     /// </summary>
     private static string ResolveBaseRoom(ElectricalSystem circuit,
-        LinkedRoomFinderService.RoomLookupCache roomCache)
+        SpaceRoomFinderService.SpaceLookupCache roomCache)
     {
         var fixtures = CircuitService.GetFixturesOnCircuit(circuit);
         if (fixtures.Count == 0)

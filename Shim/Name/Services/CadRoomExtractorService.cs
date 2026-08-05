@@ -108,7 +108,7 @@ public static class CadRoomExtractorService
                 var parts = settings.RoomNameTags
                     .Select(tag => attrDict.TryGetValue(tag, out var v) ? v.Trim() : "")
                     .Where(s => !string.IsNullOrEmpty(s));
-                roomName = string.Join(" ", parts).Replace("#", "").ToUpper();
+                roomName = RoomNameNormalizer.Normalize(string.Join(" ", parts));
             }
 
             // Read ceiling height — only when this link supplies heights.
@@ -202,7 +202,7 @@ public static class CadRoomExtractorService
                     // string length, so it has to see the same string that ends up on the region.
                     roomNameLabels.Add(new LabelText(
                         new Pt(textPointFeet.X, textPointFeet.Y),
-                        text.Replace("#", "").ToUpper(),
+                        RoomNameNormalizer.Normalize(text),
                         height * unitToFeet));
                 }
             }

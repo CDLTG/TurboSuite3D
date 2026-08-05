@@ -26,6 +26,36 @@ public class SetupCommand : IExternalCommand
 {
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
+        UIDocument uidoc0 = commandData.Application.ActiveUIDocument;
+        Document doc0 = uidoc0?.Document;
+        if (doc0 == null)
+        {
+            TaskDialog.Show("TurboSetup", "No active document found.");
+            return Result.Failed;
+        }
+
+        // ── Landing menu: route to the setup wizard or the space-naming action ──
+        var home = new TaskDialog("TurboSetup")
+        {
+            MainInstruction = "TurboSetup",
+            MainContent = "Choose a setup action.",
+            AllowCancellation = true
+        };
+        home.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Project Setup",
+            "Copy levels from the architectural link, create Floor Plan + RCP views with firm templates, and configure link graphics.");
+        home.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Name Spaces from Rooms",
+            "Pull architect Room names onto Spaces — blank-only by default, or a force re-pull.");
+
+        TaskDialogResult choice = home.Show();
+        if (choice == TaskDialogResult.CommandLink1)
+            return RunProjectSetup(commandData, ref message, elements);
+        if (choice == TaskDialogResult.CommandLink2)
+            return RunNameSpaces(doc0);
+        return Result.Cancelled;
+    }
+
+    private Result RunProjectSetup(ExternalCommandData commandData, ref string message, ElementSet elements)
+    {
         try
         {
             UIDocument uidoc = commandData.Application.ActiveUIDocument;
@@ -214,6 +244,45 @@ public class SetupCommand : IExternalCommand
             TaskDialog.Show("TurboSetup Error", $"An unexpected error occurred:\n{ex.Message}");
             return Result.Failed;
         }
+    }
+
+    /// <summary>
+    /// Seed Space names from the architect Rooms. Blank-only by default so manual disambiguation
+    /// (LOWER POWDER / MAIN POWDER) survives; a force pass re-pulls all. Writes commit inside the service,
+    /// so this returns Succeeded.
+    /// </summary>
+    private static Result RunNameSpaces(Document doc)
+    {
+        var dlg = new TaskDialog("Name Spaces from Architect Rooms")
+        {
+            MainInstruction = "Pull architect Room names onto Spaces?",
+            MainContent = "Each Space is named from the architect Room it sits in — trimmed, '#' removed, " +
+                          "and UPPERCASED to match TurboName. Spaces with no architect Room are left as-is.",
+            AllowCancellation = true
+        };
+        dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Name only blank Spaces",
+            "Recommended. Leaves Spaces you already named — including manual splits like LOWER POWDER — untouched.");
+        dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Force re-pull ALL Spaces",
+            "Overwrites every Space name from the architect, including names you edited by hand.");
+
+        TaskDialogResult choice = dlg.Show();
+        bool force;
+        if (choice == TaskDialogResult.CommandLink1) force = false;
+        else if (choice == TaskDialogResult.CommandLink2) force = true;
+        else return Result.Cancelled;
+
+        SpaceNamingResult r = SpaceNamingService.NameSpacesFromRooms(doc, force);
+
+        string summary =
+            $"Spaces examined: {r.Total}\r\n" +
+            $"Named: {r.Named}\r\n" +
+            $"Skipped (already named): {r.SkippedNamed}\r\n" +
+            $"No architect Room (left as-is): {r.NoArchitectRoom}" +
+            (r.NotWritable > 0 ? $"\r\nName not writable: {r.NotWritable}" : "") +
+            (r.Preview.Count > 0 ? "\r\n\r\n" + string.Join("\r\n", r.Preview) : "");
+
+        TaskDialog.Show("Name Spaces from Architect Rooms", summary);
+        return Result.Succeeded;
     }
 
     /// <summary>True when the running Revit can write Custom link overrides (2025 and later).</summary>
