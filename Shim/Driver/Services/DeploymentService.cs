@@ -25,9 +25,18 @@ namespace TurboSuite.Driver.Services
         }
 
         /// <summary>
-        /// Place a power supply family instance at the given point.
+        /// Place a power supply family instance at <paramref name="point"/> (absolute model coords),
+        /// associated with <paramref name="level"/>. The driver families are level-based: placed
+        /// WITHOUT a level (the bare point overload) they arrive with no Level association, so they
+        /// aren't tied to the view's level and read as floating. The level overload reproduces the
+        /// manual-placement result — it sets the Level, and Elevation-from-Level then follows from the
+        /// point's Z relative to the level's ProjectElevation (verified in-model via TurboSpike; note
+        /// the API leaves FamilyInstance.Host null for these even when placed correctly — the level
+        /// association, not Host, is what matters). Callers must pass point.Z in the internal-origin
+        /// frame (see GetDisplayElevation, which builds it from Level.ProjectElevation). Pass null only
+        /// for views with no level (drafting/3D) to keep the bare-point behavior.
         /// </summary>
-        public FamilyInstance PlacePowerSupply(XYZ point, FamilySymbol symbol)
+        public FamilyInstance PlacePowerSupply(XYZ point, FamilySymbol symbol, Level level)
         {
             if (!symbol.IsActive)
             {
@@ -35,9 +44,33 @@ namespace TurboSuite.Driver.Services
                 _doc.Regenerate();
             }
 
-            var instance = _doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
+            var instance = level != null
+                ? _doc.Create.NewFamilyInstance(point, symbol, level, StructuralType.NonStructural)
+                : _doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
             _doc.Regenerate();
             return instance;
+        }
+
+        /// <summary>
+        /// Force a level-based device's "Elevation from Level" to <paramref name="elevationFt"/> (feet
+        /// above the instance's level). Returns false if the parameter is missing or read-only.
+        ///
+        /// This is the AUTHORITATIVE elevation control for driver placement. NewFamilyInstance does not
+        /// reliably honor the Z of the placement point for these level-based families — it inherits the
+        /// family's sticky "Elevation from Level" default from the last interactive placement, so the
+        /// first driver in a fresh session can land wildly off (verified in-model: 1356' in the sky).
+        /// Setting the parameter explicitly overrides that default every time. INSTANCE_ELEVATION_PARAM
+        /// was confirmed writable on the driver family via TurboSpike.
+        /// </summary>
+        public bool SetElevationFromLevel(FamilyInstance instance, double elevationFt)
+        {
+            Parameter p = instance?.get_Parameter(BuiltInParameter.INSTANCE_ELEVATION_PARAM);
+            if (p == null || p.IsReadOnly)
+                return false;
+
+            p.Set(elevationFt);
+            _doc.Regenerate();
+            return true;
         }
 
         /// <summary>

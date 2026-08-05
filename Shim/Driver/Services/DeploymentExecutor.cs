@@ -45,6 +45,14 @@ namespace TurboSuite.Driver.Services
         /// (near the floor, below an RCP's bottom). Both are primary-range boundaries, so the
         /// device is still guaranteed visible in its own view. Null for views with no resolvable
         /// range (drafting/3D/section).
+        ///
+        /// This is an ABSOLUTE, internal-origin elevation (model coordinates) — the frame every
+        /// LocationPoint.Z uses — so it must be built from Level.ProjectElevation, NOT Level.Elevation.
+        /// Level.Elevation is measured from the project's *elevation base*, which a survey/shared/
+        /// relocated datum can inflate away from the internal origin (verified in-model via TurboSpike:
+        /// a level reading .Elevation = 1346' but .ProjectElevation = -13.5', with all geometry sitting
+        /// in the -13.5' frame). Using .Elevation there shoved drivers ~1360' into the sky. The two are
+        /// equal in an un-relocated project, so ProjectElevation is correct universally.
         /// </summary>
         private static double? GetDisplayElevation(Document doc, View view)
         {
@@ -58,50 +66,64 @@ namespace TurboSuite.Driver.Services
 
             PlanViewRange range = plan.GetViewRange();
 
-            // The plane's level can be a real level OR one of Revit's "Level Above"/"Level Below"
-            // sentinel ids (e.g. an RCP with Top = Level Above, offset 0). Sentinels don't resolve
-            // via GetElement, so map them to the actual neighbouring level by elevation; otherwise
-            // we'd fall back to the picked Z and the device could land out of range.
-            ElementId levelId = range.GetLevelId(whichPlane);
-            Level level;
-            if (levelId.Equals(PlanViewRange.LevelAbove))
-                level = AdjacentLevel(doc, plan.GenLevel, above: true);
-            else if (levelId.Equals(PlanViewRange.LevelBelow))
-                level = AdjacentLevel(doc, plan.GenLevel, above: false);
-            else
-                level = doc.GetElement(levelId) as Level;
+            // Resolve one range plane to an absolute internal-origin elevation, or null if its level
+            // can't be resolved. The plane's level can be a real level OR one of Revit's "Level
+            // Above"/"Level Below" sentinel ids (e.g. an RCP with Top = Level Above, offset 0);
+            // sentinels don't resolve via GetElement, so map them to the neighbouring level.
+            // ProjectElevation (internal origin), not Elevation (elevation base) — see method summary.
+            double? ResolvePlane(PlanViewPlane p)
+            {
+                ElementId levelId = range.GetLevelId(p);
+                Level level;
+                if (levelId.Equals(PlanViewRange.LevelAbove))
+                    level = AdjacentLevel(doc, plan.GenLevel, above: true);
+                else if (levelId.Equals(PlanViewRange.LevelBelow))
+                    level = AdjacentLevel(doc, plan.GenLevel, above: false);
+                else
+                    level = doc.GetElement(levelId) as Level;
 
-            if (level == null)
-                return null;
+                return level != null ? level.ProjectElevation + range.GetOffset(p) : (double?)null;
+            }
 
-            return level.Elevation + range.GetOffset(whichPlane);
+            // Primary: the range extreme pointing away from the companion view. If that plane's level
+            // can't be resolved — the classic case being a top-floor RCP whose Top is "Level Above"
+            // with no level above — degrade WITHIN the plan rather than to the raw picked Z (which is
+            // just wherever the work plane sits, out of range). The cut plane always lies inside the
+            // primary range, so it's guaranteed visible; GenLevel is the last-ditch anchor.
+            return ResolvePlane(whichPlane)
+                ?? ResolvePlane(PlanViewPlane.CutPlane)
+                ?? (plan.GenLevel != null
+                        ? plan.GenLevel.ProjectElevation + range.GetOffset(whichPlane)
+                        : (double?)null);
         }
 
         /// <summary>
         /// The nearest level directly above (or below) the given level by elevation, or null if
         /// there is none. Used to resolve view-range "Level Above"/"Level Below" sentinels.
+        /// Ordered by ProjectElevation (internal origin) so the neighbour search matches the frame
+        /// GetDisplayElevation builds in — a per-level elevation base can otherwise reorder .Elevation.
         /// </summary>
         private static Level AdjacentLevel(Document doc, Level from, bool above)
         {
             if (from == null)
                 return null;
 
-            double baseElev = from.Elevation;
+            double baseElev = from.ProjectElevation;
             const double Tol = 1e-6;
             Level best = null;
             foreach (Element el in new FilteredElementCollector(doc).OfClass(typeof(Level)))
             {
                 if (!(el is Level lvl))
                     continue;
-                double e = lvl.Elevation;
+                double e = lvl.ProjectElevation;
                 if (above)
                 {
-                    if (e > baseElev + Tol && (best == null || e < best.Elevation))
+                    if (e > baseElev + Tol && (best == null || e < best.ProjectElevation))
                         best = lvl;
                 }
                 else
                 {
-                    if (e < baseElev - Tol && (best == null || e > best.Elevation))
+                    if (e < baseElev - Tol && (best == null || e > best.ProjectElevation))
                         best = lvl;
                 }
             }
@@ -123,6 +145,13 @@ namespace TurboSuite.Driver.Services
             // we snap it to screen-down. Device orientation follows the same rule. Identity in an
             // un-rotated view. `stackDownUnit` is the unit "down the column" vector in model coords.
             View activeView = doc.ActiveView;
+
+            // Host new drivers on the active plan's level. The driver families are level-based:
+            // placed without a level they arrive with Host = None and read "Elevation from Level"
+            // as their full internal Z (out of range / floating). Null for non-plan views, which
+            // fall back to the bare-point placement. See DeploymentService.PlacePowerSupply.
+            Level hostLevel = (activeView as ViewPlan)?.GenLevel;
+
             double cropAngle = ViewOrientationHelper.GetViewRotation(activeView);
             bool snapToScreen = ViewOrientationHelper.IsNearRightAngle(cropAngle);
             XYZ stackDownUnit = snapToScreen
@@ -174,6 +203,19 @@ namespace TurboSuite.Driver.Services
                 }
             }
 
+            // Revit's NewFamilyInstance does NOT reliably honor the point's Z for a level-based
+            // family — it inherits the family's sticky "Elevation from Level" default from the last
+            // interactive placement (verified in-model: a fresh session dropped drivers at 1356',
+            // but after ONE manual 10' placement every subsequent API placement inherited 10',
+            // ignoring the Z we passed). So point.Z is only a hint; we authoritatively SET
+            // Elevation-from-Level on each placed driver. The target is origin.Z — built in the
+            // internal-origin frame by GetDisplayElevation (RCP top / floor-plan bottom), or copied
+            // from the stack anchor — expressed relative to the host level: origin.Z minus the
+            // level's own ProjectElevation (e.g. -3.552' - (-13.552') = 10'). Null for non-plan views.
+            double? forcedElevFromLevel = hostLevel != null
+                ? origin.Z - hostLevel.ProjectElevation
+                : (double?)null;
+
             // Place all power supplies in a single transaction
             int globalIndex = 0;
 
@@ -202,7 +244,7 @@ namespace TurboSuite.Driver.Services
                                 origin.Y + stackDownUnit.Y * dist,
                                 origin.Z);
 
-                            var instance = service.PlacePowerSupply(point, circuit.DriverSymbol);
+                            var instance = service.PlacePowerSupply(point, circuit.DriverSymbol, hostLevel);
                             if (instance == null)
                             {
                                 result.TotalFailed++;
@@ -210,6 +252,11 @@ namespace TurboSuite.Driver.Services
                                 globalIndex++;
                                 continue;
                             }
+
+                            // Authoritatively pin the elevation — do NOT trust the placed Z (Revit
+                            // may have used the family's sticky default; see forcedElevFromLevel).
+                            if (forcedElevFromLevel.HasValue)
+                                service.SetElevationFromLevel(instance, forcedElevFromLevel.Value);
 
                             // Match the stack rule: upright on screen at square angles, else model-aligned.
                             if (System.Math.Abs(deviceRotation) > 1e-9)
