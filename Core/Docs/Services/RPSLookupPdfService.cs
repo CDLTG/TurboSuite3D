@@ -32,8 +32,8 @@ public static class RPSLookupPdfService
     // ── Header (letter — full branding) ──
     private const double HeaderProjectFontSize  = 18;
     private const double HeaderSubtitleFontSize = 12;
-    private const double HeaderLogoHeight       = 76;
-    private const double HeaderLogoRightInset   = -18;
+    private const double HeaderLogoHeight       = 50;
+    private const double HeaderLogoRightInset   = -10;
     private const double HeaderHeight           = 50;
     private const double HeaderSpacing          = 10;
 
@@ -333,7 +333,7 @@ public static class RPSLookupPdfService
                 ? pdfLogo.PointWidth * (logoH / pdfLogo.PointHeight)
                 : (double)logo.PixelWidth * (logoH / logo.PixelHeight);
             double logoX = pageWidth - MarginRight - logoW - HeaderLogoRightInset;
-            double logoY = y + (HeaderProjectFontSize + HeaderSubtitleFontSize - logoH) / 2 + 4;
+            double logoY = y + (HeaderProjectFontSize + HeaderSubtitleFontSize - logoH) / 2;
             if (logo is XPdfForm pdfForm)
                 DrawScaledForm(gfx, pdfForm, logoX, logoY, logoW, logoH);
             else

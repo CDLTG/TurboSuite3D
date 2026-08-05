@@ -118,8 +118,8 @@ public static class CutSheetPdfService
 
         // Left: logo — top-aligned with project name
         double logoX = Margin;
-        double logoY = 7;
-        double logoHeight = 72;
+        double logoY = 18;
+        double logoHeight = 45;
         if (logo is XPdfForm pdfLogo)
         {
             double logoWidth = pdfLogo.PointWidth * (logoHeight / pdfLogo.PointHeight);
