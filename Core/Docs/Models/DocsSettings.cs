@@ -62,4 +62,9 @@ public class DocsSettings
     // Counts tab — header/footer images embedded on Quote and Phase 1/2/3 sheets
     public string CountsHeaderImagePath { get; set; } = string.Empty;
     public string CountsFooterImagePath { get; set; } = string.Empty;
+
+    // Counts tab — vertical banner floated top-left on the Excel Cover sheet (PNG/JPEG only;
+    // Excel cannot embed a PDF). The cover's bottom banner reuses CountsFooterImagePath.
+    // Distinct from CoverBrandingVerticalPath, which feeds the PDF cover.
+    public string CountsCoverVerticalPath { get; set; } = string.Empty;
 }

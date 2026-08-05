@@ -55,8 +55,18 @@
                     <TextBlock Text="Footer Image:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" Width="90" TextAlignment="Right"/>
                     <TextBox Text="{Binding FooterImagePath, UpdateSourceTrigger=PropertyChanged}"
                              Width="290" VerticalContentAlignment="Center" Padding="4,2"
-                             ToolTip="Optional. Embedded at center of footer on Quote and Phase 1/2/3 sheets."/>
+                             ToolTip="Optional. Embedded at center of footer on Quote and Phase 1/2/3 sheets, and as the bottom banner on the Cover sheet."/>
                     <Button Content="Browse…" Command="{Binding BrowseFooterImageCommand}"
+                            Margin="6,0,0,0" Padding="10,2" Width="64" Cursor="Hand"/>
+                </StackPanel>
+
+                <!-- Cover Banner (vertical, top-left of Cover sheet; bottom banner reuses Footer Image) -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+                    <TextBlock Text="Cover Banner:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" Width="90" TextAlignment="Right"/>
+                    <TextBox Text="{Binding CoverVerticalPath, UpdateSourceTrigger=PropertyChanged}"
+                             Width="290" VerticalContentAlignment="Center" Padding="4,2"
+                             ToolTip="Optional PNG/JPEG. Floating banner anchored top-left on the Cover sheet. The Cover's bottom banner reuses the Footer Image above."/>
+                    <Button Content="Browse…" Command="{Binding BrowseCoverVerticalCommand}"
                             Margin="6,0,0,0" Padding="10,2" Width="64" Cursor="Hand"/>
                 </StackPanel>
 

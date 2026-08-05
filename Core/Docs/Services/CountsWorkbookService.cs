@@ -188,7 +188,8 @@ public static class CountsWorkbookService
         string repDirectoryPath,
         DateTime headerDate,
         string headerImagePath = "",
-        string footerImagePath = "")
+        string footerImagePath = "",
+        string coverVerticalPath = "")
     {
         CatalogQtyValidator.ValidateOrThrow(fixtures);
         CatalogLengthTokenValidator.ValidateOrThrow(fixtures);
@@ -220,6 +221,8 @@ public static class CountsWorkbookService
         // Final tab placement: last sheet before the Counts snapshots.
         PositionCalculationsSheet(wb);
 
+        ApplyCoverBranding(wb, coverVerticalPath);
+
         wb.SaveAs(outputPath);
 
         var spillSheets = new List<(string sheetName, int? minColumn)>
@@ -231,8 +234,7 @@ public static class CountsWorkbookService
             ("Phase 3", null),
         };
         PatchDynamicArrayMetadata(outputPath, spillSheets);
-        EmbedHeaderFooterImages(outputPath, headerImagePath, footerImagePath,
-            new[] { "Quote", "Bid Compare", "Phase 1", "Phase 2", "Phase 3" });
+        EmbedHeaderFooterImages(outputPath, headerImagePath, footerImagePath, HeaderFooterTargets);
     }
 
     /// <summary>
@@ -244,7 +246,8 @@ public static class CountsWorkbookService
         string repDirectoryPath,
         DateTime headerDate,
         string headerImagePath = "",
-        string footerImagePath = "")
+        string footerImagePath = "",
+        string coverVerticalPath = "")
     {
         CatalogQtyValidator.ValidateOrThrow(fixtures);
         CatalogLengthTokenValidator.ValidateOrThrow(fixtures);
@@ -314,6 +317,9 @@ public static class CountsWorkbookService
             stage = "position-calculations";
             PositionCalculationsSheet(wb);
 
+            stage = "cover-branding";
+            ApplyCoverBranding(wb, coverVerticalPath);
+
             stage = "save";
             wb.Save();
 
@@ -330,8 +336,7 @@ public static class CountsWorkbookService
             PatchDynamicArrayMetadata(existingPath, spillSheets);
 
             stage = "embed-header-footer";
-            EmbedHeaderFooterImages(existingPath, headerImagePath, footerImagePath,
-                new[] { "Quote", "Bid Compare", "Phase 1", "Phase 2", "Phase 3" });
+            EmbedHeaderFooterImages(existingPath, headerImagePath, footerImagePath, HeaderFooterTargets);
         }
         catch (Exception ex) when (!(ex is InvalidOperationException && ex.Message.StartsWith("[stage=")))
         {
@@ -421,6 +426,10 @@ public static class CountsWorkbookService
         SeedManualCoverRow(ws, 24, "Phone: ");
 
         ApplyStandardPageSetup(ws);
+        // Cover-specific top margin (standard sheets stay at 1.15") so the banner can sit near the
+        // paper's top edge; the spacer on row 12 holds the title block down independent of it.
+        ws.PageSetup.Margins.Top = CoverTopMargin;
+        ws.Row(12).Height = CoverTextTopSpacerPt;
         ws.PageSetup.PrintAreas.Add("A1:C24");
     }
 
@@ -439,6 +448,61 @@ public static class CountsWorkbookService
         range.Merge();
         ws.Cell(row, 1).Value = prefix;
         StyleCenteredTitle(range, fontSize: 11, bold: false);
+    }
+
+    // ── Cover vertical banner (floating picture, top-left) ──
+    // The cover's bottom banner is the native print footer (EmbedHeaderFooterImages, footer
+    // image); only this top-left vertical banner needs floating placement. Pixel caps mirror
+    // TurboDocs' PDF cover (NotesPdfService) at 96 DPI (px = pt · 4/3), so it reads at the
+    // same physical size as the PDF cover.
+    private const int CoverVertMaxWidthPx  = 133; // 100pt
+    private const int CoverVertMaxHeightPx = 373; // 280pt
+    private const int CoverVertMarginPx    = 0;   // 0 = image top-left pinned to A1's top-left corner
+
+    // Cover vertical placement — two independent knobs (see BuildCoverSheet):
+    //   • CoverTopMargin lifts the whole cell grid toward the paper's top edge. The banner is
+    //     pinned to the top of the grid, so this is the only lever that raises it; but the text
+    //     rides the same grid, so lowering the margin raises the text too.
+    //   • CoverTextTopSpacerPt is the height of blank row 12, which pushes ONLY the title block
+    //     back down — decoupling text position from the margin. Raise the banner with the margin,
+    //     then restore the text with the spacer.
+    private const double CoverTopMargin       = 0.5; // inches; < the 1.15" standard so the banner sits high
+    private const double CoverTextTopSpacerPt = 60;  // row-12 height in points; ~0.65" of push on the text
+
+    /// <summary>
+    /// Places the optional vertical branding banner as a floating picture anchored top-left
+    /// on the Cover sheet, mirroring the TurboDocs PDF cover. Idempotent — clears any banner
+    /// from a prior build/update before re-adding, so an update never stacks duplicates and a
+    /// changed path takes effect. PNG/JPEG only (Excel cannot embed a PDF); a blank or
+    /// unreadable path is skipped without failing the export.
+    /// </summary>
+    private static void ApplyCoverBranding(IXLWorkbook wb, string verticalPath)
+    {
+        if (!wb.Worksheets.TryGetWorksheet("Cover", out var ws)) return;
+
+        // The Cover sheet carries no floating pictures other than this banner, so clearing all
+        // is safe. (The bottom banner is a print footer, not a picture, so it's untouched here.)
+        foreach (var existing in ws.Pictures.ToList())
+            existing.Delete();
+
+        if (string.IsNullOrWhiteSpace(verticalPath) || !File.Exists(verticalPath)) return;
+        try
+        {
+            var pic = ws.AddPicture(verticalPath);
+            // Fit within the width/height caps, aspect preserved — mirrors the PDF vertical banner.
+            double scale = Math.Min(
+                (double)CoverVertMaxWidthPx  / pic.OriginalWidth,
+                (double)CoverVertMaxHeightPx / pic.OriginalHeight);
+            // MoveTo must precede WithSize: a fresh picture defaults to MoveAndSize placement,
+            // which rejects WithSize ("placement should be FreeFloating or Move"); MoveTo flips
+            // it to Move (a one-cell anchor). Reversed, WithSize throws and the picture is left
+            // at ClosedXML's default A1 two-cell anchor.
+            pic.MoveTo(ws.Cell("A1"), CoverVertMarginPx, CoverVertMarginPx);
+            pic.WithSize(
+                (int)Math.Round(pic.OriginalWidth  * scale),
+                (int)Math.Round(pic.OriginalHeight * scale));
+        }
+        catch { /* unreadable image — skip the banner rather than fail the whole export */ }
     }
 
     #endregion
@@ -4964,13 +5028,27 @@ public static class CountsWorkbookService
 
     #region Header/Footer Image Embedding
 
+    // Sheets that carry the header/footer print images, and which of the two each opts into.
+    // The Cover takes only the footer (its top is the floating Cover Banner, not a header logo);
+    // the quote/phase print sheets take both.
+    private static readonly (string sheet, bool applyHeader, bool applyFooter)[] HeaderFooterTargets =
+    {
+        ("Quote",       true,  true),
+        ("Bid Compare", true,  true),
+        ("Phase 1",     true,  true),
+        ("Phase 2",     true,  true),
+        ("Phase 3",     true,  true),
+        ("Cover",       false, true),
+    };
+
     /// <summary>
     /// Post-processes the saved xlsx to embed a center-header and/or center-footer image
     /// on the listed sheets using the legacy VML HF mechanism (&amp;G placeholder).
     /// Image dimensions are read from PNG/JPEG headers; shape size in points = pixels * 72 / 96.
     /// No-op if both paths are empty or files don't exist.
     /// </summary>
-    private static void EmbedHeaderFooterImages(string filePath, string headerPath, string footerPath, string[] targetSheets)
+    private static void EmbedHeaderFooterImages(string filePath, string headerPath, string footerPath,
+        (string sheet, bool applyHeader, bool applyFooter)[] targets)
     {
         bool hasHeader = !string.IsNullOrWhiteSpace(headerPath) && File.Exists(headerPath);
         bool hasFooter = !string.IsNullOrWhiteSpace(footerPath) && File.Exists(footerPath);
@@ -5008,10 +5086,16 @@ public static class CountsWorkbookService
 
         int vmlIndex = GetNextVmlIndex(archive);
 
-        foreach (var sheetName in targetSheets)
+        foreach (var (sheetName, applyHeader, applyFooter) in targets)
         {
             if (!sheetEntryByName.TryGetValue(sheetName, out string? sheetEntryPath) || sheetEntryPath == null)
                 continue;
+
+            // Per-sheet scoping: an image is embedded only where its path is set AND this sheet
+            // opted into it. Lets the Cover take the footer without also getting the header logo.
+            bool sheetHeader = hasHeader && applyHeader;
+            bool sheetFooter = hasFooter && applyFooter;
+            if (!sheetHeader && !sheetFooter) continue;
 
             string vmlEntryPath = $"xl/drawings/vmlDrawing{vmlIndex}.vml";
             string sheetRelsPath = SheetRelsPath(sheetEntryPath);
@@ -5021,7 +5105,7 @@ public static class CountsWorkbookService
             string? headerRid = null;
             string? footerRid = null;
             int ridCounter = 1;
-            if (hasHeader)
+            if (sheetHeader)
             {
                 headerRid = $"rId{ridCounter++}";
                 vmlRels.Root!.Add(new XElement(rel + "Relationship",
@@ -5029,7 +5113,7 @@ public static class CountsWorkbookService
                     new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"),
                     new XAttribute("Target", $"../media/turboHF_header.{headerExt}")));
             }
-            if (hasFooter)
+            if (sheetFooter)
             {
                 footerRid = $"rId{ridCounter++}";
                 vmlRels.Root!.Add(new XElement(rel + "Relationship",
@@ -5051,7 +5135,7 @@ public static class CountsWorkbookService
             string vmlRid = AddSheetVmlRelationship(archive, sheetRelsPath, vmlIndex, rel);
 
             // Patch worksheet XML: headerFooter + legacyDrawingHF
-            PatchSheetForHeaderFooter(archive, sheetEntryPath, vmlRid, hasHeader, hasFooter, sml, orel);
+            PatchSheetForHeaderFooter(archive, sheetEntryPath, vmlRid, sheetHeader, sheetFooter, sml, orel);
 
             vmlIndex++;
         }

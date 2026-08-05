@@ -23,6 +23,7 @@ public class CountsViewModel : ViewModelBase
     private string _notifyEmail = string.Empty;
     private string _headerImagePath = string.Empty;
     private string _footerImagePath = string.Empty;
+    private string _coverVerticalPath = string.Empty;
 
     public string ProjectName { get; }
     public string ProjectNumber { get; }
@@ -70,6 +71,7 @@ public class CountsViewModel : ViewModelBase
     public RelayCommand BrowseRepDirectoryCommand { get; }
     public RelayCommand BrowseHeaderImageCommand { get; }
     public RelayCommand BrowseFooterImageCommand { get; }
+    public RelayCommand BrowseCoverVerticalCommand { get; }
 
     public string RepDirectoryPath
     {
@@ -95,6 +97,12 @@ public class CountsViewModel : ViewModelBase
         set => SetProperty(ref _footerImagePath, value);
     }
 
+    public string CoverVerticalPath
+    {
+        get => _coverVerticalPath;
+        set => SetProperty(ref _coverVerticalPath, value);
+    }
+
     public CountsViewModel(string projectName, string projectNumber, DocsViewModel parent)
     {
         _parent = parent;
@@ -105,10 +113,12 @@ public class CountsViewModel : ViewModelBase
         _notifyEmail = settings.CountsNotifyEmail;
         _headerImagePath = settings.CountsHeaderImagePath;
         _footerImagePath = settings.CountsFooterImagePath;
+        _coverVerticalPath = settings.CountsCoverVerticalPath;
         GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && _fixtures.Count > 0);
         BrowseRepDirectoryCommand = new RelayCommand(ExecuteBrowseRepDirectory);
         BrowseHeaderImageCommand = new RelayCommand(() => BrowseImage(p => HeaderImagePath = p, HeaderImagePath));
         BrowseFooterImageCommand = new RelayCommand(() => BrowseImage(p => FooterImagePath = p, FooterImagePath));
+        BrowseCoverVerticalCommand = new RelayCommand(() => BrowseImage(p => CoverVerticalPath = p, CoverVerticalPath));
     }
 
     public void LoadData(List<CountsFixtureModel> fixtures)
@@ -125,6 +135,7 @@ public class CountsViewModel : ViewModelBase
         settings.CountsNotifyEmail = _notifyEmail;
         settings.CountsHeaderImagePath = _headerImagePath;
         settings.CountsFooterImagePath = _footerImagePath;
+        settings.CountsCoverVerticalPath = _coverVerticalPath;
         DocsSettingsService.Save(settings);
     }
 
@@ -228,6 +239,7 @@ public class CountsViewModel : ViewModelBase
             string repDirPath = _repDirectoryPath;
             string headerImg = _headerImagePath;
             string footerImg = _footerImagePath;
+            string coverVert = _coverVerticalPath;
             DateTime headerDate = _parent.HeaderDate;
 
             StatusText = updateMode ? "Updating workbook..." : "Generating workbook...";
@@ -236,9 +248,9 @@ public class CountsViewModel : ViewModelBase
             await Task.Run(() =>
             {
                 if (updateMode)
-                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath, headerDate, headerImg, footerImg);
+                    CountsWorkbookService.GenerateUpdate(fixtures, outputPath, repDirPath, headerDate, headerImg, footerImg, coverVert);
                 else
-                    CountsWorkbookService.GenerateNew(fixtures, projName, projNumber, projLocation, outputPath, repDirPath, headerDate, headerImg, footerImg);
+                    CountsWorkbookService.GenerateNew(fixtures, projName, projNumber, projLocation, outputPath, repDirPath, headerDate, headerImg, footerImg, coverVert);
             });
 
             Progress = 100;
