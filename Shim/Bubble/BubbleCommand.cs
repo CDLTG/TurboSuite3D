@@ -226,10 +226,29 @@ public class BubbleCommand : IExternalCommand
         }
 
         var rotation = GetElectricalFixtureRotation(fixture);
-        var cosR = Math.Cos(rotation);
-        var sinR = Math.Sin(rotation);
-        var localX = new XYZ(cosR, sinR, 0);
-        var localY = new XYZ(-sinR, cosR, 0);
+
+        XYZ localX, localY;
+        if (GeometryHelper.IsOnVerticalFace(fixture))
+        {
+            // Face-hosted fixture on a vertical wall: derive the WHOLE frame from the true
+            // host-face normal. `rotation` is unreliable here — it comes from the geometry
+            // BasisX (which runs along the wall in either direction) or, when BasisX ≈ world X
+            // and reads ~0, falls back to the LocationPoint angle — so neither the along-wall
+            // axis nor the out-of-wall axis has a defined relationship to the wall. Anchoring
+            // both to the normal (as the lighting path does in VerticalFacePlacementCalculator)
+            // fixes two failure modes: localY mirrored across the wall line, AND localX pointing
+            // across the wall instead of along it (bubble stacks on top of the fixture).
+            localY = GeometryHelper.GetWallFaceNormal(fixture);   // out of wall
+            localX = new XYZ(-localY.Y, localY.X, 0);             // along wall
+            rotation = Math.Atan2(localX.Y, localX.X);            // keep tag glyph + flip frame consistent
+        }
+        else
+        {
+            var cosR = Math.Cos(rotation);
+            var sinR = Math.Sin(rotation);
+            localX = new XYZ(cosR, sinR, 0);
+            localY = new XYZ(-sinR, cosR, 0);
+        }
 
         var isCeilingFan = GeometryHelper.IsCeilingFan(fixture);
         var isVerticalPlacement = !isCeilingFan && IsElectricalVerticalFamily(fixture);
