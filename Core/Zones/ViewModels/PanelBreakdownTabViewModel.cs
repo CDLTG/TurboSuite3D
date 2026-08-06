@@ -327,214 +327,20 @@ namespace TurboSuite.Zones.ViewModels
                 return;
             }
 
-            var bom = new List<BomLineItem>();
-            var allPanels = _allocationResult.AllPanels;
-
-            // Count processors placed in panel dropdowns (both slots)
-            int processorCount = 0;
-            foreach (var panel in allPanels)
-            {
-                if (!panel.HasSpecialCompartment) continue;
-                if (string.Equals(panel.SelectedSpecialDevice, "Processor", StringComparison.OrdinalIgnoreCase))
-                    processorCount++;
-                if (panel.HasDualSpecialCompartment
-                    && string.Equals(panel.SelectedSpecialDevice2, "Processor", StringComparison.OrdinalIgnoreCase))
-                    processorCount++;
-            }
-
-            // Calculate recommended processors from total device/load requirements
-            int recommendedProcessors = CalculateRecommendedProcessors(allPanels);
-            int bomProcessorCount = Math.Max(recommendedProcessors, processorCount);
-
-            // --- Processors (always shown — minimum 1 required) ---
-            {
-                bom.Add(new BomLineItem { IsHeader = true, Category = "Processors", Description = "Processors" });
-
-                string processorPn = _currentBrand.SpecialDevices != null
-                    && _currentBrand.SpecialDevices.TryGetValue("Processor", out var ppn) ? ppn : "";
-                string description = _currentBrand.GetPartDescription(processorPn);
-
-                bool needsWarning = processorCount < recommendedProcessors;
-                if (needsWarning)
-                    description += $" ({processorCount} of {recommendedProcessors} placed)";
-
-                bom.Add(new BomLineItem
-                {
-                    Quantity = bomProcessorCount,
-                    PartNumber = processorPn,
-                    Description = description,
-                    Category = "Processors",
-                    IsWarning = needsWarning
-                });
-            }
-
-            // --- Panels ---
-            var panelsBySize = allPanels.GroupBy(p => p.PanelCapacity).OrderByDescending(g => g.Key).ToList();
-            if (panelsBySize.Count > 0)
-            {
-                bom.Add(new BomLineItem { IsHeader = true, Category = "Panels", Description = "Panels" });
-
-                foreach (var group in panelsBySize)
-                {
-                    string partNumber = _currentBrand.PanelPartNumbers.TryGetValue(group.Key, out var pn) ? pn : "";
-                    bom.Add(new BomLineItem
-                    {
-                        Quantity = group.Count(),
-                        PartNumber = partNumber,
-                        Description = _currentBrand.GetPartDescription(partNumber),
-                        Category = "Panels"
-                    });
-                }
-            }
-
-            // --- Modules ---
-            var allModules = allPanels.SelectMany(p => p.Modules).ToList();
-            if (allModules.Count > 0)
-            {
-                bom.Add(new BomLineItem { IsHeader = true, Category = "Modules", Description = "Modules" });
-
-                // Collapse modules by resolved part number — a single module type
-                // carrying multiple dimming roles (e.g. LQSE-4T5 for both 0-10V and Relay)
-                // should appear as one line, not duplicated.
-                foreach (var group in PanelAllocationService.GroupModulesByPartNumber(allModules))
-                {
-                    bom.Add(new BomLineItem
-                    {
-                        Quantity = group.Count,
-                        PartNumber = group.PartNumber,
-                        Description = _currentBrand.GetPartDescription(group.PartNumber),
-                        Category = "Modules"
-                    });
-                }
-            }
-
-            // --- Accessories ---
-            var accessories = new List<BomLineItem>();
-
-            // Power supply: 1 per processor (minimum 1)
-            if (!string.IsNullOrEmpty(_currentBrand.PowerSupplyPartNumber))
-            {
-                accessories.Add(new BomLineItem
-                {
-                    Quantity = bomProcessorCount,
-                    PartNumber = _currentBrand.PowerSupplyPartNumber,
-                    Description = _currentBrand.GetPartDescription(_currentBrand.PowerSupplyPartNumber),
-                    Category = "Accessories"
-                });
-            }
-
-            // Wire harnesses (one per panel, grouped by part number)
-            if (_currentBrand.WireHarnessPartNumbers != null)
-            {
-                var harnessCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                foreach (var group in panelsBySize)
-                {
-                    if (_currentBrand.WireHarnessPartNumbers.TryGetValue(group.Key, out var harnessPn))
-                    {
-                        if (!harnessCounts.ContainsKey(harnessPn))
-                            harnessCounts[harnessPn] = 0;
-                        harnessCounts[harnessPn] += group.Count();
-                    }
-                }
-
-                foreach (var kvp in harnessCounts)
-                {
-                    accessories.Add(new BomLineItem
-                    {
-                        Quantity = kvp.Value,
-                        PartNumber = kvp.Key,
-                        Description = _currentBrand.GetPartDescription(kvp.Key),
-                        Category = "Accessories"
-                    });
-                }
-            }
-
-            // Special devices from panel selections (Digital I/O, DMX — excludes Processor and Empty)
-            if (_currentBrand.SpecialDevices != null)
-            {
-                var specialCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                foreach (var panel in allPanels)
-                {
-                    if (!panel.HasSpecialCompartment) continue;
-
-                    // Count from both slots
-                    var slots = new List<string> { panel.SelectedSpecialDevice };
-                    if (panel.HasDualSpecialCompartment)
-                        slots.Add(panel.SelectedSpecialDevice2);
-
-                    foreach (string selected in slots)
-                    {
-                        if (string.IsNullOrEmpty(selected)
-                            || string.Equals(selected, "Empty", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        if (!specialCounts.ContainsKey(selected))
-                            specialCounts[selected] = 0;
-                        specialCounts[selected]++;
-                    }
-                }
-
-                foreach (var kvp in specialCounts)
-                {
-                    string partNumber = _currentBrand.SpecialDevices.TryGetValue(kvp.Key, out var spn) ? spn : "";
-                    accessories.Add(new BomLineItem
-                    {
-                        Quantity = kvp.Value,
-                        PartNumber = partNumber,
-                        Description = _currentBrand.GetPartDescription(partNumber),
-                        Category = "Accessories"
-                    });
-                }
-            }
-
-            // Hybrid repeaters (Lutron only)
-            if (_hybridRepeaterCount > 0
-                && string.Equals(_currentBrand.Name, "Lutron", StringComparison.OrdinalIgnoreCase))
-            {
-                accessories.Add(new BomLineItem
-                {
-                    Quantity = _hybridRepeaterCount,
-                    PartNumber = _hybridRepeaterPartNumber ?? "",
-                    Description = "HWQS Hybrid Wired/Wireless RF System Repeater",
-                    Category = "Accessories"
-                });
-            }
-
-            if (accessories.Count > 0)
-            {
-                bom.Add(new BomLineItem { IsHeader = true, Category = "Accessories", Description = "Accessories" });
-                bom.AddRange(accessories);
-            }
-
-            // --- Keypads ---
-            if (_keypadCount > 0 || _twoGangKeypadCount > 0)
-            {
-                bom.Add(new BomLineItem { IsHeader = true, Category = "Keypads", Description = "Keypads" });
-                if (_keypadCount > 0)
-                {
-                    bom.Add(new BomLineItem
-                    {
-                        Quantity = _keypadCount,
-                        PartNumber = "",
-                        Description = "Keypad",
-                        Category = "Keypads"
-                    });
-                }
-                if (_twoGangKeypadCount > 0)
-                {
-                    bom.Add(new BomLineItem
-                    {
-                        Quantity = _twoGangKeypadCount,
-                        PartNumber = "",
-                        Description = "Two-Gang Keypad",
-                        Category = "Keypads"
-                    });
-                }
-            }
-
+            var bom = ControlBomBuilder.Build(_allocationResult.AllPanels, _currentBrand, BuildBomExtras());
             BomItems = new ObservableCollection<BomLineItem>(bom);
         }
+
+        /// <summary>The non-panel BOM inputs this window holds. The audience is the design surface:
+        /// this is where a processor shortfall has to be visible, because this is where it is fixed.</summary>
+        private BomExtras BuildBomExtras() => new BomExtras
+        {
+            KeypadCount = _keypadCount,
+            TwoGangKeypadCount = _twoGangKeypadCount,
+            HybridRepeaterCount = _hybridRepeaterCount,
+            HybridRepeaterPartNumber = _hybridRepeaterPartNumber,
+            Audience = BomAudience.DesignSurface
+        };
 
         private void RebuildLinkAssignments()
         {
@@ -642,49 +448,6 @@ namespace TurboSuite.Zones.ViewModels
                     panel.SelectedSpecialDevice2 = device2;
                 }
             }
-        }
-
-        /// <summary>
-        /// Calculates recommended processor count based on total device/load requirements.
-        /// Each processor has 2 links (99 devices, 512 loads each).
-        /// If hybrid repeaters are present, one or more links are reserved for Clear Connect Type A.
-        /// </summary>
-        private int CalculateRecommendedProcessors(List<PanelResult> allPanels)
-        {
-            // Count special devices (Digital I/O, DMX) — each counts as 1 device on a QS link
-            int specialDeviceCount = 0;
-            foreach (var panel in allPanels)
-            {
-                if (!panel.HasSpecialCompartment) continue;
-
-                var slots = new List<string> { panel.SelectedSpecialDevice };
-                if (panel.HasDualSpecialCompartment)
-                    slots.Add(panel.SelectedSpecialDevice2);
-
-                foreach (string selected in slots)
-                {
-                    if (string.Equals(selected, "Digital I/O", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(selected, "DMX", StringComparison.OrdinalIgnoreCase))
-                        specialDeviceCount++;
-                }
-            }
-
-            int totalDevices = allPanels.Sum(p => p.DeviceCount)
-                + _keypadCount + _twoGangKeypadCount * 2
-                + specialDeviceCount;
-            int totalLoads = allPanels.Sum(p => p.LoadCount);
-
-            int qsLinksNeeded = Math.Max(
-                (int)Math.Ceiling((double)totalDevices / ProcessorLink.MaxDevices),
-                (int)Math.Ceiling((double)totalLoads / ProcessorLink.MaxLoads));
-            qsLinksNeeded = Math.Max(qsLinksNeeded, 1);
-
-            int ccaLinksNeeded = _hybridRepeaterCount > 0
-                ? Math.Max(1, (int)Math.Ceiling((double)_hybridRepeaterCount / ProcessorLink.MaxDevices))
-                : 0;
-
-            int totalLinksNeeded = qsLinksNeeded + ccaLinksNeeded;
-            return Math.Max(1, (int)Math.Ceiling((double)totalLinksNeeded / 2));
         }
     }
 }

@@ -161,7 +161,9 @@ Three-column table: **Qty | Part Number | Description**, grouped by category wit
 
 ### Data Source
 
-Re-derives the panel breakdown using `PanelAllocationService.BuildPanelBreakdown` with saved TurboZones settings (brand, panel size overrides, special device selections) from ExtensibleStorage. Also collects keypad counts and hybrid repeater info from the Revit model. BOM line items are built using the same grouping logic as the TurboZones Panel Breakdown tab.
+Re-derives the panel breakdown using `PanelAllocationService.BuildPanelBreakdown` with saved TurboZones settings (brand, panel size overrides, special device selections) from ExtensibleStorage. Also collects keypad counts and hybrid repeater info from the Revit model. Line items come from `Core/Zones/Services/ControlBomBuilder.cs` — literally the same builder the TurboZones Panel Breakdown tab uses, not a parallel implementation of it. The only difference is `BomAudience.IssuedDocument`, which drops zero-quantity lines and their orphaned headers and prints no design-state commentary; quantities are identical either way.
+
+**Quantities reflect the design, not the recommendation.** Processor (and power supply) counts follow what the designer placed in TurboZones compartments — so a job with no processor sited produces no Processors section at all, rather than an order for a processor nobody assigned. If that looks wrong, the fix is in the TurboZones Panel Breakdown, which flags the shortfall; this PDF reports it faithfully.
 
 ## Cover Tab
 
