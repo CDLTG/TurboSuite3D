@@ -46,8 +46,8 @@ public static class GeneralSettingsStorageService
 
         return new GeneralSettings
         {
-            ShowCircuitCommentsDialog = schema.GetField(ShowCommentsDialogField) != null && entity.Get<bool>(ShowCommentsDialogField),
-            AutoSplitFixtures = schema.GetField(AutoSplitFixturesField) != null && entity.Get<bool>(AutoSplitFixturesField),
+            ShowCircuitCommentsDialog = schema.GetField(ShowCommentsDialogField) == null || entity.Get<bool>(ShowCommentsDialogField),
+            AutoSplitFixtures = schema.GetField(AutoSplitFixturesField) == null || entity.Get<bool>(AutoSplitFixturesField),
             EnableDynamicDriverTags = schema.GetField(EnableDynamicDriverTagsField) == null || entity.Get<bool>(EnableDynamicDriverTagsField)
         };
     }

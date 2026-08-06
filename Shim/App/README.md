@@ -24,9 +24,9 @@ Newline-separated family name lists that control how other commands identify fix
 |------|-----------------|---------|
 | Wall Sconce Families | `AL_Decorative_Wall Sconce (Hosted)`, `Z_Wall Sconce` | TurboWire, TurboBubble — spline wire routing |
 | Receptacle Families | `AL_Electrical Fixture_Receptacle (Hosted)`, `Receptacle` | TurboWire — spline wire routing |
-| Vertical Families | `Step Light`, `Flood Lights`, `Wall Pack`, `Z_Lighted Mirror`, `Z_Picture Light`, `Z_Swing Lamp` | TurboTag — tag placement direction |
+| Wall-Mounted Lighting Families | `Step Light`, `Flood Lights`, `Wall Pack`, `Z_Lighted Mirror`, `Z_Picture Light`, `Z_Swing Lamp` | TurboTag — tag placement direction |
 | Switch Families | `Switch`, `AL_Electrical Fixture_Switch` | TurboWire — wire endpoint offset |
-| Electrical Vertical Families | `AL_Electrical Fixture_Exhaust (Hosted)`, `AL_Electrical Fixture_Exhaust`, `AL_Electrical Fixture_Fireplace Igniter`, `Exhaust`, `Fireplace Igniter` | TurboBubble — vertical switchleg placement |
+| Equipment Box Families | `AL_Electrical Fixture_Exhaust (Hosted)`, `AL_Electrical Fixture_Exhaust`, `AL_Electrical Fixture_Fireplace Igniter`, `Exhaust`, `Fireplace Igniter` | TurboBubble — up/down switchleg placement |
 
 ## Storage
 

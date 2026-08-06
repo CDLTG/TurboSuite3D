@@ -94,7 +94,7 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox Header="Vertical Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
+                <GroupBox Header="Wall-Mounted Lighting Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel Margin="4">
                         <TextBlock Text="Lighting fixture families treated as wall-mounted for tag placement (one per line):"
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
@@ -116,7 +116,7 @@
 
                 <GroupBox Header="Equipment Box Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
                     <StackPanel Margin="4">
-                        <TextBlock Text="Families matched for vertical (up/down) switchleg placement (one per line):"
+                        <TextBlock Text="Families matched for up/down switchleg placement (one per line):"
                                    Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
                         <TextBox Text="{Binding ElectricalVerticalFamiliesText, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True" TextWrapping="Wrap"

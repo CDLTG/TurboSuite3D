@@ -38,10 +38,17 @@ public class SettingsCommand : IExternalCommand
 
             if (result == true)
             {
-                FamilyNameSettingsStorageService.Save(doc, viewModel.ToFamilyModel());
-                FamilyNameSettingsCache.Invalidate();
+                // Both saves open their own transaction; group them so one "Save" is atomic
+                // (no half-persisted state) and collapses to a single Ctrl+Z undo entry.
+                using (var group = new TransactionGroup(doc, "TurboSuite - Save Settings"))
+                {
+                    group.Start();
+                    FamilyNameSettingsStorageService.Save(doc, viewModel.ToFamilyModel());
+                    GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel());
+                    group.Assimilate();
+                }
 
-                GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel());
+                FamilyNameSettingsCache.Invalidate();
                 GeneralSettingsCache.Invalidate();
             }
 

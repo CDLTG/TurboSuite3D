@@ -5,22 +5,24 @@ namespace TurboSuite.Shared.Services;
 
 /// <summary>
 /// Per-document in-memory cache for <see cref="FamilyNameSettingsStorageService"/> reads.
-/// Invalidates when the document hash changes. Call <see cref="Invalidate"/> after a save.
+/// Invalidates when the document changes. Call <see cref="Invalidate"/> after a save.
+/// Keyed by <see cref="Document.PathName"/>, not <c>GetHashCode()</c> — identity hashes are
+/// reused after GC and can collide, serving one project's settings to another (see CLAUDE.md).
 /// </summary>
 public static class FamilyNameSettingsCache
 {
     private static FamilyNameSettings? _cached;
-    private static int _docHashCode;
+    private static string? _docPath;
 
     public static FamilyNameSettings Get(Document doc)
     {
-        int hash = doc.GetHashCode();
-        if (_cached != null && _docHashCode == hash)
+        string path = doc.PathName;
+        if (_cached != null && _docPath == path)
             return _cached;
 
         _cached = FamilyNameSettingsStorageService.Load(doc)
                   ?? FamilyNameSettings.CreateDefaults();
-        _docHashCode = hash;
+        _docPath = path;
         return _cached;
     }
 
