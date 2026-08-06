@@ -152,6 +152,52 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(7.0, m.SlotAmps[0], precision: 6);
             Assert.True(m.IsOverloaded);
         }
+
+        /// <summary>SlotProtocols tracks the reordering: slot-1 promotion moves the circuit AND
+        /// its protocol together, so the panel schedule can't print one slot's protocol against
+        /// another slot's load.</summary>
+        [Fact]
+        public void SlotProtocols_FollowSlot1Promotion()
+        {
+            var quiet = C("1", 120);
+            quiet.DimmingProtocolDisplay = "ELV";
+            var promoted = C("2", 600);
+            promoted.DimmingProtocolDisplay = "MLV";
+
+            var m = Build(quiet, promoted).Single();
+
+            Assert.Equal(new[] { "2", "1" }, m.CircuitNumbers);   // promoted first
+            Assert.Equal(new[] { "MLV", "ELV" }, m.SlotProtocols); // protocols came along
+            Assert.Equal("MLV", m.SlotProtocol(0));
+            Assert.Equal("ELV", m.SlotProtocol(1));
+        }
+
+        /// <summary>The module stays ELV (that is what gets ordered) while its slot reports MLV
+        /// (that is what the output is configured for). Conflating them is the bug this exists
+        /// to prevent — don't "simplify" SlotProtocol away to DimmingType.</summary>
+        [Fact]
+        public void ModuleTypeAndSlotProtocol_DivergeForMlv()
+        {
+            var mlv = C("1", 120);
+            mlv.DimmingProtocolDisplay = "MLV";
+
+            var m = Build(mlv).Single();
+
+            Assert.Equal("ELV", m.DimmingType);
+            Assert.Equal("LQSE-4A5-120-D", m.PartNumber);
+            Assert.Equal("MLV", m.SlotProtocol(0));
+        }
+
+        /// <summary>Falls back to the module type when no protocol was recorded, so an
+        /// unpopulated path degrades to the old behavior rather than printing blank.</summary>
+        [Fact]
+        public void SlotProtocol_FallsBackToModuleType()
+        {
+            var m = Build(C("1", 120)).Single(); // C() leaves DimmingProtocolDisplay null
+
+            Assert.Equal("ELV", m.SlotProtocol(0));
+            Assert.Equal("ELV", m.SlotProtocol(99)); // out of range → still safe
+        }
     }
 
     /// <summary>BOM grouping: modules collapse by part number, ordered by module type rank
@@ -233,6 +279,84 @@ namespace TurboSuite.Tests.Zones
 
             var lone = Assert.Single(unassigned);
             Assert.Equal("1", lone.CircuitNumber);
+        }
+
+        /// <summary>DALI/DMX and blank-protocol circuits are benched loudly — they want a panel
+        /// but have no module to sit on, so they must surface rather than become phantom BOM parts.</summary>
+        [Theory]
+        [InlineData(DimmingResolveOutcome.NotYetSupported)]
+        [InlineData(DimmingResolveOutcome.NoProtocol)]
+        public void NonAllocatableProtocol_ExcludedAndWarned(DimmingResolveOutcome outcome)
+        {
+            var circuit = C("1", "ZONE 1");
+            circuit.DimmingType = string.Empty;   // resolver emits no module key for these
+            circuit.DimmingOutcome = outcome;
+            circuit.DimmingProtocolDisplay = "DALI";
+
+            var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { circuit }, BrandConfig.Crestron);
+
+            Assert.Empty(result.Locations);       // no zone, so no panel and no module
+            var lone = Assert.Single(unassigned);
+            Assert.Equal("DALI", lone.DimmingProtocolDisplay);
+        }
+
+        /// <summary>WIFI is excluded the same way but stays SILENT — it is network-controlled and
+        /// legitimately rides no module, mirroring the switch-wired exclusion. Landing in the
+        /// Unassigned list would train users to ignore that list.</summary>
+        [Fact]
+        public void NoModuleByDesign_ExcludedSilently()
+        {
+            var wifi = C("1", "ZONE 1");
+            wifi.DimmingType = string.Empty;
+            wifi.DimmingOutcome = DimmingResolveOutcome.NoModuleByDesign;
+
+            // Unpaneled too — a WIFI circuit typically has no zone panel, and that must not
+            // trip the blank-panel warning either.
+            var wifiNoPanel = C("2", "");
+            wifiNoPanel.DimmingType = string.Empty;
+            wifiNoPanel.DimmingOutcome = DimmingResolveOutcome.NoModuleByDesign;
+
+            var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { wifi, wifiNoPanel }, BrandConfig.Crestron);
+
+            Assert.Empty(result.Locations);
+            Assert.Empty(unassigned);
+        }
+
+        /// <summary>SlotProtocols is populated through the count-based path too (Crestron has no
+        /// amp limits, so it takes the other BuildModules branch).</summary>
+        [Fact]
+        public void SlotProtocols_PopulatedOnCountBasedPath()
+        {
+            var elv = C("1", "ZONE 1");
+            elv.DimmingProtocolDisplay = "ELV";
+            var mlv = C("2", "ZONE 1");
+            mlv.DimmingProtocolDisplay = "MLV";
+
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { elv, mlv }, BrandConfig.Crestron);
+
+            var module = result.Locations.Single().Panels.Single().Modules.Single();
+            Assert.Equal(new[] { "ELV", "MLV" }, module.SlotProtocols);
+            Assert.Equal("ELV", module.DimmingType); // both ride one ELV module
+        }
+
+        /// <summary>An allocatable circuit alongside a benched one still builds its panel —
+        /// one bad protocol doesn't take the zone down with it.</summary>
+        [Fact]
+        public void BenchedCircuit_DoesNotBlockItsZone()
+        {
+            var dali = C("2", "ZONE 1");
+            dali.DimmingType = string.Empty;
+            dali.DimmingOutcome = DimmingResolveOutcome.NotYetSupported;
+
+            var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { C("1", "ZONE 1"), dali }, BrandConfig.Crestron);
+
+            var loc = Assert.Single(result.Locations);
+            Assert.Equal(1, Assert.Single(loc.Panels).Modules.Single().UsedSlots); // only circuit "1"
+            Assert.Equal("2", Assert.Single(unassigned).CircuitNumber);
         }
 
         [Fact]

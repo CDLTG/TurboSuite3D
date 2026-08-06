@@ -12,7 +12,8 @@ namespace TurboSuite.Zones.Services
         /// <summary>
         /// Resolves the label portion of a load name from pre-read values.
         /// Priority: circuit comments > fixture comments > load classification name.
-        /// Strips parenthetical content from the result.
+        /// Parenthetical content is stripped from the two comment paths only — the
+        /// load-classification fallback is read straight (see below).
         /// </summary>
         public static string ResolveLabel(string circuitComments, string fixtureComments, string loadClassificationName, out LabelSource source)
         {
@@ -30,11 +31,16 @@ namespace TurboSuite.Zones.Services
                 return StripParenthetical(fixtureComments);
             }
 
-            // Priority 3: Load Classification (full name)
+            // Priority 3: Load Classification (full name), read straight.
+            // The stripping this used to do existed to cut "DOWNLIGHTS (ELV)" down to
+            // "DOWNLIGHTS" — back when the classification was being repurposed to smuggle the
+            // module type. TurboSuite no longer reads it for that (see DimmingModuleResolver),
+            // so the value is a plain classification name and sanitizing it would only
+            // corrupt a legitimate parenthetical.
             if (!string.IsNullOrWhiteSpace(loadClassificationName))
             {
                 source = LabelSource.Fallback;
-                return StripParenthetical(loadClassificationName);
+                return loadClassificationName;
             }
 
             source = LabelSource.None;

@@ -105,35 +105,6 @@ namespace TurboSuite.Zones.Models
             return size.ToString();
         }
 
-        public int ParsePanelSizeFromCatalogNumber(string catalogNumber)
-        {
-            if (!string.IsNullOrEmpty(catalogNumber))
-            {
-                // Try to find a known panel part number that matches
-                foreach (var kvp in PanelPartNumbers)
-                {
-                    if (string.Equals(catalogNumber, kvp.Value, StringComparison.OrdinalIgnoreCase))
-                        return kvp.Key;
-                }
-
-                // Lutron: PD8-xxx → 8, PD9-xxx → 9
-                if (catalogNumber.StartsWith("PD", StringComparison.OrdinalIgnoreCase)
-                    && catalogNumber.Length > 2
-                    && int.TryParse(catalogNumber.Substring(2, 1), out int lutronSize)
-                    && PanelSizes.Contains(lutronSize))
-                    return lutronSize;
-
-                // Crestron: CAEN-7X1 → 7
-                int dashIdx = catalogNumber.IndexOf('-');
-                if (dashIdx >= 0 && dashIdx + 1 < catalogNumber.Length
-                    && int.TryParse(catalogNumber.Substring(dashIdx + 1, 1), out int size)
-                    && PanelSizes.Contains(size))
-                    return size;
-            }
-
-            return PanelSizes.Min();
-        }
-
         public static BrandConfig Lutron { get; } = CreateLutron(useDedicatedRelayModule: false);
 
         public static BrandConfig CreateLutron(bool useDedicatedRelayModule)

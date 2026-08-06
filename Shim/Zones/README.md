@@ -29,11 +29,24 @@ Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selec
 
 ### Required Custom Parameters
 
-**On Electrical Circuits:**
+**On Lighting/Electrical Fixture types:**
 
 | Parameter | Type | Purpose |
 |-----------|------|---------|
-| `Load Classification Abbreviation` | Text | Dimming type identifier (ELV, 0-10V, Relay) — drives module assignment |
+| `Dimming Protocol` | Text | Drives module assignment, via the protocol→module map in `Core/Zones/Services/DimmingModuleResolver.cs` |
+
+Module type is resolved from the fixtures' **Dimming Protocol**, not the connector-level `Load Classification Abbreviation` this used to read. That value lived on a connector inside each family, printed on nothing, and was easy to leave unset — and a blank silently dropped the circuit out of allocation. Dimming Protocol carries the same information, prints on the fixture schedule (so it gets proofread), and already drives TurboDriver.
+
+Protocols fall into three categories:
+
+| Protocol | Behavior |
+|----------|----------|
+| `ELV`, `0-10V`, `MLV`, `RELAY` | Allocates. Note **MLV → ELV module** — the mapping is not the identity |
+| `WIFI` | Network-controlled, rides no module. Excluded **silently**, like a switch-wired circuit |
+| `DALI`, `DMX` | Real modules TurboSuite does not allocate yet → **Unassigned Circuits** |
+| blank / unrecognized | Authoring gap → **Unassigned Circuits** |
+
+A circuit whose fixtures declare more than one protocol resolves to one module type (first in sorted order, so it does not depend on Revit's element enumeration order).
 
 **On Keypad families (Lighting Devices):**
 

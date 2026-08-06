@@ -29,7 +29,7 @@
                        Grid.Column="0" Grid.Row="0" Margin="0,0,0,8" />
             <TextBlock Text="Room Override:"
                        Grid.Column="1" Grid.Row="0" Margin="8,0,0,8" />
-            <TextBlock Text="Panel:"
+            <TextBlock Text="Zone:"
                        Grid.Column="2" Grid.Row="0" Margin="8,0,0,8" />
             <ComboBox x:Name="CommentsComboBox"
                       Grid.Column="0" Grid.Row="1"
@@ -47,7 +47,8 @@
                       Grid.Column="2" Grid.Row="1"
                       DisplayMemberPath="Name"
                       MinWidth="60"
-                      Margin="8,0,0,0" />
+                      Margin="8,0,0,0"
+                      ToolTip="The control zone this circuit belongs to. Stored in Revit's Panel parameter, so the dropdown lists electrical equipment — TurboZones reads the zone number from the name (&quot;ZONE 3&quot;) and recommends the panels within it." />
         </Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="OK" Width="75" Margin="0,0,8,0"

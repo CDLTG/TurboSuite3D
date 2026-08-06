@@ -12,7 +12,6 @@ namespace TurboSuite.Driver.Models
         public ElementId CircuitId { get; set; }
         public string CircuitNumber { get; set; }
         public string LoadName { get; set; }
-        public string LoadClassificationAbbreviation { get; set; }
         public int NumberOfElements { get; set; }
         public double ApparentPower { get; set; }
         public string Panel { get; set; }

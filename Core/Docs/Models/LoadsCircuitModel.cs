@@ -14,7 +14,10 @@ public class LoadsCircuitModel
         set => _circuitNumber = string.Equals(value, "<unnamed>", StringComparison.OrdinalIgnoreCase) ? "<...>" : value;
     }
     public string LoadName { get; set; } = string.Empty;
-    public string LoadClassification { get; set; } = string.Empty;
+    /// <summary>The circuit's raw aggregated Dimming Protocol ("MLV", "ELV; 0-10V") — what the
+    /// PDF's "Dimming" column prints. Deliberately the protocol as authored, not the module type
+    /// it maps to, so the schedule shows what a reader would find on the fixture.</summary>
+    public string DimmingProtocol { get; set; } = string.Empty;
     public double ApparentLoadVA { get; set; }
     public string TotalWattsDisplay => $"{Math.Round(ApparentLoadVA)} W";
     public List<LoadsFixtureGroup> FixtureGroups { get; set; } = new();

@@ -94,7 +94,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 | `Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS |
 | `Sub-Driver Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS, TurboTag, TurboNumber |
 | `Scale Factor` | Fixture instances | Double | TurboBubble, TurboWire |
-| `Load Classification Abbreviation` | Electrical Circuits | Text | TurboZones, TurboDriver |
+| `Dimming Protocol` | Lighting Fixture types | Text | TurboZones, TurboDocs, TurboDriver |
 | `Data Sheet URL` | Lighting Fixture/Device types | Text (URL) | TurboDocs |
 
 ### Tag Families

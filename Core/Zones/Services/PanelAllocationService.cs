@@ -30,6 +30,13 @@ namespace TurboSuite.Zones.Services
             var circuitsByZone = new Dictionary<int, List<ZonesCircuitData>>();
             foreach (var circuit in circuits)
             {
+                // Deliberately module-less (WIFI) — network-controlled, never rides a dimming
+                // module. Checked before the panel gates because such a circuit legitimately has
+                // no zone panel either, and warning about that would be noise. Same silence the
+                // switch-wired exclusion below gets.
+                if (circuit.DimmingOutcome == DimmingResolveOutcome.NoModuleByDesign)
+                    continue;
+
                 if (string.IsNullOrWhiteSpace(circuit.PanelName))
                 {
                     // Switch-wired circuits are legitimately unpaneled — only warn for truly unassigned
@@ -48,6 +55,16 @@ namespace TurboSuite.Zones.Services
                     unassigned.Add(circuit);
                     continue;
                 }
+
+                // The circuit wants a panel but has no module to sit on: DALI/DMX (not modeled
+                // yet) or a blank/off-vocabulary protocol (an authoring gap). Surface it in the
+                // Unassigned list rather than let it become a phantom BOM part.
+                if (circuit.DimmingOutcome != DimmingResolveOutcome.Allocatable)
+                {
+                    unassigned.Add(circuit);
+                    continue;
+                }
+
                 if (!circuitsByZone.ContainsKey(zone))
                     circuitsByZone[zone] = new List<ZonesCircuitData>();
                 circuitsByZone[zone].Add(circuit);
@@ -357,6 +374,7 @@ namespace TurboSuite.Zones.Services
                 for (int c = 0; c < circuitsForThisModule && circuitIdx < circuits.Count; c++)
                 {
                     module.CircuitNumbers.Add(circuits[circuitIdx].CircuitNumber);
+                    module.SlotProtocols.Add(circuits[circuitIdx].DimmingProtocolDisplay);
                     circuitIdx++;
                 }
 
@@ -515,6 +533,7 @@ namespace TurboSuite.Zones.Services
                 {
                     module.CircuitNumbers.Add(ordered[i].Circuit.CircuitNumber);
                     module.SlotAmps.Add(ordered[i].Amps);
+                    module.SlotProtocols.Add(ordered[i].Circuit.DimmingProtocolDisplay);
                     moduleTotal += ordered[i].Amps;
                     if (ordered[i].Amps > limits.GetSlotLimit(i) + Eps)
                         overloaded = true;

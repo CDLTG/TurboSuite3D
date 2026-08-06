@@ -332,34 +332,6 @@ namespace TurboSuite.Shared.Helpers
         }
 
         /// <summary>
-        /// Get Load Classification Abbreviation from ElectricalSystem
-        /// </summary>
-        public static string GetLoadClassification(ElectricalSystem circuit)
-        {
-            if (circuit == null) return string.Empty;
-
-            // Only get the "Load Classification Abbreviation" parameter directly
-            // Do NOT extract from "Load Classification" as they are independent
-            Parameter param = circuit.LookupParameter(ParameterNames.LoadClassificationAbbreviation);
-            if (param != null && param.HasValue)
-            {
-                string raw = param.AsString() ?? string.Empty;
-                if (string.IsNullOrEmpty(raw) || !raw.Contains(';')) return raw;
-
-                // When connectors on circuit elements have differing abbreviations,
-                // Revit returns a "; "-joined list (e.g. "ELV; ELV"). Collapse exact duplicates.
-                var parts = raw.Split(';')
-                    .Select(p => p.Trim())
-                    .Where(p => p.Length > 0)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                return string.Join("; ", parts);
-            }
-
-            return string.Empty;
-        }
-
-        /// <summary>
         /// Get Apparent Load from ElectricalSystem
         /// </summary>
         public static double GetApparentLoad(ElectricalSystem circuit)

@@ -90,7 +90,7 @@ Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**
 |-------|--------|
 | Circuit Number | RBS_ELEC_CIRCUIT_NUMBER |
 | Load Name | RBS_ELEC_CIRCUIT_NAME |
-| Dimming | Load Classification Abbreviation |
+| Dimming | Dimming Protocol (raw, aggregated across the circuit's fixtures — e.g. `MLV`, `ELV; 0-10V`; the protocol as authored, not the module type it maps to) |
 | Fixtures | ALL_MODEL_TYPE_MARK (from OST_LightingFixtures + OST_ElectricalFixtures) |
 | Qty | Element count or Linear Length sum |
 | Driver | Switch ID (from OST_LightingDevices on circuit) |
@@ -107,6 +107,8 @@ Hierarchical structure per panel:
 - **Module sections** (boxed) — module number, part number, total module wattage in header; per-slot load rows underneath with empty slots marked "— spare —"
 
 Five-column table per module: **# | Load | Ckt | Dimming | Watts**
+
+The **Dimming** column reports the slot's **load** protocol, not the module's type — the module header already names the module. These differ whenever the protocol→module map is not the identity: an MLV load on an `LQSE-4A5` reads `MLV`, because forward vs. reverse phase is a per-output decision that printing `ELV` on every slot would erase. Values come from `ModuleResult.SlotProtocols`, captured during allocation (parallel to `CircuitNumbers`, so slot-1 promotion reorders both together) rather than looked up by circuit number, which Revit does not guarantee unique.
 
 Modules never split across pages. When a panel's modules span multiple pages, the panel header repeats with "(continued)". Panel wattage is calculated from rounded module totals to avoid rounding discrepancies.
 

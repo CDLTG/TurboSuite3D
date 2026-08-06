@@ -6,10 +6,18 @@ using Autodesk.Revit.DB;
 namespace TurboSuite.Shared.Views;
 
 /// <summary>
-/// The shared circuit-info dialog: circuit comment, room override, and panel assignment,
+/// The shared circuit-info dialog: circuit comment, room override, and zone assignment,
 /// shown after a command creates or wires a circuit (TurboWire, TurboDriver). Gated by the
 /// General setting; see <c>TurboSuite.Shared.Services.CircuitInfoService</c> for the
 /// resolve-defaults / apply pipeline. (Formerly <c>TurboSuite.Wire.Views.CommentsDialog</c>.)
+///
+/// The dropdown is labelled "Zone" but everything below it is named Panel, and that mismatch
+/// is deliberate. What the user is declaring is the control ZONE; the panels serving it are a
+/// recommendation TurboZones derives later, from the zone's module count. The mechanism is
+/// Revit's Panel parameter (there is nothing else on a circuit to hold it), so the code keeps
+/// the API's vocabulary — but "Panel:" on screen made users read the choice as picking the
+/// physical enclosure, which it is not. See PanelAllocationService.ParseLocationNumber, which
+/// takes only the zone NUMBER off the selected panel's name and discards the rest.
 /// </summary>
 public partial class CircuitInfoDialog : Window
 {

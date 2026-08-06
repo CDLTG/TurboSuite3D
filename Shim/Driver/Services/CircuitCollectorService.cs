@@ -72,7 +72,6 @@ namespace TurboSuite.Driver.Services
                 CircuitId = circuit.Id,
                 CircuitNumber = ParameterHelper.GetCircuitNumber(circuit),
                 LoadName = ParameterHelper.GetLoadName(circuit),
-                LoadClassificationAbbreviation = ParameterHelper.GetLoadClassification(circuit),
                 NumberOfElements = 0,
                 ApparentPower = ParameterHelper.GetApparentLoad(circuit),
                 Panel = ParameterHelper.GetPanelName(circuit)

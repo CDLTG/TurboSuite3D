@@ -5,6 +5,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Docs.Models;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Docs.Services;
 
@@ -29,6 +30,7 @@ public static class LoadsCollectorService
 
                 var fixtureGroups = new List<LoadsFixtureGroup>();
                 var driverSwitchIds = new List<string>();
+                var fixtureProtocols = new List<string>();
 
                 if (circuit.Elements != null)
                 {
@@ -42,6 +44,11 @@ public static class LoadsCollectorService
                         if (fi.Category?.BuiltInCategory is BuiltInCategory.OST_LightingFixtures
                             or BuiltInCategory.OST_ElectricalFixtures)
                         {
+                            // Collected off every fixture, not just the TypeMark-bearing ones —
+                            // the "Dimming" column describes the circuit, so an untagged fixture
+                            // still gets a say in what protocol it runs.
+                            fixtureProtocols.Add(ParameterHelper.GetDimmingProtocol(fi));
+
                             string typeMark = ParameterHelper.GetTypeMark(fi);
                             if (!string.IsNullOrWhiteSpace(typeMark))
                             {
@@ -76,7 +83,7 @@ public static class LoadsCollectorService
                 {
                     CircuitNumber = circuitNumber,
                     LoadName = ParameterHelper.GetLoadName(circuit),
-                    LoadClassification = ParameterHelper.GetLoadClassification(circuit),
+                    DimmingProtocol = DimmingModuleResolver.Resolve(fixtureProtocols).ProtocolDisplay,
                     ApparentLoadVA = ParameterHelper.GetApparentLoad(circuit),
                     FixtureGroups = fixtureGroups,
                     DriverSwitchIDs = driverSwitchIds

@@ -136,6 +136,29 @@ namespace TurboSuite.Zones.Models
         /// <summary>Per-slot amp values, parallel to <see cref="CircuitNumbers"/>.</summary>
         public List<double> SlotAmps { get; set; } = new List<double>();
 
+        /// <summary>
+        /// Per-slot raw Dimming Protocol, parallel to <see cref="CircuitNumbers"/>.
+        ///
+        /// Distinct from <see cref="DimmingType"/> on purpose: that is the MODULE's identity (what
+        /// gets ordered and mounted), this is the LOAD's (what the output is configured for). They
+        /// coincide for ELV/0-10V/Relay but not for MLV, which dims on an ELV module while needing
+        /// the opposite phase mode — a per-output decision the schedule would erase if it printed
+        /// the module key on every slot.
+        ///
+        /// Captured during allocation rather than looked up later, because the panel schedule's
+        /// circuit lookup is keyed by circuit NUMBER, which Revit does not guarantee unique
+        /// (several circuits can read "&lt;unnamed&gt;").
+        /// </summary>
+        public List<string> SlotProtocols { get; set; } = new List<string>();
+
+        /// <summary>The protocol to display for a slot, falling back to the module's own type
+        /// when a build path did not record one.</summary>
+        public string SlotProtocol(int slotIndex)
+            => slotIndex >= 0 && slotIndex < SlotProtocols.Count
+               && !string.IsNullOrWhiteSpace(SlotProtocols[slotIndex])
+                ? SlotProtocols[slotIndex]
+                : DimmingType;
+
         /// <summary>True if any slot or the module total exceeds amp limits.</summary>
         public bool IsOverloaded { get; set; }
 

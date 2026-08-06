@@ -526,7 +526,8 @@
                                                     <Run Text=")"/>
                                                 </TextBlock>
                                                 <TextBlock FontSize="9" Foreground="#856404" TextWrapping="Wrap">
-                                                    These circuits are not assigned to a zone panel in Revit.
+                                                    These circuits are excluded from the breakdown — either not assigned to a zone panel in Revit,
+                                                    or their fixtures' Dimming Protocol has no control module (blank, or DALI/DMX, which is not supported yet).
                                                 </TextBlock>
                                                 <ItemsControl ItemsSource="{Binding PanelTab.UnassignedCircuits}" Margin="0,4,0,0">
                                                     <ItemsControl.ItemTemplate>
@@ -534,7 +535,7 @@
                                                             <TextBlock FontSize="9" Foreground="#856404">
                                                                 <Run Text="{Binding CircuitNumber, Mode=OneWay}"/><Run Text=" "/><Run
                                                                     Text="{Binding CurrentLoadName, Mode=OneWay}"/><Run Text=" ("/><Run
-                                                                    Text="{Binding DimmingType, Mode=OneWay}"/><Run Text=")"/>
+                                                                    Text="{Binding DimmingProtocolDisplay, Mode=OneWay}"/><Run Text=")"/>
                                                             </TextBlock>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>

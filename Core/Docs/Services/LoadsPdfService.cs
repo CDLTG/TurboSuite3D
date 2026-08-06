@@ -81,7 +81,7 @@ public static class LoadsPdfService
                 double w = tempGfx.MeasureString(c.CircuitNumber, fontRow).Width;
                 if (w > maxCircuit) maxCircuit = w;
 
-                w = tempGfx.MeasureString(c.LoadClassification, fontRow).Width;
+                w = tempGfx.MeasureString(c.DimmingProtocol, fontRow).Width;
                 if (w > maxDimming) maxDimming = w;
 
                 w = tempGfx.MeasureString(c.FixturesDisplay, fontRow).Width;
@@ -246,7 +246,7 @@ public static class LoadsPdfService
                 new XPoint(colX[1] + ColumnPadding, baseline));
 
             // Dimming
-            gfx.DrawString(circuit.LoadClassification, fontRow, XBrushes.Black,
+            gfx.DrawString(circuit.DimmingProtocol, fontRow, XBrushes.Black,
                 new XPoint(colX[2] + ColumnPadding, baseline));
 
             // Fixtures

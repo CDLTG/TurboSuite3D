@@ -66,11 +66,11 @@ namespace TurboSuite.Zones.Services
                         if (fixtures.Count == 0)
                             continue;
 
-                        // Resolve dimming type from Load Classification Abbreviation
-                        // If multiple values separated by semicolons (e.g. "ELV; T.B.D."), use the first
-                        string dimmingType = ParameterHelper.GetLoadClassification(circuit);
-                        if (!string.IsNullOrEmpty(dimmingType) && dimmingType.Contains(';'))
-                            dimmingType = dimmingType.Substring(0, dimmingType.IndexOf(';')).Trim();
+                        // Resolve the control-module type from the fixtures' Dimming Protocol
+                        // (a schedule-visible type parameter) rather than the connector-level
+                        // Load Classification Abbreviation this used to read.
+                        var dimming = DimmingModuleResolver.Resolve(
+                            fixtures.Select(fi => ParameterHelper.GetDimmingProtocol(fi)));
 
                         string currentLoadName = ParameterHelper.GetLoadName(circuit);
 
@@ -106,7 +106,9 @@ namespace TurboSuite.Zones.Services
                         {
                             CircuitId = circuit.Id.ToRef(),
                             CircuitNumber = circuitNumber,
-                            DimmingType = dimmingType ?? string.Empty,
+                            DimmingType = dimming.ModuleType,
+                            DimmingProtocolDisplay = dimming.ProtocolDisplay,
+                            DimmingOutcome = dimming.Outcome,
                             PanelName = panelName ?? string.Empty,
                             RoomName = roomName ?? string.Empty,
                             RoomOverride = roomOverride ?? string.Empty,
@@ -176,29 +178,6 @@ namespace TurboSuite.Zones.Services
 
             string partNumber = repeaters[0].Symbol?.LookupParameter(ParameterNames.CatalogNumber1)?.AsString();
             return (repeaters.Count, partNumber);
-        }
-
-        public Dictionary<string, string> GetPanelCatalogNumbers(Document doc)
-        {
-            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            var panels = new FilteredElementCollector(doc)
-                .OfCategory(BuiltInCategory.OST_ElectricalEquipment)
-                .OfClass(typeof(FamilyInstance))
-                .Cast<FamilyInstance>();
-
-            foreach (var panel in panels)
-            {
-                string name = panel.Name;
-                if (string.IsNullOrWhiteSpace(name) || result.ContainsKey(name))
-                    continue;
-
-                string catalogNumber = panel.Symbol?.LookupParameter(ParameterNames.CatalogNumber1)?.AsString();
-                if (!string.IsNullOrEmpty(catalogNumber))
-                    result[name] = catalogNumber;
-            }
-
-            return result;
         }
 
     }

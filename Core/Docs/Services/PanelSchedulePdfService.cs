@@ -355,8 +355,21 @@ public static class PanelSchedulePdfService
                     gfx.DrawString(cktNum, rowFont, rowBrush,
                         new XPoint(colX[2] + ColumnPadding, baseline));
 
-                    // Dimming
-                    gfx.DrawString(module.DimmingType, rowFont, rowBrush,
+                    // Dimming — the LOAD's protocol, not the module's type. The module header
+                    // above already names the module; this column earns its place by describing
+                    // the individual output (an MLV load on an ELV module reads "MLV").
+                    // A circuit whose fixtures disagree yields a joined value ("0-10V; ELV") that
+                    // can outrun the fixed column, so it truncates like the Load column does.
+                    string dimming = module.SlotProtocol(slotNumber - 1) ?? "";
+                    double dimmingMaxWidth = colW[3] - ColumnPadding * 2;
+                    if (gfx.MeasureString(dimming, rowFont).Width > dimmingMaxWidth && dimming.Length > 0)
+                    {
+                        while (dimming.Length > 1
+                               && gfx.MeasureString(dimming + "\u2026", rowFont).Width > dimmingMaxWidth)
+                            dimming = dimming[..^1];
+                        dimming += "\u2026";
+                    }
+                    gfx.DrawString(dimming, rowFont, rowBrush,
                         new XPoint(colX[3] + ColumnPadding, baseline));
 
                     // Watts
