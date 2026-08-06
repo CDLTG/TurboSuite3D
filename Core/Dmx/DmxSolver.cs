@@ -18,7 +18,7 @@ namespace TurboSuite.Dmx
                            double breakerAmps = 20.0, double feedVolts = 120.0,
                            double breakerContinuousDerate = 0.8, int maxDriversPerBreaker = 0,
                            BreakerBasis breakerBasis = BreakerBasis.ConnectedLoad,
-                           int linkChannelCapacity = 512, int linkDeviceCapacity = 99, int linksPerProcessor = 2)
+                           int linkChannelCapacity = 512, int linkDeviceCapacity = 16, int linksPerProcessor = 2)
         {
             DecoderPool = decoderPool;
             DriverPool = driverPool;
@@ -50,7 +50,7 @@ namespace TurboSuite.Dmx
 
         // Link→Processor roll-up (report-only, profile values). Lutron QS / HQP7-2 defaults.
         public int LinkChannelCapacity { get; }  // switch legs per link (1 DMX ch = 1 leg); QS = 512
-        public int LinkDeviceCapacity { get; }   // devices (interfaces) per link; QS = 99
+        public int LinkDeviceCapacity { get; }   // DMX interfaces per link; Lutron QS = 16
         public int LinksPerProcessor { get; }    // links per processor; HQP7-2 = 2
 
         /// <summary>The branch-breaker watt cap drivers are load-packed under.</summary>

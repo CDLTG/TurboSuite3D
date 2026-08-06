@@ -38,7 +38,8 @@ namespace TurboSuite.Dmx
         /// <summary>Switch legs per control link (1 DMX channel = 1 leg). Lutron QS = 512.</summary>
         public int LinkChannelCapacity { get; }
 
-        /// <summary>Control-link devices (interfaces) per link. Lutron QS = 99.</summary>
+        /// <summary>DMX interfaces per control link. Lutron QS = 16 (a per-device-type cap, NOT the
+        /// link's 99-total-QS-device limit — see the Lutron constant below).</summary>
         public int LinkDeviceCapacity { get; }
 
         /// <summary>Links per processor for the roll-up (Lutron HQP7-2 = 2).</summary>
@@ -46,7 +47,12 @@ namespace TurboSuite.Dmx
 
         // ── Built-in profiles ──────────────────────────────────────────────────────────────────────
         // Lutron QSE-CI-DMX on a QS link off an HQP7-2 processor — the firm's house system, the default.
-        public static readonly DmxProfile Lutron = new DmxProfile("Lutron", 32, 512, 99, 2);
+        // The device cap is 16, not the QS link's 99: 99 is the total device budget across all types,
+        // while the QSE-CI-DMX submittal caps interfaces at "up to 16 per QS link in HomeWorks". The two
+        // only coincide when every interface is packed full (16 × 32 = 512 = the leg cap); declared loops
+        // routinely leave interfaces partly filled, and using 99 there under-reports links — and so
+        // under-reports PROCESSORS, on a purchasing document.
+        public static readonly DmxProfile Lutron = new DmxProfile("Lutron", 32, 512, 16, 2);
 
         // Crestron DIN-DMX — native universe ceiling; link/processor roll-up is a Lutron-ism, so the
         // capacities here are nominal report-only values (the roll-up is never provisioned).

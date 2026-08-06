@@ -13,7 +13,7 @@ namespace TurboSuite.Tests.Dmx
         {
             Assert.Equal(32, DmxProfile.Lutron.ChannelCeiling);
             Assert.Equal(512, DmxProfile.Lutron.LinkChannelCapacity);
-            Assert.Equal(99, DmxProfile.Lutron.LinkDeviceCapacity);
+            Assert.Equal(16, DmxProfile.Lutron.LinkDeviceCapacity);
             Assert.Equal(2, DmxProfile.Lutron.LinksPerProcessor);
         }
 

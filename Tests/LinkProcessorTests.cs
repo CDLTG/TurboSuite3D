@@ -6,8 +6,10 @@ namespace TurboSuite.Tests.Dmx
 {
     /// <summary>
     /// The Link→Processor roll-up — a pure REPORT pass (D2 is report-only). The
-    /// engine sizes the DMX demand up the tiered ladder: interfaces → control links (≤512 switch legs /
-    /// ≤99 devices each) → processors (≤2 links each, HQP7-2). It never provisions and never stops on it.
+    /// engine sizes the DMX demand up the tiered ladder: interfaces → control links (Lutron: ≤512 switch
+    /// legs / ≤16 interfaces each) → processors (≤2 links each, HQP7-2). It never provisions and never
+    /// stops on it. <see cref="LinkPacker"/> itself takes both caps as parameters, so most tests here pass
+    /// their own; the Lutron numbers are pinned in <see cref="DmxContractBuilderTests"/> and below.
     /// </summary>
     public class LinkProcessorTests
     {
@@ -27,8 +29,27 @@ namespace TurboSuite.Tests.Dmx
         public void Links_BindOnLegs_WhenInterfacesAreFull()
         {
             // 16 full 32-ch interfaces = 512 legs ⇒ exactly one link; the 17th spills to a second.
-            Assert.Single(LinkPacker.Pack(Enumerable.Repeat(32, 16).ToList(), 512, 99));
-            Assert.Equal(2, LinkPacker.Pack(Enumerable.Repeat(32, 17).ToList(), 512, 99).Count);
+            // On Lutron the two caps coincide here — 16 interfaces AND 512 legs land together, which is
+            // exactly why the wrong device cap hid for so long. See the sparse case below.
+            Assert.Single(LinkPacker.Pack(Enumerable.Repeat(32, 16).ToList(), 512, 16));
+            Assert.Equal(2, LinkPacker.Pack(Enumerable.Repeat(32, 17).ToList(), 512, 16).Count);
+        }
+
+        [Fact]
+        public void Links_BindOnDeviceCount_WhenLutronInterfacesAreSparse()
+        {
+            // The regression this cap exists for. 20 interfaces of 8 channels: 160 legs, nowhere near the
+            // 512-leg cap, so ONLY the device cap can bind. At Lutron's real 16 that is 2 links (⇒ 1
+            // processor); at the QS 99-device figure the packer reported 1 link and under-ordered.
+            var sparse = Enumerable.Repeat(8, 20).ToList();
+
+            var links = LinkPacker.Pack(sparse, DmxProfile.Lutron.LinkChannelCapacity,
+                                                DmxProfile.Lutron.LinkDeviceCapacity);
+
+            Assert.Equal(2, links.Count);
+            Assert.Equal(16, links[0].InterfaceCount);
+            Assert.Equal(4, links[1].InterfaceCount);
+            Assert.Single(LinkPacker.Pack(sparse, 512, 99)); // what the bug reported
         }
 
         [Fact]
@@ -85,7 +106,7 @@ namespace TurboSuite.Tests.Dmx
                 decoderPool: new[] { DecoderSpec.Dmx4_5000_10A },
                 driverPool: new[] { new DriverType("ME", 600, V, 0.85) },
                 systemVolts: V, channelCeiling: 32, maxDevicesPerSegment: 32);
-            // defaults: 512 legs / 99 devices / 2 links per processor
+            // defaults: 512 legs / 16 interfaces / 2 links per processor
 
             var bill = DmxSolver.Solve(contract, new[] { Zone("A"), Zone("B") });
 
