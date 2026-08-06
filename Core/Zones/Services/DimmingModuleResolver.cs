@@ -31,7 +31,12 @@ namespace TurboSuite.Zones.Services
             NoModule,
 
             /// <summary>A real module exists in the field, but TurboSuite does not model it yet.</summary>
-            NotYetSupported
+            NotYetSupported,
+
+            /// <summary>A dedicated subsystem owns this protocol's control hardware and reports its own
+            /// demand (DMX → TurboDMX). No DIN module, and no warning — the parts are counted, just not
+            /// here.</summary>
+            ExternalSubsystem
         }
 
         private readonly struct Entry
@@ -72,10 +77,14 @@ namespace TurboSuite.Zones.Services
                 // switch-wired circuit — this is a design decision, not a missing parameter.
                 { "WIFI",  new Entry(Category.NoModule) },
 
-                // Real Lutron modules that TurboSuite does not allocate yet (TurboDMX territory).
-                // Flagged rather than passed through, so they cannot become phantom BOM parts.
-                { "DALI",  new Entry(Category.NotYetSupported) },
-                { "DMX",   new Entry(Category.NotYetSupported) }
+                // DMX rides no DIN module at all: the QSE-CI-DMX is a QS-link interface in the panel's
+                // LV compartment, and TurboDMX — which knows the channel math — reports how many.
+                // Silent here, because the parts are counted, just not by this map.
+                { "DMX",   new Entry(Category.ExternalSubsystem) },
+
+                // A real Lutron module TurboSuite does not allocate yet. Flagged rather than passed
+                // through, so it cannot become a phantom BOM part.
+                { "DALI",  new Entry(Category.NotYetSupported) }
             };
 
         /// <summary>
@@ -122,23 +131,35 @@ namespace TurboSuite.Zones.Services
 
             // No module anywhere. If everything declared is deliberately module-less, that is a
             // legitimate configuration and stays silent; otherwise it needs a human's attention.
+            // A benched protocol always gets flagged, even alongside something legitimate. Otherwise the
+            // circuit stays silent only when EVERY declared value is accounted for — module-less by
+            // design, or owned by a subsystem. One unrecognized value in the mix is still an authoring
+            // gap, and being co-declared with WIFI or DMX must not hide it.
             bool anyNotYetSupported = false;
-            bool allNoModule = true;
+            bool anyExternal = false;
+            bool allAccountedFor = true;
             foreach (string protocol in declared)
             {
-                if (Map.TryGetValue(protocol, out Entry entry) && entry.Category == Category.NoModule)
-                    continue;
+                if (!Map.TryGetValue(protocol, out Entry entry)) { allAccountedFor = false; continue; }
 
-                allNoModule = false;
-                if (Map.TryGetValue(protocol, out entry) && entry.Category == Category.NotYetSupported)
-                    anyNotYetSupported = true;
+                switch (entry.Category)
+                {
+                    case Category.NoModule: break;
+                    case Category.ExternalSubsystem: anyExternal = true; break;
+                    case Category.NotYetSupported: anyNotYetSupported = true; allAccountedFor = false; break;
+                    default: allAccountedFor = false; break;
+                }
             }
 
-            if (allNoModule)
-                return new DimmingResolution(display, string.Empty, DimmingResolveOutcome.NoModuleByDesign);
+            if (anyNotYetSupported)
+                return new DimmingResolution(display, string.Empty, DimmingResolveOutcome.NotYetSupported);
 
-            return new DimmingResolution(display, string.Empty,
-                anyNotYetSupported ? DimmingResolveOutcome.NotYetSupported : DimmingResolveOutcome.NoProtocol);
+            if (allAccountedFor)
+                return new DimmingResolution(display, string.Empty,
+                    anyExternal ? DimmingResolveOutcome.HandledBySubsystem
+                                : DimmingResolveOutcome.NoModuleByDesign);
+
+            return new DimmingResolution(display, string.Empty, DimmingResolveOutcome.NoProtocol);
         }
     }
 

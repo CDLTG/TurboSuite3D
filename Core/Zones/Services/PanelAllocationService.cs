@@ -30,11 +30,13 @@ namespace TurboSuite.Zones.Services
             var circuitsByZone = new Dictionary<int, List<ZonesCircuitData>>();
             foreach (var circuit in circuits)
             {
-                // Deliberately module-less (WIFI) — network-controlled, never rides a dimming
-                // module. Checked before the panel gates because such a circuit legitimately has
-                // no zone panel either, and warning about that would be noise. Same silence the
-                // switch-wired exclusion below gets.
-                if (circuit.DimmingOutcome == DimmingResolveOutcome.NoModuleByDesign)
+                // Rides no dimming module, legitimately: deliberately module-less (WIFI, network-
+                // controlled) or owned by a subsystem that counts its own hardware (DMX → TurboDMX).
+                // Checked before the panel gates because such a circuit often has no zone panel
+                // either, and warning about that would be noise. Same silence the switch-wired
+                // exclusion below gets.
+                if (circuit.DimmingOutcome == DimmingResolveOutcome.NoModuleByDesign
+                    || circuit.DimmingOutcome == DimmingResolveOutcome.HandledBySubsystem)
                     continue;
 
                 if (string.IsNullOrWhiteSpace(circuit.PanelName))

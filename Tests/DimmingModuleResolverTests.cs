@@ -10,10 +10,12 @@ namespace TurboSuite.Tests.Zones
     //  runs on. This replaced the connector-level "Load Classification Abbreviation" — an invisible
     //  field that silently dropped circuits out of the panel BOM when unauthored.
     //
-    //  For me (Claude): the three categories are NOT interchangeable and the distinction is the
-    //  whole point. WIFI is NoModuleByDesign (silent — it legitimately rides no module);
-    //  DALI/DMX are NotYetSupported (loud — real modules TurboSuite doesn't allocate yet). A test
-    //  asserting WIFI shows up in the Unassigned list is asserting the bug this design prevents.
+    //  For me (Claude): the four categories are NOT interchangeable and the distinction is the
+    //  whole point. WIFI is NoModuleByDesign (silent — it legitimately rides no module); DMX is
+    //  HandledBySubsystem (also silent, but for a different reason — TurboDMX counts the QSE-CI-DMX
+    //  interfaces, so the hardware IS ordered, just not from this map); DALI is NotYetSupported
+    //  (loud — a real module TurboSuite doesn't allocate yet). A test asserting WIFI or DMX shows up
+    //  in the Unassigned list is asserting the bug this design prevents.
     //
     //  MLV → ELV is the entry that proves the map is needed: module type is a function of protocol,
     //  not the identity of it. Don't "simplify" the map away.
@@ -39,13 +41,14 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(expectedKey, r.ModuleType);
         }
 
-        /// <summary>The three non-allocating categories, which differ only in how loudly
+        /// <summary>The non-allocating categories, which differ only in how loudly
         /// they're surfaced downstream.</summary>
         [Theory]
         [InlineData("WIFI", DimmingResolveOutcome.NoModuleByDesign)]
         [InlineData("wifi", DimmingResolveOutcome.NoModuleByDesign)]
         [InlineData("DALI", DimmingResolveOutcome.NotYetSupported)]
-        [InlineData("DMX", DimmingResolveOutcome.NotYetSupported)]
+        [InlineData("DMX", DimmingResolveOutcome.HandledBySubsystem)]
+        [InlineData("dmx", DimmingResolveOutcome.HandledBySubsystem)]
         [InlineData("PHASE-CUT", DimmingResolveOutcome.NoProtocol)] // off-vocabulary → authoring gap
         public void NonModuleProtocols_CategorizedByOutcome(string protocol, DimmingResolveOutcome expected)
         {
@@ -151,6 +154,28 @@ namespace TurboSuite.Tests.Zones
         public void AllWifi_StaysSilent()
             => Assert.Equal(DimmingResolveOutcome.NoModuleByDesign,
                 DimmingModuleResolver.Resolve(new[] { "WIFI", "wifi", " WIFI " }).Outcome);
+
+        /// <summary>DMX co-declared with WIFI stays silent AND stays DMX-flavored: both are accounted
+        /// for, and the subsystem outcome is the more informative of the two — it is what tells the
+        /// allocator a real interface is being counted elsewhere.</summary>
+        [Fact]
+        public void DmxMixedWithWifi_IsHandledBySubsystem()
+            => Assert.Equal(DimmingResolveOutcome.HandledBySubsystem,
+                DimmingModuleResolver.Resolve(new[] { "WIFI", "DMX" }).Outcome);
+
+        /// <summary>But DMX must not launder an authoring gap. A subsystem owning one declared value
+        /// says nothing about an unrecognized one sitting next to it — same rule WIFI follows.</summary>
+        [Fact]
+        public void DmxMixedWithUnknown_IsNotSilent()
+            => Assert.Equal(DimmingResolveOutcome.NoProtocol,
+                DimmingModuleResolver.Resolve(new[] { "DMX", "GIBBERISH" }).Outcome);
+
+        /// <summary>DALI outranks DMX: the circuit still has a module nobody is counting, and the
+        /// subsystem's silence must not swallow it.</summary>
+        [Fact]
+        public void DaliMixedWithDmx_StaysFlagged()
+            => Assert.Equal(DimmingResolveOutcome.NotYetSupported,
+                DimmingModuleResolver.Resolve(new[] { "DMX", "DALI" }).Outcome);
 
         /// <summary>Display dedupes case-insensitively but keeps the first-seen spelling.</summary>
         [Fact]

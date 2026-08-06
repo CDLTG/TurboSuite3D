@@ -281,7 +281,7 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal("1", lone.CircuitNumber);
         }
 
-        /// <summary>DALI/DMX and blank-protocol circuits are benched loudly — they want a panel
+        /// <summary>DALI and blank-protocol circuits are benched loudly — they want a panel
         /// but have no module to sit on, so they must surface rather than become phantom BOM parts.</summary>
         [Theory]
         [InlineData(DimmingResolveOutcome.NotYetSupported)]
@@ -322,6 +322,49 @@ namespace TurboSuite.Tests.Zones
 
             Assert.Empty(result.Locations);
             Assert.Empty(unassigned);
+        }
+
+        /// <summary>DMX is excluded silently too, but for the opposite reason to WIFI: its control
+        /// hardware very much exists — TurboDMX counts the QSE-CI-DMX interfaces and reports them as
+        /// subsystem demand. Flagging it here would ask the user to fix something already handled.</summary>
+        [Fact]
+        public void HandledBySubsystem_ExcludedSilently()
+        {
+            var dmx = C("1", "ZONE 1");
+            dmx.DimmingType = string.Empty;
+            dmx.DimmingOutcome = DimmingResolveOutcome.HandledBySubsystem;
+            dmx.DimmingProtocolDisplay = "DMX";
+
+            // The DMX tape is often on its own unpaneled feed, which must not trip the blank-panel
+            // warning either.
+            var dmxNoPanel = C("2", "");
+            dmxNoPanel.DimmingType = string.Empty;
+            dmxNoPanel.DimmingOutcome = DimmingResolveOutcome.HandledBySubsystem;
+
+            var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { dmx, dmxNoPanel }, BrandConfig.Crestron);
+
+            Assert.Empty(result.Locations);   // rides no DIN module, so it builds no panel
+            Assert.Empty(unassigned);
+        }
+
+        /// <summary>A DMX circuit alongside an allocatable one leaves the zone's panel untouched —
+        /// the subsystem takes its circuit out of the allocation entirely, it does not shrink it.</summary>
+        [Fact]
+        public void HandledBySubsystem_DoesNotDisturbItsZone()
+        {
+            var dmx = C("2", "ZONE 1");
+            dmx.DimmingType = string.Empty;
+            dmx.DimmingOutcome = DimmingResolveOutcome.HandledBySubsystem;
+
+            var (withDmx, _) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { C("1", "ZONE 1"), dmx }, BrandConfig.Crestron);
+            var (without, _) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { C("1", "ZONE 1") }, BrandConfig.Crestron);
+
+            Assert.Equal(without.AllPanels.Count, withDmx.AllPanels.Count);
+            Assert.Equal(without.AllPanels.Sum(p => p.Modules.Count),
+                         withDmx.AllPanels.Sum(p => p.Modules.Count));
         }
 
         /// <summary>SlotProtocols is populated through the count-based path too (Crestron has no

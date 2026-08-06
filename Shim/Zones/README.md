@@ -44,7 +44,8 @@ Protocols fall into three categories:
 |----------|----------|
 | `ELV`, `0-10V`, `MLV`, `RELAY` | Allocates. Note **MLV → ELV module** — the mapping is not the identity |
 | `WIFI` | Network-controlled, rides no module. Excluded **silently**, like a switch-wired circuit |
-| `DALI`, `DMX` | Real modules TurboSuite does not allocate yet → **Unassigned Circuits** |
+| `DMX` | Rides no DIN module — the `QSE-CI-DMX` is a QS-link interface in the LV compartment, and **TurboDMX** counts them. Excluded **silently**; the hardware is ordered from subsystem demand, not from this map |
+| `DALI` | A real module TurboSuite does not allocate yet → **Unassigned Circuits** |
 | blank / unrecognized | Authoring gap → **Unassigned Circuits** |
 
 A circuit whose fixtures declare more than one protocol resolves to one module type (first in sorted order, so it does not depend on Revit's element enumeration order).
