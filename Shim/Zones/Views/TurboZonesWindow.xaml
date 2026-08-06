@@ -457,6 +457,16 @@
                                                                                           FontSize="9" FontWeight="SemiBold"
                                                                                           Foreground="Black" Cursor="Hand"/>
 
+                                                                                <!-- What the compartment device serves (DMX: its control zones) -->
+                                                                                <TextBlock Visibility="{Binding HasSpecialDeviceDetail, Converter={StaticResource BoolToVisibility}}"
+                                                                                           Text="{Binding SpecialDeviceDetail, Mode=OneWay}"
+                                                                                           Margin="4,0,4,3"
+                                                                                           FontSize="8" FontStyle="Italic"
+                                                                                           Foreground="#FFFFFFCC"
+                                                                                           TextTrimming="CharacterEllipsis"
+                                                                                           TextAlignment="Center"
+                                                                                           ToolTip="{Binding SpecialDeviceDetail, Mode=OneWay}"/>
+
                                                                                 <!-- Special compartment slot 2 (LV21 dual-slot panels) -->
                                                                                 <ComboBox Visibility="{Binding HasDualSpecialCompartment, Converter={StaticResource BoolToVisibility}}"
                                                                                           ItemsSource="{Binding SpecialDeviceOptions}"
@@ -468,6 +478,15 @@
                                                                                           VerticalContentAlignment="Center"
                                                                                           FontSize="9" FontWeight="SemiBold"
                                                                                           Foreground="Black" Cursor="Hand"/>
+
+                                                                                <TextBlock Visibility="{Binding HasSpecialDeviceDetail2, Converter={StaticResource BoolToVisibility}}"
+                                                                                           Text="{Binding SpecialDeviceDetail2, Mode=OneWay}"
+                                                                                           Margin="4,0,4,3"
+                                                                                           FontSize="8" FontStyle="Italic"
+                                                                                           Foreground="#FFFFFFCC"
+                                                                                           TextTrimming="CharacterEllipsis"
+                                                                                           TextAlignment="Center"
+                                                                                           ToolTip="{Binding SpecialDeviceDetail2, Mode=OneWay}"/>
 
                                                                                 <!-- Panel footer: name, module count, size selector -->
                                                                                 <Border CornerRadius="0,0,3,3"

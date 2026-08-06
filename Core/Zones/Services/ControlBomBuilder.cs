@@ -147,7 +147,10 @@ namespace TurboSuite.Zones.Services
                 }
             }
 
-            // Special devices from panel selections (Digital I/O, DMX — excludes Processor and Empty)
+            // Special devices from panel selections (Digital I/O, DMX — excludes Processor and Empty).
+            // A device whose subsystem reports its own demand is skipped here and emitted below
+            // instead: the dropdown says WHERE it goes, the subsystem says HOW MANY, and counting the
+            // dropdown as well would order the same interface twice.
             if (brand.SpecialDevices != null)
             {
                 var specialCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -159,7 +162,8 @@ namespace TurboSuite.Zones.Services
                     {
                         if (string.IsNullOrEmpty(selected)
                             || string.Equals(selected, "Empty", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase))
+                            || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase)
+                            || IsSubsystemOwned(selected, extras))
                             continue;
 
                         if (!specialCounts.ContainsKey(selected))
@@ -180,6 +184,8 @@ namespace TurboSuite.Zones.Services
                     });
                 }
             }
+
+            accessories.AddRange(SubsystemLines(allPanels, brand, extras));
 
             // Hybrid repeaters (Lutron only)
             if (extras.HybridRepeaterCount > 0
@@ -253,6 +259,84 @@ namespace TurboSuite.Zones.Services
         }
 
         /// <summary>
+        /// The BOM lines a control subsystem contributes — the parts it solved for, plus a warning line
+        /// when it could not solve at all.
+        ///
+        /// Quantity comes from the subsystem, NOT from what the designer placed, and that is a real
+        /// departure from the processor rule one section up. The difference is what is derivable: a
+        /// processor's count is inseparable from its location, which only a human can decide, whereas
+        /// TurboDMX computes the interface count from channel math and the compartment dropdown cannot
+        /// even express it — a panel holds one special device (two on an LV21), so a job needing four
+        /// interfaces has no way to say so by placing. Here the dropdown states location and the
+        /// subsystem states quantity. A shortfall still surfaces, on the design surface, the same way a
+        /// processor shortfall does.
+        /// </summary>
+        private static IEnumerable<BomLineItem> SubsystemLines(
+            List<PanelResult> allPanels, BrandConfig brand, BomExtras extras)
+        {
+            var lines = new List<BomLineItem>();
+            if (extras.SubsystemDemands == null) return lines;
+
+            foreach (var demand in extras.SubsystemDemands)
+            {
+                if (demand == null) continue;
+
+                // Could not solve. Worth a line rather than silence: there is real hardware that will
+                // not make it onto the order, and the reason is the subsystem's own words. Design
+                // surface only — a purchasing document is not where a half-declared design gets fixed.
+                if (demand.HasDiagnostic && extras.Audience == BomAudience.DesignSurface)
+                {
+                    lines.Add(new BomLineItem
+                    {
+                        Quantity = 0,
+                        PartNumber = "",
+                        Description = $"{demand.Subsystem}: {demand.Diagnostic}",
+                        Category = "Accessories",
+                        IsWarning = true
+                    });
+                }
+
+                foreach (var part in demand.Parts)
+                {
+                    if (part == null || part.Quantity <= 0) continue;
+
+                    string description = part.Description ?? brand.GetPartDescription(part.PartNumber);
+
+                    int placed = CountPlacedSpecialDevice(allPanels, demand.Subsystem);
+                    bool needsWarning = extras.Audience == BomAudience.DesignSurface
+                        && placed < part.Quantity;
+                    if (needsWarning)
+                        description += $" ({placed} of {part.Quantity} placed)";
+
+                    lines.Add(new BomLineItem
+                    {
+                        Quantity = part.Quantity,
+                        PartNumber = part.PartNumber,
+                        Description = description,
+                        Category = "Accessories",
+                        IsWarning = needsWarning
+                    });
+                }
+            }
+            return lines;
+        }
+
+        /// <summary>True when a compartment selection's parts are counted by a subsystem instead of by
+        /// the dropdown. Matched on the special-device NAME ("DMX"), which is what both the dropdown
+        /// and <see cref="ControlSubsystemDemand.Subsystem"/> use.</summary>
+        private static bool IsSubsystemOwned(string specialDevice, BomExtras extras)
+        {
+            if (extras.SubsystemDemands == null) return false;
+            foreach (var demand in extras.SubsystemDemands)
+            {
+                if (demand != null && string.Equals(demand.Subsystem, specialDevice,
+                                                    StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Processors implied by the job's QS-link demand: devices and loads each cap a link, links
         /// cap a processor. Hybrid repeaters ride their own CCA link rather than the QS link, so they
         /// add capacity demand instead of consuming it.
@@ -262,14 +346,36 @@ namespace TurboSuite.Zones.Services
             if (allPanels == null) return 1;
             extras ??= new BomExtras();
 
-            // Special devices (Digital I/O, DMX) — each counts as 1 device on a QS link.
-            int specialDeviceCount = CountPlacedSpecialDevice(allPanels, "Digital I/O")
-                + CountPlacedSpecialDevice(allPanels, "DMX");
+            // Compartment devices — each counts as 1 device on a QS link. A subsystem-owned device is
+            // excluded here and picked up from its demand below, which knows the real count; taking
+            // both would charge the link twice for the same interfaces.
+            int specialDeviceCount = 0;
+            foreach (string device in new[] { "Digital I/O", "DMX" })
+            {
+                if (!IsSubsystemOwned(device, extras))
+                    specialDeviceCount += CountPlacedSpecialDevice(allPanels, device);
+            }
+
+            // Subsystem demand on the link. Devices and loads are independent budgets: a QSE-CI-DMX is
+            // "1 QS device and 0 zones", while each of its DMX channels is a switch leg. So a sparse
+            // DMX job pressures the device cap and a dense one pressures the leg cap, and neither
+            // number can be derived from the other.
+            int subsystemDevices = 0;
+            int subsystemLoads = 0;
+            if (extras.SubsystemDemands != null)
+            {
+                foreach (var demand in extras.SubsystemDemands)
+                {
+                    if (demand == null) continue;
+                    subsystemDevices += demand.LinkDevices;
+                    subsystemLoads += demand.LinkLoads;
+                }
+            }
 
             int totalDevices = allPanels.Sum(p => p.DeviceCount)
                 + extras.KeypadCount + extras.TwoGangKeypadCount * 2
-                + specialDeviceCount;
-            int totalLoads = allPanels.Sum(p => p.LoadCount);
+                + specialDeviceCount + subsystemDevices;
+            int totalLoads = allPanels.Sum(p => p.LoadCount) + subsystemLoads;
 
             int qsLinksNeeded = Math.Max(
                 (int)Math.Ceiling((double)totalDevices / ProcessorLink.MaxDevices),
@@ -319,6 +425,11 @@ namespace TurboSuite.Zones.Services
         public int TwoGangKeypadCount { get; set; }
         public int HybridRepeaterCount { get; set; }
         public string HybridRepeaterPartNumber { get; set; }
+
+        /// <summary>What the control subsystems report they need — DMX today, DALI later. Null or empty
+        /// means nothing to add, which is the shape a job with no subsystem hardware produces and the
+        /// shape a caller that has no provider wired up produces; both are correct.</summary>
+        public IReadOnlyList<ControlSubsystemDemand> SubsystemDemands { get; set; }
 
         /// <summary>Who the BOM is being built for. Defaults to <see cref="BomAudience.IssuedDocument"/>
         /// — the conservative choice, since design-state commentary leaking onto a purchasing

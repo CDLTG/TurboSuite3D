@@ -1,10 +1,13 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Dmx.Services;
 using TurboSuite.Shared.Services;
+using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
 using TurboSuite.Zones.ViewModels;
 using TurboSuite.Zones.Views;
@@ -69,9 +72,18 @@ namespace TurboSuite.Zones
                 var panelSettingsStore = new PanelSettingsStore(doc);
                 var circuitSelector = new CircuitSelector(uidoc);
 
+                // What the control subsystems report they need. Read once, here, for the same reason
+                // the keypad counts are: the Core VM cannot touch Revit synchronously. TurboDMX solves
+                // its own design, so the interface count on the BOM is channel math, not a dropdown.
+                var subsystemDemands = new List<ControlSubsystemDemand>
+                {
+                    new DmxDemandProvider(doc).GetDemand()
+                };
+
                 var viewModel = new ZonesMainViewModel(circuits,
                     keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
-                    savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector);
+                    savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
+                    subsystemDemands);
 
                 var window = new TurboZonesWindow
                 {

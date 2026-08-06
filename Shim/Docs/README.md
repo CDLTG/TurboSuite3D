@@ -165,6 +165,8 @@ Re-derives the panel breakdown using `PanelAllocationService.BuildPanelBreakdown
 
 **Quantities reflect the design, not the recommendation.** Processor (and power supply) counts follow what the designer placed in TurboZones compartments — so a job with no processor sited produces no Processors section at all, rather than an order for a processor nobody assigned. If that looks wrong, the fix is in the TurboZones Panel Breakdown, which flags the shortfall; this PDF reports it faithfully.
 
+**Except where a subsystem solves its own hardware.** `QSE-CI-DMX` quantity comes from TurboDMX's solve (`DmxDemandProvider`), not from the compartment dropdown — a panel holds one special device, so placement cannot express the count, and the channel math can. The dropdown says which panel; the solve says how many. A DMX design that will not solve contributes no parts and no error: the BOM still generates, and the reason is shown in TurboZones rather than printed here.
+
 ## Cover Tab
 
 Generates cover page and notes PDFs for lighting fixture and control system specification packages. Toggle between **Fixture Package** (General Notes) and **Control Package** (Control Notes). A cover page with project name, location, subtitle, date, project number, and branding images is prepended before the notes.

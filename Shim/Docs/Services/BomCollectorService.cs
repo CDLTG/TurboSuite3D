@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using TurboSuite.Dmx.Services;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
 
@@ -67,9 +68,21 @@ public static class BomCollectorService
             TwoGangKeypadCount = twoGangKeypadCount,
             HybridRepeaterCount = hybridRepeaterCount,
             HybridRepeaterPartNumber = hybridRepeaterPartNumber,
+            SubsystemDemands = CollectSubsystemDemands(doc),
             Audience = BomAudience.IssuedDocument
         });
 
         return new BomData { Items = items, BrandName = brandName };
     }
+
+    /// <summary>
+    /// The control subsystems that report their own hardware. One entry today (TurboDMX); DALI joins
+    /// the list when it lands, and nothing downstream changes.
+    ///
+    /// A provider never throws, so this needs no guard of its own — but a subsystem that cannot solve
+    /// returns a diagnostic instead of parts, and on an issued document that diagnostic is dropped
+    /// rather than printed. The user sees it in TurboZones, where it can be acted on.
+    /// </summary>
+    private static List<ControlSubsystemDemand> CollectSubsystemDemands(Document doc) =>
+        new List<ControlSubsystemDemand> { new DmxDemandProvider(doc).GetDemand() };
 }

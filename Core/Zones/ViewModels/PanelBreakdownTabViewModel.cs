@@ -27,6 +27,11 @@ namespace TurboSuite.Zones.ViewModels
         private readonly int _twoGangKeypadCount;
         private readonly int _hybridRepeaterCount;
         private readonly string _hybridRepeaterPartNumber;
+
+        /// <summary>What the control subsystems (TurboDMX today) reported at window open. Read once —
+        /// re-solving DMX on every panel-size tweak would be wasted work, and the DMX design cannot
+        /// change while this window is the one in front of the user.</summary>
+        private readonly IReadOnlyList<ControlSubsystemDemand> _subsystemDemands;
         private readonly IRevitWorkQueue _workQueue;
         private readonly IPanelSettingsStore _settingsStore;
         private BrandConfig _currentBrand;
@@ -42,10 +47,12 @@ namespace TurboSuite.Zones.ViewModels
             int keypadCount, int twoGangKeypadCount,
             int hybridRepeaterCount, string hybridRepeaterPartNumber,
             PanelSettings savedSettings,
-            IRevitWorkQueue workQueue, IPanelSettingsStore settingsStore)
+            IRevitWorkQueue workQueue, IPanelSettingsStore settingsStore,
+            IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null)
         {
             _workQueue = workQueue;
             _settingsStore = settingsStore;
+            _subsystemDemands = subsystemDemands;
             _keypadCount = keypadCount;
             _twoGangKeypadCount = twoGangKeypadCount;
             _hybridRepeaterCount = hybridRepeaterCount;
@@ -165,6 +172,7 @@ namespace TurboSuite.Zones.ViewModels
             // Restore special device selections (no auto-lock — processor is manual)
             RestoreSpecialDeviceSelections();
             AttachPanelHandlers();
+            RebuildSubsystemDetails();
             RebuildLinkAssignments();
 
             // Build location displays for XAML binding
@@ -301,6 +309,7 @@ namespace TurboSuite.Zones.ViewModels
             if (e.PropertyName == nameof(PanelResult.SelectedSpecialDevice)
                 || e.PropertyName == nameof(PanelResult.SelectedSpecialDevice2))
             {
+                RebuildSubsystemDetails();
                 RebuildLinkAssignments();
                 RebuildBom();
                 SaveSettings();
@@ -319,6 +328,48 @@ namespace TurboSuite.Zones.ViewModels
             }
         }
 
+        /// <summary>
+        /// Label each compartment that holds a subsystem device with what it serves — for DMX, its
+        /// control zones. "DMX" alone tells a reviewer nothing about whether the right zones are
+        /// covered; the zone names are the thing they can actually check against the drawings.
+        ///
+        /// Every panel is rewritten, including the ones that clear, so removing a device removes its
+        /// caption instead of stranding it under a compartment that no longer holds it.
+        /// </summary>
+        private void RebuildSubsystemDetails()
+        {
+            if (_allocationResult == null) return;
+
+            foreach (var panel in _allocationResult.AllPanels)
+            {
+                panel.SpecialDeviceDetail = DetailFor(panel.SelectedSpecialDevice);
+                panel.SpecialDeviceDetail2 = panel.HasDualSpecialCompartment
+                    ? DetailFor(panel.SelectedSpecialDevice2)
+                    : "";
+            }
+        }
+
+        /// <summary>The served-zone caption for a compartment selection, or empty when no subsystem
+        /// speaks for it. A subsystem that could not solve says so here too — the compartment is where
+        /// the user is looking when they wonder why the count seems wrong.</summary>
+        private string DetailFor(string selectedDevice)
+        {
+            if (_subsystemDemands == null || string.IsNullOrEmpty(selectedDevice)) return "";
+
+            foreach (var demand in _subsystemDemands)
+            {
+                if (demand == null
+                    || !string.Equals(demand.Subsystem, selectedDevice, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (demand.HasDiagnostic) return "unsolved";
+                if (demand.ServedZones.Count == 0) return "";
+
+                return string.Join(", ", demand.ServedZones);
+            }
+            return "";
+        }
+
         private void RebuildBom()
         {
             if (_allocationResult == null || _currentBrand == null)
@@ -332,13 +383,15 @@ namespace TurboSuite.Zones.ViewModels
         }
 
         /// <summary>The non-panel BOM inputs this window holds. The audience is the design surface:
-        /// this is where a processor shortfall has to be visible, because this is where it is fixed.</summary>
+        /// this is where a processor shortfall — or a DMX design that will not solve — has to be
+        /// visible, because this is where it gets fixed.</summary>
         private BomExtras BuildBomExtras() => new BomExtras
         {
             KeypadCount = _keypadCount,
             TwoGangKeypadCount = _twoGangKeypadCount,
             HybridRepeaterCount = _hybridRepeaterCount,
             HybridRepeaterPartNumber = _hybridRepeaterPartNumber,
+            SubsystemDemands = _subsystemDemands,
             Audience = BomAudience.DesignSurface
         };
 

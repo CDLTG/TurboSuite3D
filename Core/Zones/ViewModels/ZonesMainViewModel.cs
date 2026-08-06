@@ -16,11 +16,12 @@ namespace TurboSuite.Zones.ViewModels
             IRevitWorkQueue workQueue,
             ILoadNameWriter loadNameWriter,
             IPanelSettingsStore panelSettingsStore,
-            ICircuitSelector circuitSelector)
+            ICircuitSelector circuitSelector,
+            IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null)
         {
             PanelTab = new PanelBreakdownTabViewModel(circuits,
                 keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
-                savedSettings, workQueue, panelSettingsStore);
+                savedSettings, workQueue, panelSettingsStore, subsystemDemands);
             LoadNameTab = new LoadNameTabViewModel(circuits, workQueue, loadNameWriter, circuitSelector);
         }
 

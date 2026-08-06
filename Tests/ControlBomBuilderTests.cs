@@ -467,6 +467,175 @@ namespace TurboSuite.Tests.Zones
         }
     }
 
+    /// <summary>
+    /// Control-subsystem demand — the parts a subsystem solves for itself (DMX today, DALI later).
+    ///
+    /// For me (Claude): quantity here follows the SUBSYSTEM, not what the designer placed, which is
+    /// the opposite of the processor rule two classes up. That is deliberate and load-bearing, not an
+    /// oversight: a panel holds one special device (two on an LV21), so placement physically cannot
+    /// express "four interfaces" — the dropdown says where, the subsystem says how many. Do not
+    /// "harmonize" these two rules.
+    /// </summary>
+    public class ControlBomSubsystemTests : ControlBomTestBase
+    {
+        private static ControlSubsystemDemand Dmx(int interfaces, int channels) =>
+            new ControlSubsystemDemand("DMX",
+                parts: new List<DemandPart>
+                {
+                    new DemandPart("QSE-CI-DMX", interfaces, DemandMount.LvCompartment)
+                },
+                linkDevices: interfaces, linkLoads: channels);
+
+        private static BomExtras With(ControlSubsystemDemand demand, BomAudience audience) =>
+            new BomExtras
+            {
+                Audience = audience,
+                SubsystemDemands = new List<ControlSubsystemDemand> { demand }
+            };
+
+        private static List<PanelResult> OnePanel(string? placedDevice = null)
+        {
+            var panel = LutronPanel("1-A", 8, ("ELV", 4));
+            if (placedDevice != null) panel.SelectedSpecialDevice = placedDevice;
+            return new List<PanelResult> { panel };
+        }
+
+        [Fact]
+        public void DemandedInterfacesAreOrderedAtTheSolvedQuantity()
+        {
+            var bom = Build(OnePanel("DMX"), Lutron, With(Dmx(4, 100), BomAudience.IssuedDocument));
+
+            var line = Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX");
+            Assert.Equal(4, line.Quantity);
+        }
+
+        /// <summary>The bug the seam exists to kill: the placed dropdown and the demand both name
+        /// QSE-CI-DMX, and counting both would order five interfaces for a job needing four.</summary>
+        [Fact]
+        public void PlacedDropdownDoesNotDoubleCountAgainstDemand()
+        {
+            var panels = OnePanel("DMX");
+            panels.Add(LutronPanel("2-A", 8, ("ELV", 4)));
+            panels[1].SelectedSpecialDevice = "DMX";
+
+            var bom = Build(panels, Lutron, With(Dmx(4, 100), BomAudience.IssuedDocument));
+
+            var line = Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX");
+            Assert.Equal(4, line.Quantity);   // 4 from the solve, NOT 4 + 2 placed
+        }
+
+        /// <summary>A compartment device with no subsystem behind it still counts off the dropdown —
+        /// the skip is scoped to the subsystem that claimed it, not to special devices generally.</summary>
+        [Fact]
+        public void UnclaimedSpecialDevicesStillCountFromPlacement()
+        {
+            var panels = OnePanel("Digital I/O");
+
+            var bom = Build(panels, Lutron, With(Dmx(2, 40), BomAudience.IssuedDocument));
+
+            Assert.Equal(1, Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-IO").Quantity);
+            Assert.Equal(2, Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX").Quantity);
+        }
+
+        /// <summary>Placing fewer than the solve calls for is flagged where it can be fixed, with the
+        /// same "(N of M placed)" shape a processor shortfall uses.</summary>
+        [Fact]
+        public void ShortfallIsAnnotatedOnTheDesignSurface()
+        {
+            var bom = Build(OnePanel("DMX"), Lutron, With(Dmx(3, 90), BomAudience.DesignSurface));
+
+            var line = Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX");
+            Assert.True(line.IsWarning);
+            Assert.Contains("(1 of 3 placed)", line.Description);
+        }
+
+        /// <summary>The issued PDF carries no design-state commentary — the audience rule from Phase 0
+        /// applies to subsystem lines too.</summary>
+        [Fact]
+        public void ShortfallIsNotAnnotatedOnTheIssuedDocument()
+        {
+            var line = Assert.Single(
+                Section(Build(OnePanel("DMX"), Lutron, With(Dmx(3, 90), BomAudience.IssuedDocument)),
+                        "Accessories"),
+                i => i.PartNumber == "QSE-CI-DMX");
+
+            Assert.False(line.IsWarning);
+            Assert.DoesNotContain("placed", line.Description);
+        }
+
+        /// <summary>The audience invariant, restated for subsystem lines: presentation may differ,
+        /// quantities may not.</summary>
+        [Fact]
+        public void AudienceDoesNotChangeSubsystemQuantities()
+        {
+            int Qty(BomAudience a) => Section(
+                Build(OnePanel("DMX"), Lutron, With(Dmx(3, 90), a)), "Accessories")
+                .Single(i => i.PartNumber == "QSE-CI-DMX").Quantity;
+
+            Assert.Equal(Qty(BomAudience.IssuedDocument), Qty(BomAudience.DesignSurface));
+        }
+
+        /// <summary>An unsolvable subsystem produces a warning line on the design surface — there is
+        /// real hardware that will not make the order, and the reason is the subsystem's own.</summary>
+        [Fact]
+        public void UnsolvableSubsystemWarnsOnTheDesignSurface()
+        {
+            var demand = ControlSubsystemDemand.Unsolvable("DMX", "no decoder type is selected");
+
+            var bom = Build(OnePanel(), Lutron, With(demand, BomAudience.DesignSurface));
+
+            var warning = Assert.Single(Section(bom, "Accessories"), i => i.IsWarning);
+            Assert.Contains("no decoder type is selected", warning.Description);
+        }
+
+        /// <summary>...but never on the issued document, where it is neither actionable nor orderable.
+        /// The BOM still builds — that is the whole requirement.</summary>
+        [Fact]
+        public void UnsolvableSubsystemIsSilentOnTheIssuedDocument()
+        {
+            var demand = ControlSubsystemDemand.Unsolvable("DMX", "no decoder type is selected");
+
+            var bom = Build(OnePanel(), Lutron, With(demand, BomAudience.IssuedDocument));
+
+            Assert.NotEmpty(bom);
+            Assert.DoesNotContain(bom, i => i.IsWarning);
+            Assert.DoesNotContain(bom, i => i.Description != null && i.Description.Contains("decoder"));
+        }
+
+        /// <summary>Demand pressures the link budgets, and the two are independent: interfaces are QS
+        /// devices, channels are switch legs. Enough channels alone must move the processor count.</summary>
+        [Fact]
+        public void ChannelsAloneCanForceAnotherProcessor()
+        {
+            var panels = OnePanel();
+
+            int WithChannels(int channels) => ControlBomBuilder.CalculateRecommendedProcessors(
+                panels, new BomExtras { SubsystemDemands = new List<ControlSubsystemDemand> { Dmx(1, channels) } });
+
+            // One link carries 512 loads; two links fill one processor, so crossing 1024 needs a second.
+            Assert.Equal(1, WithChannels(1000));
+            Assert.Equal(2, WithChannels(1100));
+        }
+
+        /// <summary>No demand at all leaves every quantity exactly where Phase 0 left it — the seam is
+        /// inert on the jobs that have no subsystem hardware, which is most of them.</summary>
+        [Fact]
+        public void NoDemandIsByteIdenticalToNoSeam()
+        {
+            var extras = new BomExtras { KeypadCount = 12, Audience = BomAudience.DesignSurface };
+            var withNull = Build(OnePanel("Processor"), Lutron, extras);
+
+            extras.SubsystemDemands = new List<ControlSubsystemDemand>
+            {
+                ControlSubsystemDemand.None("DMX")
+            };
+            var withEmpty = Build(OnePanel("Processor"), Lutron, extras);
+
+            Assert.Equal(withNull.Select(i => (i.Category, i.PartNumber, i.Quantity, i.Description)),
+                         withEmpty.Select(i => (i.Category, i.PartNumber, i.Quantity, i.Description)));
+        }
+    }
+
     /// <summary>Degenerate inputs — a BOM must not throw at the boundaries the callers can hit.</summary>
     public class ControlBomEdgeCaseTests : ControlBomTestBase
     {

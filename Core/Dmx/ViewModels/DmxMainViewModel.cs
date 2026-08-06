@@ -712,17 +712,18 @@ namespace TurboSuite.Dmx.ViewModels
             _loadedState = state ?? new DmxModuleState();
             var s = _loadedState.Settings ?? new DmxSettingsDto();
 
-            _selectedProfile = DmxProfile.All.FirstOrDefault(p =>
-                string.Equals(p.Name, s.Profile, StringComparison.OrdinalIgnoreCase)) ?? DmxProfile.Lutron;
+            // Through the shared mapper, because a BOM built outside this window solves the same saved
+            // state (DmxHeadlessSolve) and the two must read it identically.
+            _selectedProfile = DmxStateMapper.ToProfile(s);
 
-            _settings.SystemVolts = s.SystemVolts;
-            _settings.BreakerAmps = s.BreakerAmps;
-            _settings.FeedVolts = s.FeedVolts;
-            _settings.BreakerContinuousDerate = s.BreakerContinuousDerate;
-            _settings.MaxDriversPerBreaker = s.MaxDriversPerBreaker;
-            _settings.PullUpSizes = s.PullUpSizes;
-            _settings.BreakerBasis = Enum.TryParse<BreakerBasis>(s.BreakerBasis, out var basis)
-                ? basis : BreakerBasis.DriverRating;
+            var mapped = DmxStateMapper.ToJobSettings(s);
+            _settings.SystemVolts = mapped.SystemVolts;
+            _settings.BreakerAmps = mapped.BreakerAmps;
+            _settings.FeedVolts = mapped.FeedVolts;
+            _settings.BreakerContinuousDerate = mapped.BreakerContinuousDerate;
+            _settings.MaxDriversPerBreaker = mapped.MaxDriversPerBreaker;
+            _settings.PullUpSizes = mapped.PullUpSizes;
+            _settings.BreakerBasis = mapped.BreakerBasis;
 
             // Empty saved list ⇒ never curated ⇒ leave null so LoadSnapshot defaults to none-selected.
             _savedDecoderTypeIds = s.DecoderTypeIds?.Count > 0 ? new HashSet<string>(s.DecoderTypeIds) : null;
