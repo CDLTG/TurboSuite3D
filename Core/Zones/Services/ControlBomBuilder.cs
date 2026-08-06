@@ -148,9 +148,9 @@ namespace TurboSuite.Zones.Services
             }
 
             // Special devices from panel selections (Digital I/O, DMX — excludes Processor and Empty).
-            // A device whose subsystem reports its own demand is skipped here and emitted below
-            // instead: the dropdown says WHERE it goes, the subsystem says HOW MANY, and counting the
-            // dropdown as well would order the same interface twice.
+            // Quantity is what the designer placed, exactly as it is for processors: a compartment
+            // device has to go SOMEWHERE, and only a human decides where. A subsystem that solved a
+            // requirement annotates this line rather than replacing it.
             if (brand.SpecialDevices != null)
             {
                 var specialCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -162,8 +162,7 @@ namespace TurboSuite.Zones.Services
                     {
                         if (string.IsNullOrEmpty(selected)
                             || string.Equals(selected, "Empty", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase)
-                            || IsSubsystemOwned(selected, extras))
+                            || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase))
                             continue;
 
                         if (!specialCounts.ContainsKey(selected))
@@ -172,20 +171,43 @@ namespace TurboSuite.Zones.Services
                     }
                 }
 
+                // A subsystem with a requirement gets a line even when nothing is placed: that zero IS
+                // the signal ("0 of 4 placed"), the same one an unplaced processor shows. Stripped from
+                // the issued document like any other zero.
+                if (extras.SubsystemDemands != null)
+                {
+                    foreach (var demand in extras.SubsystemDemands)
+                    {
+                        if (demand == null || demand.Parts.Count == 0) continue;
+                        if (brand.SpecialDevices.ContainsKey(demand.Subsystem)
+                            && !specialCounts.ContainsKey(demand.Subsystem))
+                            specialCounts[demand.Subsystem] = 0;
+                    }
+                }
+
                 foreach (var kvp in specialCounts)
                 {
                     string partNumber = brand.SpecialDevices.TryGetValue(kvp.Key, out var spn) ? spn : "";
+                    string description = brand.GetPartDescription(partNumber);
+
+                    int required = RequiredFor(kvp.Key, extras);
+                    bool needsWarning = extras.Audience == BomAudience.DesignSurface
+                        && kvp.Value < required;
+                    if (needsWarning)
+                        description += $" ({kvp.Value} of {required} placed)";
+
                     accessories.Add(new BomLineItem
                     {
                         Quantity = kvp.Value,
                         PartNumber = partNumber,
-                        Description = brand.GetPartDescription(partNumber),
-                        Category = "Accessories"
+                        Description = description,
+                        Category = "Accessories",
+                        IsWarning = needsWarning
                     });
                 }
             }
 
-            accessories.AddRange(SubsystemLines(allPanels, brand, extras));
+            accessories.AddRange(SubsystemLines(brand, extras));
 
             // Hybrid repeaters (Lutron only)
             if (extras.HybridRepeaterCount > 0
@@ -259,20 +281,17 @@ namespace TurboSuite.Zones.Services
         }
 
         /// <summary>
-        /// The BOM lines a control subsystem contributes — the parts it solved for, plus a warning line
-        /// when it could not solve at all.
+        /// What a subsystem contributes beyond the compartment lines: its reason for not solving, and
+        /// any part that has no compartment to be placed into.
         ///
-        /// Quantity comes from the subsystem, NOT from what the designer placed, and that is a real
-        /// departure from the processor rule one section up. The difference is what is derivable: a
-        /// processor's count is inseparable from its location, which only a human can decide, whereas
-        /// TurboDMX computes the interface count from channel math and the compartment dropdown cannot
-        /// even express it — a panel holds one special device (two on an LV21), so a job needing four
-        /// interfaces has no way to say so by placing. Here the dropdown states location and the
-        /// subsystem states quantity. A shortfall still surfaces, on the design surface, the same way a
-        /// processor shortfall does.
+        /// The rule is <b>placement wins wherever placement is possible</b>. A QSE-CI-DMX is a
+        /// compartment device, so its quantity follows the dropdown exactly as a processor's does — the
+        /// subsystem's solve becomes a requirement that annotates the line, never an order that
+        /// overrides it. TurboDMX says "this job needs four"; the designer says "and here is where the
+        /// four go"; the purchase order follows the designer. A part with no compartment (the DALI DIN
+        /// module, when it lands) has no placement to defer to and is emitted at its solved quantity.
         /// </summary>
-        private static IEnumerable<BomLineItem> SubsystemLines(
-            List<PanelResult> allPanels, BrandConfig brand, BomExtras extras)
+        private static IEnumerable<BomLineItem> SubsystemLines(BrandConfig brand, BomExtras extras)
         {
             var lines = new List<BomLineItem>();
             if (extras.SubsystemDemands == null) return lines;
@@ -281,9 +300,10 @@ namespace TurboSuite.Zones.Services
             {
                 if (demand == null) continue;
 
-                // Could not solve. Worth a line rather than silence: there is real hardware that will
-                // not make it onto the order, and the reason is the subsystem's own words. Design
-                // surface only — a purchasing document is not where a half-declared design gets fixed.
+                // Something is wrong and a human has to fix it: a design that would not solve, or one
+                // that solved over incomplete input. Worth a line rather than silence, in the
+                // subsystem's own words. Design surface only — a purchasing document is not where a
+                // half-declared design gets fixed, and the reason is not orderable.
                 if (demand.HasDiagnostic && extras.Audience == BomAudience.DesignSurface)
                 {
                     lines.Add(new BomLineItem
@@ -296,44 +316,44 @@ namespace TurboSuite.Zones.Services
                     });
                 }
 
+                // Parts with a compartment are already on a placement-driven line above.
+                if (brand.SpecialDevices != null && brand.SpecialDevices.ContainsKey(demand.Subsystem))
+                    continue;
+
                 foreach (var part in demand.Parts)
                 {
                     if (part == null || part.Quantity <= 0) continue;
-
-                    string description = part.Description ?? brand.GetPartDescription(part.PartNumber);
-
-                    int placed = CountPlacedSpecialDevice(allPanels, demand.Subsystem);
-                    bool needsWarning = extras.Audience == BomAudience.DesignSurface
-                        && placed < part.Quantity;
-                    if (needsWarning)
-                        description += $" ({placed} of {part.Quantity} placed)";
 
                     lines.Add(new BomLineItem
                     {
                         Quantity = part.Quantity,
                         PartNumber = part.PartNumber,
-                        Description = description,
-                        Category = "Accessories",
-                        IsWarning = needsWarning
+                        Description = part.Description ?? brand.GetPartDescription(part.PartNumber),
+                        Category = "Accessories"
                     });
                 }
             }
             return lines;
         }
 
-        /// <summary>True when a compartment selection's parts are counted by a subsystem instead of by
-        /// the dropdown. Matched on the special-device NAME ("DMX"), which is what both the dropdown
-        /// and <see cref="ControlSubsystemDemand.Subsystem"/> use.</summary>
-        private static bool IsSubsystemOwned(string specialDevice, BomExtras extras)
+        /// <summary>How many of a compartment device the subsystems say the job needs, or 0 when
+        /// nothing speaks for it. Matched on the special-device NAME ("DMX"), which is what both the
+        /// dropdown and <see cref="ControlSubsystemDemand.Subsystem"/> use.</summary>
+        private static int RequiredFor(string specialDevice, BomExtras extras)
         {
-            if (extras.SubsystemDemands == null) return false;
+            if (extras.SubsystemDemands == null) return 0;
+
+            int required = 0;
             foreach (var demand in extras.SubsystemDemands)
             {
-                if (demand != null && string.Equals(demand.Subsystem, specialDevice,
-                                                    StringComparison.OrdinalIgnoreCase))
-                    return true;
+                if (demand == null || !string.Equals(demand.Subsystem, specialDevice,
+                                                     StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foreach (var part in demand.Parts)
+                    if (part != null) required += part.Quantity;
             }
-            return false;
+            return required;
         }
 
         /// <summary>
@@ -346,13 +366,14 @@ namespace TurboSuite.Zones.Services
             if (allPanels == null) return 1;
             extras ??= new BomExtras();
 
-            // Compartment devices — each counts as 1 device on a QS link. A subsystem-owned device is
-            // excluded here and picked up from its demand below, which knows the real count; taking
-            // both would charge the link twice for the same interfaces.
+            // Compartment devices — each counts as 1 device on a QS link. A device a subsystem speaks
+            // for is excluded here and taken from its demand below instead: this is a RECOMMENDATION,
+            // so it should reflect what the job needs rather than what has been placed so far, and
+            // counting both would charge the link twice for the same interfaces.
             int specialDeviceCount = 0;
             foreach (string device in new[] { "Digital I/O", "DMX" })
             {
-                if (!IsSubsystemOwned(device, extras))
+                if (RequiredFor(device, extras) == 0)
                     specialDeviceCount += CountPlacedSpecialDevice(allPanels, device);
             }
 

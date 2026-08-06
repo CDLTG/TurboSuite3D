@@ -10,11 +10,16 @@ namespace TurboSuite.Zones.Models
     /// The shape both DMX and (later) DALI fit: the designer declares groupings, a solver derives the
     /// device count, and the panel breakdown plus the BOM consume that count <b>without recomputing
     /// it</b>. TurboDMX is a complete instance of it already — <c>DmxBill.InterfaceCount</c> is the
-    /// QSE-CI-DMX quantity, from real channel math. Before this seam existed the BOM re-derived DMX
-    /// demand from a hand-picked compartment dropdown and could not agree with the module that knew.
+    /// QSE-CI-DMX quantity, from real channel math.
     ///
-    /// Nothing here is a recommendation the consumer may override. A provider that cannot solve
-    /// reports zero parts and a <see cref="Diagnostic"/>, never a guess.
+    /// <b>This is a requirement, not an order.</b> Where a part has a home the designer picks — a
+    /// panel's LV compartment — the placement is what gets ordered, and this demand becomes the
+    /// "(1 of 4 placed)" annotation that tells them to go site the rest. Siting hardware is a
+    /// judgement no solver can make, and the designer can always act on the signal (an LV21 override
+    /// frees two compartments and the allocator re-homes the displaced modules). Only a part with no
+    /// compartment to be placed into is ordered straight from here.
+    ///
+    /// A provider that cannot solve reports zero parts and a <see cref="Diagnostic"/>, never a guess.
     /// </summary>
     public sealed class ControlSubsystemDemand
     {
@@ -38,8 +43,9 @@ namespace TurboSuite.Zones.Models
         /// keys the per-subsystem BOM lines.</summary>
         public string Subsystem { get; }
 
-        /// <summary>The parts to order, already counted. Empty when the subsystem is absent from the
-        /// job or could not be solved (see <see cref="Diagnostic"/>).</summary>
+        /// <summary>The parts the job needs, already counted. Empty when the subsystem is absent from
+        /// the job or could not be solved (see <see cref="Diagnostic"/>). Whether a part is ordered at
+        /// this quantity depends on <see cref="DemandPart.Mount"/> — see the class summary.</summary>
         public IReadOnlyList<DemandPart> Parts { get; }
 
         /// <summary>Devices this subsystem consumes off the control link's device budget. For DMX this
@@ -98,7 +104,8 @@ namespace TurboSuite.Zones.Models
     public enum DemandMount
     {
         /// <summary>The panel's low-voltage compartment (QSE-CI-DMX). Does not consume DIN slots, so
-        /// panel allocation is untouched.</summary>
+        /// panel allocation is untouched — but the designer picks which compartment, so the ORDERED
+        /// quantity comes from that placement and this demand only annotates it.</summary>
         LvCompartment,
 
         /// <summary>A DIN slot alongside the dimming modules (the DALI module, when it lands). This is

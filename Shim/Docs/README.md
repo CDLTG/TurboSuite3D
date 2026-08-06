@@ -165,7 +165,7 @@ Re-derives the panel breakdown using `PanelAllocationService.BuildPanelBreakdown
 
 **Quantities reflect the design, not the recommendation.** Processor (and power supply) counts follow what the designer placed in TurboZones compartments — so a job with no processor sited produces no Processors section at all, rather than an order for a processor nobody assigned. If that looks wrong, the fix is in the TurboZones Panel Breakdown, which flags the shortfall; this PDF reports it faithfully.
 
-**Except where a subsystem solves its own hardware.** `QSE-CI-DMX` quantity comes from TurboDMX's solve (`DmxDemandProvider`), not from the compartment dropdown — a panel holds one special device, so placement cannot express the count, and the channel math can. The dropdown says which panel; the solve says how many. A DMX design that will not solve contributes no parts and no error: the BOM still generates, and the reason is shown in TurboZones rather than printed here.
+That rule holds for compartment devices too, including `QSE-CI-DMX`. TurboDMX solves how many interfaces the job *needs* (`DmxDemandProvider`), but that requirement surfaces in the TurboZones Panel Breakdown as `(1 of 4 placed)` — this PDF orders what was placed. So the BOM and the Panel Schedule can never disagree about how many interfaces exist. A DMX design that will not solve contributes no parts and no error: the BOM still generates, and the reason is shown in TurboZones rather than printed here.
 
 ## Cover Tab
 

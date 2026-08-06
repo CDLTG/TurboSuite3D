@@ -468,13 +468,17 @@ namespace TurboSuite.Tests.Zones
     }
 
     /// <summary>
-    /// Control-subsystem demand — the parts a subsystem solves for itself (DMX today, DALI later).
+    /// Control-subsystem demand — what a subsystem solves for itself (DMX today, DALI later).
     ///
-    /// For me (Claude): quantity here follows the SUBSYSTEM, not what the designer placed, which is
-    /// the opposite of the processor rule two classes up. That is deliberate and load-bearing, not an
-    /// oversight: a panel holds one special device (two on an LV21), so placement physically cannot
-    /// express "four interfaces" — the dropdown says where, the subsystem says how many. Do not
-    /// "harmonize" these two rules.
+    /// For me (Claude): the rule is PLACEMENT WINS WHEREVER PLACEMENT IS POSSIBLE, identical to the
+    /// processor rule two classes up. A QSE-CI-DMX is a compartment device, so the solve is a
+    /// REQUIREMENT that annotates the line ("1 of 4 placed"), never an order that overrides it. That
+    /// annotation is the signal telling the designer to go find somewhere to put the other three —
+    /// which is a decision no solver can make, and which they can always act on, since overriding a
+    /// panel to LV21 frees two compartments and the allocator re-homes the displaced modules.
+    ///
+    /// A part with NO compartment (the DALI DIN module, when it lands) has no placement to defer to
+    /// and is emitted at its solved quantity. That is the same rule, not an exception to it.
     /// </summary>
     public class ControlBomSubsystemTests : ControlBomTestBase
     {
@@ -500,32 +504,34 @@ namespace TurboSuite.Tests.Zones
             return new List<PanelResult> { panel };
         }
 
+        /// <summary>The order follows the designer. TurboDMX solving four interfaces does not put four
+        /// on the purchase order — it puts a requirement next to what was placed.</summary>
         [Fact]
-        public void DemandedInterfacesAreOrderedAtTheSolvedQuantity()
+        public void OrderedQuantityFollowsPlacementNotTheSolve()
         {
             var bom = Build(OnePanel("DMX"), Lutron, With(Dmx(4, 100), BomAudience.IssuedDocument));
 
             var line = Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX");
-            Assert.Equal(4, line.Quantity);
+            Assert.Equal(1, line.Quantity);
         }
 
-        /// <summary>The bug the seam exists to kill: the placed dropdown and the demand both name
-        /// QSE-CI-DMX, and counting both would order five interfaces for a job needing four.</summary>
+        /// <summary>Every placed compartment counts, and the solve never caps them — placing more than
+        /// solved orders more, the same way an over-placed processor does.</summary>
         [Fact]
-        public void PlacedDropdownDoesNotDoubleCountAgainstDemand()
+        public void PlacingMoreThanSolvedOrdersMore()
         {
             var panels = OnePanel("DMX");
             panels.Add(LutronPanel("2-A", 8, ("ELV", 4)));
             panels[1].SelectedSpecialDevice = "DMX";
 
-            var bom = Build(panels, Lutron, With(Dmx(4, 100), BomAudience.IssuedDocument));
+            var bom = Build(panels, Lutron, With(Dmx(1, 20), BomAudience.IssuedDocument));
 
-            var line = Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX");
-            Assert.Equal(4, line.Quantity);   // 4 from the solve, NOT 4 + 2 placed
+            Assert.Equal(2, Assert.Single(Section(bom, "Accessories"),
+                i => i.PartNumber == "QSE-CI-DMX").Quantity);
         }
 
-        /// <summary>A compartment device with no subsystem behind it still counts off the dropdown —
-        /// the skip is scoped to the subsystem that claimed it, not to special devices generally.</summary>
+        /// <summary>A compartment device with no subsystem behind it behaves identically — placement
+        /// has always driven these lines, and the subsystem changes nothing about that.</summary>
         [Fact]
         public void UnclaimedSpecialDevicesStillCountFromPlacement()
         {
@@ -534,11 +540,11 @@ namespace TurboSuite.Tests.Zones
             var bom = Build(panels, Lutron, With(Dmx(2, 40), BomAudience.IssuedDocument));
 
             Assert.Equal(1, Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-IO").Quantity);
-            Assert.Equal(2, Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX").Quantity);
         }
 
         /// <summary>Placing fewer than the solve calls for is flagged where it can be fixed, with the
-        /// same "(N of M placed)" shape a processor shortfall uses.</summary>
+        /// same "(N of M placed)" shape a processor shortfall uses. This annotation is the whole
+        /// mechanism: it is how a designer learns to go free up a compartment.</summary>
         [Fact]
         public void ShortfallIsAnnotatedOnTheDesignSurface()
         {
@@ -546,7 +552,49 @@ namespace TurboSuite.Tests.Zones
 
             var line = Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX");
             Assert.True(line.IsWarning);
+            Assert.Equal(1, line.Quantity);
             Assert.Contains("(1 of 3 placed)", line.Description);
+        }
+
+        /// <summary>Nothing placed still shows the requirement on the design surface — a zero line is
+        /// exactly how an unplaced processor surfaces, and it is the only way the designer finds out
+        /// the job needs interfaces at all.</summary>
+        [Fact]
+        public void NothingPlacedStillShowsTheRequirement()
+        {
+            var bom = Build(OnePanel(), Lutron, With(Dmx(4, 120), BomAudience.DesignSurface));
+
+            var line = Assert.Single(Section(bom, "Accessories"), i => i.PartNumber == "QSE-CI-DMX");
+            Assert.Equal(0, line.Quantity);
+            Assert.True(line.IsWarning);
+            Assert.Contains("(0 of 4 placed)", line.Description);
+        }
+
+        /// <summary>...and orders nothing on the issued document, where a zero-quantity line is
+        /// stripped. A job that never sited an interface buys none — the Phase 0 rule, unchanged.</summary>
+        [Fact]
+        public void NothingPlacedOrdersNothing()
+        {
+            var bom = Build(OnePanel(), Lutron, With(Dmx(4, 120), BomAudience.IssuedDocument));
+
+            Assert.DoesNotContain(bom, i => i.PartNumber == "QSE-CI-DMX");
+        }
+
+        /// <summary>A subsystem part with no compartment to sit in has no placement to defer to, so it
+        /// is emitted at its solved quantity. Forward cover for the DALI DIN module.</summary>
+        [Fact]
+        public void PartsWithNoCompartmentFollowTheSolve()
+        {
+            var demand = new ControlSubsystemDemand("DALI",
+                parts: new List<DemandPart>
+                {
+                    new DemandPart("LQSE-4DALI", 3, DemandMount.DinSlot, "DALI Module")
+                });
+
+            var bom = Build(OnePanel(), Lutron, With(demand, BomAudience.IssuedDocument));
+
+            Assert.Equal(3, Assert.Single(Section(bom, "Accessories"),
+                i => i.PartNumber == "LQSE-4DALI").Quantity);
         }
 
         /// <summary>The issued PDF carries no design-state commentary — the audience rule from Phase 0
@@ -618,8 +666,8 @@ namespace TurboSuite.Tests.Zones
 
             var bom = Build(OnePanel("DMX"), Lutron, With(demand, BomAudience.DesignSurface));
 
-            Assert.Equal(2, Assert.Single(Section(bom, "Accessories"),
-                i => i.PartNumber == "QSE-CI-DMX").Quantity);
+            Assert.Equal(1, Assert.Single(Section(bom, "Accessories"),
+                i => i.PartNumber == "QSE-CI-DMX").Quantity);   // placed, per the rule
             Assert.Contains(Section(bom, "Accessories"),
                 i => i.IsWarning && i.Description.Contains("not in any Control Zone"));
         }
