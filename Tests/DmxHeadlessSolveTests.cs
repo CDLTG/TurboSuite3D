@@ -92,16 +92,42 @@ namespace TurboSuite.Tests.Dmx
             Assert.Null(result.Bill);
         }
 
-        /// <summary>Fixtures with no Control Zone are not DMX zones — same clean nothing, since there
-        /// is nothing yet to solve and nothing yet mis-specified.</summary>
+        /// <summary>DMX tape in the model with nothing zoned is NOT a clean nothing. Their circuits are
+        /// excluded from panel allocation because a subsystem owns them, so without this the job orders
+        /// no interfaces and nothing anywhere says why.</summary>
         [Fact]
-        public void UnzonedFixturesAreACleanNothing()
+        public void UnzonedFixturesAreReportedNotSilent()
         {
-            var result = DmxHeadlessSolve.Solve(Snapshot(Tape("")), CuratedState());
+            var result = DmxHeadlessSolve.Solve(Snapshot(Tape(""), Tape("")), CuratedState());
 
-            Assert.Null(result.Diagnostic);
             Assert.Null(result.Bill);
+            Assert.Contains("Control Zone", result.Diagnostic);
+            Assert.Contains("2 DMX fixtures have", result.Diagnostic);
         }
+
+        [Fact]
+        public void UnzonedFixtureDiagnosticReadsSingularForOne()
+            => Assert.Contains("1 DMX fixture has",
+                DmxHeadlessSolve.Solve(Snapshot(Tape("")), CuratedState()).Diagnostic);
+
+        /// <summary>The dangerous middle case: some tape zoned, some not. The solve is complete for
+        /// what it saw and the count is simply too low — so the parts ship WITH the caveat, because
+        /// withholding either half would mislead.</summary>
+        [Fact]
+        public void PartiallyZonedJobSolvesWithACaveat()
+        {
+            var result = DmxHeadlessSolve.Solve(Snapshot(Tape("COVE 1"), Tape("")), CuratedState());
+
+            Assert.NotNull(result.Bill);
+            Assert.Equal(1, result.Bill!.InterfaceCount);
+            Assert.Contains("not counted", result.Diagnostic);
+        }
+
+        /// <summary>A fully zoned job carries no caveat — the warning must not become background noise
+        /// that users learn to scroll past.</summary>
+        [Fact]
+        public void FullyZonedJobCarriesNoCaveat()
+            => Assert.Null(DmxHeadlessSolve.Solve(Snapshot(Tape("COVE 1")), CuratedState()).Diagnostic);
 
         /// <summary>But once zones exist, an uncurated kit is a real gap: there IS hardware here and
         /// nobody can price it. The zone names survive so the reason has context.</summary>

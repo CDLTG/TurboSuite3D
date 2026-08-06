@@ -602,6 +602,28 @@ namespace TurboSuite.Tests.Zones
             Assert.DoesNotContain(bom, i => i.Description != null && i.Description.Contains("decoder"));
         }
 
+        /// <summary>A demand can carry parts AND a caveat — a DMX solve over partially zoned tape is
+        /// complete for what it saw and still under-counts. Both must survive: the order needs the
+        /// parts, the designer needs the caveat.</summary>
+        [Fact]
+        public void PartsAndACaveatBothSurviveOnTheDesignSurface()
+        {
+            var demand = new ControlSubsystemDemand("DMX",
+                parts: new List<DemandPart>
+                {
+                    new DemandPart("QSE-CI-DMX", 2, DemandMount.LvCompartment)
+                },
+                linkDevices: 2, linkLoads: 60,
+                diagnostic: "3 DMX fixtures are not in any Control Zone");
+
+            var bom = Build(OnePanel("DMX"), Lutron, With(demand, BomAudience.DesignSurface));
+
+            Assert.Equal(2, Assert.Single(Section(bom, "Accessories"),
+                i => i.PartNumber == "QSE-CI-DMX").Quantity);
+            Assert.Contains(Section(bom, "Accessories"),
+                i => i.IsWarning && i.Description.Contains("not in any Control Zone"));
+        }
+
         /// <summary>Demand pressures the link budgets, and the two are independent: interfaces are QS
         /// devices, channels are switch legs. Enough channels alone must move the processor count.</summary>
         [Fact]

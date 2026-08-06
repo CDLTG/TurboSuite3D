@@ -39,14 +39,15 @@ namespace TurboSuite.Dmx.Services
 
             var result = DmxHeadlessSolve.Solve(snapshot, state);
 
-            if (result.Diagnostic != null)
+            // Nothing solved. Either a clean nothing (no DMX in the job) or a reason — the result
+            // carries whichever, and both are correct answers here.
+            if (result.Bill == null || result.Bill.InterfaceCount == 0)
                 return new ControlSubsystemDemand(
                     SubsystemName, servedZones: result.ZoneNames, diagnostic: result.Diagnostic);
 
-            // No DMX in the job — a clean nothing, reported silently.
-            if (result.Bill == null || result.Bill.InterfaceCount == 0)
-                return ControlSubsystemDemand.None(SubsystemName);
-
+            // A bill AND a diagnostic is a real combination, not a contradiction: a solve over
+            // partially zoned tape is complete for what it saw and still under-counts the job. Order
+            // the parts, and carry the caveat with them.
             var bill = result.Bill;
 
             // The QS-link accounting, from the QSE-CI-DMX submittal: each interface "counts as 1 QS
@@ -61,7 +62,8 @@ namespace TurboSuite.Dmx.Services
                 },
                 linkDevices: bill.InterfaceCount,
                 linkLoads: bill.TotalChannels,
-                servedZones: result.ZoneNames);
+                servedZones: result.ZoneNames,
+                diagnostic: result.Diagnostic);
         }
     }
 }

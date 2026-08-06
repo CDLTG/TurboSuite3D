@@ -362,7 +362,10 @@ namespace TurboSuite.Zones.ViewModels
                     || !string.Equals(demand.Subsystem, selectedDevice, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (demand.HasDiagnostic) return "unsolved";
+                // "Unsolved" means nothing was counted. A demand carrying parts AND a diagnostic is a
+                // caveat, not a failure — it still serves zones, and the BOM warning line is where the
+                // caveat belongs; repeating it here would just crowd the panel graphic.
+                if (demand.Parts.Count == 0 && demand.HasDiagnostic) return "unsolved";
                 if (demand.ServedZones.Count == 0) return "";
 
                 return string.Join(", ", demand.ServedZones);

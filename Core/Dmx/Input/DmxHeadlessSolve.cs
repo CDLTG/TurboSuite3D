@@ -31,10 +31,22 @@ namespace TurboSuite.Dmx.Input
             {
                 var zoneResult = DmxZoneBuilder.Build(snapshot.Fixtures, state.Clusters);
 
-                // No DMX in this job at all. A clean nothing, not a problem to report: most jobs have
-                // no DMX, and a BOM warning on every one of them would be noise.
                 if (zoneResult.Zones.Count == 0)
+                {
+                    // DMX tape is in the model but nothing is zoned yet. Worth saying out loud: the
+                    // circuits carrying it are excluded from panel allocation (a subsystem owns them),
+                    // so without this the job orders no interfaces and NOTHING anywhere says why.
+                    if (zoneResult.UnassignedFixtures > 0)
+                        return DmxHeadlessResult.Blocked(
+                            $"{zoneResult.UnassignedFixtures} DMX fixture"
+                            + (zoneResult.UnassignedFixtures == 1 ? " has" : "s have")
+                            + " no Control Zone assigned, so no interfaces can be counted — set Control "
+                            + "Zone on the DMX fixtures.");
+
+                    // No DMX in this job at all. A clean nothing, not a problem to report: most jobs
+                    // have no DMX, and a BOM warning on every one of them would be noise.
                     return DmxHeadlessResult.Nothing();
+                }
 
                 // From here the job HAS DMX, so anything that stops the solve is worth saying out loud
                 // — there is real hardware that will not make it onto the order.
@@ -58,7 +70,18 @@ namespace TurboSuite.Dmx.Input
                 var loops = DmxStateMapper.ToLoopDeclarations(state.Loops, zoneResult.ZoneNames);
 
                 var bill = DmxSolver.Solve(contract, zoneResult.Zones, loops);
-                return DmxHeadlessResult.Solved(bill, zoneResult.ZoneNames);
+
+                // A clean solve over an INCOMPLETE input. More dangerous than no solve at all: the
+                // count looks authoritative and is simply too low, because unzoned tape contributes no
+                // channels. The bill still stands for what was zoned, so the parts ship with a caveat
+                // rather than being withheld.
+                string? caveat = zoneResult.UnassignedFixtures > 0
+                    ? $"{zoneResult.UnassignedFixtures} DMX fixture"
+                      + (zoneResult.UnassignedFixtures == 1 ? " is" : "s are")
+                      + " not in any Control Zone and is not counted below."
+                    : null;
+
+                return DmxHeadlessResult.Solved(bill, zoneResult.ZoneNames, caveat);
             }
             // The engine's pre-solve hard stops are the designer's to fix in TurboDMX, and they carry
             // their own batched messages — pass them straight through.
@@ -90,12 +113,15 @@ namespace TurboSuite.Dmx.Input
         /// designer's zone names are still the most useful thing to show next to the reason.</summary>
         public IReadOnlyList<string> ZoneNames { get; }
 
-        /// <summary>Why there is no bill, in the engine's own words. Null when the job simply has no
-        /// DMX — that case is silent by design.</summary>
+        /// <summary>What is wrong, in the engine's own words. Null when the job simply has no DMX —
+        /// that case is silent by design. <b>Can be set alongside a bill</b>: a solve over partially
+        /// zoned tape is complete for what it saw and still under-counts the job, and suppressing
+        /// either half of that would mislead.</summary>
         public string? Diagnostic { get; }
 
-        internal static DmxHeadlessResult Solved(DmxBill bill, IReadOnlyList<string> zoneNames) =>
-            new DmxHeadlessResult(bill, zoneNames, null);
+        internal static DmxHeadlessResult Solved(DmxBill bill, IReadOnlyList<string> zoneNames,
+                                                 string? caveat = null) =>
+            new DmxHeadlessResult(bill, zoneNames, caveat);
 
         internal static DmxHeadlessResult Nothing() =>
             new DmxHeadlessResult(null, new List<string>(), null);
