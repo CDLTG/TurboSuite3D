@@ -82,6 +82,11 @@ When converting fixture-local offsets to global coordinates:
 ### Explain Before Acting
 When asked to explain something, provide the explanation only. Do not assume a code change, behavior modification, or memory update is wanted unless explicitly requested.
 
+### Never Commit or Push Without Approval
+**IMPORTANT**: Do NOT run `git commit` or `git push` unless explicitly asked. Finishing a change is not permission to commit it — make the edits, build, run the tests, report what changed, and stop. Approval is per-request and does not carry over to the next change. This applies even mid-task, and even when the work is obviously complete and green.
+
+Every push reaches production users on their next Revit launch (see "Release Status"), so a commit is an outward-facing action, not a bookkeeping step. `/ship` is the explicit approval to commit and push.
+
 ### Revit API Parameter Safety
 **IMPORTANT**: Before implementing anything that reads or writes a Revit parameter:
 1. Verify the parameter is writable via the Revit API (some are read-only or computed).
