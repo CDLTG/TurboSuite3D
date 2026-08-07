@@ -240,10 +240,12 @@
                                                                    Foreground="{Binding Link1.IsOverDeviceCapacity, Converter={StaticResource BoolToRedForeground}}"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Run Text="{Binding Link1.UsedDevices, Mode=OneWay}"/>
-                                                            <Run Text=" / 99 devices"/>
+                                                            <Run Text=" / "/>
+                                                            <Run Text="{Binding Link1.DeviceCapacity, Mode=OneWay}"/>
+                                                            <Run Text=" devices"/>
                                                         </TextBlock>
                                                     </Grid>
-                                                    <Grid Height="14" Margin="0,0,0,6">
+                                                    <Grid Height="14" Margin="0,0,0,2">
                                                         <Border Background="#E0E0E0" CornerRadius="2"/>
                                                         <Border Background="#C5E0B4" CornerRadius="2"
                                                                 HorizontalAlignment="Left"
@@ -252,13 +254,30 @@
                                                                    Foreground="{Binding Link1.IsOverLoadCapacity, Converter={StaticResource BoolToRedForeground}}"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Run Text="{Binding Link1.UsedLoads, Mode=OneWay}"/>
-                                                            <Run Text=" / 512 loads"/>
+                                                            <Run Text=" / "/>
+                                                            <Run Text="{Binding Link1.LoadCapacity, Mode=OneWay}"/>
+                                                            <Run Text=" loads"/>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                    <Grid Height="14"
+                                                          Visibility="{Binding Link1.ShowRepeaterBar, Converter={StaticResource BoolToVisibility}}">
+                                                        <Border Background="#E0E0E0" CornerRadius="2"/>
+                                                        <Border Background="#E8CFA9" CornerRadius="2"
+                                                                HorizontalAlignment="Left"
+                                                                Width="{Binding Link1.RepeaterPercent, Converter={StaticResource PercentToWidth}}"/>
+                                                        <TextBlock FontSize="9"
+                                                                   Foreground="{Binding Link1.IsOverRepeaterCapacity, Converter={StaticResource BoolToRedForeground}}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Run Text="{Binding Link1.UsedRepeaters, Mode=OneWay}"/>
+                                                            <Run Text=" / "/>
+                                                            <Run Text="{Binding Link1.RepeaterCapacity, Mode=OneWay}"/>
+                                                            <Run Text=" repeaters"/>
                                                         </TextBlock>
                                                     </Grid>
 
                                                     <!-- Link 2 -->
                                                     <TextBlock Text="{Binding Link2.DisplayName}" FontSize="9" FontWeight="SemiBold"
-                                                               Foreground="#555555" Margin="0,0,0,2"/>
+                                                               Foreground="#555555" Margin="0,6,0,2"/>
                                                     <Grid Height="14" Margin="0,0,0,2">
                                                         <Border Background="#E0E0E0" CornerRadius="2"/>
                                                         <Border Background="#C2D9F0" CornerRadius="2"
@@ -268,10 +287,12 @@
                                                                    Foreground="{Binding Link2.IsOverDeviceCapacity, Converter={StaticResource BoolToRedForeground}}"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Run Text="{Binding Link2.UsedDevices, Mode=OneWay}"/>
-                                                            <Run Text=" / 99 devices"/>
+                                                            <Run Text=" / "/>
+                                                            <Run Text="{Binding Link2.DeviceCapacity, Mode=OneWay}"/>
+                                                            <Run Text=" devices"/>
                                                         </TextBlock>
                                                     </Grid>
-                                                    <Grid Height="14">
+                                                    <Grid Height="14" Margin="0,0,0,2">
                                                         <Border Background="#E0E0E0" CornerRadius="2"/>
                                                         <Border Background="#C5E0B4" CornerRadius="2"
                                                                 HorizontalAlignment="Left"
@@ -280,7 +301,24 @@
                                                                    Foreground="{Binding Link2.IsOverLoadCapacity, Converter={StaticResource BoolToRedForeground}}"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Run Text="{Binding Link2.UsedLoads, Mode=OneWay}"/>
-                                                            <Run Text=" / 512 loads"/>
+                                                            <Run Text=" / "/>
+                                                            <Run Text="{Binding Link2.LoadCapacity, Mode=OneWay}"/>
+                                                            <Run Text=" loads"/>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                    <Grid Height="14"
+                                                          Visibility="{Binding Link2.ShowRepeaterBar, Converter={StaticResource BoolToVisibility}}">
+                                                        <Border Background="#E0E0E0" CornerRadius="2"/>
+                                                        <Border Background="#E8CFA9" CornerRadius="2"
+                                                                HorizontalAlignment="Left"
+                                                                Width="{Binding Link2.RepeaterPercent, Converter={StaticResource PercentToWidth}}"/>
+                                                        <TextBlock FontSize="9"
+                                                                   Foreground="{Binding Link2.IsOverRepeaterCapacity, Converter={StaticResource BoolToRedForeground}}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Run Text="{Binding Link2.UsedRepeaters, Mode=OneWay}"/>
+                                                            <Run Text=" / "/>
+                                                            <Run Text="{Binding Link2.RepeaterCapacity, Mode=OneWay}"/>
+                                                            <Run Text=" repeaters"/>
                                                         </TextBlock>
                                                     </Grid>
 

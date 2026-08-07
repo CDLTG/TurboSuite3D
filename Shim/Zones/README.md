@@ -24,11 +24,57 @@ Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selec
 - **DMX warnings never fail a document.** A design that will not solve, or one solved over partly zoned tape, contributes a warning line naming the reason — including *"N DMX fixtures have no Control Zone assigned"*.
 - **A subsystem only earns silence by speaking.** DMX circuits are excluded from Unassigned Circuits because TurboDMX owns them — but only when it actually accounted for them, with parts or with a reason. A circuit whose fixtures declare `Dimming Protocol = DMX` yet carry no `DMX Channels` is invisible to TurboDMX, so it falls back into Unassigned Circuits instead of disappearing from every surface at once.
 - **Panel size overrides:** Users can force any panel to a different size; modules auto-redistribute to accommodate.
-- **Processor links** (Lutron): QS links auto-assigned across processors (99 devices, 512 loads per link). Clear Connect Type A links reserved for hybrid repeaters when present.
+- **Processor links** (Lutron): two per placed processor, packed by `Core/Zones/Services/ControlLinkPacker.cs`. See "Control links" below — this is a recommendation surface, and there is deliberately no way to assign a panel to a link.
 - **Amp-aware allocation** (Lutron): Module limits enforced per part number — ELV `LQSE-4A5` 6.6/4.2/16 A (slot 1 / slots 2-4 / module total), 0-10V `LQSE-4T5` 5.0/5.0/20 A, switching `LQSE-4S8` 8.0/8.0/16 A. Circuits over the slot-2-4 limit auto-promote to slot 1. When sequential circuit-number order produces an overloaded module, the allocator falls back to first-fit-decreasing bin-packing only when it would reduce module count or overload count. Overloaded modules render with a red background in Panel Breakdown and overloaded rows render in bold red on a pale red highlight in the Panel Schedule PDF.
 - **BOM:** Categorized bill-of-materials with part numbers, built by `Core/Zones/Services/ControlBomBuilder.cs` — the **same builder** the TurboDocs Control BOM PDF uses, so the two cannot disagree about what to order. The only per-consumer difference is `BomAudience`, which governs presentation and never quantities: this tab renders as `DesignSurface`, keeping zero-quantity lines and annotating a shortfall.
 - **Processor count follows what is placed**, not what is recommended — over *or* under. A processor's location can't be derived; it is an assignment the designer makes to a specific panel, so this tab is the single source of truth for the count. The recommendation stays advisory: placing fewer than recommended flags the BOM line with `(N of M placed)` rather than silently inflating the order. The power supply follows the same rule (one per placed processor).
 - **Unassigned circuits:** Circuits without a recognized zone panel name are flagged. Switch-wired circuits are excluded from this warning.
+
+## Control links
+
+The sidebar answers exactly one question: **do I need another processor?** The Panel Breakdown is a
+recommendation surface — the designer makes two decisions (panel sizes, and where processors, I/O and
+DMX interfaces go) and everything else is derived. There is **no manual panel→link assignment and
+will not be**: if the derived layout does not fit, the answer is another processor, and the bars are
+how that is said. Downstream the design is imported into Lutron's own software, which is what the
+BOM's "Verify bill of materials with official control system documentation" is for.
+
+**One packer, two questions.** `ControlLinkPacker` both recommends a processor count (pack into
+unlimited links, divide by two) and fills the capacity bars (pack into the links that exist, show
+overflow). They were separate algorithms until they were merged, and they disagreed — the BOM pooled
+every device in the job and divided, which assumes a panel's modules can be split across two links.
+They cannot. The invariant now holds by construction: **if a bar is over capacity the BOM recommends
+more processors, and if it recommends more, some bar is over.**
+
+**A link has three budgets, and they are different kinds of thing** (Lutron 3691127f p.2):
+
+| Budget | QS link | Clear Connect Type A |
+|--------|---------|----------------------|
+| Devices | 99 | 99 |
+| Switch legs | 512 | 100 |
+| Hybrid Repeaters | — | 4 |
+
+So a Clear Connect link shows **three** bars where QS shows two. The repeater cap is a cap on one
+*kind* of device, not on devices — a wireless keypad consumes the 99 exactly as a wired one consumes a
+QS link's, and can run well past four. Reading the two as one number makes every wireless device past
+the fourth look like an overflow on a link with 95 slots free.
+
+**A switch leg is the smallest controllable output** — *"dimmed or switched circuits, HomeWorks
+Digital or DALI addressable devices (ballasts, drivers, and interfaces), a single DMX channel, contact
+closure outputs, and Sivoia QS shade drives."* Module outputs are counted at **nameplate**: a
+four-output module holding one circuit still presents four legs. Two known under-counts follow from
+that definition and are not yet fixed: a QSE-IO's contact closure outputs are legs and it is counted
+as 1 device / 0 legs, and Sivoia shade drives are not collected at all.
+
+**Wireless takes whole links.** One repeater converts a link to Clear Connect, so a job that would run
+on one processor can need two purely to carry wireless — five repeaters is two CC-A links, which is a
+processor. Wireless devices ride those links and consume their device budget; wired keypads never do.
+When the link budget is fixed, CC-A stops one link short of consuming every link that has QS work, so
+the overflow shows as an over-capacity bar rather than hiding the panels.
+
+**Packing is first-fit decreasing over indivisible units.** A panel is one unit — its modules plus any
+compartment device sited in it all ride the same link. Interfaces a subsystem requires but nobody has
+sited yet float and pack anywhere; keypads are one device each and pour into whatever room is left.
 
 ## Dependencies
 
@@ -54,11 +100,33 @@ Protocols fall into three categories:
 
 A circuit whose fixtures declare more than one protocol resolves to one module type (first in sorted order, so it does not depend on Revit's element enumeration order).
 
-**On Keypad families (Lighting Devices):**
+**On Keypad families (Lighting Devices) and Hybrid Repeaters (Electrical Fixtures):**
 
 | Parameter | Type | Purpose |
 |-----------|------|---------|
-| `Two Gang` | Yes/No (Integer) | Identifies two-gang keypad configurations |
+| `Two Gang` | Yes/No (Integer) | **Link math only.** A two-gang keypad is two addressed devices in one backbox, so it counts twice against a link's 99. It does *not* split the BOM — see below |
+| `Wireless` | Yes/No (Integer) | Rides a Clear Connect link instead of a QS link, consuming that link's device budget. Read type-first with instance override, like `Two Gang`. **Absent reads as wired**, which is the behaviour that shipped before it existed |
+| `Catalog Number1`–`6` | Text | The parts to order. One device is often several: base unit + button kits + faceplate |
+| `Catalog Qty1`–`6` | Text | How many of that slot per device — blank ⇒ 1 each, `N` ⇒ N each, `1/N` ⇒ 1 per N, `N @type` ⇒ N per type |
+| `Description`, `Description2` | Text | Words for `Catalog Number1` and `Catalog Number2` respectively |
+
+**A type answers two independent questions, and neither derives from the other.** How many *devices*
+it occupies on a link (`Two Gang`, `Wireless`, instance count) and what it *costs to buy* (the catalog
+slots). "Button kit qty 2" is not "2 gangs"; "2 gangs" is not "2 of everything". So the BOM groups
+purely by catalog number — a two-gang keypad is a different model with its own number, and the lines
+separate on their own — while the link math never sums order rows to get a device count.
+
+The quantity grammar is `CatalogQtyParser` / `CatalogQtyRule.Evaluate`, borrowed from the Counts
+module; `Core/Zones/Services/CatalogSlotTally.cs` is the only other consumer and takes **nothing else**
+from Counts, where Lutron control devices are not declared at all. `N @ft` / `N @in` are rejected here:
+stock-cut divides Linear Length, which a control device does not have. An unparseable token falls back
+to one-per-device and is flagged in this tab with the type and slot named — never dropped, because a
+part nobody can parse is still a part somebody has to buy.
+
+A type with no catalog number is still ordered, with the part column falling back to the generic word
+(`Keypad`, `Hybrid Repeater`) and an amber flag here. Descriptions pair with slots by position and
+stop at two, because a family carries two description fields and six catalog slots. Slots 3–6 print
+without words; nothing in the library uses them yet.
 
 **On Panel families (Electrical Equipment):**
 

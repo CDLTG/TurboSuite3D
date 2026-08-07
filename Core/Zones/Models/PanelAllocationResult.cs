@@ -86,6 +86,25 @@ namespace TurboSuite.Zones.Models
             }
         }
 
+        /// <summary>
+        /// The compartment slots this panel actually has — one, or two on a dual-compartment panel
+        /// (the LV21) — carrying whatever is selected in each, including "Empty".
+        ///
+        /// Lives here rather than in a caller because the BOM builder and the link packer both walk
+        /// them and must walk them identically: a slot one counts and the other misses is a panel
+        /// whose interface is ordered but consumes no link, or vice versa. Yields nothing when the
+        /// selected panel size has no compartment, so callers do not repeat that guard.
+        /// </summary>
+        public IEnumerable<string> CompartmentSlots
+        {
+            get
+            {
+                if (!HasSpecialCompartment) yield break;
+                yield return _selectedSpecialDevice;
+                if (HasDualSpecialCompartment) yield return _selectedSpecialDevice2;
+            }
+        }
+
         // Processor capacity bars
         public bool IsProcessor
         {

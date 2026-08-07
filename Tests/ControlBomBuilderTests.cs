@@ -85,7 +85,7 @@ namespace TurboSuite.Tests.Zones
         public void SectionsAppearInDocumentOrder()
         {
             var bom = Build(TwoFullPanels(), Lutron,
-                new BomExtras { KeypadCount = 3 });
+                new BomExtras { KeypadTallies = Tally.Of(("HQRD-W3BD", 3)) });
 
             Assert.Equal(
                 new[] { "Processors", "Panels", "Modules", "Accessories", "Keypads" },
@@ -124,18 +124,192 @@ namespace TurboSuite.Tests.Zones
             Assert.DoesNotContain("Keypads", Headers(bom));
         }
 
+        /// <summary>
+        /// Keypads are one line per catalog number, and <b>nothing else</b> splits them. This section
+        /// used to print the literal words "Keypad" and "Two-Gang Keypad" against blank part numbers —
+        /// a quantity on a purchasing document with nothing to order against.
+        ///
+        /// Note the gang counts are set here and do NOT appear: a two-gang keypad is a different model
+        /// with its own catalog number, so the lines separate on their own, and "Two Gang" is left
+        /// doing the one job it is actually for — doubling a device on the link math.
+        /// </summary>
         [Fact]
-        public void KeypadLinesSplitSingleAndTwoGang()
+        public void KeypadLinesAreOnePerCatalogNumber()
+        {
+            var bom = Build(TwoFullPanels(), Lutron, new BomExtras
+            {
+                KeypadCount = 5,
+                TwoGangKeypadCount = 2,
+                KeypadTallies = Tally.Of(("HQRD-W3BD", 5), ("HQRD-W6BRL", 2))
+            });
+
+            var keypads = Section(bom, "Keypads");
+            Assert.Equal(2, keypads.Count);
+            Assert.Equal(("HQRD-W3BD", 5), (keypads[0].PartNumber, keypads[0].Quantity));
+            Assert.Equal(("HQRD-W6BRL", 2), (keypads[1].PartNumber, keypads[1].Quantity));
+            Assert.All(keypads, k => Assert.False(k.IsWarning));
+        }
+
+        /// <summary>Descriptions ride through from the family type, so a keypad line reads as a part
+        /// rather than a bare code. Blank where the family had no field left to describe the slot.</summary>
+        [Fact]
+        public void KeypadLinesCarryTheFamilyDescription()
+        {
+            var keypads = Section(Build(TwoFullPanels(), Lutron, new BomExtras
+            {
+                KeypadTallies = Tally.Described(
+                    ("HQRD-W3BD", "3-Button Keypad with Raise/Lower", 5),
+                    ("HQRD-BTN-KIT", "Button Kit", 10),
+                    ("HQRD-2G-FACE", "", 5))
+            }), "Keypads");
+
+            Assert.Equal("3-Button Keypad with Raise/Lower", keypads[0].Description);
+            Assert.Equal("Button Kit", keypads[1].Description);
+            Assert.Equal("", keypads[2].Description);
+        }
+
+        /// <summary>The type's own words beat the generic per-category text, being the more specific of
+        /// the two. A repeater whose family says nothing still gets the product description.</summary>
+        [Fact]
+        public void FamilyDescriptionWinsOverTheCategoryDefault()
+        {
+            var accessories = Section(Build(TwoFullPanels(), Lutron, new BomExtras
+            {
+                HybridRepeaters = new ControlDeviceGroup
+                {
+                    DeviceCount = 3,
+                    Tallies = Tally.Described(("HQK-REP", "868 MHz Hybrid Repeater", 1), ("HQR-REP-120", "", 2))
+                }
+            }), "Accessories");
+
+            Assert.Equal("868 MHz Hybrid Repeater",
+                accessories.Single(a => a.PartNumber == "HQK-REP").Description);
+            Assert.Equal("HWQS Hybrid Wired/Wireless RF System Repeater",
+                accessories.Single(a => a.PartNumber == "HQR-REP-120").Description);
+        }
+
+        /// <summary>Gang counts alone produce no keypad section — the order comes from catalog numbers,
+        /// not from the link-math counts, so a job whose keypads are all uncollected prints nothing
+        /// rather than an unorderable placeholder.</summary>
+        [Fact]
+        public void GangCountsAloneDoNotMakeKeypadLines()
         {
             var bom = Build(TwoFullPanels(), Lutron,
                 new BomExtras { KeypadCount = 5, TwoGangKeypadCount = 2 });
 
-            var keypads = Section(bom, "Keypads");
-            Assert.Equal(2, keypads.Count);
-            Assert.Equal(5, keypads[0].Quantity);
-            Assert.Equal("Keypad", keypads[0].Description);
-            Assert.Equal(2, keypads[1].Quantity);
-            Assert.Equal("Two-Gang Keypad", keypads[1].Description);
+            Assert.DoesNotContain("Keypads", Headers(bom));
+        }
+
+        /// <summary>
+        /// A keypad type with no catalog number is still ordered — the keypads are placed and the
+        /// quantity is real. The part column falls back to the generic word, so the row reads
+        /// <c>4 · Keypad</c> on both surfaces rather than as a quantity of nothing.
+        ///
+        /// The only difference is the flag: the design surface marks the row so the missing number
+        /// gets filled in, the issued document just prints it.
+        /// </summary>
+        [Fact]
+        public void KeypadWithNoCatalogNumberFallsBackToTheGenericPartName()
+        {
+            var tallies = Tally.Named((null, "Seetouch 5-Button", 4));
+
+            var design = Section(Build(TwoFullPanels(), Lutron,
+                new BomExtras { KeypadTallies = tallies, Audience = BomAudience.DesignSurface }), "Keypads");
+            var issued = Section(Build(TwoFullPanels(), Lutron,
+                new BomExtras { KeypadTallies = tallies, Audience = BomAudience.IssuedDocument }), "Keypads");
+
+            Assert.Equal(("Keypad", 4), (Assert.Single(design).PartNumber, design[0].Quantity));
+            Assert.True(design[0].IsWarning);
+            Assert.Equal("", design[0].Description);
+
+            // Quantity and part number never depend on audience — only the flag does.
+            Assert.Equal(("Keypad", 4), (Assert.Single(issued).PartNumber, issued[0].Quantity));
+            Assert.False(issued[0].IsWarning);
+            Assert.Equal("", issued[0].Description);
+        }
+
+        /// <summary>Repeaters get their own generic fallback rather than the keypad one, and keep their
+        /// product description — that text is what the part IS, not commentary about the design.</summary>
+        [Fact]
+        public void RepeaterWithNoCatalogNumberFallsBackToItsOwnGenericName()
+        {
+            var line = Section(Build(TwoFullPanels(), Lutron, new BomExtras
+            {
+                HybridRepeaters = new ControlDeviceGroup
+                {
+                    DeviceCount = 2,
+                    Tallies = Tally.Named((null, "Hybrid Repeater Type A", 2))
+                }
+            }), "Accessories").Single(a => a.PartNumber == "Hybrid Repeater");
+
+            Assert.Equal(2, line.Quantity);
+            Assert.Equal("HWQS Hybrid Wired/Wireless RF System Repeater", line.Description);
+        }
+
+        /// <summary>An unparseable quantity rule still explains itself on the design surface — unlike a
+        /// missing catalog number, the number on the line is a fallback rather than the authored
+        /// intent, so the row says which slot to look at.</summary>
+        [Fact]
+        public void BadQuantityRuleExplainsItselfOnTheDesignSurface()
+        {
+            var tallies = new List<ControlDeviceTally>
+            {
+                new ControlDeviceTally
+                {
+                    CatalogNumber = "HQRD-BTN-KIT",
+                    TypeName = "Seetouch 5-Button",
+                    Quantity = 4,
+                    Diagnostic = "Seetouch 5-Button — Catalog Qty2 \"banana\": Unrecognized format"
+                }
+            };
+
+            var design = Assert.Single(Section(Build(TwoFullPanels(), Lutron,
+                new BomExtras { KeypadTallies = tallies, Audience = BomAudience.DesignSurface }), "Keypads"));
+            var issued = Assert.Single(Section(Build(TwoFullPanels(), Lutron,
+                new BomExtras { KeypadTallies = tallies, Audience = BomAudience.IssuedDocument }), "Keypads"));
+
+            Assert.True(design.IsWarning);
+            Assert.Contains("Catalog Qty2", design.Description);
+
+            Assert.False(issued.IsWarning);
+            Assert.Equal("", issued.Description);
+            Assert.Equal(design.Quantity, issued.Quantity);
+        }
+
+        /// <summary>Repeaters group by catalog number too. The part number used to be read off the
+        /// FIRST instance only, so a two-model job ordered them all as whichever model happened to be
+        /// collected first.</summary>
+        [Fact]
+        public void RepeatersGroupByCatalogNumberRatherThanTakingTheFirst()
+        {
+            var accessories = Section(Build(TwoFullPanels(), Lutron, new BomExtras
+            {
+                HybridRepeaters = Tally.RepeaterGroup(5, ("HQR-REP-120", 3), ("HQK-REP", 2))
+            }), "Accessories");
+
+            Assert.Equal(3, accessories.Single(a => a.PartNumber == "HQR-REP-120").Quantity);
+            Assert.Equal(2, accessories.Single(a => a.PartNumber == "HQK-REP").Quantity);
+        }
+
+        /// <summary>
+        /// Devices on a link and parts on an order are different numbers, and the link math must take
+        /// the former. A repeater type declaring a mounting bracket in a second slot orders two parts
+        /// per device — summing the order rows would size Clear Connect for hardware that is not there.
+        ///
+        /// Four devices is one CC-A link (the cap is four). Eight <i>parts</i> would be two, and would
+        /// wrongly recommend a second processor.
+        /// </summary>
+        [Fact]
+        public void LinkMathCountsDevicesNotOrderedParts()
+        {
+            var panels = new List<PanelResult> { LutronPanel("1-A", 8, ("ELV", 4)) };
+            var extras = new BomExtras
+            {
+                HybridRepeaters = Tally.RepeaterGroup(4, ("HQR-REP-120", 4), ("HQR-BRACKET", 4))
+            };
+
+            Assert.Equal(4, extras.HybridRepeaterCount);
+            Assert.Equal(1, ControlBomBuilder.CalculateRecommendedProcessors(panels, extras));
         }
 
         /// <summary>Crestron declares no power supply, no harnesses and gets no repeater line, so the
@@ -147,7 +321,7 @@ namespace TurboSuite.Tests.Zones
             panel.Modules.Add(new ModuleResult { DimmingType = "ELV", PartNumber = "CLX-2DIMU8", ModuleCapacity = 8 });
 
             var bom = Build(new List<PanelResult> { panel }, Crestron,
-                new BomExtras { HybridRepeaterCount = 4 });
+                new BomExtras { HybridRepeaters = Tally.Repeaters(4) });
 
             Assert.DoesNotContain("Accessories", Headers(bom));
         }
@@ -290,7 +464,7 @@ namespace TurboSuite.Tests.Zones
         public void HybridRepeatersAreLutronOnly()
         {
             var panels = new List<PanelResult> { LutronPanel("1-A", 8, ("ELV", 4)) };
-            var extras = new BomExtras { HybridRepeaterCount = 2, HybridRepeaterPartNumber = "HQR-W" };
+            var extras = new BomExtras { HybridRepeaters = Tally.Repeaters(2, "HQR-W") };
 
             var lutron = Section(Build(panels, Lutron, extras), "Accessories");
             Assert.Equal(2, lutron.Single(a => a.PartNumber == "HQR-W").Quantity);
@@ -313,30 +487,34 @@ namespace TurboSuite.Tests.Zones
         public void SmallJobNeedsOneProcessor()
             => Assert.Equal(1, ControlBomBuilder.CalculateRecommendedProcessors(SmallJob(), new BomExtras()));
 
-        /// <summary>Loads cap a link at 512. 129 modules × 4 slots = 516 loads ⇒ 2 QS links ⇒ still
-        /// 1 processor (2 links fit one HQP7-2).</summary>
+        /// <summary>Loads cap a link at 512. Fourteen full 9-module panels are 504 loads — one link;
+        /// the fifteenth crosses into a second, while devices (135) are still well inside the 99×2
+        /// they now occupy. Two links still fit one HQP7-2.</summary>
         [Fact]
         public void LoadCapDrivesLinkCount()
         {
-            var panel = LutronPanel("1-A", 8,
-                Enumerable.Repeat(("ELV", 4), 129).ToArray());
+            var panels = Enumerable.Range(1, 15)
+                .Select(i => LutronPanel($"P{i:00}", 9, Enumerable.Repeat(("ELV", 4), 9).ToArray()))
+                .ToList();
 
-            Assert.Equal(516, panel.LoadCount);
-            Assert.Equal(1, ControlBomBuilder.CalculateRecommendedProcessors(
-                new List<PanelResult> { panel }, new BomExtras()));
+            Assert.Equal(540, panels.Sum(p => p.LoadCount));
+            Assert.Equal(1, ControlBomBuilder.CalculateRecommendedProcessors(panels, new BomExtras()));
         }
 
         /// <summary>Hybrid repeaters ride a separate Clear Connect link, so they ADD a link rather than
-        /// consuming QS capacity: 2 QS links + 1 CCA link = 3 ⇒ 2 processors.</summary>
+        /// consuming QS capacity: 1 QS link + 1 CCA link = 2 ⇒ still one processor, but a third link
+        /// tips it. Four repeaters fit one CC-A link (Lutron 369-351b); the fifth needs a second, and
+        /// that is enough to force a second processor on its own.</summary>
         [Fact]
         public void HybridRepeatersAddAClearConnectLink()
         {
-            var panel = LutronPanel("1-A", 8, Enumerable.Repeat(("ELV", 4), 129).ToArray());
-            var panels = new List<PanelResult> { panel };
+            var panels = new List<PanelResult> { LutronPanel("1-A", 8, ("ELV", 4)) };
 
             Assert.Equal(1, ControlBomBuilder.CalculateRecommendedProcessors(panels, new BomExtras()));
+            Assert.Equal(1, ControlBomBuilder.CalculateRecommendedProcessors(
+                panels, new BomExtras { HybridRepeaters = Tally.Repeaters(4) }));
             Assert.Equal(2, ControlBomBuilder.CalculateRecommendedProcessors(
-                panels, new BomExtras { HybridRepeaterCount = 1 }));
+                panels, new BomExtras { HybridRepeaters = Tally.Repeaters(5) }));
         }
 
         /// <summary>Keypads count as QS devices — two-gang counts as two.</summary>
@@ -350,18 +528,18 @@ namespace TurboSuite.Tests.Zones
         }
 
         /// <summary>A job needing 2 processors but with only 1 sited: the fixture for every
-        /// placed-below-recommended case below. 129 modules ⇒ 2 QS links, + 1 CCA link ⇒ 2 processors.</summary>
+        /// placed-below-recommended case below. 1 QS link + 2 Clear Connect links (5 repeaters at 4
+        /// per link) = 3 links ⇒ 2 processors.</summary>
         private static List<PanelResult> UnderPlacedJob()
         {
-            var panel = LutronPanel("1-A", 8, Enumerable.Repeat(("ELV", 4), 129).ToArray());
+            var panel = LutronPanel("1-A", 8, ("ELV", 4));
             panel.SelectedSpecialDevice = "Processor";
             return new List<PanelResult> { panel };
         }
 
         private static BomExtras UnderPlacedExtras(BomAudience audience) => new BomExtras
         {
-            HybridRepeaterCount = 1,
-            HybridRepeaterPartNumber = "HQR-W",
+            HybridRepeaters = Tally.Repeaters(5, "HQR-W"),
             Audience = audience
         };
 
@@ -686,18 +864,26 @@ namespace TurboSuite.Tests.Zones
         }
 
         /// <summary>Demand pressures the link budgets, and the two are independent: interfaces are QS
-        /// devices, channels are switch legs. Enough channels alone must move the processor count.</summary>
+        /// devices, channels are switch legs. Enough channels alone must move the processor count.
+        ///
+        /// Sized in whole interfaces at Lutron's 32 channels each, because an interface is what packs:
+        /// a link holds 16 of them (16 × 32 = 512 legs), two links fill a processor, so 32 interfaces
+        /// fit one and 33 need a second. Stating it as "one interface with 1000 channels" would be an
+        /// object no solver can emit and no link can hold.</summary>
         [Fact]
         public void ChannelsAloneCanForceAnotherProcessor()
         {
             var panels = OnePanel();
 
-            int WithChannels(int channels) => ControlBomBuilder.CalculateRecommendedProcessors(
-                panels, new BomExtras { SubsystemDemands = new List<ControlSubsystemDemand> { Dmx(1, channels) } });
+            int WithInterfaces(int interfaces) => ControlBomBuilder.CalculateRecommendedProcessors(
+                panels,
+                new BomExtras
+                {
+                    SubsystemDemands = new List<ControlSubsystemDemand> { Dmx(interfaces, interfaces * 32) }
+                });
 
-            // One link carries 512 loads; two links fill one processor, so crossing 1024 needs a second.
-            Assert.Equal(1, WithChannels(1000));
-            Assert.Equal(2, WithChannels(1100));
+            Assert.Equal(1, WithInterfaces(31));
+            Assert.Equal(2, WithInterfaces(33));
         }
 
         /// <summary>No demand at all leaves every quantity exactly where Phase 0 left it — the seam is

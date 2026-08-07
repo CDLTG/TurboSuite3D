@@ -156,13 +156,9 @@ namespace TurboSuite.Zones.Services
                 var specialCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (var panel in allPanels)
                 {
-                    if (!panel.HasSpecialCompartment) continue;
-
-                    foreach (string selected in SpecialDeviceSlots(panel))
+                    foreach (string selected in panel.CompartmentSlots)
                     {
-                        if (string.IsNullOrEmpty(selected)
-                            || string.Equals(selected, "Empty", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(selected, "Processor", StringComparison.OrdinalIgnoreCase))
+                        if (!ControlLinkPacker.IsDeviceSelection(selected))
                             continue;
 
                         if (!specialCounts.ContainsKey(selected))
@@ -210,17 +206,12 @@ namespace TurboSuite.Zones.Services
 
             accessories.AddRange(SubsystemLines(brand, extras));
 
-            // Hybrid repeaters (Lutron only)
-            if (extras.HybridRepeaterCount > 0
-                && string.Equals(brand.Name, "Lutron", StringComparison.OrdinalIgnoreCase))
+            // Hybrid repeaters (Lutron only), one line per catalog number.
+            if (string.Equals(brand.Name, "Lutron", StringComparison.OrdinalIgnoreCase))
             {
-                accessories.Add(new BomLineItem
-                {
-                    Quantity = extras.HybridRepeaterCount,
-                    PartNumber = extras.HybridRepeaterPartNumber ?? "",
-                    Description = "HWQS Hybrid Wired/Wireless RF System Repeater",
-                    Category = "Accessories"
-                });
+                accessories.AddRange(TallyLines(extras.HybridRepeaterTallies, "Accessories",
+                    extras.Audience, "Hybrid Repeater",
+                    "HWQS Hybrid Wired/Wireless RF System Repeater"));
             }
 
             if (accessories.Count > 0)
@@ -230,32 +221,67 @@ namespace TurboSuite.Zones.Services
             }
 
             // --- Keypads ---
-            if (extras.KeypadCount > 0 || extras.TwoGangKeypadCount > 0)
+            // One line per catalog number. There is deliberately no gang split here: a two-gang
+            // keypad is a different model with its own catalog number, so the lines separate on their
+            // own, and "Two Gang" goes back to being what it is — a device-count multiplier for the
+            // link math, which is the only place it was ever needed. This section used to print the
+            // words "Keypad" and "Two-Gang Keypad" against blank part numbers.
+            var keypadLines = TallyLines(extras.KeypadTallies, "Keypads", extras.Audience, "Keypad");
+            if (keypadLines.Count > 0)
             {
                 bom.Add(new BomLineItem { IsHeader = true, Category = "Keypads", Description = "Keypads" });
-                if (extras.KeypadCount > 0)
-                {
-                    bom.Add(new BomLineItem
-                    {
-                        Quantity = extras.KeypadCount,
-                        PartNumber = "",
-                        Description = "Keypad",
-                        Category = "Keypads"
-                    });
-                }
-                if (extras.TwoGangKeypadCount > 0)
-                {
-                    bom.Add(new BomLineItem
-                    {
-                        Quantity = extras.TwoGangKeypadCount,
-                        PartNumber = "",
-                        Description = "Two-Gang Keypad",
-                        Category = "Keypads"
-                    });
-                }
+                bom.AddRange(keypadLines);
             }
 
             return extras.Audience == BomAudience.IssuedDocument ? StripEmptyLines(bom) : bom;
+        }
+
+        /// <summary>
+        /// Turns counted parts into order lines, one per catalog number.
+        ///
+        /// A type carrying no catalog number, or a quantity rule that would not parse, still gets its
+        /// line — the devices are placed and the quantity is real, so dropping it would understate the
+        /// order, and <see cref="BomAudience"/> is not allowed to change a quantity.
+        ///
+        /// With no catalog number the part column falls back to <paramref name="fallbackPartNumber"/> —
+        /// the generic word for the thing, "Keypad". A row reading <c>12 · Keypad</c> is at least
+        /// legible as a line item; the blank it replaced read as an order for an unnamed part. The
+        /// design surface additionally flags the row, which is the signal that a real number is
+        /// missing; the issued document just prints it, because a purchasing document is not where a
+        /// family gets fixed.
+        /// </summary>
+        private static List<BomLineItem> TallyLines(
+            IReadOnlyList<ControlDeviceTally> tallies, string category, BomAudience audience,
+            string fallbackPartNumber, string description = "")
+        {
+            var lines = new List<BomLineItem>();
+            if (tallies == null) return lines;
+
+            foreach (var tally in tallies)
+            {
+                if (tally == null || tally.Quantity <= 0) continue;
+
+                bool missing = !tally.HasCatalogNumber;
+                bool flag = (missing || tally.HasDiagnostic)
+                    && audience == BomAudience.DesignSurface;
+
+                lines.Add(new BomLineItem
+                {
+                    Quantity = tally.Quantity,
+                    PartNumber = missing ? fallbackPartNumber : tally.CatalogNumber,
+
+                    // A bad quantity rule is the one case worth spelling out, since the number on the
+                    // line is a fallback rather than the authored intent, and it displaces the
+                    // description for as long as it is unfixed. Otherwise the type's own words win
+                    // over the generic per-category text, being the more specific of the two.
+                    Description = flag && tally.HasDiagnostic
+                        ? tally.Diagnostic
+                        : (string.IsNullOrEmpty(tally.Description) ? description : tally.Description),
+                    Category = category,
+                    IsWarning = flag
+                });
+            }
+            return lines;
         }
 
         /// <summary>
@@ -365,59 +391,17 @@ namespace TurboSuite.Zones.Services
         }
 
         /// <summary>
-        /// Processors implied by the job's QS-link demand: devices and loads each cap a link, links
-        /// cap a processor. Hybrid repeaters ride their own CCA link rather than the QS link, so they
-        /// add capacity demand instead of consuming it.
+        /// Processors implied by the job's control-link demand.
+        ///
+        /// Delegates to <see cref="ControlLinkPacker"/>, which is also what fills the Panel
+        /// Breakdown's capacity bars. It used to compute this itself, by pooling every device in the
+        /// job and dividing by the link cap — which assumes a panel's modules can be split across two
+        /// links. They cannot, so the pooled figure could only ever come in at or below the truth,
+        /// and it disagreed with the bars that the designer was reading at the same moment.
         /// </summary>
         public static int CalculateRecommendedProcessors(List<PanelResult> allPanels, BomExtras extras)
-        {
-            if (allPanels == null) return 1;
-            extras ??= new BomExtras();
-
-            // Compartment devices — each counts as 1 device on a QS link. A device a subsystem speaks
-            // for is excluded here and taken from its demand below instead: this is a RECOMMENDATION,
-            // so it should reflect what the job needs rather than what has been placed so far, and
-            // counting both would charge the link twice for the same interfaces.
-            int specialDeviceCount = 0;
-            foreach (string device in new[] { "Digital I/O", "DMX" })
-            {
-                if (RequiredFor(device, extras) == 0)
-                    specialDeviceCount += CountPlacedSpecialDevice(allPanels, device);
-            }
-
-            // Subsystem demand on the link. Devices and loads are independent budgets: a QSE-CI-DMX is
-            // "1 QS device and 0 zones", while each of its DMX channels is a switch leg. So a sparse
-            // DMX job pressures the device cap and a dense one pressures the leg cap, and neither
-            // number can be derived from the other.
-            int subsystemDevices = 0;
-            int subsystemLoads = 0;
-            if (extras.SubsystemDemands != null)
-            {
-                foreach (var demand in extras.SubsystemDemands)
-                {
-                    if (demand == null) continue;
-                    subsystemDevices += demand.LinkDevices;
-                    subsystemLoads += demand.LinkLoads;
-                }
-            }
-
-            int totalDevices = allPanels.Sum(p => p.DeviceCount)
-                + extras.KeypadCount + extras.TwoGangKeypadCount * 2
-                + specialDeviceCount + subsystemDevices;
-            int totalLoads = allPanels.Sum(p => p.LoadCount) + subsystemLoads;
-
-            int qsLinksNeeded = Math.Max(
-                (int)Math.Ceiling((double)totalDevices / ProcessorLink.MaxDevices),
-                (int)Math.Ceiling((double)totalLoads / ProcessorLink.MaxLoads));
-            qsLinksNeeded = Math.Max(qsLinksNeeded, 1);
-
-            int ccaLinksNeeded = extras.HybridRepeaterCount > 0
-                ? Math.Max(1, (int)Math.Ceiling((double)extras.HybridRepeaterCount / ProcessorLink.MaxDevices))
-                : 0;
-
-            int totalLinksNeeded = qsLinksNeeded + ccaLinksNeeded;
-            return Math.Max(1, (int)Math.Ceiling((double)totalLinksNeeded / 2));
-        }
+            => ControlLinkPacker.RecommendProcessors(
+                ControlLinkPacker.BuildDemand(allPanels, extras));
 
         /// <summary>Counts how many compartment slots across all panels hold the named device.</summary>
         private static int CountPlacedSpecialDevice(List<PanelResult> allPanels, string deviceName)
@@ -425,22 +409,13 @@ namespace TurboSuite.Zones.Services
             int count = 0;
             foreach (var panel in allPanels)
             {
-                if (!panel.HasSpecialCompartment) continue;
-                foreach (string selected in SpecialDeviceSlots(panel))
+                foreach (string selected in panel.CompartmentSlots)
                 {
                     if (string.Equals(selected, deviceName, StringComparison.OrdinalIgnoreCase))
                         count++;
                 }
             }
             return count;
-        }
-
-        /// <summary>A panel's occupied compartment slots — one, or two on a dual-compartment panel (LV21).</summary>
-        private static IEnumerable<string> SpecialDeviceSlots(PanelResult panel)
-        {
-            yield return panel.SelectedSpecialDevice;
-            if (panel.HasDualSpecialCompartment)
-                yield return panel.SelectedSpecialDevice2;
         }
     }
 
@@ -452,8 +427,28 @@ namespace TurboSuite.Zones.Services
     {
         public int KeypadCount { get; set; }
         public int TwoGangKeypadCount { get; set; }
-        public int HybridRepeaterCount { get; set; }
-        public string HybridRepeaterPartNumber { get; set; }
+
+        /// <summary>The same keypads counted for ordering — grouped by catalog number rather than by
+        /// gang and radio. Not derivable from the counts above, nor they from these: gang doubles a
+        /// device but not an order line, and radio decides which link but not which part.</summary>
+        public IReadOnlyList<ControlDeviceTally> KeypadTallies { get; set; }
+
+        /// <summary>Hybrid Repeaters: devices on the link, and the parts to order for them.</summary>
+        public ControlDeviceGroup HybridRepeaters { get; set; }
+
+        public IReadOnlyList<ControlDeviceTally> HybridRepeaterTallies => HybridRepeaters?.Tallies;
+
+        /// <summary>Repeaters on the job, for the Clear Connect link math. Comes from the instance
+        /// count, <b>not</b> from summing the order rows: a repeater type declaring a mounting bracket
+        /// in a second catalog slot orders two parts and is still one device, and summing would
+        /// silently size the wireless links for hardware that does not exist.</summary>
+        public int HybridRepeaterCount => HybridRepeaters?.DeviceCount ?? 0;
+
+        /// <summary>Wireless devices, already expanded to device count. These ride the processor's
+        /// Clear Connect link rather than a QS link, so they pressure a different budget — and a job
+        /// with enough of them needs another Clear Connect link, which comes out of a processor's
+        /// pair of two exactly as the repeaters' do.</summary>
+        public int WirelessDeviceCount { get; set; }
 
         /// <summary>What the control subsystems report they need — DMX today, DALI later. Null or empty
         /// means nothing to add, which is the shape a job with no subsystem hardware produces and the

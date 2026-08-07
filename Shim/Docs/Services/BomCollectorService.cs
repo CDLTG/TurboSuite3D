@@ -59,18 +59,19 @@ public static class BomCollectorService
             }
         }
 
-        var (keypadCount, twoGangKeypadCount) = collector.GetKeypadCounts(doc);
-        var (hybridRepeaterCount, hybridRepeaterPartNumber) = collector.GetHybridRepeaterInfo(doc);
+        var keypadCounts = collector.GetKeypadCounts(doc);
+        var hybridRepeaters = collector.GetHybridRepeaters(doc);
 
         // Same builder the TurboZones window uses, so the issued PDF and the live panel breakdown
         // cannot disagree about what to order. The audience is what differs: this is a purchasing
         // document, so no shortfall commentary and no zero-quantity lines.
         var items = ControlBomBuilder.Build(allocation.AllPanels, brand, new BomExtras
         {
-            KeypadCount = keypadCount,
-            TwoGangKeypadCount = twoGangKeypadCount,
-            HybridRepeaterCount = hybridRepeaterCount,
-            HybridRepeaterPartNumber = hybridRepeaterPartNumber,
+            KeypadCount = keypadCounts.Regular,
+            TwoGangKeypadCount = keypadCounts.TwoGang,
+            WirelessDeviceCount = keypadCounts.WirelessDevices,
+            KeypadTallies = keypadCounts.Tallies,
+            HybridRepeaters = hybridRepeaters,
             SubsystemDemands = subsystemDemands,
             Audience = BomAudience.IssuedDocument
         });

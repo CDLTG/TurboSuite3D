@@ -60,8 +60,8 @@ namespace TurboSuite.Zones
                     return Result.Cancelled;
                 }
 
-                var (keypadCount, twoGangKeypadCount) = collectorService.GetKeypadCounts(doc);
-                var (hybridRepeaterCount, hybridRepeaterPartNumber) = collectorService.GetHybridRepeaterInfo(doc);
+                var keypadCounts = collectorService.GetKeypadCounts(doc);
+                var hybridRepeaters = collectorService.GetHybridRepeaters(doc);
 
                 // Load persisted panel settings shim-side (a Core ctor cannot read Revit synchronously).
                 var savedSettings = ZonesPanelSettingsStorageService.Load(doc);
@@ -81,7 +81,7 @@ namespace TurboSuite.Zones
                 };
 
                 var viewModel = new ZonesMainViewModel(circuits,
-                    keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
+                    keypadCounts, hybridRepeaters,
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
                     subsystemDemands);
 

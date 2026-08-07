@@ -7,14 +7,16 @@ namespace TurboSuite.Tests.Zones
 {
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     //  Oracle suite for LinkAssignmentService (Core/Zones/Services/LinkAssignmentService.cs).
-    //  Assigns panels to processor links (2 per processor: QS by default) and tallies devices/loads,
-    //  reserving trailing links as "Clear Connect Type A" when wireless (hybrid repeater) devices
-    //  exist. Mutates PanelResult.Link1/Link2 in place — assert on those after the call.
     //
-    //  For me (Claude): ProcessorLink.MaxDevices=99, MaxLoads=512. A PanelResult's DeviceCount =
-    //  Modules.Count and LoadCount = Σ ModuleCapacity, so I shape those by adding ModuleResults.
-    //  IsProcessor is what makes a panel spawn links (the real ViewModel sets it); a panel can be a
-    //  processor without a special compartment. Derivations inline.
+    //  The service used to BE the link math. It is now an adapter: it runs ControlLinkPacker against
+    //  the links the sited processors provide and writes the result onto PanelResult.Link1/Link2.
+    //  So the packing rules belong in ControlLinkPackerTests — what belongs HERE is the adapting:
+    //  which panels spawn links, the positional mapping (Clear Connect lands on the trailing links),
+    //  and that a link's type is set before the flags that depend on its capacity.
+    //
+    //  For me (Claude): IsProcessor is what makes a panel spawn links — the real ViewModel sets it
+    //  from the compartment selection, and a panel can be a processor here without one. Mutates
+    //  Link1/Link2 in place; assert on those after the call. Derivations inline.
     // ─────────────────────────────────────────────────────────────────────────────────────────────
 
     public class LinkAssignmentTests
@@ -29,59 +31,117 @@ namespace TurboSuite.Tests.Zones
             return p;
         }
 
+        private static void Assign(List<PanelResult> panels, BomExtras? extras = null)
+            => LinkAssignmentService.AssignAndAggregate(panels, extras ?? new BomExtras());
+
         [Fact]
         public void NoProcessorPanels_NoLinksCreated()
         {
             var plain = new PanelResult { PanelName = "1-A" }; // IsProcessor false
-            LinkAssignmentService.AssignAndAggregate(new List<PanelResult> { plain }, keypadCount: 0);
+            Assign(new List<PanelResult> { plain });
             Assert.Null(plain.Link1);
             Assert.Null(plain.Link2);
         }
 
         [Fact]
-        public void EmptyPanelList_NoThrow()
-            => LinkAssignmentService.AssignAndAggregate(new List<PanelResult>(), keypadCount: 0);
+        public void EmptyPanelList_NoThrow() => Assign(new List<PanelResult>());
 
         [Fact]
-        public void SingleProcessor_GetsTwoQsLinks_AndAggregatesToFirst()
+        public void NullPanelList_NoThrow()
+            => LinkAssignmentService.AssignAndAggregate(null!, new BomExtras());
+
+        [Fact]
+        public void SingleProcessor_GetsTwoQsLinks_AndPacksOntoTheFirst()
         {
             var proc = Proc("1-A", modules: 3, cap: 4); // DeviceCount=3, LoadCount=12
-            LinkAssignmentService.AssignAndAggregate(new List<PanelResult> { proc }, keypadCount: 0);
+            Assign(new List<PanelResult> { proc });
 
-            Assert.Equal("QS", proc.Link1.LinkType);
-            Assert.Equal("QS", proc.Link2.LinkType);
-            // The lone panel fits on Link 1: 3 devices, 12 loads. Link 2 stays empty.
+            Assert.Equal(ProcessorLink.QsLinkType, proc.Link1.LinkType);
+            Assert.Equal(ProcessorLink.QsLinkType, proc.Link2.LinkType);
             Assert.Equal(3, proc.Link1.UsedDevices);
             Assert.Equal(12, proc.Link1.UsedLoads);
             Assert.Equal(0, proc.Link2.UsedDevices);
         }
 
+        /// <summary>Two processors, four links, in panel order.</summary>
         [Fact]
-        public void Keypads_GroupOnLinkWithMostDeviceHeadroom()
+        public void EachProcessorContributesTwoLinks()
         {
-            var proc = Proc("1-A", modules: 3, cap: 4);
-            LinkAssignmentService.AssignAndAggregate(new List<PanelResult> { proc }, keypadCount: 10);
+            var a = Proc("1-A", modules: 2, cap: 4);
+            var b = Proc("2-A", modules: 2, cap: 4);
+            Assign(new List<PanelResult> { a, b });
 
-            // Link 1 carries the panel (3 devices, room 96); Link 2 is empty (room 99) → keypads land there.
-            Assert.Equal(3, proc.Link1.UsedDevices);
-            Assert.Equal(10, proc.Link2.UsedDevices);
+            Assert.Equal(1, a.Link1.LinkNumber);
+            Assert.Equal(2, a.Link2.LinkNumber);
+            Assert.Equal("1-A", a.Link1.ProcessorPanelName);
+            Assert.Equal("2-A", b.Link1.ProcessorPanelName);
         }
 
+        /// <summary>Keypads pour into whatever room the panels left, filling links in order rather
+        /// than spreading — packing tightly is the point when the question is "how many links".</summary>
         [Fact]
-        public void WirelessDevices_ReserveLastLinkAsClearConnect()
+        public void KeypadsFillTheFirstLinkBeforeTheSecond()
+        {
+            var proc = Proc("1-A", modules: 3, cap: 4);
+            Assign(new List<PanelResult> { proc }, new BomExtras { KeypadCount = 10 });
+
+            Assert.Equal(13, proc.Link1.UsedDevices);   // 3 modules + 10 keypads, room for 96 more
+            Assert.Equal(0, proc.Link2.UsedDevices);
+        }
+
+        /// <summary>Wireless takes the TRAILING link, which is what the packer's ordering guarantees:
+        /// the panel keeps Link 1 and the repeaters get Link 2.</summary>
+        [Fact]
+        public void WirelessDevices_ReserveTheLastLinkAsClearConnect()
         {
             var proc = Proc("1-A", modules: 2, cap: 4); // DeviceCount=2, LoadCount=8
-            LinkAssignmentService.AssignAndAggregate(
-                new List<PanelResult> { proc }, keypadCount: 0, hybridRepeaterCount: 3);
+            Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(3) });
 
-            // ceil(3/99)=1 CC-A link, taken from the last link backward → Link 2 becomes CC-A with the
-            // 3 repeaters; the panel falls to the remaining QS link (Link 1).
-            Assert.Equal("Clear Connect Type A", proc.Link2.LinkType);
+            Assert.Equal(ProcessorLink.ClearConnectLinkType, proc.Link2.LinkType);
             Assert.Equal(3, proc.Link2.UsedDevices);
             Assert.Equal(0, proc.Link2.UsedLoads);
-            Assert.Equal("QS", proc.Link1.LinkType);
+            Assert.Equal(ProcessorLink.QsLinkType, proc.Link1.LinkType);
             Assert.Equal(2, proc.Link1.UsedDevices);
             Assert.Equal(8, proc.Link1.UsedLoads);
+        }
+
+        /// <summary>Overflow shows on the REPEATER bar, not the device bar. Five repeaters is over the
+        /// cap of four, but five devices is nowhere near a link's 99 — a Clear Connect link is a
+        /// 99-device link that caps one kind of device at four, and the two bars say different
+        /// things.</summary>
+        [Fact]
+        public void ClearConnectOverflowShowsOnTheRepeaterBarNotTheDeviceBar()
+        {
+            var proc = Proc("1-A", modules: 2, cap: 4);
+            Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(5) });
+
+            Assert.Equal(ProcessorLink.MaxDevices, proc.Link2.DeviceCapacity);
+            Assert.Equal(5, proc.Link2.UsedDevices);
+            Assert.False(proc.Link2.IsOverDeviceCapacity);   // 5 of 99
+
+            Assert.Equal(5, proc.Link2.UsedRepeaters);
+            Assert.Equal(4, proc.Link2.RepeaterCapacity);
+            Assert.True(proc.Link2.IsOverRepeaterCapacity);  // 5 of 4 — this is the signal
+
+            Assert.True(proc.Link2.ShowRepeaterBar);
+        }
+
+        /// <summary>Clear Connect shows three bars where QS shows two — devices and switch legs on both,
+        /// repeaters only where they exist. The leg cap differs by link type: 100 against the wired
+        /// link's 512 (Lutron 3691127f p.2).</summary>
+        [Fact]
+        public void ClearConnectShowsThreeBudgetsAndQsShowsTwo()
+        {
+            var proc = Proc("1-A", modules: 2, cap: 4);
+            Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(2) });
+
+            Assert.False(proc.Link1.ShowRepeaterBar);
+            Assert.Equal(512, proc.Link1.LoadCapacity);
+
+            Assert.True(proc.Link2.ShowRepeaterBar);
+            Assert.Equal(100, proc.Link2.LoadCapacity);
+            Assert.Equal(99, proc.Link2.DeviceCapacity);
+            Assert.Equal(4, proc.Link2.RepeaterCapacity);
         }
 
         [Fact]
@@ -92,9 +152,8 @@ namespace TurboSuite.Tests.Zones
             proc.SelectedPanelSize = 4;                 // → HasSpecialCompartment true
             proc.SelectedSpecialDevice = "Digital I/O"; // QSE-IO counts as 1 device on its link
 
-            LinkAssignmentService.AssignAndAggregate(new List<PanelResult> { proc }, keypadCount: 0);
+            Assign(new List<PanelResult> { proc });
 
-            // 1 panel device + 1 special-compartment device = 2 on Link 1.
             Assert.Equal(2, proc.Link1.UsedDevices);
             Assert.Equal(4, proc.Link1.UsedLoads);
         }
@@ -105,11 +164,41 @@ namespace TurboSuite.Tests.Zones
             var proc = Proc("1-A", modules: 1, cap: 4);
             proc.SpecialCompartmentPanelSizes = new HashSet<int> { 4 };
             proc.SelectedPanelSize = 4;
-            proc.SelectedSpecialDevice = "Empty"; // neither Digital I/O nor DMX → no increment
+            proc.SelectedSpecialDevice = "Empty"; // not a device → no increment
 
-            LinkAssignmentService.AssignAndAggregate(new List<PanelResult> { proc }, keypadCount: 0);
+            Assign(new List<PanelResult> { proc });
 
             Assert.Equal(1, proc.Link1.UsedDevices);
+        }
+
+        /// <summary>The bug this seam closes, seen from the display: a sited DMX interface used to add
+        /// one device and no loads, so its switch legs never moved the load bar at all.</summary>
+        [Fact]
+        public void DmxChannelsMoveTheLoadBar()
+        {
+            var proc = Proc("1-A", modules: 1, cap: 4);
+            var dmxPanel = new PanelResult
+            {
+                PanelName = "2-A",
+                SpecialCompartmentPanelSizes = new HashSet<int> { 4 },
+                SelectedPanelSize = 4,
+                SelectedSpecialDevice = "DMX"
+            };
+
+            Assign(new List<PanelResult> { proc, dmxPanel }, new BomExtras
+            {
+                SubsystemDemands = new[]
+                {
+                    new ControlSubsystemDemand(
+                        "DMX",
+                        new List<DemandPart> { new DemandPart("QSE-CI-DMX", 1, DemandMount.LvCompartment) },
+                        linkDevices: 1,
+                        linkLoads: 64)
+                }
+            });
+
+            Assert.Equal(2, proc.Link1.UsedDevices);   // 1 module + 1 interface
+            Assert.Equal(68, proc.Link1.UsedLoads);    // 4 module outputs + 64 DMX channels
         }
     }
 }

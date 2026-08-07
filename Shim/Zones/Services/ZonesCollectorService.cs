@@ -136,10 +136,17 @@ namespace TurboSuite.Zones.Services
         }
 
 
-        public (int regular, int twoGang) GetKeypadCounts(Document doc)
+        /// <summary>
+        /// Keypads, split two ways: by gang (a two-gang keypad is two devices) and by radio.
+        ///
+        /// A wireless keypad rides the processor's Clear Connect link rather than a QS link, so it
+        /// consumes a different link's device budget — which is why the two are counted apart rather
+        /// than summed here. See <see cref="ParameterNames.Wireless"/>: absent reads as wired, which
+        /// is the behaviour that shipped before the parameter existed.
+        /// </summary>
+        public KeypadCounts GetKeypadCounts(Document doc)
         {
-            int regular = 0;
-            int twoGang = 0;
+            var counts = new KeypadCounts();
 
             var keypads = new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_LightingDevices)
@@ -149,22 +156,52 @@ namespace TurboSuite.Zones.Services
                 {
                     string familyName = fi.Symbol?.Family?.Name ?? "";
                     return familyName.IndexOf("keypad", StringComparison.OrdinalIgnoreCase) >= 0;
-                });
+                })
+                .ToList();
+
+            counts.Tallies = TallyCatalogSlots(keypads);
 
             foreach (var fi in keypads)
             {
                 Parameter twoGangParam = fi.LookupParameter(ParameterNames.TwoGang)
                     ?? fi.Symbol?.LookupParameter(ParameterNames.TwoGang);
-                if (twoGangParam != null && twoGangParam.AsInteger() == 1)
-                    twoGang++;
+                bool isTwoGang = twoGangParam != null && twoGangParam.AsInteger() == 1;
+
+                if (IsWireless(fi))
+                {
+                    // Gang still doubles the device count — a two-gang wireless keypad is two devices
+                    // on the Clear Connect link, same as it is two on a QS link.
+                    counts.WirelessDevices += isTwoGang ? 2 : 1;
+                }
+                else if (isTwoGang)
+                {
+                    counts.TwoGang++;
+                }
                 else
-                    regular++;
+                {
+                    counts.Regular++;
+                }
             }
 
-            return (regular, twoGang);
+            return counts;
         }
 
-        public (int count, string partNumber) GetHybridRepeaterInfo(Document doc)
+        /// <summary>Instance value wins where a family exposes one; otherwise the type's, since wired
+        /// vs wireless is normally a property of the model. Absent ⇒ wired.</summary>
+        private static bool IsWireless(FamilyInstance fi)
+        {
+            Parameter param = fi.LookupParameter(ParameterNames.Wireless)
+                ?? fi.Symbol?.LookupParameter(ParameterNames.Wireless);
+            return param != null && param.AsInteger() == 1;
+        }
+
+        /// <summary>
+        /// Hybrid Repeaters — how many devices are on the link, and what to order for them.
+        ///
+        /// The part number used to be read off the <b>first instance only</b>, which ordered a
+        /// two-model job as however many of whichever model happened to be collected first.
+        /// </summary>
+        public ControlDeviceGroup GetHybridRepeaters(Document doc)
         {
             var repeaters = new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_ElectricalFixtures)
@@ -174,12 +211,61 @@ namespace TurboSuite.Zones.Services
                     "AL_Electrical Fixture_Hybrid Repeater", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            if (repeaters.Count == 0)
-                return (0, null);
-
-            string partNumber = repeaters[0].Symbol?.LookupParameter(ParameterNames.CatalogNumber1)?.AsString();
-            return (repeaters.Count, partNumber);
+            return new ControlDeviceGroup
+            {
+                DeviceCount = repeaters.Count,
+                Tallies = TallyCatalogSlots(repeaters)
+            };
         }
 
+        /// <summary>
+        /// Counts instances per family type, reads that type's six catalog slots once, and merges the
+        /// rows across types by catalog number.
+        ///
+        /// The reading and the arithmetic are <see cref="CatalogSlotTally"/>'s, in Core, so the grammar's
+        /// behaviour is pinned by tests. All this does is get the parameters off the symbol.
+        /// </summary>
+        private static List<ControlDeviceTally> TallyCatalogSlots(IEnumerable<FamilyInstance> instances)
+        {
+            var perSymbol = new Dictionary<ElementId, (FamilySymbol Symbol, int Count)>();
+            foreach (var fi in instances)
+            {
+                var symbol = fi.Symbol;
+                if (symbol == null) continue;
+
+                if (perSymbol.TryGetValue(symbol.Id, out var entry))
+                    perSymbol[symbol.Id] = (entry.Symbol, entry.Count + 1);
+                else
+                    perSymbol[symbol.Id] = (symbol, 1);
+            }
+
+            var rows = new List<ControlDeviceTally>();
+            foreach (var (symbol, count) in perSymbol.Values)
+            {
+                var catalogNumbers = new string[CatalogSlotTally.SlotCount];
+                var qtyTokens = new string[CatalogSlotTally.SlotCount];
+                for (int slot = 0; slot < CatalogSlotTally.SlotCount; slot++)
+                {
+                    catalogNumbers[slot] =
+                        symbol.LookupParameter($"Catalog Number{slot + 1}")?.AsString() ?? "";
+                    qtyTokens[slot] =
+                        symbol.LookupParameter($"Catalog Qty{slot + 1}")?.AsString() ?? "";
+                }
+
+                // A family has two description fields and six catalog slots, so they pair by position
+                // and stop: Catalog Number1 takes the built-in Description, Catalog Number2 takes
+                // Description2, and the rest carry none. No library type uses slots 3-6 today.
+                var descriptions = new string[CatalogSlotTally.SlotCount];
+                descriptions[0] = symbol.get_Parameter(BuiltInParameter.ALL_MODEL_DESCRIPTION)
+                    ?.AsString() ?? "";
+                descriptions[1] = symbol.LookupParameter(ParameterNames.Description2)
+                    ?.AsString() ?? "";
+
+                rows.AddRange(CatalogSlotTally.ForType(
+                    symbol.Name ?? "", count, catalogNumbers, qtyTokens, descriptions));
+            }
+
+            return CatalogSlotTally.Merge(rows);
+        }
     }
 }

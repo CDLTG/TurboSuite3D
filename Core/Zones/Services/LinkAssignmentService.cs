@@ -1,31 +1,38 @@
 #nullable disable
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
 {
+    /// <summary>
+    /// Fills the Panel Breakdown's capacity bars: runs <see cref="ControlLinkPacker"/> against the
+    /// links the sited processors actually provide, and writes the result onto each
+    /// <see cref="ProcessorLink"/>.
+    ///
+    /// This used to <i>be</i> the link math — a forward-only first-fit that was the third independent
+    /// computation of QS-link demand in the codebase, and disagreed with the other two. All it does
+    /// now is adapt: pack, then map positionally onto Link 1, Link 2, Link 3… Because the packer
+    /// returns QS links first and Clear Connect last, the trailing links are the wireless ones, which
+    /// is the behaviour the display has always had.
+    /// </summary>
     public static class LinkAssignmentService
     {
         /// <summary>
-        /// Assigns panels to processor links and aggregates device/load counts.
-        /// When wireless devices are present, the last link(s) are designated Clear Connect Type A
-        /// and reserved exclusively for wireless devices (hybrid repeaters).
-        /// QSE-IO and QSE-CI-DMX special compartment devices each count as 1 device on their link.
+        /// Packs the job onto the sited processors' links and updates their bars in place.
+        ///
+        /// <paramref name="extras"/> is the same object the BOM is built from, deliberately: the bars
+        /// and the processor recommendation must be derived from identical inputs, or they can drift
+        /// apart through the inputs even while sharing the algorithm.
         /// </summary>
-        public static void AssignAndAggregate(List<PanelResult> allPanels, int keypadCount, int hybridRepeaterCount = 0)
+        public static void AssignAndAggregate(List<PanelResult> allPanels, BomExtras extras)
         {
-            bool hasWirelessDevices = hybridRepeaterCount > 0;
+            if (allPanels == null) return;
 
-            // Build processor links from panels marked as processors
-            // (IsProcessor is set by the ViewModel, checking both special device slots)
             var processorPanels = allPanels.Where(p => p.IsProcessor).ToList();
+            if (processorPanels.Count == 0) return;
 
-            if (processorPanels.Count == 0)
-                return;
-
-            var allLinks = new List<ProcessorLink>();
+            var links = new List<ProcessorLink>();
             foreach (var proc in processorPanels)
             {
                 if (proc.Link1 == null)
@@ -33,152 +40,23 @@ namespace TurboSuite.Zones.Services
                 if (proc.Link2 == null)
                     proc.Link2 = new ProcessorLink { ProcessorPanelName = proc.PanelName, LinkNumber = 2 };
 
-                // Reset link types to QS (will designate CC-A below if needed)
-                proc.Link1.LinkType = "QS";
-                proc.Link2.LinkType = "QS";
-
-                allLinks.Add(proc.Link1);
-                allLinks.Add(proc.Link2);
+                links.Add(proc.Link1);
+                links.Add(proc.Link2);
             }
 
-            // Designate Clear Connect Type A links (last link first, working backward)
-            var ccaLinks = new List<ProcessorLink>();
-            if (hasWirelessDevices && allLinks.Count > 0)
+            var packed = ControlLinkPacker.Pack(
+                ControlLinkPacker.BuildDemand(allPanels, extras), links.Count);
+
+            for (int i = 0; i < links.Count; i++)
             {
-                int ccaLinksNeeded = (int)Math.Ceiling((double)hybridRepeaterCount / ProcessorLink.MaxDevices);
-                ccaLinksNeeded = Math.Max(ccaLinksNeeded, 1);
+                var result = i < packed.Links.Count ? packed.Links[i] : null;
 
-                // Assign CC-A from the last link backward
-                for (int i = allLinks.Count - 1; i >= 0 && ccaLinks.Count < ccaLinksNeeded; i--)
-                {
-                    allLinks[i].LinkType = "Clear Connect Type A";
-                    ccaLinks.Add(allLinks[i]);
-                }
-            }
-
-            // Separate QS links from CC-A links
-            var qsLinks = allLinks.Where(l => !l.IsClearConnect).ToList();
-
-            // Track accumulated devices and loads per link
-            var linkDevices = new Dictionary<ProcessorLink, int>();
-            var linkLoads = new Dictionary<ProcessorLink, int>();
-            foreach (var link in allLinks)
-            {
-                linkDevices[link] = 0;
-                linkLoads[link] = 0;
-            }
-
-            // Assign hybrid repeaters to CC-A link(s)
-            if (hybridRepeaterCount > 0 && ccaLinks.Count > 0)
-            {
-                int remaining = hybridRepeaterCount;
-                foreach (var link in ccaLinks)
-                {
-                    if (remaining <= 0) break;
-                    int assign = Math.Min(remaining, ProcessorLink.MaxDevices);
-                    linkDevices[link] += assign;
-                    remaining -= assign;
-                }
-            }
-
-            // Track which QS link each panel is assigned to (for special device counting)
-            var panelLinkMap = new Dictionary<PanelResult, ProcessorLink>();
-
-            // Auto-assign all panels (including processor panels) to QS links
-            if (qsLinks.Count > 0)
-            {
-                int linkIndex = 0;
-                foreach (var panel in allPanels)
-                {
-                    bool assigned = false;
-                    for (int i = linkIndex; i < qsLinks.Count; i++)
-                    {
-                        var link = qsLinks[i];
-                        int deviceRoom = ProcessorLink.MaxDevices - linkDevices[link];
-                        int loadRoom = ProcessorLink.MaxLoads - linkLoads[link];
-
-                        if (panel.DeviceCount <= deviceRoom && panel.LoadCount <= loadRoom)
-                        {
-                            linkDevices[link] += panel.DeviceCount;
-                            linkLoads[link] += panel.LoadCount;
-                            panelLinkMap[panel] = link;
-                            assigned = true;
-                            break;
-                        }
-
-                        // Current link is full for this panel — advance
-                        linkIndex = i + 1;
-                    }
-
-                    // Fallback: if no QS link from linkIndex onward fits, use the one with most room
-                    if (!assigned && qsLinks.Count > 0)
-                    {
-                        var bestLink = qsLinks
-                            .OrderByDescending(l => Math.Min(
-                                ProcessorLink.MaxDevices - linkDevices[l],
-                                ProcessorLink.MaxLoads - linkLoads[l]))
-                            .First();
-                        linkDevices[bestLink] += panel.DeviceCount;
-                        linkLoads[bestLink] += panel.LoadCount;
-                        panelLinkMap[panel] = bestLink;
-                    }
-                }
-            }
-
-            // Count QSE-IO and QSE-CI-DMX as 1 device each on the link their panel is assigned to
-            foreach (var panel in allPanels)
-            {
-                if (!panel.HasSpecialCompartment) continue;
-
-                // Check both slots (slot 2 exists on dual-compartment panels like LV21)
-                var slots = new List<string> { panel.SelectedSpecialDevice };
-                if (panel.HasDualSpecialCompartment)
-                    slots.Add(panel.SelectedSpecialDevice2);
-
-                foreach (string selected in slots)
-                {
-                    if (string.Equals(selected, "Digital I/O", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(selected, "DMX", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (panelLinkMap.TryGetValue(panel, out var link))
-                            linkDevices[link] += 1;
-                    }
-                }
-            }
-
-            // Group keypads together on the QS link(s) with the most device headroom.
-            // If all links are at/over capacity, assign remaining to the least-overloaded
-            // link so the overflow is visible to the user.
-            if (keypadCount > 0 && qsLinks.Count > 0)
-            {
-                int remaining = keypadCount;
-                var linksByRoom = qsLinks
-                    .OrderByDescending(l => ProcessorLink.MaxDevices - linkDevices[l])
-                    .ToList();
-
-                foreach (var link in linksByRoom)
-                {
-                    if (remaining <= 0) break;
-                    int room = ProcessorLink.MaxDevices - linkDevices[link];
-                    if (room <= 0) continue;
-                    int assign = Math.Min(remaining, room);
-                    linkDevices[link] += assign;
-                    remaining -= assign;
-                }
-
-                // If keypads remain (all links full), pile onto the link with most headroom
-                if (remaining > 0)
-                {
-                    var bestLink = linksByRoom[0];
-                    linkDevices[bestLink] += remaining;
-                }
-            }
-
-            // Update ProcessorLink properties (triggers INotifyPropertyChanged)
-            foreach (var link in allLinks)
-            {
-                link.UsedDevices = linkDevices[link];
-                link.UsedLoads = linkLoads[link];
+                // Type first: it is what decides a link's capacity, so the over-capacity flags raised
+                // by the two setters below are only correct once it is set.
+                links[i].LinkType = result?.LinkType ?? ProcessorLink.QsLinkType;
+                links[i].UsedDevices = result?.Devices ?? 0;
+                links[i].UsedLoads = result?.Loads ?? 0;
+                links[i].UsedRepeaters = result?.Repeaters ?? 0;
             }
         }
     }

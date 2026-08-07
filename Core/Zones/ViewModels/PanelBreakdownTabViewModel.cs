@@ -25,8 +25,9 @@ namespace TurboSuite.Zones.ViewModels
         private readonly Dictionary<string, int> _panelSizeOverrides = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly int _keypadCount;
         private readonly int _twoGangKeypadCount;
-        private readonly int _hybridRepeaterCount;
-        private readonly string _hybridRepeaterPartNumber;
+        private readonly int _wirelessDeviceCount;
+        private readonly IReadOnlyList<ControlDeviceTally> _keypadTallies;
+        private readonly ControlDeviceGroup _hybridRepeaters;
 
         /// <summary>What the control subsystems (TurboDMX today) reported at window open. Read once —
         /// re-solving DMX on every panel-size tweak would be wasted work, and the DMX design cannot
@@ -44,8 +45,8 @@ namespace TurboSuite.Zones.ViewModels
         private bool _saveDirty;
 
         public PanelBreakdownTabViewModel(List<ZonesCircuitData> circuits,
-            int keypadCount, int twoGangKeypadCount,
-            int hybridRepeaterCount, string hybridRepeaterPartNumber,
+            KeypadCounts keypadCounts,
+            ControlDeviceGroup hybridRepeaters,
             PanelSettings savedSettings,
             IRevitWorkQueue workQueue, IPanelSettingsStore settingsStore,
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null)
@@ -53,10 +54,12 @@ namespace TurboSuite.Zones.ViewModels
             _workQueue = workQueue;
             _settingsStore = settingsStore;
             _subsystemDemands = subsystemDemands;
-            _keypadCount = keypadCount;
-            _twoGangKeypadCount = twoGangKeypadCount;
-            _hybridRepeaterCount = hybridRepeaterCount;
-            _hybridRepeaterPartNumber = hybridRepeaterPartNumber;
+            keypadCounts ??= new KeypadCounts();
+            _keypadCount = keypadCounts.Regular;
+            _twoGangKeypadCount = keypadCounts.TwoGang;
+            _wirelessDeviceCount = keypadCounts.WirelessDevices;
+            _keypadTallies = keypadCounts.Tallies;
+            _hybridRepeaters = hybridRepeaters;
 
             Circuits = new ObservableCollection<ZonesCircuitViewModel>(
                 circuits.OrderBy(c => c.CircuitNumber).Select(c => new ZonesCircuitViewModel(c)));
@@ -345,8 +348,9 @@ namespace TurboSuite.Zones.ViewModels
         {
             KeypadCount = _keypadCount,
             TwoGangKeypadCount = _twoGangKeypadCount,
-            HybridRepeaterCount = _hybridRepeaterCount,
-            HybridRepeaterPartNumber = _hybridRepeaterPartNumber,
+            WirelessDeviceCount = _wirelessDeviceCount,
+            KeypadTallies = _keypadTallies,
+            HybridRepeaters = _hybridRepeaters,
             SubsystemDemands = _subsystemDemands,
             Audience = BomAudience.DesignSurface
         };
@@ -397,8 +401,9 @@ namespace TurboSuite.Zones.ViewModels
                 panel.Link2 = null;
             }
 
-            // Run auto-assignment and aggregate
-            LinkAssignmentService.AssignAndAggregate(allPanels, _keypadCount + _twoGangKeypadCount * 2, _hybridRepeaterCount);
+            // Pack onto the links the sited processors provide. Same inputs as the BOM, on purpose —
+            // the bars and the processor recommendation are two questions to one packer.
+            LinkAssignmentService.AssignAndAggregate(allPanels, BuildBomExtras());
 
             // Rebuild processor displays for sidebar
             ProcessorDisplays = new ObservableCollection<PanelResult>(processorPanels);

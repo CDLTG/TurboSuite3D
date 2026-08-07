@@ -10,8 +10,8 @@ namespace TurboSuite.Zones.ViewModels
     public class ZonesMainViewModel : ViewModelBase
     {
         public ZonesMainViewModel(List<ZonesCircuitData> circuits,
-            int keypadCount, int twoGangKeypadCount,
-            int hybridRepeaterCount, string hybridRepeaterPartNumber,
+            KeypadCounts keypadCounts,
+            ControlDeviceGroup hybridRepeaters,
             PanelSettings savedSettings,
             IRevitWorkQueue workQueue,
             ILoadNameWriter loadNameWriter,
@@ -20,7 +20,7 @@ namespace TurboSuite.Zones.ViewModels
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null)
         {
             PanelTab = new PanelBreakdownTabViewModel(circuits,
-                keypadCount, twoGangKeypadCount, hybridRepeaterCount, hybridRepeaterPartNumber,
+                keypadCounts, hybridRepeaters,
                 savedSettings, workQueue, panelSettingsStore, subsystemDemands);
             LoadNameTab = new LoadNameTabViewModel(circuits, workQueue, loadNameWriter, circuitSelector);
         }
