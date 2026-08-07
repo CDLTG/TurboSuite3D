@@ -324,29 +324,112 @@ namespace TurboSuite.Tests.Zones
             Assert.Empty(unassigned);
         }
 
-        /// <summary>DMX is excluded silently too, but for the opposite reason to WIFI: its control
-        /// hardware very much exists — TurboDMX counts the QSE-CI-DMX interfaces and reports them as
-        /// subsystem demand. Flagging it here would ask the user to fix something already handled.</summary>
+        /// <summary>A DMX circuit whose subsystem accounted for it is excluded silently — for the
+        /// opposite reason to WIFI: its control hardware very much exists, and TurboDMX counted the
+        /// QSE-CI-DMX interfaces. Flagging it would ask the user to fix something already handled.</summary>
         [Fact]
-        public void HandledBySubsystem_ExcludedSilently()
+        public void HandledBySubsystem_ExcludedSilently_WhenTheSubsystemAccountedForIt()
         {
-            var dmx = C("1", "ZONE 1");
-            dmx.DimmingType = string.Empty;
-            dmx.DimmingOutcome = DimmingResolveOutcome.HandledBySubsystem;
-            dmx.DimmingProtocolDisplay = "DMX";
+            var dmx = Dmx("1", "ZONE 1");
 
             // The DMX tape is often on its own unpaneled feed, which must not trip the blank-panel
             // warning either.
-            var dmxNoPanel = C("2", "");
-            dmxNoPanel.DimmingType = string.Empty;
-            dmxNoPanel.DimmingOutcome = DimmingResolveOutcome.HandledBySubsystem;
+            var dmxNoPanel = Dmx("2", "");
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
-                new List<ZonesCircuitData> { dmx, dmxNoPanel }, BrandConfig.Crestron);
+                new List<ZonesCircuitData> { dmx, dmxNoPanel }, BrandConfig.Crestron,
+                subsystemDemands: new[] { DmxDemand(interfaces: 2) });
 
             Assert.Empty(result.Locations);   // rides no DIN module, so it builds no panel
             Assert.Empty(unassigned);
         }
+
+        /// <summary>A subsystem that reported a REASON has also accounted for itself — the user is
+        /// already being told what to fix, and listing the circuits too would be the same complaint
+        /// twice.</summary>
+        [Fact]
+        public void HandledBySubsystem_StaysSilent_WhenTheSubsystemReportedADiagnostic()
+        {
+            var (_, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { Dmx("1", "ZONE 1") }, BrandConfig.Crestron,
+                subsystemDemands: new[]
+                {
+                    ControlSubsystemDemand.Unsolvable("DMX", "no decoder type is selected")
+                });
+
+            Assert.Empty(unassigned);
+        }
+
+        /// <summary>The case this rule exists for. The fixtures declare DMX but carry no DMX Channels,
+        /// so TurboDMX never saw them: no parts, no reason, nothing. Silence here would mean the
+        /// circuits vanish from the breakdown, order nothing, and are mentioned nowhere at all — so
+        /// they go back in the Unassigned list, where they lived before subsystems existed.</summary>
+        [Fact]
+        public void HandledBySubsystem_Surfaces_WhenNoSubsystemAccountedForIt()
+        {
+            var (_, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { Dmx("1", "ZONE 1") }, BrandConfig.Crestron,
+                subsystemDemands: new[] { ControlSubsystemDemand.None("DMX") });
+
+            Assert.Equal("DMX", Assert.Single(unassigned).DimmingProtocolDisplay);
+        }
+
+        /// <summary>No demands supplied at all (the Panel Schedule path, and any caller predating the
+        /// seam) surfaces them too. Safe direction: a circuit nobody vouched for is visible.</summary>
+        [Fact]
+        public void HandledBySubsystem_Surfaces_WhenNoDemandsWereSuppliedAtAll()
+        {
+            var (_, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { Dmx("1", "ZONE 1") }, BrandConfig.Crestron);
+
+            Assert.Single(unassigned);
+        }
+
+        /// <summary>Accounting is per subsystem: DALI speaking up must not silence DMX's circuits.</summary>
+        [Fact]
+        public void OneSubsystemAccounting_DoesNotSilenceAnother()
+        {
+            var (_, unassigned) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { Dmx("1", "ZONE 1") }, BrandConfig.Crestron,
+                subsystemDemands: new[] { ControlSubsystemDemand.Unsolvable("DALI", "no module data") });
+
+            Assert.Single(unassigned);
+        }
+
+        /// <summary>A subsystem-owned circuit is still never allocated, accounted for or not — so the
+        /// panels built are identical either way and only the Unassigned list moves.</summary>
+        [Fact]
+        public void SubsystemAccounting_DoesNotChangeTheAllocation()
+        {
+            var circuits = new List<ZonesCircuitData> { C("1", "ZONE 1"), Dmx("2", "ZONE 1") };
+
+            var (accounted, _) = PanelAllocationService.BuildPanelBreakdown(
+                circuits, BrandConfig.Crestron, subsystemDemands: new[] { DmxDemand(1) });
+            var (unaccounted, _) = PanelAllocationService.BuildPanelBreakdown(
+                circuits, BrandConfig.Crestron, subsystemDemands: new[] { ControlSubsystemDemand.None("DMX") });
+
+            Assert.Equal(accounted.AllPanels.Count, unaccounted.AllPanels.Count);
+            Assert.Equal(accounted.AllPanels.Sum(p => p.Modules.Count),
+                         unaccounted.AllPanels.Sum(p => p.Modules.Count));
+        }
+
+        private static ZonesCircuitData Dmx(string number, string panel)
+        {
+            var circuit = C(number, panel);
+            circuit.DimmingType = string.Empty;
+            circuit.DimmingOutcome = DimmingResolveOutcome.HandledBySubsystem;
+            circuit.DimmingSubsystem = "DMX";
+            circuit.DimmingProtocolDisplay = "DMX";
+            return circuit;
+        }
+
+        private static ControlSubsystemDemand DmxDemand(int interfaces) =>
+            new ControlSubsystemDemand("DMX",
+                parts: new List<DemandPart>
+                {
+                    new DemandPart("QSE-CI-DMX", interfaces, DemandMount.LvCompartment)
+                },
+                linkDevices: interfaces);
 
         /// <summary>A DMX circuit alongside an allocatable one leaves the zone's panel untouched —
         /// the subsystem takes its circuit out of the allocation entirely, it does not shrink it.</summary>

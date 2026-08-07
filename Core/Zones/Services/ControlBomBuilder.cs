@@ -178,8 +178,9 @@ namespace TurboSuite.Zones.Services
                 {
                     foreach (var demand in extras.SubsystemDemands)
                     {
-                        if (demand == null || demand.Parts.Count == 0) continue;
+                        if (demand == null) continue;
                         if (brand.SpecialDevices.ContainsKey(demand.Subsystem)
+                            && RequiredFor(demand.Subsystem, extras) > 0
                             && !specialCounts.ContainsKey(demand.Subsystem))
                             specialCounts[demand.Subsystem] = 0;
                     }
@@ -316,13 +317,17 @@ namespace TurboSuite.Zones.Services
                     });
                 }
 
-                // Parts with a compartment are already on a placement-driven line above.
-                if (brand.SpecialDevices != null && brand.SpecialDevices.ContainsKey(demand.Subsystem))
-                    continue;
-
                 foreach (var part in demand.Parts)
                 {
                     if (part == null || part.Quantity <= 0) continue;
+
+                    // A compartment part is ordered by placement, on the line built above — never from
+                    // here. Keyed on the MOUNT, not on whether this brand happens to define a
+                    // compartment for it: Crestron declares no special devices at all, and reading that
+                    // as "no compartment anywhere" dropped a Lutron QSE-CI-DMX onto a Crestron BOM at
+                    // full solve quantity. A part that cannot be placed on this brand is ordered by
+                    // nobody, which is the correct answer.
+                    if (part.Mount == DemandMount.LvCompartment) continue;
 
                     lines.Add(new BomLineItem
                     {
@@ -338,7 +343,9 @@ namespace TurboSuite.Zones.Services
 
         /// <summary>How many of a compartment device the subsystems say the job needs, or 0 when
         /// nothing speaks for it. Matched on the special-device NAME ("DMX"), which is what both the
-        /// dropdown and <see cref="ControlSubsystemDemand.Subsystem"/> use.</summary>
+        /// dropdown and <see cref="ControlSubsystemDemand.Subsystem"/> use. Only compartment-mounted
+        /// parts count — a subsystem's DIN or external parts are ordered elsewhere and would inflate
+        /// the "of M placed" figure into something no amount of placing could satisfy.</summary>
         private static int RequiredFor(string specialDevice, BomExtras extras)
         {
             if (extras.SubsystemDemands == null) return 0;
@@ -351,7 +358,8 @@ namespace TurboSuite.Zones.Services
                     continue;
 
                 foreach (var part in demand.Parts)
-                    if (part != null) required += part.Quantity;
+                    if (part != null && part.Mount == DemandMount.LvCompartment)
+                        required += part.Quantity;
             }
             return required;
         }

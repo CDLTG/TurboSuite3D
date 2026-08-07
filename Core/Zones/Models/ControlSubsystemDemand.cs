@@ -28,14 +28,12 @@ namespace TurboSuite.Zones.Models
             IReadOnlyList<DemandPart>? parts = null,
             int linkDevices = 0,
             int linkLoads = 0,
-            IReadOnlyList<string>? servedZones = null,
             string? diagnostic = null)
         {
             Subsystem = subsystem;
             Parts = parts ?? new List<DemandPart>();
             LinkDevices = linkDevices;
             LinkLoads = linkLoads;
-            ServedZones = servedZones ?? new List<string>();
             Diagnostic = diagnostic;
         }
 
@@ -56,10 +54,6 @@ namespace TurboSuite.Zones.Models
         /// <summary>Switch legs consumed off the control link's load budget. For DMX, <i>"each DMX
         /// channel = 1 switch leg"</i>, so this is the total channel count across every interface.</summary>
         public int LinkLoads { get; }
-
-        /// <summary>The control zones this demand serves, for display under the compartment. Names as
-        /// the designer authored them.</summary>
-        public IReadOnlyList<string> ServedZones { get; }
 
         /// <summary>Why the demand is zero or unsolvable, in the subsystem's own words — surfaced as a
         /// BOM warning line. Null when the demand is a clean solve (including a clean zero).</summary>

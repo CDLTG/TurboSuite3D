@@ -52,6 +52,10 @@ namespace TurboSuite.Zones.Models
         public string DimmingProtocolDisplay { get; set; }
 
         public DimmingResolveOutcome DimmingOutcome { get; set; }
+
+        /// <summary>Which subsystem owns this circuit's control hardware ("DMX"). Empty unless
+        /// <see cref="DimmingOutcome"/> is <see cref="DimmingResolveOutcome.HandledBySubsystem"/>.</summary>
+        public string DimmingSubsystem { get; set; }
         public string RoomName { get; set; }
         public string CurrentLoadName { get; set; }
         public string CircuitComments { get; set; }

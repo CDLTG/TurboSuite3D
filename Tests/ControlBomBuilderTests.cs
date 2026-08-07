@@ -580,6 +580,19 @@ namespace TurboSuite.Tests.Zones
             Assert.DoesNotContain(bom, i => i.PartNumber == "QSE-CI-DMX");
         }
 
+        /// <summary>A brand with no compartments at all (Crestron declares no special devices) must not
+        /// have a Lutron interface fall through onto its BOM. "No compartment defined for this brand"
+        /// is not the same as "this part has no compartment anywhere".</summary>
+        [Fact]
+        public void LutronInterfaceDoesNotLandOnACrestronBom()
+        {
+            var panels = new List<PanelResult> { LutronPanel("1-A", 8, ("ELV", 4)) };
+
+            var bom = Build(panels, Crestron, With(Dmx(4, 100), BomAudience.IssuedDocument));
+
+            Assert.DoesNotContain(bom, i => i.PartNumber == "QSE-CI-DMX");
+        }
+
         /// <summary>A subsystem part with no compartment to sit in has no placement to defer to, so it
         /// is emitted at its solved quantity. Forward cover for the DALI DIN module.</summary>
         [Fact]

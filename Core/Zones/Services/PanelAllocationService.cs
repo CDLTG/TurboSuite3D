@@ -15,28 +15,63 @@ namespace TurboSuite.Zones.Services
         public static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
 
         /// <summary>
+        /// The subsystems that accounted for themselves — reported parts, or a reason they could not.
+        ///
+        /// Either counts as "spoke": a subsystem with a diagnostic is already telling the user what to
+        /// fix, so re-listing its circuits would be the same complaint twice. Silence is the only
+        /// answer that leaves nobody informed, and it is the one this set is here to catch.
+        /// </summary>
+        private static HashSet<string> AccountedSubsystems(
+            IReadOnlyList<ControlSubsystemDemand> demands)
+        {
+            var accounted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (demands == null) return accounted;
+
+            foreach (var demand in demands)
+            {
+                if (demand == null) continue;
+                if (demand.Parts.Count > 0 || demand.HasDiagnostic)
+                    accounted.Add(demand.Subsystem);
+            }
+            return accounted;
+        }
+
+        /// <summary>
         /// Groups circuits by zone (ZONE N panels), recommends the minimum number of
         /// real panels per zone, and distributes modules across them.
         /// Circuits on "DUMMY" panels are excluded. Circuits without a panel are unassigned.
         /// </summary>
+        /// <param name="subsystemDemands">
+        /// What the control subsystems reported, so a subsystem-owned circuit can be silenced only when
+        /// its subsystem actually accounted for it. Null means nothing reported — every such circuit
+        /// then surfaces, which is the safe direction.
+        /// </param>
         public static (PanelAllocationResult Result, List<ZonesCircuitData> Unassigned) BuildPanelBreakdown(
             List<ZonesCircuitData> circuits,
             BrandConfig brand,
-            Dictionary<string, int> panelSizeOverrides = null)
+            Dictionary<string, int> panelSizeOverrides = null,
+            IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null)
         {
             var unassigned = new List<ZonesCircuitData>();
+            var accountedSubsystems = AccountedSubsystems(subsystemDemands);
 
             // Group circuits by zone number, filtering out DUMMY and unassigned
             var circuitsByZone = new Dictionary<int, List<ZonesCircuitData>>();
             foreach (var circuit in circuits)
             {
-                // Rides no dimming module, legitimately: deliberately module-less (WIFI, network-
-                // controlled) or owned by a subsystem that counts its own hardware (DMX → TurboDMX).
-                // Checked before the panel gates because such a circuit often has no zone panel
-                // either, and warning about that would be noise. Same silence the switch-wired
-                // exclusion below gets.
-                if (circuit.DimmingOutcome == DimmingResolveOutcome.NoModuleByDesign
-                    || circuit.DimmingOutcome == DimmingResolveOutcome.HandledBySubsystem)
+                // Deliberately module-less (WIFI, network-controlled). Checked before the panel gates
+                // because such a circuit often has no zone panel either, and warning about that would
+                // be noise. Same silence the switch-wired exclusion below gets.
+                if (circuit.DimmingOutcome == DimmingResolveOutcome.NoModuleByDesign)
+                    continue;
+
+                // Owned by a subsystem that counts its own hardware (DMX → TurboDMX) — silenced only if
+                // that subsystem actually said something. If it reported neither parts nor a reason, it
+                // never saw this circuit's fixtures at all (the fixtures carry Dimming Protocol but not
+                // the DMX Channels the reader keys on), and nothing anywhere would mention them. Better
+                // in the Unassigned list, where they were before subsystems existed, than nowhere.
+                if (circuit.DimmingOutcome == DimmingResolveOutcome.HandledBySubsystem
+                    && accountedSubsystems.Contains(circuit.DimmingSubsystem ?? ""))
                     continue;
 
                 if (string.IsNullOrWhiteSpace(circuit.PanelName))
@@ -58,9 +93,10 @@ namespace TurboSuite.Zones.Services
                     continue;
                 }
 
-                // The circuit wants a panel but has no module to sit on: DALI/DMX (not modeled
-                // yet) or a blank/off-vocabulary protocol (an authoring gap). Surface it in the
-                // Unassigned list rather than let it become a phantom BOM part.
+                // The circuit wants a panel but has no module to sit on: DALI (not modeled yet), a
+                // blank/off-vocabulary protocol (an authoring gap), or a subsystem-owned circuit its
+                // subsystem never saw. Surface it in the Unassigned list rather than let it become a
+                // phantom BOM part.
                 if (circuit.DimmingOutcome != DimmingResolveOutcome.Allocatable)
                 {
                     unassigned.Add(circuit);

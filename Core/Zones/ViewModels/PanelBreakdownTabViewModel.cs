@@ -164,7 +164,7 @@ namespace TurboSuite.Zones.ViewModels
             var circuitData = Circuits.Select(c => c.Data).ToList();
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
-                circuitData, _currentBrand, _panelSizeOverrides);
+                circuitData, _currentBrand, _panelSizeOverrides, _subsystemDemands);
 
             AllocationResult = result;
             UnassignedCircuits = new ObservableCollection<ZonesCircuitData>(unassigned);
@@ -172,7 +172,6 @@ namespace TurboSuite.Zones.ViewModels
             // Restore special device selections (no auto-lock — processor is manual)
             RestoreSpecialDeviceSelections();
             AttachPanelHandlers();
-            RebuildSubsystemDetails();
             RebuildLinkAssignments();
 
             // Build location displays for XAML binding
@@ -309,7 +308,6 @@ namespace TurboSuite.Zones.ViewModels
             if (e.PropertyName == nameof(PanelResult.SelectedSpecialDevice)
                 || e.PropertyName == nameof(PanelResult.SelectedSpecialDevice2))
             {
-                RebuildSubsystemDetails();
                 RebuildLinkAssignments();
                 RebuildBom();
                 SaveSettings();
@@ -326,51 +324,6 @@ namespace TurboSuite.Zones.ViewModels
                     Dispatcher.CurrentDispatcher.BeginInvoke(BuildPanelBreakdown, DispatcherPriority.Background);
                 }
             }
-        }
-
-        /// <summary>
-        /// Label each compartment that holds a subsystem device with what it serves — for DMX, its
-        /// control zones. "DMX" alone tells a reviewer nothing about whether the right zones are
-        /// covered; the zone names are the thing they can actually check against the drawings.
-        ///
-        /// Every panel is rewritten, including the ones that clear, so removing a device removes its
-        /// caption instead of stranding it under a compartment that no longer holds it.
-        /// </summary>
-        private void RebuildSubsystemDetails()
-        {
-            if (_allocationResult == null) return;
-
-            foreach (var panel in _allocationResult.AllPanels)
-            {
-                panel.SpecialDeviceDetail = DetailFor(panel.SelectedSpecialDevice);
-                panel.SpecialDeviceDetail2 = panel.HasDualSpecialCompartment
-                    ? DetailFor(panel.SelectedSpecialDevice2)
-                    : "";
-            }
-        }
-
-        /// <summary>The served-zone caption for a compartment selection, or empty when no subsystem
-        /// speaks for it. A subsystem that could not solve says so here too — the compartment is where
-        /// the user is looking when they wonder why the count seems wrong.</summary>
-        private string DetailFor(string selectedDevice)
-        {
-            if (_subsystemDemands == null || string.IsNullOrEmpty(selectedDevice)) return "";
-
-            foreach (var demand in _subsystemDemands)
-            {
-                if (demand == null
-                    || !string.Equals(demand.Subsystem, selectedDevice, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                // "Unsolved" means nothing was counted. A demand carrying parts AND a diagnostic is a
-                // caveat, not a failure — it still serves zones, and the BOM warning line is where the
-                // caveat belongs; repeating it here would just crowd the panel graphic.
-                if (demand.Parts.Count == 0 && demand.HasDiagnostic) return "unsolved";
-                if (demand.ServedZones.Count == 0) return "";
-
-                return string.Join(", ", demand.ServedZones);
-            }
-            return "";
         }
 
         private void RebuildBom()

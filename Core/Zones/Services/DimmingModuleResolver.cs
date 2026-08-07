@@ -41,16 +41,22 @@ namespace TurboSuite.Zones.Services
 
         private readonly struct Entry
         {
-            public Entry(Category category, string moduleKey = "")
+            public Entry(Category category, string moduleKey = "", string subsystem = "")
             {
                 Category = category;
                 ModuleKey = moduleKey;
+                Subsystem = subsystem;
             }
 
             public Category Category { get; }
 
             /// <summary>The <see cref="Models.BrandConfig"/> module key; empty for non-module categories.</summary>
             public string ModuleKey { get; }
+
+            /// <summary>For <see cref="Category.ExternalSubsystem"/>, which subsystem owns it — the
+            /// canonical name a <c>ControlSubsystemDemand</c> reports under. Stored rather than reusing
+            /// the authored protocol string so casing is the map's, not the family author's.</summary>
+            public string Subsystem { get; }
         }
 
         /// <summary>
@@ -80,7 +86,7 @@ namespace TurboSuite.Zones.Services
                 // DMX rides no DIN module at all: the QSE-CI-DMX is a QS-link interface in the panel's
                 // LV compartment, and TurboDMX — which knows the channel math — reports how many.
                 // Silent here, because the parts are counted, just not by this map.
-                { "DMX",   new Entry(Category.ExternalSubsystem) },
+                { "DMX",   new Entry(Category.ExternalSubsystem, subsystem: "DMX") },
 
                 // A real Lutron module TurboSuite does not allocate yet. Flagged rather than passed
                 // through, so it cannot become a phantom BOM part.
@@ -136,7 +142,7 @@ namespace TurboSuite.Zones.Services
             // design, or owned by a subsystem. One unrecognized value in the mix is still an authoring
             // gap, and being co-declared with WIFI or DMX must not hide it.
             bool anyNotYetSupported = false;
-            bool anyExternal = false;
+            string subsystem = string.Empty;
             bool allAccountedFor = true;
             foreach (string protocol in declared)
             {
@@ -145,7 +151,7 @@ namespace TurboSuite.Zones.Services
                 switch (entry.Category)
                 {
                     case Category.NoModule: break;
-                    case Category.ExternalSubsystem: anyExternal = true; break;
+                    case Category.ExternalSubsystem: subsystem = entry.Subsystem; break;
                     case Category.NotYetSupported: anyNotYetSupported = true; allAccountedFor = false; break;
                     default: allAccountedFor = false; break;
                 }
@@ -155,9 +161,11 @@ namespace TurboSuite.Zones.Services
                 return new DimmingResolution(display, string.Empty, DimmingResolveOutcome.NotYetSupported);
 
             if (allAccountedFor)
-                return new DimmingResolution(display, string.Empty,
-                    anyExternal ? DimmingResolveOutcome.HandledBySubsystem
-                                : DimmingResolveOutcome.NoModuleByDesign);
+                return subsystem.Length > 0
+                    ? new DimmingResolution(display, string.Empty,
+                                            DimmingResolveOutcome.HandledBySubsystem, subsystem)
+                    : new DimmingResolution(display, string.Empty,
+                                            DimmingResolveOutcome.NoModuleByDesign);
 
             return new DimmingResolution(display, string.Empty, DimmingResolveOutcome.NoProtocol);
         }
@@ -166,11 +174,13 @@ namespace TurboSuite.Zones.Services
     /// <summary>The outcome of resolving one circuit's fixtures to a control-module type.</summary>
     public readonly struct DimmingResolution
     {
-        public DimmingResolution(string protocolDisplay, string moduleType, DimmingResolveOutcome outcome)
+        public DimmingResolution(string protocolDisplay, string moduleType, DimmingResolveOutcome outcome,
+                                 string subsystem = "")
         {
             ProtocolDisplay = protocolDisplay;
             ModuleType = moduleType;
             Outcome = outcome;
+            Subsystem = subsystem;
         }
 
         /// <summary>The circuit's distinct declared protocols, "; "-joined — what the Loads PDF
@@ -183,5 +193,11 @@ namespace TurboSuite.Zones.Services
         public string ModuleType { get; }
 
         public DimmingResolveOutcome Outcome { get; }
+
+        /// <summary>Which subsystem owns this circuit's control hardware. Empty unless
+        /// <see cref="Outcome"/> is <see cref="DimmingResolveOutcome.HandledBySubsystem"/>. Lets the
+        /// allocator ask whether that subsystem actually accounted for anything before staying quiet
+        /// about the circuit.</summary>
+        public string Subsystem { get; }
     }
 }

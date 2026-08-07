@@ -25,8 +25,6 @@ namespace TurboSuite.Zones.Models
     {
         private string _selectedSpecialDevice = "";
         private string _selectedSpecialDevice2 = "";
-        private string _specialDeviceDetail = "";
-        private string _specialDeviceDetail2 = "";
         private bool _isProcessor;
         private ProcessorLink _link1;
         private ProcessorLink _link2;
@@ -87,39 +85,6 @@ namespace TurboSuite.Zones.Models
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedSpecialDevice2)));
             }
         }
-
-        /// <summary>What the compartment device actually serves, shown under the dropdown — for DMX,
-        /// the control zones behind it. Empty when the selection has no subsystem to speak for it.
-        /// Display only: the dropdown still states the device, this states what it is there for, which
-        /// is the thing a reviewer cannot get from "DMX" alone.</summary>
-        public string SpecialDeviceDetail
-        {
-            get => _specialDeviceDetail;
-            set
-            {
-                if (_specialDeviceDetail == value) return;
-                _specialDeviceDetail = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SpecialDeviceDetail)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasSpecialDeviceDetail)));
-            }
-        }
-
-        public bool HasSpecialDeviceDetail => !string.IsNullOrEmpty(_specialDeviceDetail);
-
-        /// <summary>Same, for the second compartment on a dual-slot (LV21) panel.</summary>
-        public string SpecialDeviceDetail2
-        {
-            get => _specialDeviceDetail2;
-            set
-            {
-                if (_specialDeviceDetail2 == value) return;
-                _specialDeviceDetail2 = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SpecialDeviceDetail2)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasSpecialDeviceDetail2)));
-            }
-        }
-
-        public bool HasSpecialDeviceDetail2 => !string.IsNullOrEmpty(_specialDeviceDetail2);
 
         // Processor capacity bars
         public bool IsProcessor

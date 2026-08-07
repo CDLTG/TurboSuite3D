@@ -32,7 +32,10 @@ public static class BomCollectorService
         var specialSelections = panelSettings?.SpecialDeviceSelections
             ?? new Dictionary<string, string>();
 
-        var (allocation, _) = PanelAllocationService.BuildPanelBreakdown(circuits, brand, overrides);
+        var subsystemDemands = CollectSubsystemDemands(doc);
+
+        var (allocation, _) = PanelAllocationService.BuildPanelBreakdown(
+            circuits, brand, overrides, subsystemDemands);
         if (allocation == null)
             return new BomData { BrandName = brandName };
 
@@ -68,7 +71,7 @@ public static class BomCollectorService
             TwoGangKeypadCount = twoGangKeypadCount,
             HybridRepeaterCount = hybridRepeaterCount,
             HybridRepeaterPartNumber = hybridRepeaterPartNumber,
-            SubsystemDemands = CollectSubsystemDemands(doc),
+            SubsystemDemands = subsystemDemands,
             Audience = BomAudience.IssuedDocument
         });
 

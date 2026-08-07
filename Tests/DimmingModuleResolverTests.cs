@@ -163,6 +163,22 @@ namespace TurboSuite.Tests.Zones
             => Assert.Equal(DimmingResolveOutcome.HandledBySubsystem,
                 DimmingModuleResolver.Resolve(new[] { "WIFI", "DMX" }).Outcome);
 
+        /// <summary>The owning subsystem is named, in the map's canonical casing rather than however
+        /// the family author typed it — the allocator matches on it to ask whether that subsystem
+        /// actually accounted for the circuit.</summary>
+        [Fact]
+        public void HandledBySubsystem_NamesItsSubsystemCanonically()
+            => Assert.Equal("DMX", DimmingModuleResolver.Resolve(new[] { " dmx " }).Subsystem);
+
+        /// <summary>Every other outcome leaves it empty — nothing owns those circuits.</summary>
+        [Theory]
+        [InlineData("ELV")]
+        [InlineData("WIFI")]
+        [InlineData("DALI")]
+        [InlineData("GIBBERISH")]
+        public void NonSubsystemProtocols_NameNoSubsystem(string protocol)
+            => Assert.Equal(string.Empty, DimmingModuleResolver.Resolve(new[] { protocol }).Subsystem);
+
         /// <summary>But DMX must not launder an authoring gap. A subsystem owning one declared value
         /// says nothing about an unrecognized one sitting next to it — same rule WIFI follows.</summary>
         [Fact]

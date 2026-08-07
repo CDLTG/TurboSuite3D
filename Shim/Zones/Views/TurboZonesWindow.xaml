@@ -457,18 +457,6 @@
                                                                                           FontSize="9" FontWeight="SemiBold"
                                                                                           Foreground="Black" Cursor="Hand"/>
 
-                                                                                <!-- What the compartment device serves (DMX: its control zones). Grey, not the
-                                                                                     #FFFFFFCC the module tiles use — those sit on saturated fills, this sits on the
-                                                                                     panel card's #FAFAFA, where near-white reads as an empty gap. -->
-                                                                                <TextBlock Visibility="{Binding HasSpecialDeviceDetail, Converter={StaticResource BoolToVisibility}}"
-                                                                                           Text="{Binding SpecialDeviceDetail, Mode=OneWay}"
-                                                                                           Margin="4,0,4,3"
-                                                                                           FontSize="8" FontStyle="Italic"
-                                                                                           Foreground="#666666"
-                                                                                           TextTrimming="CharacterEllipsis"
-                                                                                           TextAlignment="Center"
-                                                                                           ToolTip="{Binding SpecialDeviceDetail, Mode=OneWay}"/>
-
                                                                                 <!-- Special compartment slot 2 (LV21 dual-slot panels) -->
                                                                                 <ComboBox Visibility="{Binding HasDualSpecialCompartment, Converter={StaticResource BoolToVisibility}}"
                                                                                           ItemsSource="{Binding SpecialDeviceOptions}"
@@ -480,15 +468,6 @@
                                                                                           VerticalContentAlignment="Center"
                                                                                           FontSize="9" FontWeight="SemiBold"
                                                                                           Foreground="Black" Cursor="Hand"/>
-
-                                                                                <TextBlock Visibility="{Binding HasSpecialDeviceDetail2, Converter={StaticResource BoolToVisibility}}"
-                                                                                           Text="{Binding SpecialDeviceDetail2, Mode=OneWay}"
-                                                                                           Margin="4,0,4,3"
-                                                                                           FontSize="8" FontStyle="Italic"
-                                                                                           Foreground="#666666"
-                                                                                           TextTrimming="CharacterEllipsis"
-                                                                                           TextAlignment="Center"
-                                                                                           ToolTip="{Binding SpecialDeviceDetail2, Mode=OneWay}"/>
 
                                                                                 <!-- Panel footer: name, module count, size selector -->
                                                                                 <Border CornerRadius="0,0,3,3"
@@ -548,7 +527,9 @@
                                                 </TextBlock>
                                                 <TextBlock FontSize="9" Foreground="#856404" TextWrapping="Wrap">
                                                     These circuits are excluded from the breakdown — either not assigned to a zone panel in Revit,
-                                                    or their fixtures' Dimming Protocol has no control module (blank, or DALI/DMX, which is not supported yet).
+                                                    or their fixtures' Dimming Protocol has no control module (blank or unrecognized, or DALI, which
+                                                    is not supported yet). A DMX circuit appears here only when TurboDMX found no fixtures to count
+                                                    for it — check that its fixtures carry DMX Channels.
                                                 </TextBlock>
                                                 <ItemsControl ItemsSource="{Binding PanelTab.UnassignedCircuits}" Margin="0,4,0,0">
                                                     <ItemsControl.ItemTemplate>

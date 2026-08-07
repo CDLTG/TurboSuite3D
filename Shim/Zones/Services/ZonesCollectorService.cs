@@ -109,6 +109,7 @@ namespace TurboSuite.Zones.Services
                             DimmingType = dimming.ModuleType,
                             DimmingProtocolDisplay = dimming.ProtocolDisplay,
                             DimmingOutcome = dimming.Outcome,
+                            DimmingSubsystem = dimming.Subsystem,
                             PanelName = panelName ?? string.Empty,
                             RoomName = roomName ?? string.Empty,
                             RoomOverride = roomOverride ?? string.Empty,
