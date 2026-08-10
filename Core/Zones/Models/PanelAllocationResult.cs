@@ -26,8 +26,6 @@ namespace TurboSuite.Zones.Models
         private string _selectedSpecialDevice = "";
         private string _selectedSpecialDevice2 = "";
         private bool _isProcessor;
-        private ProcessorLink _link1;
-        private ProcessorLink _link2;
         private int _selectedPanelSize;
 
         public string PanelName { get; set; }
@@ -114,26 +112,6 @@ namespace TurboSuite.Zones.Models
                 if (_isProcessor == value) return;
                 _isProcessor = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsProcessor)));
-            }
-        }
-
-        public ProcessorLink Link1
-        {
-            get => _link1;
-            set
-            {
-                _link1 = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Link1)));
-            }
-        }
-
-        public ProcessorLink Link2
-        {
-            get => _link2;
-            set
-            {
-                _link2 = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Link2)));
             }
         }
 

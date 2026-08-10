@@ -127,8 +127,8 @@ namespace TurboSuite.Zones.ViewModels
             private set => SetProperty(ref _bomItems, value);
         }
 
-        private ObservableCollection<PanelResult> _processorDisplays;
-        public ObservableCollection<PanelResult> ProcessorDisplays
+        private ObservableCollection<ProcessorInstance> _processorDisplays;
+        public ObservableCollection<ProcessorInstance> ProcessorDisplays
         {
             get => _processorDisplays;
             private set
@@ -362,7 +362,9 @@ namespace TurboSuite.Zones.ViewModels
             bool isLutron = string.Equals(_currentBrand?.Name, "Lutron", StringComparison.OrdinalIgnoreCase);
             var allPanels = _allocationResult.AllPanels;
 
-            // Set IsProcessor on each panel
+            // Set IsProcessor on each panel — a per-panel "hosts a processor" flag. The sidebar itself
+            // is built per-slot below (an LV21 with two processors is two instances), but this stays a
+            // useful panel-level fact.
             foreach (var panel in allPanels)
             {
                 bool hasProc = panel.HasSpecialCompartment
@@ -374,39 +376,15 @@ namespace TurboSuite.Zones.ViewModels
 
             if (!isLutron)
             {
-                // Crestron: clear link data
-                foreach (var panel in allPanels)
-                {
-                    panel.Link1 = null;
-                    panel.Link2 = null;
-                }
-                ProcessorDisplays = new ObservableCollection<PanelResult>();
+                ProcessorDisplays = new ObservableCollection<ProcessorInstance>();
                 return;
             }
 
-            // Build ProcessorLink objects for each processor panel
-            var processorPanels = allPanels.Where(p => p.IsProcessor).ToList();
-            foreach (var proc in processorPanels)
-            {
-                if (proc.Link1 == null || proc.Link1.ProcessorPanelName != proc.PanelName)
-                    proc.Link1 = new ProcessorLink { ProcessorPanelName = proc.PanelName, LinkNumber = 1 };
-                if (proc.Link2 == null || proc.Link2.ProcessorPanelName != proc.PanelName)
-                    proc.Link2 = new ProcessorLink { ProcessorPanelName = proc.PanelName, LinkNumber = 2 };
-            }
-
-            // Clear Link1/Link2 on non-processor panels
-            foreach (var panel in allPanels.Where(p => !p.IsProcessor))
-            {
-                panel.Link1 = null;
-                panel.Link2 = null;
-            }
-
-            // Pack onto the links the sited processors provide. Same inputs as the BOM, on purpose —
-            // the bars and the processor recommendation are two questions to one packer.
-            LinkAssignmentService.AssignAndAggregate(allPanels, BuildBomExtras());
-
-            // Rebuild processor displays for sidebar
-            ProcessorDisplays = new ObservableCollection<PanelResult>(processorPanels);
+            // Build one processor instance per placed "Processor" slot and pack onto their links. Same
+            // inputs as the BOM, on purpose — the bars and the processor recommendation are two questions
+            // to one packer, counted per-slot just as the supply sizer counts them.
+            ProcessorDisplays = new ObservableCollection<ProcessorInstance>(
+                LinkAssignmentService.BuildProcessorInstances(allPanels, BuildBomExtras()));
         }
 
         private void SaveSpecialDeviceSelections()

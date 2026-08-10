@@ -42,7 +42,10 @@ namespace TurboSuite.Zones.Models
             string powerSupplyPartNumber = null,
             Dictionary<string, int> moduleCapacityOverrides = null,
             Dictionary<string, string> partDescriptions = null,
-            Dictionary<string, ModuleAmpLimits> ampLimits = null)
+            Dictionary<string, ModuleAmpLimits> ampLimits = null,
+            Dictionary<string, int> devicePduDraw = null,
+            int powerSupplyPdu = 0,
+            Dictionary<int, int> powerSupplyCapacityByPanelSize = null)
         {
             Name = name;
             ModuleCapacity = moduleCapacity;
@@ -58,6 +61,9 @@ namespace TurboSuite.Zones.Models
             ModuleCapacityOverrides = moduleCapacityOverrides;
             PartDescriptions = partDescriptions;
             AmpLimits = ampLimits;
+            DevicePduDraw = devicePduDraw;
+            PowerSupplyPdu = powerSupplyPdu;
+            PowerSupplyCapacityByPanelSize = powerSupplyCapacityByPanelSize;
         }
 
         public Dictionary<string, string> SpecialDevices { get; }
@@ -69,6 +75,47 @@ namespace TurboSuite.Zones.Models
         public Dictionary<string, int> ModuleCapacityOverrides { get; }
         public Dictionary<string, string> PartDescriptions { get; }
         public Dictionary<string, ModuleAmpLimits> AmpLimits { get; }
+
+        /// <summary>
+        /// Signed QS-link power draw of each device that has one, keyed by the name the compartment
+        /// dropdown and <see cref="ControlSubsystemDemand.Subsystem"/> use ("Processor", "Digital I/O",
+        /// "DMX") plus "Keypad" for the poured keypads. A supply <i>contributes</i> PDU
+        /// (<see cref="PowerSupplyPdu"/>, positive); everything here <i>draws</i> it (negative).
+        ///
+        /// <b>What is deliberately absent, and why it must stay absent.</b> Lutron's PDU budget is a
+        /// <i>terminal-2</i> (V+) fact: a device draws PDU only if it takes bus power off the link's V+
+        /// rail. The dimming modules (LQSE-*) are line-powered and take nothing from V+ — their whole
+        /// job is downstream of the panel's own supply — so they draw <b>0 PDU</b> and are not in this
+        /// table. That is not an omission to be "fixed" by adding the LQSE at some guessed value: a
+        /// module's presence on a link is a <i>terminal-3/4</i> (MUX/data) fact, which is what the
+        /// device/leg budgets in <see cref="ControlLinkPacker"/> count, and is independent of PDU.
+        /// Panels are likewise 0 (they are enclosures, not bus loads). If a future device belongs here,
+        /// it belongs because it draws V+ bus power, not because it sits on the link.
+        /// </summary>
+        public Dictionary<string, int> DevicePduDraw { get; }
+
+        /// <summary>PDU a single QS-link power supply contributes (QSPS-DH-1-75-H → 75). Zero when the
+        /// brand has no PDU model, which is the signal to skip PDU sizing entirely.</summary>
+        public int PowerSupplyPdu { get; }
+
+        /// <summary>How many QSPS supply positions a panel of each module capacity provides — the
+        /// denominator of the <b>global</b> feasibility check (total supplies needed vs the sum of this
+        /// across every placed panel). LV21→2, PD4→1, PD8→1, the rest→0. Not a per-link check: there is
+        /// no physical panel→link assignment in the model, so a shortfall means "the panel mix cannot
+        /// hold the count", answered by a different panel rather than another placement.</summary>
+        public Dictionary<int, int> PowerSupplyCapacityByPanelSize { get; }
+
+        /// <summary>Signed PDU draw of a named device, or 0 when it has none (modules, panels, and any
+        /// brand with no PDU model all land here).</summary>
+        public int GetDevicePduDraw(string deviceName)
+            => DevicePduDraw != null
+               && !string.IsNullOrEmpty(deviceName)
+               && DevicePduDraw.TryGetValue(deviceName, out var pdu) ? pdu : 0;
+
+        /// <summary>Supply positions a panel of the given module capacity provides, 0 when unlisted.</summary>
+        public int GetPowerSupplySlots(int panelSize)
+            => PowerSupplyCapacityByPanelSize != null
+               && PowerSupplyCapacityByPanelSize.TryGetValue(panelSize, out var slots) ? slots : 0;
 
         /// <summary>
         /// Amp limits are keyed by module part number so that a dimming type sharing
@@ -167,6 +214,25 @@ namespace TurboSuite.Zones.Models
                 { "LQSE-4A5-120-D", new ModuleAmpLimits(slot1: 6.6, defaultSlot: 4.2, moduleTotal: 16.0) },
                 { "LQSE-4T5-120-D", new ModuleAmpLimits(slot1: 5.0, defaultSlot: 5.0, moduleTotal: 20.0) },
                 { "LQSE-4S8-120-D", new ModuleAmpLimits(slot1: 8.0, defaultSlot: 8.0, moduleTotal: 16.0) }
+            },
+            // Signed QS-link PDU draws. Processor −8 is billed by the BOM-side supply sizer, not the
+            // packer (it is a per-processor fact, and the packer is identity-blind); it lives here so
+            // the magnitude is data, not a literal in the sizer. Keypad −1 (two-gang is −2 by counting
+            // as two keypads). QSE-IO −3, QSE-CI-DMX −2. Modules and panels are absent by design — see
+            // DevicePduDraw's summary. Quoted from Lutron 369405ab (QS Link Power Draw Units).
+            devicePduDraw: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Processor", -8 },
+                { "Digital I/O", -3 },
+                { "DMX", -2 },
+                { "Keypad", -1 }
+            },
+            powerSupplyPdu: 75,
+            // Supply positions per panel: LV21 holds two, PD4 and PD8 one each, the feed-through panels
+            // none. The global feasibility denominator — not a per-link capacity.
+            powerSupplyCapacityByPanelSize: new Dictionary<int, int>
+            {
+                { 0, 2 }, { 2, 0 }, { 4, 1 }, { 5, 0 }, { 8, 1 }, { 9, 0 }
             });
 
         public static BrandConfig Crestron { get; } = new BrandConfig("Crestron", 8, new[] { 7 },

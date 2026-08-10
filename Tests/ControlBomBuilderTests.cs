@@ -932,4 +932,129 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal("PDW-QS-8", Section(bom, "Accessories").Single().PartNumber);
         }
     }
+
+    /// <summary>
+    /// QS-link power-supply sizing (Phase 2b). Supplies are no longer one-per-processor: each QS link
+    /// nets its device PDU against a supply's +75, the processor's −8 lands on its first QS link, and
+    /// the count is ceil(|net|/75) summed over QS links plus one per all-wireless processor.
+    /// Feasibility is a global slot check. The shipped under-order these pin is the 67/68 boundary.
+    /// </summary>
+    public class ControlBomPowerSupplyTests : ControlBomTestBase
+    {
+        private const string Qsps = "QSPS-DH-1-75-H";
+
+        /// <summary>A processor panel of the given size with no modules — a clean stage for the keypad
+        /// pour, whose PDU is what the boundary tests turn on.</summary>
+        private static List<PanelResult> Processor(int size)
+        {
+            var panel = LutronPanel("1-A", size);
+            panel.SelectedSpecialDevice = "Processor";
+            return new List<PanelResult> { panel };
+        }
+
+        private static BomLineItem Supply(List<PanelResult> panels, BomExtras extras)
+            => Section(Build(panels, Lutron, extras), "Accessories").Single(a => a.PartNumber == Qsps);
+
+        /// <summary>The exact shipped boundary. One processor (−8) plus 67 keypads (−67) is exactly −75
+        /// on the link → one supply; the 68th keypad crosses 75 into a second. Both keypads counts land
+        /// on the one QS link (well inside its 99 devices), so the whole draw nets on a single supply.</summary>
+        [Theory]
+        [InlineData(67, 1)]
+        [InlineData(68, 2)]
+        public void KeypadPduSizesSuppliesAtTheSeventyFiveBoundary(int keypads, int expected)
+        {
+            // PD8 alone is one slot; the 68-keypad case needs two, so keep the sizing test off the
+            // feasibility path with an issued document (no warning) and assert the quantity only.
+            var supply = Supply(Processor(8),
+                new BomExtras { KeypadCount = keypads, Audience = BomAudience.IssuedDocument });
+
+            Assert.Equal(expected, supply.Quantity);
+        }
+
+        /// <summary>The −8 alone orders a supply: a processor with no keypads and no interfaces still
+        /// draws 8 PDU on its first QS link, ceil(8/75) = 1. This is the one-per-processor floor the old
+        /// code hard-coded, now falling out of the arithmetic.</summary>
+        [Fact]
+        public void LonelyProcessorStillOrdersOneSupply()
+            => Assert.Equal(1, Supply(Processor(8), new BomExtras()).Quantity);
+
+        /// <summary>All-wireless safeguard: five repeaters take both of the processor's links to Clear
+        /// Connect, leaving no QS link to carry the −8 — but the box still needs power, so the processor
+        /// contributes one supply directly.</summary>
+        [Fact]
+        public void AllWirelessProcessorOrdersOneSupply()
+        {
+            var supply = Supply(Processor(8), new BomExtras { HybridRepeaters = Tally.Repeaters(5) });
+            Assert.Equal(1, supply.Quantity);
+        }
+
+        /// <summary>Clear Connect carries no PDU budget, so the wireless keypads riding it draw nothing —
+        /// a processor with a QS link and a pile of wireless devices still orders just the one supply its
+        /// −8 forces.</summary>
+        [Fact]
+        public void WirelessDevicesDrawNoPdu()
+        {
+            var supply = Supply(Processor(8),
+                new BomExtras { HybridRepeaters = Tally.Repeaters(1), WirelessDeviceCount = 40 });
+            Assert.Equal(1, supply.Quantity);
+        }
+
+        /// <summary>Global feasibility: a PD4 holds one supply slot, so a job needing two (68 keypads
+        /// past the boundary) is flagged on the design surface — a new warning shape naming the
+        /// shortfall, because the fix is a bigger panel, not another placement.</summary>
+        [Fact]
+        public void ShortfallAgainstPanelSlotsWarnsOnDesignSurface()
+        {
+            var supply = Supply(Processor(4),
+                new BomExtras { KeypadCount = 68, Audience = BomAudience.DesignSurface });
+
+            Assert.Equal(2, supply.Quantity);
+            Assert.True(supply.IsWarning);
+            Assert.Contains("(2 needed, panels hold 1)", supply.Description);
+        }
+
+        /// <summary>The LV21 holds two supply slots where a DIN panel holds one, so the same two-supply
+        /// demand that overflows a PD4 fits an LV21 cleanly — no warning, description untouched.</summary>
+        [Fact]
+        public void Lv21TwoSlotsAbsorbWhatAPd4Cannot()
+        {
+            var supply = Supply(Processor(0),
+                new BomExtras { KeypadCount = 68, Audience = BomAudience.DesignSurface });
+
+            Assert.Equal(2, supply.Quantity);
+            Assert.False(supply.IsWarning);
+            Assert.Equal("DIN Rail Power Supply", supply.Description);
+        }
+
+        /// <summary>Two processors in one LV21's two compartments are two HQP7-2s — two power groups
+        /// that cannot share a supply — so the job orders two, one per processor's −8, and the LV21's
+        /// two slots hold them (feasible). Counting per panel would order both processors but one
+        /// supply. Matches the two-separate-panels case exactly.</summary>
+        [Fact]
+        public void TwoProcessorsInOneLv21OrderTwoSupplies()
+        {
+            var lv21 = LutronPanel("1-A", 0);
+            lv21.SelectedSpecialDevice = "Processor";
+            lv21.SelectedSpecialDevice2 = "Processor";
+
+            var supply = Supply(new List<PanelResult> { lv21 },
+                new BomExtras { Audience = BomAudience.DesignSurface });
+
+            Assert.Equal(2, supply.Quantity);
+            Assert.False(supply.IsWarning);   // LV21 holds two supplies
+        }
+
+        /// <summary>The shortfall is a presentation concern: the issued document orders the same two
+        /// supplies with no commentary, exactly as audience is required to behave everywhere else.</summary>
+        [Fact]
+        public void IssuedDocumentOrdersTheShortfallWithoutCommentary()
+        {
+            var supply = Supply(Processor(4),
+                new BomExtras { KeypadCount = 68, Audience = BomAudience.IssuedDocument });
+
+            Assert.Equal(2, supply.Quantity);
+            Assert.False(supply.IsWarning);
+            Assert.Equal("DIN Rail Power Supply", supply.Description);
+        }
+    }
 }

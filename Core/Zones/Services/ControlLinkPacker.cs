@@ -32,11 +32,17 @@ namespace TurboSuite.Zones.Services
     /// Downstream, the real design is imported into Lutron's own software, which is why the BOM
     /// carries "Verify bill of materials with official control system documentation."
     ///
-    /// <b>Next dimension: PDU.</b> The QS Link Power Supply budget is the obvious third budget to add
-    /// beside devices and loads, but it is <i>not</i> shaped like them and should not be bolted on as
-    /// a third parallel counter: PDU is <b>signed</b> (a supply contributes, a device draws) and is
-    /// budgeted <b>per power group, not per link</b> — a link may hold several power groups,
-    /// separated by not connecting V+. Adding it means a group layer under the link, not another int.
+    /// <b>Third dimension: PDU.</b> The QS Link Power Supply budget rides here, but only the part that
+    /// is a packing fact: each unit and each poured keypad carries a signed <see cref="LinkUnit.Pdu"/>,
+    /// the bins sum it, and every <see cref="PackedLink"/> reports a <see cref="PackedLink.ConsumedPdu"/>
+    /// — the per-link device draw the packer already distributes (keypad −1, QSE-IO −3, QSE-CI-DMX −2;
+    /// modules and panels 0). What is <i>not</i> here is the processor's −8 and the supply sizing: −8 is
+    /// per-<i>processor</i>, not per-link, and this packer takes an <c>int availableLinks</c>, not
+    /// "processor A's two links", so it cannot bill it; and feasibility is a <b>global</b> slot check,
+    /// not per-link, because panel→link is a recommendation rather than physical wiring. Both live in
+    /// <c>ControlBomBuilder</c>'s supply sizer, the sole consumer of <see cref="PackedLink.ConsumedPdu"/>.
+    /// Clear Connect links carry no PDU budget by product architecture, so their <see cref="PackedLink.ConsumedPdu"/>
+    /// is always 0.
     /// </summary>
     public static class ControlLinkPacker
     {
@@ -86,12 +92,13 @@ namespace TurboSuite.Zones.Services
                 Place(unit, qsBins, unlimited);
 
             // Finally the genuinely divisible demand: keypads are one device each and go wherever
-            // there is room, so they fill the gaps the units left rather than forcing new links.
-            Pour(demand.FloatingDevices, qsBins, unlimited, asDevices: true);
+            // there is room, so they fill the gaps the units left rather than forcing new links. Their
+            // PDU rides the pour and lands per bin, so the sizer sees each link's true keypad draw.
+            Pour(demand.FloatingDevices, qsBins, unlimited, asDevices: true, totalPdu: demand.FloatingDevicePdu);
             Pour(demand.FloatingLoads, qsBins, unlimited, asDevices: false);
 
             var links = qsBins
-                .Select(b => new PackedLink(ProcessorLink.QsLinkType, b.Devices, b.Loads, b.UnitNames))
+                .Select(b => new PackedLink(ProcessorLink.QsLinkType, b.Devices, b.Loads, b.UnitNames, consumedPdu: b.Pdu))
                 .ToList();
             links.AddRange(PackWireless(demand.RepeaterCount, demand.WirelessDevices, ccaLinks));
 
@@ -115,7 +122,8 @@ namespace TurboSuite.Zones.Services
         /// questions on purpose — a divergence between the bars and the recommendation could
         /// otherwise creep back in through the inputs rather than the algorithm.
         /// </summary>
-        public static LinkDemand BuildDemand(IEnumerable<PanelResult>? allPanels, BomExtras? extras)
+        public static LinkDemand BuildDemand(
+            IEnumerable<PanelResult>? allPanels, BomExtras? extras, BrandConfig? brand = null)
         {
             var panels = allPanels?.ToList() ?? new List<PanelResult>();
             extras ??= new BomExtras();
@@ -133,10 +141,17 @@ namespace TurboSuite.Zones.Services
 
             var panelDevices = new Dictionary<PanelResult, int>();
             var panelLoads = new Dictionary<PanelResult, int>();
+
+            // Signed PDU each panel's LinkUnit carries — the sum of the V+ draws of the interfaces sited
+            // in its compartments. Modules and the panel itself draw nothing (see BrandConfig), so this
+            // stays 0 unless a compartment device lands. Null brand ⇒ every draw is 0, which is what the
+            // capacity bars and the processor recommendation want: neither reads PDU.
+            var panelPdu = new Dictionary<PanelResult, int>();
             foreach (var panel in panels)
             {
                 panelDevices[panel] = panel.DeviceCount;
                 panelLoads[panel] = panel.LoadCount;
+                panelPdu[panel] = 0;
 
                 foreach (string slot in panel.CompartmentSlots)
                 {
@@ -144,8 +159,9 @@ namespace TurboSuite.Zones.Services
                         continue;
 
                     // A compartment device nobody speaks for — QSE-IO, or a QSE-CI-DMX on a job where
-                    // TurboDMX has nothing to say. One QS device, no switch legs.
+                    // TurboDMX has nothing to say. One QS device, no switch legs, its own V+ draw.
                     panelDevices[panel] += 1;
+                    panelPdu[panel] += brand?.GetDevicePduDraw(slot) ?? 0;
                 }
             }
 
@@ -154,8 +170,16 @@ namespace TurboSuite.Zones.Services
             // Wired keypads only. A wireless one is not a QS device at all — it rides the Clear
             // Connect link, and pouring it in here would charge a link that never sees it while
             // leaving the link that does under-reported.
-            int floatingDevices = extras.KeypadCount + extras.TwoGangKeypadCount * 2;
+            int floatingKeypadDevices = extras.KeypadCount + extras.TwoGangKeypadCount * 2;
+            int floatingDevices = floatingKeypadDevices;
             int floatingLoads = 0;
+
+            // Keypad PDU rides the pour. Today every floating device IS a keypad (the only
+            // compartment-less demand, a future DALI DIN module, is benched and emits none), so this
+            // total distributes exactly at −1 per device; when a compartment-less subsystem with its
+            // own draw lands it must be poured separately rather than folded in here (Phase 3).
+            int keypadPdu = brand?.GetDevicePduDraw("Keypad") ?? 0;
+            int floatingDevicePdu = floatingKeypadDevices * keypadPdu;
 
             foreach (var demand in demands)
             {
@@ -179,6 +203,12 @@ namespace TurboSuite.Zones.Services
                 int[] deviceShares = Split(demand.LinkDevices, required);
                 int[] loadShares = Split(demand.LinkLoads, required);
 
+                // Every sited interface is a physical QSE-CI-DMX drawing V+, whether or not it carries
+                // legs of its own — so its PDU lands here, on the panel it sits in, for all of them.
+                int subsystemPdu = brand?.GetDevicePduDraw(demand.Subsystem) ?? 0;
+                foreach (var panel in sited)
+                    panelPdu[panel] += subsystemPdu;
+
                 for (int i = 0; i < required; i++)
                 {
                     if (i < sited.Count)
@@ -189,23 +219,24 @@ namespace TurboSuite.Zones.Services
                     else
                     {
                         floatingUnits.Add(new LinkUnit(
-                            demand.Subsystem + " interface", deviceShares[i], loadShares[i]));
+                            demand.Subsystem + " interface", deviceShares[i], loadShares[i], subsystemPdu));
                     }
                 }
 
                 // Sited beyond the requirement: the designer put down more interfaces than the solve
-                // asked for. They still occupy the link, they just carry no legs of their own.
+                // asked for. They still occupy the link, they just carry no legs of their own. (Their
+                // V+ draw is already counted in the panelPdu loop above.)
                 for (int i = required; i < sited.Count; i++)
                     panelDevices[sited[i]] += 1;
             }
 
             var pinned = panels
                 .Where(p => panelDevices[p] > 0 || panelLoads[p] > 0)
-                .Select(p => new LinkUnit(p.PanelName, panelDevices[p], panelLoads[p]))
+                .Select(p => new LinkUnit(p.PanelName, panelDevices[p], panelLoads[p], panelPdu[p]))
                 .ToList();
 
             return new LinkDemand(pinned, floatingUnits, floatingDevices, floatingLoads,
-                extras.HybridRepeaterCount, extras.WirelessDeviceCount);
+                extras.HybridRepeaterCount, extras.WirelessDeviceCount, floatingDevicePdu);
         }
 
         /// <summary>Compartment slots across all panels holding the named device, in panel order.</summary>
@@ -363,9 +394,26 @@ namespace TurboSuite.Zones.Services
             Emptiest(bins).Add(unit);
         }
 
-        private static void Pour(int amount, List<Bin> bins, bool unlimited, bool asDevices)
+        private static void Pour(
+            int amount, List<Bin> bins, bool unlimited, bool asDevices, int totalPdu = 0)
         {
             if (amount <= 0) return;
+
+            // PDU follows the devices as they land. Running-remainder against the original amount, so
+            // each bin's share is the exact integer prefix difference: with a uniform rate (every
+            // floating device is a keypad at −1) this is exact per bin, and it always sums back to
+            // totalPdu regardless. Loads carry no PDU.
+            int total = amount;
+            int placed = 0, placedPdu = 0;
+            int PduFor(int take)
+            {
+                if (!asDevices || totalPdu == 0 || total == 0) return 0;
+                placed += take;
+                int target = (int)((long)totalPdu * placed / total);
+                int chunk = target - placedPdu;
+                placedPdu = target;
+                return chunk;
+            }
 
             foreach (var bin in bins)
             {
@@ -373,7 +421,7 @@ namespace TurboSuite.Zones.Services
                 int room = asDevices ? bin.DeviceRoom : bin.LoadRoom;
                 if (room <= 0) continue;
                 int take = Math.Min(room, amount);
-                bin.Add(asDevices ? take : 0, asDevices ? 0 : take);
+                bin.Add(asDevices ? take : 0, asDevices ? 0 : take, PduFor(take));
                 amount -= take;
             }
 
@@ -382,12 +430,12 @@ namespace TurboSuite.Zones.Services
                 var fresh = new Bin();
                 bins.Add(fresh);
                 int take = Math.Min(asDevices ? fresh.DeviceRoom : fresh.LoadRoom, amount);
-                fresh.Add(asDevices ? take : 0, asDevices ? 0 : take);
+                fresh.Add(asDevices ? take : 0, asDevices ? 0 : take, PduFor(take));
                 amount -= take;
             }
 
             if (amount > 0 && bins.Count > 0)
-                Emptiest(bins).Add(asDevices ? amount : 0, asDevices ? 0 : amount);
+                Emptiest(bins).Add(asDevices ? amount : 0, asDevices ? 0 : amount, PduFor(amount));
         }
 
         private static Bin Emptiest(List<Bin> bins)
@@ -414,6 +462,12 @@ namespace TurboSuite.Zones.Services
         {
             public int Devices;
             public int Loads;
+
+            /// <summary>Signed V+ PDU drawn on this link — a subset of the story <see cref="Devices"/>
+            /// tells, since a device draws PDU only if it takes bus power, and the counts are not the
+            /// same (a keypad is 1 device / −1 PDU, a QSE-IO 1 device / −3 PDU). Not a capacity here:
+            /// nothing bins against it — the BOM sizer reads it and sizes supplies.</summary>
+            public int Pdu;
             public readonly List<string> UnitNames = new List<string>();
 
             public int DeviceRoom => ProcessorLink.MaxDevices - Devices;
@@ -425,14 +479,16 @@ namespace TurboSuite.Zones.Services
             {
                 Devices += unit.Devices;
                 Loads += unit.Loads;
+                Pdu += unit.Pdu;
                 if (!string.IsNullOrEmpty(unit.Name))
                     UnitNames.Add(unit.Name!);
             }
 
-            public void Add(int devices, int loads)
+            public void Add(int devices, int loads, int pdu = 0)
             {
                 Devices += devices;
                 Loads += loads;
+                Pdu += pdu;
             }
         }
     }
@@ -453,7 +509,8 @@ namespace TurboSuite.Zones.Services
             int floatingDevices = 0,
             int floatingLoads = 0,
             int repeaterCount = 0,
-            int wirelessDevices = 0)
+            int wirelessDevices = 0,
+            int floatingDevicePdu = 0)
         {
             PinnedUnits = pinnedUnits ?? new List<LinkUnit>();
             FloatingUnits = floatingUnits ?? new List<LinkUnit>();
@@ -461,6 +518,7 @@ namespace TurboSuite.Zones.Services
             FloatingLoads = floatingLoads;
             RepeaterCount = repeaterCount;
             WirelessDevices = wirelessDevices;
+            FloatingDevicePdu = floatingDevicePdu;
         }
 
         /// <summary>Indivisible and already sited — panels, with whatever is in their compartments.</summary>
@@ -485,16 +543,22 @@ namespace TurboSuite.Zones.Services
         /// the Clear Connect links alongside the repeaters and consume the same 99-device budget —
         /// which is the budget the repeater cap of four is <i>not</i>.</summary>
         public int WirelessDevices { get; }
+
+        /// <summary>Signed PDU the floating-device pour carries, in total — today entirely keypad draw
+        /// (−1 each). Distributed across the links the keypads land on, exactly under that uniform rate.
+        /// The pinned/floating <i>units</i> carry their own <see cref="LinkUnit.Pdu"/> instead.</summary>
+        public int FloatingDevicePdu { get; }
     }
 
     /// <summary>One indivisible thing that must fit on a single link.</summary>
     public sealed class LinkUnit
     {
-        public LinkUnit(string? name, int devices, int loads)
+        public LinkUnit(string? name, int devices, int loads, int pdu = 0)
         {
             Name = name;
             Devices = devices;
             Loads = loads;
+            Pdu = pdu;
         }
 
         /// <summary>What it is, for the packed link's contents list — a panel name, or an interface.</summary>
@@ -502,6 +566,10 @@ namespace TurboSuite.Zones.Services
 
         public int Devices { get; }
         public int Loads { get; }
+
+        /// <summary>Signed V+ PDU this unit draws — the sum of its sited interfaces' draws. 0 for a
+        /// bare panel of modules, which take no bus power.</summary>
+        public int Pdu { get; }
     }
 
     /// <summary>How the demand landed. When packed against a fixed link budget, <see cref="Links"/>
@@ -525,16 +593,22 @@ namespace TurboSuite.Zones.Services
     public sealed class PackedLink
     {
         public PackedLink(string linkType, int devices, int loads, IReadOnlyList<string> unitNames,
-            int repeaters = 0)
+            int repeaters = 0, int consumedPdu = 0)
         {
             LinkType = linkType;
             Devices = devices;
             Loads = loads;
             UnitNames = unitNames;
             Repeaters = repeaters;
+            ConsumedPdu = consumedPdu;
         }
 
         public string LinkType { get; }
+
+        /// <summary>Signed V+ PDU drawn on this link by the devices the packer distributed here — the
+        /// input the BOM supply sizer nets against the +75 a supply gives. Excludes the processor's −8
+        /// (billed per-processor, in the sizer). Always 0 on a Clear Connect link.</summary>
+        public int ConsumedPdu { get; }
 
         /// <summary>Everything on the link, repeaters included — they are devices like anything else.</summary>
         public int Devices { get; }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
 using Xunit;
@@ -8,74 +9,118 @@ namespace TurboSuite.Tests.Zones
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     //  Oracle suite for LinkAssignmentService (Core/Zones/Services/LinkAssignmentService.cs).
     //
-    //  The service used to BE the link math. It is now an adapter: it runs ControlLinkPacker against
-    //  the links the sited processors provide and writes the result onto PanelResult.Link1/Link2.
-    //  So the packing rules belong in ControlLinkPackerTests — what belongs HERE is the adapting:
-    //  which panels spawn links, the positional mapping (Clear Connect lands on the trailing links),
-    //  and that a link's type is set before the flags that depend on its capacity.
+    //  The service used to BE the link math. It is now an adapter: it builds one ProcessorInstance per
+    //  placed "Processor" compartment slot, runs ControlLinkPacker against the links those processors
+    //  provide, and writes the result onto each instance's Link1/Link2. So the packing rules belong in
+    //  ControlLinkPackerTests — what belongs HERE is the adapting: which slots spawn processors, the
+    //  positional mapping (Clear Connect lands on the trailing links), and that a link's type is set
+    //  before the flags that depend on its capacity.
     //
-    //  For me (Claude): IsProcessor is what makes a panel spawn links — the real ViewModel sets it
-    //  from the compartment selection, and a panel can be a processor here without one. Mutates
-    //  Link1/Link2 in place; assert on those after the call. Derivations inline.
+    //  For me (Claude): a processor is a "Processor" COMPARTMENT SELECTION, not a flag — per slot, so an
+    //  LV21 with a processor in each of its two compartments is two instances and four link bars. That
+    //  is the same count the BOM's supply sizer uses. Panels need a special compartment (sizes 0/4/8)
+    //  for a selection to register; the LV21 (size 0) is the dual-compartment one. Returns the
+    //  instances; assert on those.
     // ─────────────────────────────────────────────────────────────────────────────────────────────
 
     public class LinkAssignmentTests
     {
-        /// <summary>A processor panel with <paramref name="modules"/> modules of capacity
-        /// <paramref name="cap"/> → DeviceCount=modules, LoadCount=modules*cap.</summary>
+        /// <summary>A single-compartment processor panel (PD8) carrying <paramref name="modules"/>
+        /// modules of capacity <paramref name="cap"/> → DeviceCount=modules, LoadCount=modules*cap.</summary>
         private static PanelResult Proc(string name, int modules, int cap)
         {
-            var p = new PanelResult { PanelName = name, IsProcessor = true };
+            var p = new PanelResult
+            {
+                PanelName = name,
+                SelectedPanelSize = 8,
+                SpecialCompartmentPanelSizes = new HashSet<int> { 0, 4, 8 },
+                SelectedSpecialDevice = "Processor"
+            };
             for (int i = 0; i < modules; i++)
                 p.Modules.Add(new ModuleResult { ModuleCapacity = cap });
             return p;
         }
 
-        private static void Assign(List<PanelResult> panels, BomExtras? extras = null)
-            => LinkAssignmentService.AssignAndAggregate(panels, extras ?? new BomExtras());
+        /// <summary>An LV21 (dual-compartment) carrying whatever the two compartments hold.</summary>
+        private static PanelResult Lv21(string name, string slot1, string slot2)
+            => new PanelResult
+            {
+                PanelName = name,
+                SelectedPanelSize = 0,
+                SpecialCompartmentPanelSizes = new HashSet<int> { 0, 4, 8 },
+                DualCompartmentPanelSizes = new HashSet<int> { 0 },
+                SelectedSpecialDevice = slot1,
+                SelectedSpecialDevice2 = slot2
+            };
+
+        private static List<ProcessorInstance> Assign(List<PanelResult> panels, BomExtras? extras = null)
+            => LinkAssignmentService.BuildProcessorInstances(panels, extras ?? new BomExtras());
 
         [Fact]
-        public void NoProcessorPanels_NoLinksCreated()
+        public void NoProcessorPanels_NoInstances()
         {
-            var plain = new PanelResult { PanelName = "1-A" }; // IsProcessor false
-            Assign(new List<PanelResult> { plain });
-            Assert.Null(plain.Link1);
-            Assert.Null(plain.Link2);
+            var plain = new PanelResult { PanelName = "1-A" }; // no compartment selection
+            Assert.Empty(Assign(new List<PanelResult> { plain }));
         }
 
         [Fact]
-        public void EmptyPanelList_NoThrow() => Assign(new List<PanelResult>());
+        public void EmptyPanelList_NoThrow() => Assert.Empty(Assign(new List<PanelResult>()));
 
         [Fact]
         public void NullPanelList_NoThrow()
-            => LinkAssignmentService.AssignAndAggregate(null!, new BomExtras());
+            => Assert.Empty(LinkAssignmentService.BuildProcessorInstances(null!, new BomExtras()));
 
         [Fact]
         public void SingleProcessor_GetsTwoQsLinks_AndPacksOntoTheFirst()
         {
             var proc = Proc("1-A", modules: 3, cap: 4); // DeviceCount=3, LoadCount=12
-            Assign(new List<PanelResult> { proc });
+            var inst = Assert.Single(Assign(new List<PanelResult> { proc }));
 
-            Assert.Equal(ProcessorLink.QsLinkType, proc.Link1.LinkType);
-            Assert.Equal(ProcessorLink.QsLinkType, proc.Link2.LinkType);
-            Assert.Equal(3, proc.Link1.UsedDevices);
-            Assert.Equal(12, proc.Link1.UsedLoads);
-            Assert.Equal(0, proc.Link2.UsedDevices);
+            Assert.Equal(ProcessorLink.QsLinkType, inst.Link1.LinkType);
+            Assert.Equal(ProcessorLink.QsLinkType, inst.Link2.LinkType);
+            Assert.Equal(3, inst.Link1.UsedDevices);
+            Assert.Equal(12, inst.Link1.UsedLoads);
+            Assert.Equal(0, inst.Link2.UsedDevices);
         }
 
-        /// <summary>Two processors, four links, in panel order.</summary>
+        /// <summary>Two processor panels, four links, in panel order.</summary>
         [Fact]
         public void EachProcessorContributesTwoLinks()
         {
             var a = Proc("1-A", modules: 2, cap: 4);
             var b = Proc("2-A", modules: 2, cap: 4);
-            Assign(new List<PanelResult> { a, b });
+            var insts = Assign(new List<PanelResult> { a, b });
 
-            Assert.Equal(1, a.Link1.LinkNumber);
-            Assert.Equal(2, a.Link2.LinkNumber);
-            Assert.Equal("1-A", a.Link1.ProcessorPanelName);
-            Assert.Equal("2-A", b.Link1.ProcessorPanelName);
+            Assert.Equal(2, insts.Count);
+            Assert.Equal(1, insts[0].Link1.LinkNumber);
+            Assert.Equal(2, insts[0].Link2.LinkNumber);
+            Assert.Equal("1-A", insts[0].Link1.ProcessorPanelName);
+            Assert.Equal("2-A", insts[1].Link1.ProcessorPanelName);
         }
+
+        /// <summary>Two processors in one LV21's two compartments are two instances and four links —
+        /// the display gap the per-slot model closes. Labels distinguish them; the panel is shared.</summary>
+        [Fact]
+        public void DualProcessorLv21_YieldsTwoInstances_FourLinks()
+        {
+            var insts = Assign(new List<PanelResult> { Lv21("1-A", "Processor", "Processor") });
+
+            Assert.Equal(2, insts.Count);
+            Assert.All(insts, i => Assert.Equal("1-A", i.PanelName));
+            Assert.Equal("1-A (1)", insts[0].Label);
+            Assert.Equal("1-A (2)", insts[1].Label);
+            Assert.All(insts, i =>
+            {
+                Assert.Equal(ProcessorLink.QsLinkType, i.Link1.LinkType);
+                Assert.Equal(ProcessorLink.QsLinkType, i.Link2.LinkType);
+            });
+        }
+
+        /// <summary>A lone processor's instance is labelled by the bare panel name — no "(1)" suffix
+        /// until a panel actually holds more than one.</summary>
+        [Fact]
+        public void SingleProcessorInstance_LabelledByPanelName()
+            => Assert.Equal("1-A", Assert.Single(Assign(new List<PanelResult> { Proc("1-A", 1, 4) })).Label);
 
         /// <summary>Keypads pour into whatever room the panels left, filling links in order rather
         /// than spreading — packing tightly is the point when the question is "how many links".</summary>
@@ -83,10 +128,10 @@ namespace TurboSuite.Tests.Zones
         public void KeypadsFillTheFirstLinkBeforeTheSecond()
         {
             var proc = Proc("1-A", modules: 3, cap: 4);
-            Assign(new List<PanelResult> { proc }, new BomExtras { KeypadCount = 10 });
+            var inst = Assert.Single(Assign(new List<PanelResult> { proc }, new BomExtras { KeypadCount = 10 }));
 
-            Assert.Equal(13, proc.Link1.UsedDevices);   // 3 modules + 10 keypads, room for 96 more
-            Assert.Equal(0, proc.Link2.UsedDevices);
+            Assert.Equal(13, inst.Link1.UsedDevices);   // 3 modules + 10 keypads, room for 96 more
+            Assert.Equal(0, inst.Link2.UsedDevices);
         }
 
         /// <summary>Wireless takes the TRAILING link, which is what the packer's ordering guarantees:
@@ -95,14 +140,15 @@ namespace TurboSuite.Tests.Zones
         public void WirelessDevices_ReserveTheLastLinkAsClearConnect()
         {
             var proc = Proc("1-A", modules: 2, cap: 4); // DeviceCount=2, LoadCount=8
-            Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(3) });
+            var inst = Assert.Single(
+                Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(3) }));
 
-            Assert.Equal(ProcessorLink.ClearConnectLinkType, proc.Link2.LinkType);
-            Assert.Equal(3, proc.Link2.UsedDevices);
-            Assert.Equal(0, proc.Link2.UsedLoads);
-            Assert.Equal(ProcessorLink.QsLinkType, proc.Link1.LinkType);
-            Assert.Equal(2, proc.Link1.UsedDevices);
-            Assert.Equal(8, proc.Link1.UsedLoads);
+            Assert.Equal(ProcessorLink.ClearConnectLinkType, inst.Link2.LinkType);
+            Assert.Equal(3, inst.Link2.UsedDevices);
+            Assert.Equal(0, inst.Link2.UsedLoads);
+            Assert.Equal(ProcessorLink.QsLinkType, inst.Link1.LinkType);
+            Assert.Equal(2, inst.Link1.UsedDevices);
+            Assert.Equal(8, inst.Link1.UsedLoads);
         }
 
         /// <summary>Overflow shows on the REPEATER bar, not the device bar. Five repeaters is over the
@@ -113,17 +159,18 @@ namespace TurboSuite.Tests.Zones
         public void ClearConnectOverflowShowsOnTheRepeaterBarNotTheDeviceBar()
         {
             var proc = Proc("1-A", modules: 2, cap: 4);
-            Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(5) });
+            var inst = Assert.Single(
+                Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(5) }));
 
-            Assert.Equal(ProcessorLink.MaxDevices, proc.Link2.DeviceCapacity);
-            Assert.Equal(5, proc.Link2.UsedDevices);
-            Assert.False(proc.Link2.IsOverDeviceCapacity);   // 5 of 99
+            Assert.Equal(ProcessorLink.MaxDevices, inst.Link2.DeviceCapacity);
+            Assert.Equal(5, inst.Link2.UsedDevices);
+            Assert.False(inst.Link2.IsOverDeviceCapacity);   // 5 of 99
 
-            Assert.Equal(5, proc.Link2.UsedRepeaters);
-            Assert.Equal(4, proc.Link2.RepeaterCapacity);
-            Assert.True(proc.Link2.IsOverRepeaterCapacity);  // 5 of 4 — this is the signal
+            Assert.Equal(5, inst.Link2.UsedRepeaters);
+            Assert.Equal(4, inst.Link2.RepeaterCapacity);
+            Assert.True(inst.Link2.IsOverRepeaterCapacity);  // 5 of 4 — this is the signal
 
-            Assert.True(proc.Link2.ShowRepeaterBar);
+            Assert.True(inst.Link2.ShowRepeaterBar);
         }
 
         /// <summary>Clear Connect shows three bars where QS shows two — devices and switch legs on both,
@@ -133,46 +180,47 @@ namespace TurboSuite.Tests.Zones
         public void ClearConnectShowsThreeBudgetsAndQsShowsTwo()
         {
             var proc = Proc("1-A", modules: 2, cap: 4);
-            Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(2) });
+            var inst = Assert.Single(
+                Assign(new List<PanelResult> { proc }, new BomExtras { HybridRepeaters = Tally.Repeaters(2) }));
 
-            Assert.False(proc.Link1.ShowRepeaterBar);
-            Assert.Equal(512, proc.Link1.LoadCapacity);
+            Assert.False(inst.Link1.ShowRepeaterBar);
+            Assert.Equal(512, inst.Link1.LoadCapacity);
 
-            Assert.True(proc.Link2.ShowRepeaterBar);
-            Assert.Equal(100, proc.Link2.LoadCapacity);
-            Assert.Equal(99, proc.Link2.DeviceCapacity);
-            Assert.Equal(4, proc.Link2.RepeaterCapacity);
+            Assert.True(inst.Link2.ShowRepeaterBar);
+            Assert.Equal(100, inst.Link2.LoadCapacity);
+            Assert.Equal(99, inst.Link2.DeviceCapacity);
+            Assert.Equal(4, inst.Link2.RepeaterCapacity);
         }
 
+        /// <summary>A QSE-IO in the processor's second LV21 compartment counts as one extra device on
+        /// its link — the compartment device rides the panel it sits in.</summary>
         [Fact]
         public void SpecialCompartmentDigitalIO_CountsAsOneExtraDevice()
         {
-            var proc = Proc("1-A", modules: 1, cap: 4); // DeviceCount=1
-            proc.SpecialCompartmentPanelSizes = new HashSet<int> { 4 };
-            proc.SelectedPanelSize = 4;                 // → HasSpecialCompartment true
-            proc.SelectedSpecialDevice = "Digital I/O"; // QSE-IO counts as 1 device on its link
+            var proc = Lv21("1-A", "Processor", "Digital I/O"); // QSE-IO shares the processor's panel
+            proc.Modules.Add(new ModuleResult { ModuleCapacity = 4 }); // DeviceCount=1
 
-            Assign(new List<PanelResult> { proc });
+            var inst = Assert.Single(Assign(new List<PanelResult> { proc }));
 
-            Assert.Equal(2, proc.Link1.UsedDevices);
-            Assert.Equal(4, proc.Link1.UsedLoads);
+            Assert.Equal(2, inst.Link1.UsedDevices);   // 1 module + 1 QSE-IO
+            Assert.Equal(4, inst.Link1.UsedLoads);
         }
 
+        /// <summary>An "Empty" second compartment adds nothing — only a device selection increments.</summary>
         [Fact]
         public void NonSpecialDeviceSelection_NoExtraDevice()
         {
-            var proc = Proc("1-A", modules: 1, cap: 4);
-            proc.SpecialCompartmentPanelSizes = new HashSet<int> { 4 };
-            proc.SelectedPanelSize = 4;
-            proc.SelectedSpecialDevice = "Empty"; // not a device → no increment
+            var proc = Lv21("1-A", "Processor", "Empty");
+            proc.Modules.Add(new ModuleResult { ModuleCapacity = 4 });
 
-            Assign(new List<PanelResult> { proc });
+            var inst = Assert.Single(Assign(new List<PanelResult> { proc }));
 
-            Assert.Equal(1, proc.Link1.UsedDevices);
+            Assert.Equal(1, inst.Link1.UsedDevices);
         }
 
         /// <summary>The bug this seam closes, seen from the display: a sited DMX interface used to add
-        /// one device and no loads, so its switch legs never moved the load bar at all.</summary>
+        /// one device and no loads, so its switch legs never moved the load bar at all. Here the DMX
+        /// panel is separate from the processor, and its interface packs onto the processor's link.</summary>
         [Fact]
         public void DmxChannelsMoveTheLoadBar()
         {
@@ -185,7 +233,7 @@ namespace TurboSuite.Tests.Zones
                 SelectedSpecialDevice = "DMX"
             };
 
-            Assign(new List<PanelResult> { proc, dmxPanel }, new BomExtras
+            var inst = Assert.Single(Assign(new List<PanelResult> { proc, dmxPanel }, new BomExtras
             {
                 SubsystemDemands = new[]
                 {
@@ -195,10 +243,10 @@ namespace TurboSuite.Tests.Zones
                         linkDevices: 1,
                         linkLoads: 64)
                 }
-            });
+            }));
 
-            Assert.Equal(2, proc.Link1.UsedDevices);   // 1 module + 1 interface
-            Assert.Equal(68, proc.Link1.UsedLoads);    // 4 module outputs + 64 DMX channels
+            Assert.Equal(2, inst.Link1.UsedDevices);   // 1 module + 1 interface
+            Assert.Equal(68, inst.Link1.UsedLoads);    // 4 module outputs + 64 DMX channels
         }
     }
 }

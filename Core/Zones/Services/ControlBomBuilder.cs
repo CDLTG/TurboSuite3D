@@ -108,16 +108,28 @@ namespace TurboSuite.Zones.Services
             // --- Accessories ---
             var accessories = new List<BomLineItem>();
 
-            // Power supply: one per placed processor — follows the same design-is-truth rule, so a
-            // job with no processor sited orders no supply rather than one for a phantom.
+            // Power supply: sized from the QS-link PDU budget, not one-per-processor. A job with no
+            // processor sited still orders none (the sizer returns 0), so no supply for a phantom.
             if (!string.IsNullOrEmpty(brand.PowerSupplyPartNumber))
             {
+                var supply = SizePowerSupplies(allPanels, brand, extras);
+                string description = brand.GetPartDescription(brand.PowerSupplyPartNumber);
+
+                // Global infeasibility: the panels cannot physically hold the supplies the demand
+                // needs. A different warning shape from "(N of M placed)" — the fix is a bigger/other
+                // panel, not another placement — and design-surface only, like every other annotation.
+                bool infeasible = extras.Audience == BomAudience.DesignSurface
+                    && supply.Quantity > supply.SlotsAvailable;
+                if (infeasible)
+                    description += $" ({supply.Quantity} needed, panels hold {supply.SlotsAvailable})";
+
                 accessories.Add(new BomLineItem
                 {
-                    Quantity = bomProcessorCount,
+                    Quantity = supply.Quantity,
                     PartNumber = brand.PowerSupplyPartNumber,
-                    Description = brand.GetPartDescription(brand.PowerSupplyPartNumber),
-                    Category = "Accessories"
+                    Description = description,
+                    Category = "Accessories",
+                    IsWarning = infeasible
                 });
             }
 
@@ -403,6 +415,80 @@ namespace TurboSuite.Zones.Services
             => ControlLinkPacker.RecommendProcessors(
                 ControlLinkPacker.BuildDemand(allPanels, extras));
 
+        /// <summary>
+        /// How many QS-link power supplies (QSPS-DH-1-75-H) the job needs, and whether the placed
+        /// panels can physically hold them.
+        ///
+        /// <b>PDU nets per link, pooled within it.</b> A power group cannot span a link (V+ is link
+        /// wiring), so supplies are sized one link at a time: each supply gives +75, and the devices on
+        /// the link draw against it. The packer already distributes the device draws
+        /// (<see cref="PackedLink.ConsumedPdu"/>); this adds the one draw it cannot — the processor's
+        /// −8, which is per-<i>processor</i> and lands on that processor's <b>first QS link</b> (not
+        /// "the first N QS links", or a processor heading two QS links would be billed −16 and its
+        /// neighbour nothing). Then <c>ceil(|net| / 75)</c> per QS link, summed.
+        ///
+        /// The <b>all-wireless-processor safeguard</b>: a processor whose two links both went to Clear
+        /// Connect has no QS link to carry its −8, yet the box still needs power — so each such
+        /// processor adds one supply directly, matching the one-per-processor floor the old code had.
+        ///
+        /// Feasibility is <b>global</b>: total supplies vs the sum of
+        /// <see cref="BrandConfig.PowerSupplyCapacityByPanelSize"/> across every placed panel. There is
+        /// no physical panel→link assignment to check against — a panel is grouped spatially and the
+        /// pack's panel→link scatter is a recommendation — so a per-link check would false-alarm on a
+        /// keypad-heavy link the FFD left with no panel.
+        /// </summary>
+        internal static PowerSupplySizing SizePowerSupplies(
+            List<PanelResult> allPanels, BrandConfig brand, BomExtras extras)
+        {
+            int slots = allPanels.Sum(p => brand.GetPowerSupplySlots(p.PanelCapacity));
+
+            // Per-SLOT, matching the processor line (CountPlacedSpecialDevice): each "Processor"
+            // selection is one HQP7-2 and its own two links, so an LV21 with a processor in each of its
+            // two compartments is two processors → four links → two supplies (each processor is its own
+            // power group and cannot share a QSPS). Per-panel counting would order both HQP7-2s but only
+            // one supply. The sidebar bars still render such a panel as one processor — a separate,
+            // pre-existing display limitation (a PanelResult carries a single Link1/Link2 pair).
+            int processorCount = CountPlacedSpecialDevice(allPanels, "Processor");
+            if (processorCount == 0)
+                return new PowerSupplySizing(0, slots);
+
+            int supplyPdu = brand.PowerSupplyPdu > 0 ? brand.PowerSupplyPdu : 75;
+
+            int availableLinks = processorCount * ControlLinkPacker.LinksPerProcessor;
+            var links = ControlLinkPacker.Pack(
+                ControlLinkPacker.BuildDemand(allPanels, extras, brand), availableLinks).Links;
+
+            // Per-QS-link draw magnitude the packer distributed. Clear Connect links carry no PDU.
+            var draw = new int[links.Count];
+            for (int i = 0; i < links.Count; i++)
+                draw[i] = links[i].IsClearConnect ? 0 : Math.Abs(links[i].ConsumedPdu);
+
+            // Charge each processor's −8 to its first QS link; an all-wireless processor has none, so it
+            // takes a supply on its own account.
+            int processorDraw = Math.Abs(brand.GetDevicePduDraw("Processor"));
+            int allWirelessProcessors = 0;
+            for (int j = 0; j < processorCount; j++)
+            {
+                int firstQs = -1;
+                for (int k = 0; k < ControlLinkPacker.LinksPerProcessor; k++)
+                {
+                    int idx = j * ControlLinkPacker.LinksPerProcessor + k;
+                    if (idx < links.Count && !links[idx].IsClearConnect) { firstQs = idx; break; }
+                }
+                if (firstQs < 0) allWirelessProcessors++;
+                else draw[firstQs] += processorDraw;
+            }
+
+            int quantity = allWirelessProcessors;
+            for (int i = 0; i < links.Count; i++)
+            {
+                if (links[i].IsClearConnect || draw[i] <= 0) continue;
+                quantity += (int)Math.Ceiling((double)draw[i] / supplyPdu);
+            }
+
+            return new PowerSupplySizing(quantity, slots);
+        }
+
         /// <summary>Counts how many compartment slots across all panels hold the named device.</summary>
         private static int CountPlacedSpecialDevice(List<PanelResult> allPanels, string deviceName)
         {
@@ -417,6 +503,23 @@ namespace TurboSuite.Zones.Services
             }
             return count;
         }
+    }
+
+    /// <summary>How many QS-link power supplies a job needs, and how many the placed panels can hold —
+    /// the two numbers the global feasibility warning compares.</summary>
+    internal readonly struct PowerSupplySizing
+    {
+        public PowerSupplySizing(int quantity, int slotsAvailable)
+        {
+            Quantity = quantity;
+            SlotsAvailable = slotsAvailable;
+        }
+
+        /// <summary>Supplies to order.</summary>
+        public int Quantity { get; }
+
+        /// <summary>Supply positions the panel mix provides — Σ PowerSupplyCapacityByPanelSize.</summary>
+        public int SlotsAvailable { get; }
     }
 
     /// <summary>
