@@ -21,6 +21,7 @@ Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selec
 - **Panel allocation:** Circuits grouped by zone (ZONE N panels); recommends minimum panels per zone and distributes modules across them. Each panel supports a compartment slot for Processor, Digital I/O, or DMX. LV21 panels (dual-compartment, no modules) are supported.
 - **Control subsystems:** A subsystem that solves its own hardware reports it through `IControlSubsystemDemandProvider` (`Core/Zones/Services/`), and the BOM plus the QS-link roll-up consume that count rather than re-deriving one. **TurboDMX** is the first: `DmxDemandProvider` re-solves the persisted DMX design headlessly and reports the `QSE-CI-DMX` interfaces the job needs from real channel math, plus the QS device and switch-leg budgets they consume (1 device and 0 zones per interface; 1 leg per DMX channel).
 - **A subsystem states a requirement; placement still decides the order.** `QSE-CI-DMX` is a compartment device, so its BOM quantity follows the dropdown exactly as the processor's does, and the solve becomes the `(1 of 4 placed)` annotation telling the designer to go site the rest. That is always actionable: overriding a panel to **LV21** frees two compartments, and the allocator adds a panel to re-home the displaced modules. A part with no compartment (the DALI DIN module, when it lands) has no placement to defer to and is ordered at its solved quantity.
+- **Shades (Sivoia QS)** are the second subsystem, treated like lighting: **a recommendation off the circuits, not placed hardware.** `ShadeDemandProvider` (`Shim/Zones/Services/`) finds shade circuits — a circuit is a shade circuit when a connected fixture's family name contains **"Shade Motor"** (catching the 3D `AL_Electrical Fixture_Shade Motor` and the 2D `Shade Motor`) — groups them by **location** (the circuit's panel name, e.g. SHADE 1 / SHADE 2), and `Core/Zones/Services/ShadeSolver.cs` recommends `ceil(shades / 10)` **QSPS-10PNL per location, summed** (33 in SHADE 1 + 4 in SHADE 2 → 4 + 1 = five panels). The order is `DemandMount.External` (ordered, competing for no compartment) and prints under its own **Shades** BOM section, apart from Accessories. **Link accounting:** a shade is 1 QS device + 1 switch leg and each recommended panel is 1 more device (a full panel → 11 devices / 10 legs), riding the same link budget as the lighting; the QSPS-10PNL's Link terminals carry no V+, so shades draw **0 PDU** and never touch the QSPS-DH supply — the panel powers its own outputs from mains. Shade circuits are dropped from the lighting collector (`ZonesCollectorService`, same shade-motor test) so their Electrical-Fixture motors don't become spurious lighting zones.
 - **DMX warnings never fail a document.** A design that will not solve, or one solved over partly zoned tape, contributes a warning line naming the reason — including *"N DMX fixtures have no Control Zone assigned"*.
 - **A subsystem only earns silence by speaking.** DMX circuits are excluded from Unassigned Circuits because TurboDMX owns them — but only when it actually accounted for them, with parts or with a reason. A circuit whose fixtures declare `Dimming Protocol = DMX` yet carry no `DMX Channels` is invisible to TurboDMX, so it falls back into Unassigned Circuits instead of disappearing from every surface at once.
 - **Panel size overrides:** Users can force any panel to a different size; modules auto-redistribute to accommodate.
@@ -62,10 +63,12 @@ the fourth look like an overflow on a link with 95 slots free.
 
 **A switch leg is the smallest controllable output** — *"dimmed or switched circuits, HomeWorks
 Digital or DALI addressable devices (ballasts, drivers, and interfaces), a single DMX channel, contact
-closure outputs, and Sivoia QS shade drives."* Module outputs are counted at **nameplate**: a
-four-output module holding one circuit still presents four legs. Two known under-counts follow from
-that definition and are not yet fixed: a QSE-IO's contact closure outputs are legs and it is counted
-as 1 device / 0 legs, and Sivoia shade drives are not collected at all.
+closure outputs, and Sivoia QS shade drives."* Devices are counted at **nameplate**: a four-output
+module holding one circuit still presents four legs, and a QSE-IO presents its **five** flexible I/O
+terminals as five legs (`BrandConfig.DeviceSwitchLegs`), whatever a job configures. **Sivoia QS shade
+drives** are counted through the shades subsystem above (one leg + one device each, via the placed
+QSPS-10PNL panels) rather than this nameplate table — a shade's leg rides its circuit, not a fixed
+per-device count.
 
 **Wireless takes whole links.** One repeater converts a link to Clear Connect, so a job that would run
 on one processor can need two purely to carry wireless — five repeaters is two CC-A links, which is a

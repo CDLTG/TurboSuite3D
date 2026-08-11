@@ -384,7 +384,7 @@ namespace TurboSuite.Zones.ViewModels
             // inputs as the BOM, on purpose — the bars and the processor recommendation are two questions
             // to one packer, counted per-slot just as the supply sizer counts them.
             ProcessorDisplays = new ObservableCollection<ProcessorInstance>(
-                LinkAssignmentService.BuildProcessorInstances(allPanels, BuildBomExtras()));
+                LinkAssignmentService.BuildProcessorInstances(allPanels, BuildBomExtras(), _currentBrand));
         }
 
         private void SaveSpecialDeviceSelections()

@@ -32,7 +32,7 @@ namespace TurboSuite.Zones.Services
         /// apart through the inputs even while sharing the algorithm.
         /// </summary>
         public static List<ProcessorInstance> BuildProcessorInstances(
-            List<PanelResult> allPanels, BomExtras extras)
+            List<PanelResult> allPanels, BomExtras extras, BrandConfig brand = null)
         {
             var instances = new List<ProcessorInstance>();
             if (allPanels == null) return instances;
@@ -68,8 +68,10 @@ namespace TurboSuite.Zones.Services
                 links.Add(inst.Link2);
             }
 
+            // Brand rides along so a compartment device's nameplate legs (QSE-IO → 5) show on the bars.
+            // PDU is computed too but nothing here reads it — only the BOM's supply sizer does.
             var packed = ControlLinkPacker.Pack(
-                ControlLinkPacker.BuildDemand(allPanels, extras), links.Count);
+                ControlLinkPacker.BuildDemand(allPanels, extras, brand), links.Count);
 
             for (int i = 0; i < links.Count; i++)
             {

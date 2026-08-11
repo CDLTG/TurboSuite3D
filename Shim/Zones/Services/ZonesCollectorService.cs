@@ -42,6 +42,13 @@ namespace TurboSuite.Zones.Services
                         if (string.IsNullOrWhiteSpace(circuitNumber))
                             continue;
 
+                        // A shade circuit carries shade motors (Electrical Fixtures) — which the fixture
+                        // filter below would otherwise pull in as a lighting zone. The shade subsystem
+                        // (ShadeDemandProvider) accounts for these separately, so drop them here. A no-op
+                        // on any job without shade motors.
+                        if (ShadeDemandProvider.IsShadeCircuit(circuit))
+                            continue;
+
                         // Get fixtures directly from the circuit's connected elements
                         // (avoids grouping by circuit number string, which fails when
                         // multiple circuits share the same number like "<unnamed>")

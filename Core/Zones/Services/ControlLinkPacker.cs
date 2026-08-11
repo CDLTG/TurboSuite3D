@@ -159,8 +159,12 @@ namespace TurboSuite.Zones.Services
                         continue;
 
                     // A compartment device nobody speaks for — QSE-IO, or a QSE-CI-DMX on a job where
-                    // TurboDMX has nothing to say. One QS device, no switch legs, its own V+ draw.
+                    // TurboDMX has nothing to say. One QS device, its nameplate switch legs (QSE-IO → 5;
+                    // a silent QSE-CI-DMX contributes none until its subsystem reports channels), its own
+                    // V+ draw. Legs are real load-bar demand, so — unlike PDU — every caller passes brand
+                    // and these show on the bars too; a null brand (a brand with no leg model) is 0.
                     panelDevices[panel] += 1;
+                    panelLoads[panel] += brand?.GetDeviceSwitchLegs(slot) ?? 0;
                     panelPdu[panel] += brand?.GetDevicePduDraw(slot) ?? 0;
                 }
             }

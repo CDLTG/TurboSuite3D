@@ -88,5 +88,9 @@ public static class BomCollectorService
     /// rather than printed. The user sees it in TurboZones, where it can be acted on.
     /// </summary>
     private static List<ControlSubsystemDemand> CollectSubsystemDemands(Document doc) =>
-        new List<ControlSubsystemDemand> { new DmxDemandProvider(doc).GetDemand() };
+        new List<ControlSubsystemDemand>
+        {
+            new DmxDemandProvider(doc).GetDemand(),
+            new ShadeDemandProvider(doc).GetDemand()
+        };
 }

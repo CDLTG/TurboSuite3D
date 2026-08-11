@@ -45,7 +45,8 @@ namespace TurboSuite.Zones.Models
             Dictionary<string, ModuleAmpLimits> ampLimits = null,
             Dictionary<string, int> devicePduDraw = null,
             int powerSupplyPdu = 0,
-            Dictionary<int, int> powerSupplyCapacityByPanelSize = null)
+            Dictionary<int, int> powerSupplyCapacityByPanelSize = null,
+            Dictionary<string, int> deviceSwitchLegs = null)
         {
             Name = name;
             ModuleCapacity = moduleCapacity;
@@ -64,6 +65,7 @@ namespace TurboSuite.Zones.Models
             DevicePduDraw = devicePduDraw;
             PowerSupplyPdu = powerSupplyPdu;
             PowerSupplyCapacityByPanelSize = powerSupplyCapacityByPanelSize;
+            DeviceSwitchLegs = deviceSwitchLegs;
         }
 
         public Dictionary<string, string> SpecialDevices { get; }
@@ -105,12 +107,35 @@ namespace TurboSuite.Zones.Models
         /// hold the count", answered by a different panel rather than another placement.</summary>
         public Dictionary<int, int> PowerSupplyCapacityByPanelSize { get; }
 
+        /// <summary>
+        /// Switch legs a named device contributes to its QS link's load budget, keyed like
+        /// <see cref="DevicePduDraw"/>. A leg is the smallest controllable output; unlike PDU (a
+        /// V+/terminal-2 fact), legs are <i>real load-bar demand</i> that every surface must show, so the
+        /// packer folds these into a link's load count on <b>all</b> paths — bars, recommendation, and
+        /// the supply sizer alike — not just the sizer.
+        ///
+        /// <b>QSE-IO → 5.</b> The QS Contact Closure interface has five flexible I/O terminals; by the
+        /// nameplate precedent the modules set, we count the outputs it <i>has</i>, not the subset a job
+        /// configures (Lutron 3691127f p.2 enumerates its outputs as switch legs). Most devices have no
+        /// legs of their own and are simply absent (a keypad's legs are its programmed loads, not a
+        /// fixed nameplate count). <b>This table is also the seam a future Sivoia QS shade plugs into</b>
+        /// — a shade drive is one device and one leg — once a shade-collecting family and its PDU value
+        /// (submittal 085335) land; see the plan's Open Data.
+        /// </summary>
+        public Dictionary<string, int> DeviceSwitchLegs { get; }
+
         /// <summary>Signed PDU draw of a named device, or 0 when it has none (modules, panels, and any
         /// brand with no PDU model all land here).</summary>
         public int GetDevicePduDraw(string deviceName)
             => DevicePduDraw != null
                && !string.IsNullOrEmpty(deviceName)
                && DevicePduDraw.TryGetValue(deviceName, out var pdu) ? pdu : 0;
+
+        /// <summary>Switch legs a named device contributes, or 0 when it contributes none.</summary>
+        public int GetDeviceSwitchLegs(string deviceName)
+            => DeviceSwitchLegs != null
+               && !string.IsNullOrEmpty(deviceName)
+               && DeviceSwitchLegs.TryGetValue(deviceName, out var legs) ? legs : 0;
 
         /// <summary>Supply positions a panel of the given module capacity provides, 0 when unlisted.</summary>
         public int GetPowerSupplySlots(int panelSize)
@@ -201,13 +226,14 @@ namespace TurboSuite.Zones.Models
                 { "LQSE-4S8-120-D", "DIN Rail Power Module (Switching)" },
                 { "LQSE-4T5-120-D", "DIN Rail Power Module (0-10V and Switching)" },
                 { "LQSE-4A5-120-D", "DIN Rail Power Module (LED+ Adaptive)" },
-                { "QSPS-DH-1-75-H", "DIN Rail Power Supply" },
+                { "QSPS-DH-1-75-H", "DIN Rail Power Supply with Wire Harnesses" },
                 { "PDW-QS-4", "QS Wire Harness (4-Module)" },
                 { "PDW-QS-5", "QS Wire Harness (5-Module)" },
                 { "PDW-QS-8", "QS Wire Harness (8-Module)" },
                 { "PDW-QS-9", "QS Wire Harness (9-Module)" },
                 { "QSE-IO", "QS Contact Closure Input/Output Interface" },
-                { "QSE-CI-DMX", "QS DMX Output Control Interface" }
+                { "QSE-CI-DMX", "QS DMX Output Control Interface" },
+                { "QSPS-10PNL", "QS Smart Panel (shades)" }
             },
             ampLimits: new Dictionary<string, ModuleAmpLimits>(StringComparer.OrdinalIgnoreCase)
             {
@@ -233,6 +259,14 @@ namespace TurboSuite.Zones.Models
             powerSupplyCapacityByPanelSize: new Dictionary<int, int>
             {
                 { 0, 2 }, { 2, 0 }, { 4, 1 }, { 5, 0 }, { 8, 1 }, { 9, 0 }
+            },
+            // Switch legs a compartment device contributes to its link's load bar. The QSE-IO has five
+            // flexible I/O terminals, counted as five legs (nameplate precedent — see DeviceSwitchLegs).
+            // The QSE-CI-DMX is absent here: its legs are its DMX channels, which the subsystem reports
+            // per-job (LinkLoads), not a fixed nameplate count.
+            deviceSwitchLegs: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Digital I/O", 5 }
             });
 
         public static BrandConfig Crestron { get; } = new BrandConfig("Crestron", 8, new[] { 7 },

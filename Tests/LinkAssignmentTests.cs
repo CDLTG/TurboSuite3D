@@ -53,8 +53,13 @@ namespace TurboSuite.Tests.Zones
                 SelectedSpecialDevice2 = slot2
             };
 
-        private static List<ProcessorInstance> Assign(List<PanelResult> panels, BomExtras? extras = null)
-            => LinkAssignmentService.BuildProcessorInstances(panels, extras ?? new BomExtras());
+        // Production always passes the brand (the VM hands the packer _currentBrand), so the bars see
+        // a compartment device's nameplate switch legs. Default to Lutron; the one null-brand case
+        // below passes it explicitly to pin that a brand with no leg model contributes 0.
+        private static List<ProcessorInstance> Assign(
+            List<PanelResult> panels, BomExtras? extras = null, BrandConfig? brand = null)
+            => LinkAssignmentService.BuildProcessorInstances(
+                panels, extras ?? new BomExtras(), brand ?? BrandConfig.Lutron);
 
         [Fact]
         public void NoProcessorPanels_NoInstances()
@@ -192,10 +197,11 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(4, inst.Link2.RepeaterCapacity);
         }
 
-        /// <summary>A QSE-IO in the processor's second LV21 compartment counts as one extra device on
-        /// its link — the compartment device rides the panel it sits in.</summary>
+        /// <summary>A QSE-IO in the processor's second LV21 compartment counts as one extra device AND
+        /// its five nameplate switch legs on its link — the compartment device rides the panel it sits
+        /// in, and its outputs are real load-bar demand.</summary>
         [Fact]
-        public void SpecialCompartmentDigitalIO_CountsAsOneExtraDevice()
+        public void SpecialCompartmentDigitalIO_AddsOneDeviceAndFiveLegs()
         {
             var proc = Lv21("1-A", "Processor", "Digital I/O"); // QSE-IO shares the processor's panel
             proc.Modules.Add(new ModuleResult { ModuleCapacity = 4 }); // DeviceCount=1
@@ -203,7 +209,23 @@ namespace TurboSuite.Tests.Zones
             var inst = Assert.Single(Assign(new List<PanelResult> { proc }));
 
             Assert.Equal(2, inst.Link1.UsedDevices);   // 1 module + 1 QSE-IO
-            Assert.Equal(4, inst.Link1.UsedLoads);
+            Assert.Equal(9, inst.Link1.UsedLoads);     // 4 module outputs + 5 QSE-IO legs
+        }
+
+        /// <summary>The legs are a brand fact, so a null brand (or one with no leg model) contributes
+        /// none — the same QSE-IO shows its device but no legs. This is what the pre-leg bars did, and
+        /// the gate that keeps a leg-less brand honest.</summary>
+        [Fact]
+        public void NullBrand_ContributesNoSwitchLegs()
+        {
+            var proc = Lv21("1-A", "Processor", "Digital I/O");
+            proc.Modules.Add(new ModuleResult { ModuleCapacity = 4 });
+
+            var inst = Assert.Single(LinkAssignmentService.BuildProcessorInstances(
+                new List<PanelResult> { proc }, new BomExtras(), brand: null));
+
+            Assert.Equal(2, inst.Link1.UsedDevices);   // device still counts
+            Assert.Equal(4, inst.Link1.UsedLoads);     // but no legs without a brand
         }
 
         /// <summary>An "Empty" second compartment adds nothing — only a device selection increments.</summary>

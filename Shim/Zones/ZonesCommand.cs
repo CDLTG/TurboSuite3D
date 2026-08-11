@@ -77,7 +77,8 @@ namespace TurboSuite.Zones
                 // its own design, so the interface count on the BOM is channel math, not a dropdown.
                 var subsystemDemands = new List<ControlSubsystemDemand>
                 {
-                    new DmxDemandProvider(doc).GetDemand()
+                    new DmxDemandProvider(doc).GetDemand(),
+                    new ShadeDemandProvider(doc).GetDemand()
                 };
 
                 var viewModel = new ZonesMainViewModel(circuits,

@@ -92,6 +92,28 @@ namespace TurboSuite.Tests.Zones
                 Headers(bom));
         }
 
+        /// <summary>Shades order into their own section, apart from Accessories: the QSPS-10PNL recommended
+        /// by the shade subsystem lands under a "Shades" header and never in Accessories.</summary>
+        [Fact]
+        public void ShadesGetTheirOwnSection()
+        {
+            var shades = ShadeSolver.Solve(new List<ShadeLocationTally>
+            {
+                new ShadeLocationTally("SHADE 1", 33),
+                new ShadeLocationTally("SHADE 2", 4)
+            });
+            var bom = Build(TwoFullPanels(), Lutron,
+                new BomExtras { SubsystemDemands = new[] { shades } });
+
+            Assert.Contains("Shades", Headers(bom));
+
+            var line = Assert.Single(Section(bom, "Shades"));
+            Assert.Equal("QSPS-10PNL", line.PartNumber);
+            Assert.Equal(5, line.Quantity);   // ceil(33/10) + ceil(4/10)
+
+            Assert.DoesNotContain(Section(bom, "Accessories"), l => l.PartNumber == "QSPS-10PNL");
+        }
+
         /// <summary>An issued document lists only what is actually being ordered, so a job with no
         /// processor sited drops the section entirely rather than printing a blank-quantity row.</summary>
         [Fact]
@@ -978,6 +1000,21 @@ namespace TurboSuite.Tests.Zones
         public void LonelyProcessorStillOrdersOneSupply()
             => Assert.Equal(1, Supply(Processor(8), new BomExtras()).Quantity);
 
+        /// <summary>No processor sited → zero supplies, and the line is dropped rather than shown as a
+        /// bare "0". Design surface, where zero lines normally survive: the processor line's "0 of N
+        /// placed" already says to site one, and the supply — derived, not placed — has nothing of its
+        /// own to annotate.</summary>
+        [Fact]
+        public void ZeroSupplyLineIsSuppressedOnDesignSurface()
+        {
+            var noProcessor = new List<PanelResult> { LutronPanel("1-A", 8, ("ELV", 4)) };
+            var accessories = Section(
+                Build(noProcessor, Lutron, new BomExtras { Audience = BomAudience.DesignSurface }),
+                "Accessories");
+
+            Assert.DoesNotContain(accessories, a => a.PartNumber == Qsps);
+        }
+
         /// <summary>All-wireless safeguard: five repeaters take both of the processor's links to Clear
         /// Connect, leaving no QS link to carry the −8 — but the box still needs power, so the processor
         /// contributes one supply directly.</summary>
@@ -1023,7 +1060,7 @@ namespace TurboSuite.Tests.Zones
 
             Assert.Equal(2, supply.Quantity);
             Assert.False(supply.IsWarning);
-            Assert.Equal("DIN Rail Power Supply", supply.Description);
+            Assert.Equal("DIN Rail Power Supply with Wire Harnesses", supply.Description);
         }
 
         /// <summary>Two processors in one LV21's two compartments are two HQP7-2s — two power groups
@@ -1054,7 +1091,7 @@ namespace TurboSuite.Tests.Zones
 
             Assert.Equal(2, supply.Quantity);
             Assert.False(supply.IsWarning);
-            Assert.Equal("DIN Rail Power Supply", supply.Description);
+            Assert.Equal("DIN Rail Power Supply with Wire Harnesses", supply.Description);
         }
     }
 }

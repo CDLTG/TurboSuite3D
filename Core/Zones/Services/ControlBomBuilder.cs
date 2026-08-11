@@ -20,7 +20,7 @@ namespace TurboSuite.Zones.Services
     public static class ControlBomBuilder
     {
         /// <summary>
-        /// Builds the ordered BOM: Processors, Panels, Modules, Accessories, Keypads. Header rows
+        /// Builds the ordered BOM: Processors, Panels, Modules, Accessories, Shades, Keypads. Header rows
         /// are interleaved as <see cref="BomLineItem.IsHeader"/> entries, so the list is render-ready
         /// in document order and callers do not re-group it.
         /// </summary>
@@ -41,7 +41,7 @@ namespace TurboSuite.Zones.Services
             // it drives the shortfall warning on the design surface, where the fix actually happens,
             // and never silently inflates an order quantity.
             int processorCount = CountPlacedSpecialDevice(allPanels, "Processor");
-            int recommendedProcessors = CalculateRecommendedProcessors(allPanels, extras);
+            int recommendedProcessors = CalculateRecommendedProcessors(allPanels, extras, brand);
             int bomProcessorCount = processorCount;
 
             {
@@ -113,24 +113,33 @@ namespace TurboSuite.Zones.Services
             if (!string.IsNullOrEmpty(brand.PowerSupplyPartNumber))
             {
                 var supply = SizePowerSupplies(allPanels, brand, extras);
-                string description = brand.GetPartDescription(brand.PowerSupplyPartNumber);
 
-                // Global infeasibility: the panels cannot physically hold the supplies the demand
-                // needs. A different warning shape from "(N of M placed)" — the fix is a bigger/other
-                // panel, not another placement — and design-surface only, like every other annotation.
-                bool infeasible = extras.Audience == BomAudience.DesignSurface
-                    && supply.Quantity > supply.SlotsAvailable;
-                if (infeasible)
-                    description += $" ({supply.Quantity} needed, panels hold {supply.SlotsAvailable})";
-
-                accessories.Add(new BomLineItem
+                // A count of 0 means no processor is sited yet: nothing to order, and the processor line
+                // already carries that signal ("0 of N placed"). Unlike the processor, the supply has no
+                // placement of its own to annotate, so a bare "0" is noise — drop it on both surfaces
+                // (the issued document strips it anyway). A sited processor always needs ≥1, so this
+                // never hides a real order.
+                if (supply.Quantity > 0)
                 {
-                    Quantity = supply.Quantity,
-                    PartNumber = brand.PowerSupplyPartNumber,
-                    Description = description,
-                    Category = "Accessories",
-                    IsWarning = infeasible
-                });
+                    string description = brand.GetPartDescription(brand.PowerSupplyPartNumber);
+
+                    // Global infeasibility: the panels cannot physically hold the supplies the demand
+                    // needs. A different warning shape from "(N of M placed)" — the fix is a bigger/other
+                    // panel, not another placement — and design-surface only, like every other annotation.
+                    bool infeasible = extras.Audience == BomAudience.DesignSurface
+                        && supply.Quantity > supply.SlotsAvailable;
+                    if (infeasible)
+                        description += $" ({supply.Quantity} needed, panels hold {supply.SlotsAvailable})";
+
+                    accessories.Add(new BomLineItem
+                    {
+                        Quantity = supply.Quantity,
+                        PartNumber = brand.PowerSupplyPartNumber,
+                        Description = description,
+                        Category = "Accessories",
+                        IsWarning = infeasible
+                    });
+                }
             }
 
             // Wire harnesses (one per panel, grouped by part number)
@@ -216,7 +225,11 @@ namespace TurboSuite.Zones.Services
                 }
             }
 
-            accessories.AddRange(SubsystemLines(brand, extras));
+            // Subsystem parts. Shades carry their own "Shades" category and get their own section below;
+            // every other subsystem's external parts join Accessories.
+            var subsystemLines = SubsystemLines(brand, extras).ToList();
+            var shadeLines = subsystemLines.Where(l => l.Category == "Shades").ToList();
+            accessories.AddRange(subsystemLines.Where(l => l.Category != "Shades"));
 
             // Hybrid repeaters (Lutron only), one line per catalog number.
             if (string.Equals(brand.Name, "Lutron", StringComparison.OrdinalIgnoreCase))
@@ -230,6 +243,14 @@ namespace TurboSuite.Zones.Services
             {
                 bom.Add(new BomLineItem { IsHeader = true, Category = "Accessories", Description = "Accessories" });
                 bom.AddRange(accessories);
+            }
+
+            // --- Shades ---
+            // The Sivoia QS shade panels (QSPS-10PNL), kept apart from the general Accessories.
+            if (shadeLines.Count > 0)
+            {
+                bom.Add(new BomLineItem { IsHeader = true, Category = "Shades", Description = "Shades" });
+                bom.AddRange(shadeLines);
             }
 
             // --- Keypads ---
@@ -339,6 +360,11 @@ namespace TurboSuite.Zones.Services
             {
                 if (demand == null) continue;
 
+                // Shades get their own section, apart from the general Accessories; every other
+                // subsystem's external parts land in Accessories.
+                string category = string.Equals(demand.Subsystem, ShadeSolver.SubsystemName,
+                    StringComparison.OrdinalIgnoreCase) ? "Shades" : "Accessories";
+
                 // Something is wrong and a human has to fix it: a design that would not solve, or one
                 // that solved over incomplete input. Worth a line rather than silence, in the
                 // subsystem's own words. Design surface only — a purchasing document is not where a
@@ -350,7 +376,7 @@ namespace TurboSuite.Zones.Services
                         Quantity = 0,
                         PartNumber = "",
                         Description = $"{demand.Subsystem}: {demand.Diagnostic}",
-                        Category = "Accessories",
+                        Category = category,
                         IsWarning = true
                     });
                 }
@@ -372,7 +398,7 @@ namespace TurboSuite.Zones.Services
                         Quantity = part.Quantity,
                         PartNumber = part.PartNumber,
                         Description = part.Description ?? brand.GetPartDescription(part.PartNumber),
-                        Category = "Accessories"
+                        Category = category
                     });
                 }
             }
@@ -411,9 +437,10 @@ namespace TurboSuite.Zones.Services
         /// links. They cannot, so the pooled figure could only ever come in at or below the truth,
         /// and it disagreed with the bars that the designer was reading at the same moment.
         /// </summary>
-        public static int CalculateRecommendedProcessors(List<PanelResult> allPanels, BomExtras extras)
+        public static int CalculateRecommendedProcessors(
+            List<PanelResult> allPanels, BomExtras extras, BrandConfig brand = null)
             => ControlLinkPacker.RecommendProcessors(
-                ControlLinkPacker.BuildDemand(allPanels, extras));
+                ControlLinkPacker.BuildDemand(allPanels, extras, brand));
 
         /// <summary>
         /// How many QS-link power supplies (QSPS-DH-1-75-H) the job needs, and whether the placed
@@ -446,8 +473,8 @@ namespace TurboSuite.Zones.Services
             // selection is one HQP7-2 and its own two links, so an LV21 with a processor in each of its
             // two compartments is two processors → four links → two supplies (each processor is its own
             // power group and cannot share a QSPS). Per-panel counting would order both HQP7-2s but only
-            // one supply. The sidebar bars still render such a panel as one processor — a separate,
-            // pre-existing display limitation (a PanelResult carries a single Link1/Link2 pair).
+            // one supply. The sidebar bars count the same way (LinkAssignmentService builds one
+            // ProcessorInstance per slot), so the two supplies and the four bars agree by construction.
             int processorCount = CountPlacedSpecialDevice(allPanels, "Processor");
             if (processorCount == 0)
                 return new PowerSupplySizing(0, slots);
