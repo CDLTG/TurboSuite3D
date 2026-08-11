@@ -7,6 +7,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.Dmx;
 using TurboSuite.Dmx.Overlay;
 using TurboSuite.Dmx.Services;
+using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Dmx.Services
 {
@@ -65,6 +66,13 @@ namespace TurboSuite.Dmx.Services
             var toColor = new List<KeyValuePair<ElementId, DmxColor>>();
             foreach (var fi in fixtures)
             {
+                // Only color DMX fixtures. Control Zone is now shared with DALI, so an unscoped value match
+                // would cross-color a DALI loop that happens to share a zone name. Scope on Dimming Protocol
+                // — the same membership rule the DMX reader uses.
+                if (!(fi is FamilyInstance inst)) continue;
+                if (!ParameterHelper.GetDimmingProtocol(inst).Trim()
+                        .Equals("DMX", StringComparison.OrdinalIgnoreCase)) continue;
+
                 string zone = fi.LookupParameter(DmxParameterNames.ControlZone)?.AsString()?.Trim();
                 if (!string.IsNullOrEmpty(zone) && zoneColors.TryGetValue(zone, out var col))
                     toColor.Add(new KeyValuePair<ElementId, DmxColor>(fi.Id, col));

@@ -31,6 +31,15 @@ public static class ParameterNames
     /// </summary>
     public const string Wireless = "Wireless";
 
+    /// <summary>
+    /// The one designer-set instance parameter grouping fixtures into control zones for a zone/loop-based
+    /// control subsystem (DMX today, DALI next). A blank value is "unassigned". Protocol-agnostic:
+    /// <see cref="DimmingProtocol"/> routes which subsystem owns a fixture, and this names the zone
+    /// within it. Template shared param, bound per-family to DMX/DALI fixtures only.
+    /// <c>DmxParameterNames.ControlZone</c> aliases this so the two subsystems key on one string.
+    /// </summary>
+    public const string ControlZone = "Control Zone";
+
     // Lighting Device / Fixture type parameters
     public const string TypeMark = "Type Mark";
     public const string DimmingProtocol = "Dimming Protocol";

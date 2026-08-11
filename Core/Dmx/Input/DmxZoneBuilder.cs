@@ -12,11 +12,13 @@ namespace TurboSuite.Dmx
     /// the loop builder, and the count of fixtures with no <c>Control Zone</c> assigned).</summary>
     public sealed class DmxZoneBuildResult
     {
-        public DmxZoneBuildResult(IReadOnlyList<ZoneDesign> zones, IReadOnlyList<string> zoneNames, int unassignedFixtures)
+        public DmxZoneBuildResult(IReadOnlyList<ZoneDesign> zones, IReadOnlyList<string> zoneNames,
+                                  int unassignedFixtures, int zeroChannelFixtures)
         {
             Zones = zones;
             ZoneNames = zoneNames;
             UnassignedFixtures = unassignedFixtures;
+            ZeroChannelFixtures = zeroChannelFixtures;
         }
 
         public IReadOnlyList<ZoneDesign> Zones { get; }
@@ -26,6 +28,12 @@ namespace TurboSuite.Dmx
 
         /// <summary>Fixtures with an empty <c>Control Zone</c> — excluded from the solve, reported not failed.</summary>
         public int UnassignedFixtures { get; }
+
+        /// <summary>DMX-protocol fixtures carrying no <c>DMX Channels</c> (0) — a mis-authoring now visible
+        /// because subsystem membership routes on <c>Dimming Protocol</c>, not the channel count. Excluded
+        /// from the solve and counted so it can be reported, exactly like <see cref="UnassignedFixtures"/>,
+        /// so a mis-authored circuit is never silently dropped.</summary>
+        public int ZeroChannelFixtures { get; }
     }
 
     /// <summary>
@@ -48,6 +56,7 @@ namespace TurboSuite.Dmx
             if (fixtures == null) throw new ArgumentNullException(nameof(fixtures));
 
             int unassigned = 0;
+            int zeroChannel = 0;
             var order = new List<string>();
             // Keep each fixture as a bundler Item (carries its ElementId for cluster binding) so the
             // cluster/flat/residual paths can coalesce chains of connectable fixtures into bundle runs.
@@ -55,6 +64,11 @@ namespace TurboSuite.Dmx
 
             foreach (var f in fixtures)
             {
+                // A DMX-protocol fixture with no channels is a mis-authoring: excluded from the solve and
+                // counted so it can be reported, never solved as a phantom 0-channel run. Checked before the
+                // zone test so it is reported under its most specific cause.
+                if (f.Channels <= 0) { zeroChannel++; continue; }
+
                 string zone = (f.ControlZone ?? "").Trim();
                 if (zone.Length == 0) { unassigned++; continue; }
 
@@ -76,7 +90,7 @@ namespace TurboSuite.Dmx
                 .Select(name => BuildZone(name, byZone[name],
                                           clustersByZone.TryGetValue(name, out var zc) ? zc : null))
                 .ToList();
-            return new DmxZoneBuildResult(zones, order, unassigned);
+            return new DmxZoneBuildResult(zones, order, unassigned, zeroChannel);
         }
 
         private static ZoneDesign BuildZone(string zone, List<DmxBundler.Item> runs,

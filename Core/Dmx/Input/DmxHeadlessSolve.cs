@@ -36,6 +36,11 @@ namespace TurboSuite.Dmx.Input
                     // DMX tape is in the model but nothing is zoned yet. Worth saying out loud: the
                     // circuits carrying it are excluded from panel allocation (a subsystem owns them),
                     // so without this the job orders no interfaces and NOTHING anywhere says why.
+                    //
+                    // Zero-channel fixtures are deliberately NOT reported here: a channel-less fixture is
+                    // an authoring error with no orderable hardware, so it changes nothing on this BOM.
+                    // TurboDMX surfaces it (the window summary's "N zero-channel"); the BOM stays quiet —
+                    // a line on a purchasing document must be something you can order.
                     if (zoneResult.UnassignedFixtures > 0)
                         return DmxHeadlessResult.Blocked(
                             $"{zoneResult.UnassignedFixtures} DMX fixture"
@@ -75,6 +80,8 @@ namespace TurboSuite.Dmx.Input
                 // count looks authoritative and is simply too low, because unzoned tape contributes no
                 // channels. The bill still stands for what was zoned, so the parts ship with a caveat
                 // rather than being withheld.
+                // Only unzoned fixtures caveat the bill — they are orderable hardware the count missed.
+                // Zero-channel fixtures order nothing, so they never undercount and never caveat here.
                 string? caveat = zoneResult.UnassignedFixtures > 0
                     ? $"{zoneResult.UnassignedFixtures} DMX fixture"
                       + (zoneResult.UnassignedFixtures == 1 ? " is" : "s are")

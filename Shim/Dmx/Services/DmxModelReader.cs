@@ -44,11 +44,17 @@ namespace TurboSuite.Dmx.Services
 
             foreach (var fi in fixtures)
             {
+                // Subsystem membership routes on the authored Dimming Protocol, NOT the channel count.
+                // (Was DMX Channels > 0 — that overloaded a count as a membership flag and disagreed with
+                // TurboZones' protocol-based routing on a mis-authored fixture, silently dropping its
+                // circuit. Now DMX Channels is read for the math only; a DMX fixture with 0 channels flows
+                // through to be reported as a zero-channel error by DmxZoneBuilder.)
+                string protocol = ReadStringIT(fi, ParameterNames.DimmingProtocol).Trim();
+                if (!protocol.Equals("DMX", System.StringComparison.OrdinalIgnoreCase)) continue;
+
                 // DMX Channels is typically a TYPE param; Control Zone is instance. Read both with an
                 // instance→type fallback so the reader works however the shared params are bound.
                 int channels = ReadIntIT(fi, DmxParameterNames.DmxChannels);
-                if (channels <= 0) continue; // DMX Channels > 0 marks ANY DMX fixture
-                                             // (linear tape/sheet/landscape AND point downlights).
 
                 // The engine only needs total watts + channels per fixture; length is just how watts are
                 // expressed (watts = LengthFt × WattsPerFt). Linear fixtures carry a real length and a

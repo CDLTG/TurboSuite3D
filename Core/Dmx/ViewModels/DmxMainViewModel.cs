@@ -254,9 +254,15 @@ namespace TurboSuite.Dmx.ViewModels
         private int _unassignedFixtures;
         public int UnassignedFixtures { get => _unassignedFixtures; private set => SetProperty(ref _unassignedFixtures, value); }
 
+        private int _zeroChannelFixtures;
+        /// <summary>DMX-protocol fixtures carrying no DMX Channels — a mis-authoring surfaced now that
+        /// membership routes on Dimming Protocol. Shown in the summary so the designer can find and fix them.</summary>
+        public int ZeroChannelFixtures { get => _zeroChannelFixtures; private set => SetProperty(ref _zeroChannelFixtures, value); }
+
         public string SummaryText =>
             $"{FixtureCount} DMX fixtures · {ZoneCount} zones" +
-            (UnassignedFixtures > 0 ? $" · {UnassignedFixtures} unassigned" : "");
+            (UnassignedFixtures > 0 ? $" · {UnassignedFixtures} unassigned" : "") +
+            (ZeroChannelFixtures > 0 ? $" · {ZeroChannelFixtures} zero-channel" : "");
 
         // ── The bill (right zone) ────────────────────────────────────────────────────────────────────
         private DmxBillViewModel _bill;
@@ -838,6 +844,7 @@ namespace TurboSuite.Dmx.ViewModels
             var zoneResult = DmxZoneBuilder.Build(_fixtures, _loadedState.Clusters);
             ZoneNames = zoneResult.ZoneNames;
             UnassignedFixtures = zoneResult.UnassignedFixtures;
+            ZeroChannelFixtures = zoneResult.ZeroChannelFixtures;
 
             // Preserve the designer's ticks across a refresh (by TypeId). On FIRST load, seed from the saved
             // curation if any; a never-curated job starts with NOTHING ticked (?? false) so the designer must

@@ -1,5 +1,7 @@
 #nullable enable
 
+using TurboSuite.Shared.Constants;
+
 namespace TurboSuite.Dmx
 {
     /// <summary>
@@ -22,8 +24,10 @@ namespace TurboSuite.Dmx
         // AND point downlights alike (confirmed 2026-06-25).
 
         /// <summary>The one designer-set instance param grouping fixtures into control zones (native
-        /// Properties; template shared param). A fixture with no value is "unassigned".</summary>
-        public const string ControlZone = "Control Zone";
+        /// Properties; template shared param). A fixture with no value is "unassigned". Now
+        /// protocol-agnostic — aliases <see cref="ParameterNames.ControlZone"/> so DMX and DALI key on
+        /// one string; membership routes on <c>Dimming Protocol</c>, not this parameter's presence.</summary>
+        public const string ControlZone = ParameterNames.ControlZone;
 
         /// <summary>Integer DMX channel count (1 single … 6 RGBATW) — the ONE shared param used on both
         /// fixtures and decoders (confirmed 2026-06-25): on a fixture it's the channels consumed and > 0

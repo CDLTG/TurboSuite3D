@@ -59,6 +59,31 @@ namespace TurboSuite.Tests.Dmx
         }
 
         [Fact]
+        public void ZeroChannelFixturesAreCountedAndNotSolved()
+        {
+            // Membership now routes on Dimming Protocol, so a DMX fixture with 0 channels reaches the
+            // builder. It must be excluded from the solve and counted — never solved as a phantom run.
+            var result = DmxZoneBuilder.Build(new[]
+            {
+                Fix("Z1", 4, 10), Fix("Z1", 0, 10), Fix("Z2", 0, 8),
+            });
+
+            Assert.Equal(2, result.ZeroChannelFixtures);
+            Assert.Single(result.Zones);                     // only the 4-channel Z1 fixture solves
+            Assert.Equal(new[] { "Z1" }, result.ZoneNames);  // Z2 had nothing but a zero-channel fixture
+        }
+
+        [Fact]
+        public void ZeroChannelTakesPrecedenceOverUnassigned()
+        {
+            // A fixture both zero-channel AND unzoned is reported once, under its more specific cause.
+            var result = DmxZoneBuilder.Build(new[] { Fix("", 0, 10) });
+
+            Assert.Equal(1, result.ZeroChannelFixtures);
+            Assert.Equal(0, result.UnassignedFixtures);
+        }
+
+        [Fact]
         public void GroupingIsCaseInsensitiveAndOrderPreserving()
         {
             var result = DmxZoneBuilder.Build(new[] { Fix("Cove", 4, 10), Fix("cove", 4, 5), Fix("Wall", 4, 6) });

@@ -129,6 +129,31 @@ namespace TurboSuite.Tests.Dmx
         public void FullyZonedJobCarriesNoCaveat()
             => Assert.Null(DmxHeadlessSolve.Solve(Snapshot(Tape("COVE 1")), CuratedState()).Diagnostic);
 
+        /// <summary>A zero-channel DMX fixture is an authoring error with nothing orderable, so it must NOT
+        /// warn the BOM — a purchasing-document line has to be something you can order. It is surfaced in
+        /// TurboDMX (the window summary) instead. Here it is the only DMX content: a clean nothing on the BOM.</summary>
+        [Fact]
+        public void ZeroChannelFixturesDoNotWarnTheBom()
+        {
+            var result = DmxHeadlessSolve.Solve(Snapshot(Tape("COVE 1", channels: 0)), CuratedState());
+
+            Assert.Null(result.Bill);
+            Assert.Null(result.Diagnostic);   // no orderable hardware ⇒ nothing for the BOM to say
+        }
+
+        /// <summary>Zoned tape plus a zero-channel straggler: the bill stands and carries NO caveat — the
+        /// straggler orders nothing, so it never undercounts. (Contrast an UNZONED fixture, which does.)</summary>
+        [Fact]
+        public void ZeroChannelFixtureOnAnOtherwiseSolvedJobIsSilentOnTheBom()
+        {
+            var result = DmxHeadlessSolve.Solve(
+                Snapshot(Tape("COVE 1"), Tape("COVE 2", channels: 0)), CuratedState());
+
+            Assert.NotNull(result.Bill);
+            Assert.Equal(1, result.Bill!.InterfaceCount);
+            Assert.Null(result.Diagnostic);
+        }
+
         /// <summary>But once zones exist, an uncurated kit is a real gap: there IS hardware here and
         /// nobody can price it. The zone names survive so the reason has context.</summary>
         [Fact]
