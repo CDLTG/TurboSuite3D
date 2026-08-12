@@ -59,7 +59,7 @@ namespace TurboSuite.Dali.Input
                     continue;
                 }
 
-                if (!circuitZone.TryGetValue(f.CircuitKey, out string zone))
+                if (!circuitZone.TryGetValue(f.CircuitKey, out string? zone))
                 {
                     circuitZone[f.CircuitKey] = f.Zone;           // first fixture on this circuit (may be blank)
                     circuitOrder.Add(f.CircuitKey);

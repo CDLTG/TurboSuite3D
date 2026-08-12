@@ -134,14 +134,14 @@ namespace TurboSuite.Dali.ViewModels
         }
 
         /// <summary>Raised on any edit the owning tab must react to (recompute aggregates + persist).</summary>
-        public Action Changed { get; set; }
+        public Action? Changed { get; set; }
 
         // Wired by the owning ViewModel (it holds the pool selection the add gesture needs).
-        public ICommand AddSelectedCommand { get; set; }   // + move selected pool zones into this loop
-        public ICommand RemoveCommand { get; set; }         // ✕ delete loop (its zones return to the pool)
-        public ICommand RemoveZoneCommand { get; set; }     // ✕ remove one zone (it returns to the pool)
+        public ICommand? AddSelectedCommand { get; set; }   // + move selected pool zones into this loop
+        public ICommand? RemoveCommand { get; set; }         // ✕ delete loop (its zones return to the pool)
+        public ICommand? RemoveZoneCommand { get; set; }     // ✕ remove one zone (it returns to the pool)
 
-        private void OnZonesChanged(object sender, NotifyCollectionChangedEventArgs e)
+        private void OnZonesChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             OnPropertyChanged(nameof(LoadCount));
             OnPropertyChanged(nameof(IsOverCap));

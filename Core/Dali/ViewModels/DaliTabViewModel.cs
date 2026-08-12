@@ -96,7 +96,7 @@ namespace TurboSuite.Dali.ViewModels
             $"{_unassignedLoopCount} DALI loop" + (_unassignedLoopCount == 1 ? " is" : "s are")
             + " unassigned — ordered on the BOM, but not placed in any panel. Assign a ZONE to each.";
 
-        private string _overCapMessage;
+        private string _overCapMessage = "";
         public string OverCapMessage
         {
             get => _overCapMessage;
@@ -124,7 +124,7 @@ namespace TurboSuite.Dali.ViewModels
         }
 
         private DaliLoopRowViewModel NewRow(string name, int assignedZone,
-                                            IEnumerable<DaliZoneItemViewModel> members = null)
+                                            IEnumerable<DaliZoneItemViewModel>? members = null)
         {
             var row = new DaliLoopRowViewModel(Guid.NewGuid().ToString("N"), name, assignedZone, _zoneOptions);
             row.Changed = () => { if (_loaded) { Recompute(); SaveSettings(); } };
@@ -235,7 +235,7 @@ namespace TurboSuite.Dali.ViewModels
                                .Select(l => $"\"{l.Name}\" ({l.LoadCount})")
                                .ToList();
             OverCapMessage = overCap.Count == 0
-                ? null
+                ? ""
                 : $"{overCap.Count} DALI loop" + (overCap.Count == 1 ? "" : "s")
                   + $" exceed {DaliLoopRowViewModel.MaxLoadsPerBus} loads on one bus — "
                   + string.Join("; ", overCap) + " — split into more loops.";
@@ -277,7 +277,7 @@ namespace TurboSuite.Dali.ViewModels
 
             var snapshot = BuildSnapshot();
             _workQueue.Enqueue(
-                () => { _store.Save(snapshot); return null; },
+                () => { _store.Save(snapshot); return null!; },
                 _ =>
                 {
                     if (_saveDirty) RaiseSave();
