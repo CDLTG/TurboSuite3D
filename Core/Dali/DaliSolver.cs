@@ -43,7 +43,7 @@ namespace TurboSuite.Dali
         /// <summary>BOM description carried on the demanded part, so the line reads correctly without a
         /// BrandConfig catalog entry (the module is allocator-supplied, never hand-placed like the DMX
         /// interface, so there is no placed line for it to match).</summary>
-        public const string ModuleDescription = "HomeWorks DALI-2 Power Module (NA, 1 bus)";
+        public const string ModuleDescription = "GEN2 HW Universal ESN DALI 1-LINK";
 
         /// <summary>The subsystem name the BOM and the panel breakdown label this demand with.</summary>
         public const string SubsystemName = "DALI";

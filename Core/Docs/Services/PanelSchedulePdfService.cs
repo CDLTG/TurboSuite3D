@@ -200,7 +200,13 @@ public static class PanelSchedulePdfService
                 MarginLeft, y, ContentWidth, ModuleHeaderHeight);
 
             string label = $"Module #{moduleNumber}: {module.PartNumber}";
-            string wattsLabel = $"Total Wattage: {FormatWatts(moduleWatts)}";
+            // A subsystem-placed module (DALI DIN) carries no panel wattage — its loads are DALI addresses on
+            // a bus, not dimming circuits — so a dash reads truer than "0 W".
+            // Trailing space is a deliberate right-margin buffer: the label is Far-aligned to the panel
+            // edge, so the space becomes breathing room between the dash and the border.
+            string wattsLabel = module.OrderedBySubsystem
+                ? "Total Wattage: — "
+                : $"Total Wattage: {FormatWatts(moduleWatts)}";
 
             var vertCenter = new XStringFormat
             {
@@ -242,6 +248,80 @@ public static class PanelSchedulePdfService
                 MarginLeft, y, PageWidth - MarginRight, y);
         }
 
+        // LV-compartment block: the interfaces the designer sited in this panel's low-voltage compartment
+        // (Processor / QSE-IO / QSE-CI-DMX), each as part number + description. One panel per page, so the
+        // page IS the location — no zone column, and none is derivable anyway (a processor serves the whole
+        // job, not its panel's zone). Renders nothing when the compartment is Empty.
+        void DrawLvCompartment(PanelResult panel, double panelWatts)
+        {
+            var devices = new List<(string PartNo, string Description)>();
+            foreach (string name in panel.CompartmentSlots)
+            {
+                if (string.IsNullOrWhiteSpace(name)
+                    || string.Equals(name, "Empty", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string partNo = panel.SpecialDevicePartNumbers != null
+                    && panel.SpecialDevicePartNumbers.TryGetValue(name, out var pn) ? pn : name;
+                devices.Add((partNo, data.Brand.GetPartDescription(partNo)));
+            }
+            if (devices.Count == 0) return;
+
+            double blockHeight = ModuleHeaderHeight + ColumnHeaderHeight
+                + (devices.Count * LineHeight) + ModuleGap;
+            if (y + blockHeight > UsableBottom)
+            {
+                StartNewPage();
+                DrawPanelHeader(panel.PanelName, panel.SelectedPanelSize, panelWatts, true);
+                y += ModuleGap;
+            }
+
+            double blockTop = y;
+
+            // Title band — matches a module header band.
+            gfx.DrawRectangle(new XSolidBrush(XColor.FromGrayScale(0.88)),
+                MarginLeft, y, ContentWidth, ModuleHeaderHeight);
+            gfx.DrawString("LV COMPARTMENT", fontModuleHeader, XBrushes.Black,
+                new XPoint(MarginLeft + ColumnPadding, y + ModuleHeaderHeight / 2),
+                new XStringFormat { Alignment = XStringAlignment.Near, LineAlignment = XLineAlignment.Center });
+            y += ModuleHeaderHeight;
+
+            // Column headers — same weight/brush as the module table.
+            const double lvPartW = 110;
+            double lvDescX = MarginLeft + lvPartW;
+            var lvHeaderBrush = new XSolidBrush(XColor.FromGrayScale(0.15));
+            gfx.DrawString("Part No.", fontColHeader, lvHeaderBrush,
+                new XPoint(MarginLeft + ColumnPadding, y + BaselineOffset - 2));
+            gfx.DrawString("Description", fontColHeader, lvHeaderBrush,
+                new XPoint(lvDescX + ColumnPadding, y + BaselineOffset - 2));
+            y += ColumnHeaderHeight;
+            gfx.DrawLine(new XPen(XColor.FromGrayScale(0.85), 0.5),
+                MarginLeft, y, PageWidth - MarginRight, y);
+
+            // Rows — one interface per line; description truncates to its column like a load name.
+            foreach (var (partNo, description) in devices)
+            {
+                double baseline = y + BaselineOffset;
+                gfx.DrawString(partNo, fontRow, XBrushes.Black,
+                    new XPoint(MarginLeft + ColumnPadding, baseline));
+
+                string desc = description ?? "";
+                double descMax = ContentWidth - lvPartW - ColumnPadding * 2;
+                if (gfx.MeasureString(desc, fontRow).Width > descMax && desc.Length > 0)
+                {
+                    while (desc.Length > 1 && gfx.MeasureString(desc + "…", fontRow).Width > descMax)
+                        desc = desc[..^1];
+                    desc += "…";
+                }
+                gfx.DrawString(desc, fontRow, XBrushes.Black,
+                    new XPoint(lvDescX + ColumnPadding, baseline));
+                y += LineHeight;
+            }
+
+            gfx.DrawRectangle(new XPen(XColor.FromGrayScale(0.50), 0.75),
+                MarginLeft, blockTop, ContentWidth, y - blockTop);
+            y += ModuleGap;
+        }
+
         // ── Main rendering loop ──
         var allPanels = data.Allocation.Locations
             .OrderBy(l => l.LocationNumber)
@@ -271,11 +351,86 @@ public static class PanelSchedulePdfService
             DrawPanelHeader(panel.PanelName, panel.SelectedPanelSize, panelWatts, false);
             y += ModuleGap;
 
+            // The panel's low-voltage compartment interfaces (Processor / QSE-IO / QSE-CI-DMX) lead the
+            // page, above the dimming modules. Nothing drawn when the compartment is Empty.
+            DrawLvCompartment(panel, panelWatts);
+
             int moduleNumber = 0;
             foreach (var module in panel.Modules)
             {
                 double moduleWatts = moduleWattsList[moduleNumber];
                 moduleNumber++;
+
+                // DALI (any subsystem-placed) module: its slot is a loop, not a circuit list, and its
+                // ModuleCapacity is the 64-load bus cap — NOT panel slots to pad with spares. Render the
+                // standard header + columns, then a single loop row (Load = "Loop 1 (33/64)"), no spares.
+                if (module.OrderedBySubsystem)
+                {
+                    double daliHeight = ModuleHeaderHeight + ColumnHeaderHeight + LineHeight + ModuleGap;
+                    if (y + daliHeight > UsableBottom)
+                    {
+                        StartNewPage();
+                        DrawPanelHeader(panel.PanelName, panel.SelectedPanelSize, panelWatts, true);
+                        y += ModuleGap;
+                    }
+
+                    double daliTop = y;
+                    DrawModuleHeader(moduleNumber, module, moduleWatts);
+                    DrawColumnHeaders();
+
+                    var daliCenter = new XStringFormat
+                    {
+                        Alignment = XStringAlignment.Center,
+                        LineAlignment = XLineAlignment.BaseLine
+                    };
+                    double daliBaseline = y + BaselineOffset;
+
+                    // Over the 64-load bus cap highlights red, mirroring the DALI tab's over-cap warning.
+                    if (module.IsOverloaded)
+                    {
+                        var overloadFill = new XSolidBrush(XColor.FromArgb(255, 250, 210, 210));
+                        gfx.DrawRectangle(overloadFill, MarginLeft, y, ContentWidth, LineHeight);
+                    }
+                    var daliBrush = module.IsOverloaded ? XBrushes.Red : XBrushes.Black;
+                    var daliFont = module.IsOverloaded ? fontRowBold : fontRow;
+
+                    // Slot #
+                    gfx.DrawString("1", daliFont, daliBrush,
+                        new XPoint(colX[0] + colW[0] / 2, daliBaseline), daliCenter);
+
+                    // Load = loop + its bus load count, truncated to the column like a normal load name.
+                    string daliLoad = $"{module.CircuitNumbersDisplay} ({module.UsedSlots}/{module.ModuleCapacity})";
+                    double daliLoadMax = colW[1] - ColumnPadding * 2;
+                    if (gfx.MeasureString(daliLoad, daliFont).Width > daliLoadMax && daliLoad.Length > 0)
+                    {
+                        while (daliLoad.Length > 1
+                               && gfx.MeasureString(daliLoad + "…", daliFont).Width > daliLoadMax)
+                            daliLoad = daliLoad[..^1];
+                        daliLoad += "…";
+                    }
+                    gfx.DrawString(daliLoad, daliFont, daliBrush,
+                        new XPoint(colX[1] + ColumnPadding, daliBaseline));
+
+                    // Ckt — a loop has no panel circuit number.
+                    gfx.DrawString("—", daliFont, daliBrush,
+                        new XPoint(colX[2] + ColumnPadding, daliBaseline));
+
+                    // Dimming
+                    gfx.DrawString(module.DimmingType ?? "", daliFont, daliBrush,
+                        new XPoint(colX[3] + ColumnPadding, daliBaseline));
+
+                    // Watts — no panel wattage.
+                    gfx.DrawString("—", daliFont, daliBrush,
+                        new XPoint(colX[4] + ColumnPadding, daliBaseline));
+
+                    y += LineHeight;
+
+                    gfx.DrawRectangle(new XPen(XColor.FromGrayScale(0.50), 0.75),
+                        MarginLeft, daliTop, ContentWidth, y - daliTop);
+
+                    y += ModuleGap;
+                    continue;
+                }
 
                 // Total rows = used slots + empty slots
                 int emptySlots = Math.Max(0, module.ModuleCapacity - module.CircuitNumbers.Count);

@@ -112,9 +112,13 @@ The **Dimming** column reports the slot's **load** protocol, not the module's ty
 
 Modules never split across pages. When a panel's modules span multiple pages, the panel header repeats with "(continued)". Panel wattage is calculated from rounded module totals to avoid rounding discrepancies.
 
+A **subsystem-placed module** (the DALI DIN module, `ModuleResult.OrderedBySubsystem`) renders differently: its slot is a *loop*, not a circuit list, and its `ModuleCapacity` is a 64-load bus cap, not panel slots. So it draws one row (`Load = "Loop N (x/64)"`) with no spare padding, a dashed `Total Wattage: —`, and a red row when the loop exceeds one bus — never the 64-spare block a naive read would produce.
+
+Each panel page leads with an **LV-compartment block** listing the interfaces the designer sited there (Processor / QSE-IO / QSE-CI-DMX) as part number + description. Interfaces only — no served-zones column (no compartment→zone linkage exists, and one-panel-per-page makes the page itself the location). Nothing draws for an Empty compartment.
+
 ### Data Source
 
-Re-derives the panel breakdown by reading saved TurboZones settings (brand, panel size overrides) from ExtensibleStorage and running `PanelAllocationService.BuildPanelBreakdown`. Circuit wattage is read from `RBS_ELEC_APPARENT_LOAD`.
+Re-derives the panel breakdown **exactly as the Control BOM does**, so the two never disagree about what a panel holds: `PanelAllocationService.BuildPanelBreakdown` with saved TurboZones settings (brand, panel size overrides) plus the control-subsystem demands (`SubsystemDemandCollector` — DMX/shades/DALI) and the DALI placement map (`DaliPlacementMapper`), then `SpecialDeviceRestore` reapplies the saved LV-compartment device choices. Circuit wattage is read from `RBS_ELEC_APPARENT_LOAD`.
 
 ## Power Supplies Tab
 
