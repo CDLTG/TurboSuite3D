@@ -281,8 +281,10 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal("1", lone.CircuitNumber);
         }
 
-        /// <summary>DALI and blank-protocol circuits are benched loudly — they want a panel
-        /// but have no module to sit on, so they must surface rather than become phantom BOM parts.</summary>
+        /// <summary>A benched (NotYetSupported) or off-vocabulary (NoProtocol) circuit is surfaced loudly —
+        /// it wants a panel but has no module to sit on, so it must appear rather than become a phantom BOM
+        /// part. (Uses a placeholder protocol: DALI itself is no longer NotYetSupported — it became a
+        /// subsystem in Phase 3 — but the allocator's handling of the outcome is what's under test here.)</summary>
         [Theory]
         [InlineData(DimmingResolveOutcome.NotYetSupported)]
         [InlineData(DimmingResolveOutcome.NoProtocol)]
@@ -291,14 +293,14 @@ namespace TurboSuite.Tests.Zones
             var circuit = C("1", "ZONE 1");
             circuit.DimmingType = string.Empty;   // resolver emits no module key for these
             circuit.DimmingOutcome = outcome;
-            circuit.DimmingProtocolDisplay = "DALI";
+            circuit.DimmingProtocolDisplay = "SOME-UNMODELED";
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
                 new List<ZonesCircuitData> { circuit }, BrandConfig.Crestron);
 
             Assert.Empty(result.Locations);       // no zone, so no panel and no module
             var lone = Assert.Single(unassigned);
-            Assert.Equal("DALI", lone.DimmingProtocolDisplay);
+            Assert.Equal("SOME-UNMODELED", lone.DimmingProtocolDisplay);
         }
 
         /// <summary>WIFI is excluded the same way but stays SILENT — it is network-controlled and

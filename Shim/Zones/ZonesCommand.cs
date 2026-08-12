@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Dali.Services;
 using TurboSuite.Dmx.Services;
 using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
@@ -78,7 +79,8 @@ namespace TurboSuite.Zones
                 var subsystemDemands = new List<ControlSubsystemDemand>
                 {
                     new DmxDemandProvider(doc).GetDemand(),
-                    new ShadeDemandProvider(doc).GetDemand()
+                    new ShadeDemandProvider(doc).GetDemand(),
+                    new DaliDemandProvider(doc).GetDemand()
                 };
 
                 var viewModel = new ZonesMainViewModel(circuits,

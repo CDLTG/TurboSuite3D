@@ -30,7 +30,10 @@ namespace TurboSuite.Zones.Services
             /// <summary>Never rides a control module, by design. Legitimate, not an authoring gap.</summary>
             NoModule,
 
-            /// <summary>A real module exists in the field, but TurboSuite does not model it yet.</summary>
+            /// <summary>A real module exists in the field, but TurboSuite does not model it yet. Currently
+            /// has NO members — DALI, its last one, became <see cref="ExternalSubsystem"/> in Phase 3 —
+            /// but kept as the seam the next benched protocol maps to (the downstream
+            /// <see cref="DimmingResolveOutcome.NotYetSupported"/> handling in the allocator stays live).</summary>
             NotYetSupported,
 
             /// <summary>A dedicated subsystem owns this protocol's control hardware and reports its own
@@ -61,7 +64,8 @@ namespace TurboSuite.Zones.Services
 
         /// <summary>
         /// The protocol → module map. Adding or reclassifying a protocol is a one-line edit here
-        /// (e.g. when the DALI module ships, DALI moves from NotYetSupported to Module).
+        /// (e.g. DALI moved from NotYetSupported to ExternalSubsystem when its loop-driven subsystem
+        /// shipped in Phase 3).
         ///
         /// Module keys are the ones <see cref="Models.BrandConfig"/> defines for BOTH brands
         /// (Lutron and Crestron each declare ELV / 0-10V / Relay), so allocation, amp limits, and the
@@ -88,9 +92,12 @@ namespace TurboSuite.Zones.Services
                 // Silent here, because the parts are counted, just not by this map.
                 { "DMX",   new Entry(Category.ExternalSubsystem, subsystem: "DMX") },
 
-                // A real Lutron module TurboSuite does not allocate yet. Flagged rather than passed
-                // through, so it cannot become a phantom BOM part.
-                { "DALI",  new Entry(Category.NotYetSupported) }
+                // DALI is now subsystem-owned too (Phase 3): the LQSE2-1DALUNV-D module count comes from
+                // the designer's declared loops, reported job-wide by the DALI subsystem — not from these
+                // circuits. Silent here for the same reason as DMX: the parts are counted elsewhere. (Note
+                // it did NOT become Category.Module as this table once predicted — its grain is loops, not
+                // circuits, so it is a subsystem like DMX, not a per-circuit DIN module.)
+                { "DALI",  new Entry(Category.ExternalSubsystem, subsystem: "DALI") }
             };
 
         /// <summary>

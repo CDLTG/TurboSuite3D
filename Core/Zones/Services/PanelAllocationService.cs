@@ -14,6 +14,14 @@ namespace TurboSuite.Zones.Services
         // Module ordering inside panels: Relay first, then 0-10V, then ELV
         public static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
 
+        // The module's DimmingType label for a placed DALI DIN module. Not in ModuleTypeOrder (DALI modules
+        // are injected after the circuit-driven distribution, so they need no place in that ordering), and
+        // never rolled up into the BOM — see OrderedBySubsystem.
+        private const string DaliDimmingType = "DALI";
+
+        private static readonly IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> EmptyDaliMap =
+            new Dictionary<int, IReadOnlyList<DaliPanelModule>>();
+
         /// <summary>
         /// The subsystems that accounted for themselves — reported parts, or a reason they could not.
         ///
@@ -46,14 +54,29 @@ namespace TurboSuite.Zones.Services
         /// its subsystem actually accounted for it. Null means nothing reported — every such circuit
         /// then surfaces, which is the safe direction.
         /// </param>
+        /// <param name="daliModulesByZone">
+        /// DALI DIN modules to place, keyed by the ZONE N the designer assigned each loop to (the tab's
+        /// required assignment). Each entry is a slot-occupying, bus-labeled module appended after the
+        /// dimming modules in that zone's panels; it counts toward panel capacity and the panel-count
+        /// recommendation, but is ordered and link-budgeted by the job-wide DALI demand, not here (so it is
+        /// tagged <see cref="ModuleResult.OrderedBySubsystem"/>). Null/empty ⇒ the circuit path is
+        /// untouched — a zone appears only if it has dimming circuits, exactly as before.
+        /// </param>
         public static (PanelAllocationResult Result, List<ZonesCircuitData> Unassigned) BuildPanelBreakdown(
             List<ZonesCircuitData> circuits,
             BrandConfig brand,
             Dictionary<string, int> panelSizeOverrides = null,
-            IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null)
+            IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
+            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null)
         {
             var unassigned = new List<ZonesCircuitData>();
             var accountedSubsystems = AccountedSubsystems(subsystemDemands);
+
+            // DALI placement map, normalized: drop empty lists so a zone with no placed modules never
+            // conjures a spurious empty panel.
+            var daliByZone = (daliModulesByZone ?? EmptyDaliMap)
+                .Where(kv => kv.Value != null && kv.Value.Count > 0)
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
 
             // Group circuits by zone number, filtering out DUMMY and unassigned
             var circuitsByZone = new Dictionary<int, List<ZonesCircuitData>>();
@@ -110,9 +133,17 @@ namespace TurboSuite.Zones.Services
 
             var result = new PanelAllocationResult();
 
-            foreach (var zone in circuitsByZone.Keys.OrderBy(z => z))
+            // The zones to build = those with dimming circuits ∪ those the designer assigned DALI loops to.
+            // The union is what lets a DALI-only zone (no dimming circuits) get a panel at all.
+            var allZones = new SortedSet<int>(circuitsByZone.Keys);
+            allZones.UnionWith(daliByZone.Keys);
+
+            foreach (var zone in allZones)
             {
-                var zoneCircuits = circuitsByZone[zone];
+                var zoneCircuits = circuitsByZone.TryGetValue(zone, out var zc)
+                    ? zc : new List<ZonesCircuitData>();
+                var zoneDali = daliByZone.TryGetValue(zone, out var zd)
+                    ? zd : (IReadOnlyList<DaliPanelModule>)Array.Empty<DaliPanelModule>();
 
                 // Group all circuits in this zone by dimming type
                 var circuitsByType = zoneCircuits
@@ -134,7 +165,9 @@ namespace TurboSuite.Zones.Services
                     moduleCountByType[kvp.Key] = modules;
                 }
 
-                int zoneTotalModules = moduleCountByType.Values.Sum();
+                // DALI modules occupy a panel slot each, so they count toward the panel-count
+                // recommendation exactly like a dimming module (their slot footprint is identical).
+                int zoneTotalModules = moduleCountByType.Values.Sum() + zoneDali.Count;
 
                 // Determine default panel size and recommended panel count
                 int defaultSize = brand.DefaultPanelSize;
@@ -215,6 +248,10 @@ namespace TurboSuite.Zones.Services
                 // Distribute modules across panels evenly
                 DistributeModulesAcrossPanels(panelResults, circuitsByType, moduleCountByType, brand);
 
+                // Then drop the zone's DALI modules into the slots the sizing above already reserved for
+                // them — appended after the dimming modules, so they read last in each panel.
+                PlaceDaliModules(panelResults, zoneDali);
+
                 foreach (var panel in panelResults)
                 {
                     locationResult.Panels.Add(panel);
@@ -226,6 +263,40 @@ namespace TurboSuite.Zones.Services
 
             return (result, unassigned);
         }
+
+        /// <summary>
+        /// Appends the zone's DALI modules into the panels' remaining slots, panel by panel in order (fill
+        /// A, then B, …). The panel sizing already reserved room for them (they were in
+        /// <c>zoneTotalModules</c>), so they fit; the trailing fallback only guards a rounding edge.
+        ///
+        /// Each is a display-only, slot-occupying <see cref="ModuleResult"/>: labeled by its loop (not
+        /// circuits), no amp math (a DALI bus draws 0 A on the dimming panel), and tagged
+        /// <see cref="ModuleResult.OrderedBySubsystem"/> so the BOM roll-up and the link budget skip it —
+        /// it is ordered and link-budgeted by the job-wide DALI demand instead.
+        /// </summary>
+        private static void PlaceDaliModules(List<PanelResult> panels, IReadOnlyList<DaliPanelModule> daliModules)
+        {
+            if (panels.Count == 0 || daliModules == null || daliModules.Count == 0) return;
+
+            int idx = 0;
+            foreach (var panel in panels)
+            {
+                while (idx < daliModules.Count && panel.Modules.Count < panel.PanelCapacity)
+                    panel.Modules.Add(MakeDaliModule(daliModules[idx++]));
+            }
+            // Rounding guard: anything that didn't fit (shouldn't, given the sizing) lands on the last panel
+            // rather than being silently dropped — an over-capacity panel is visible; a missing module isn't.
+            while (idx < daliModules.Count)
+                panels[panels.Count - 1].Modules.Add(MakeDaliModule(daliModules[idx++]));
+        }
+
+        private static ModuleResult MakeDaliModule(DaliPanelModule dali) => new ModuleResult
+        {
+            DimmingType = DaliDimmingType,
+            ModuleCapacity = 1,                 // occupies one panel slot; not a dimming-load capacity
+            OrderedBySubsystem = true,          // ordered + link-budgeted by the job-wide DALI demand
+            CircuitNumbers = { dali.LoopName }, // the slot is labeled by its loop, not circuits
+        };
 
         /// <summary>
         /// Distributes modules of each dimming type evenly across the given panels,
@@ -633,6 +704,9 @@ namespace TurboSuite.Zones.Services
             }
 
             return modules
+                // Subsystem-placed modules (DALI) occupy a slot but are ordered by their subsystem's
+                // job-wide demand, not this roll-up — including them here would double-count the part.
+                .Where(m => !m.OrderedBySubsystem)
                 .GroupBy(m => m.PartNumber ?? "", StringComparer.OrdinalIgnoreCase)
                 .Select(g => new
                 {

@@ -115,8 +115,12 @@ namespace TurboSuite.Zones.Models
             }
         }
 
-        public int DeviceCount => Modules.Count;
-        public int LoadCount => Modules.Sum(m => m.ModuleCapacity);
+        // Link budget from this panel's own modules — dimming modules are QS devices and their slots are
+        // loads. A subsystem-placed module (a DALI DIN module) is EXCLUDED: it occupies a panel slot but
+        // its QS device + legs are reported job-wide through its subsystem's demand (LinkDevices/LinkLoads)
+        // and folded in as floating demand by ControlLinkPacker. Counting it here too would double it.
+        public int DeviceCount => Modules.Count(m => !m.OrderedBySubsystem);
+        public int LoadCount => Modules.Where(m => !m.OrderedBySubsystem).Sum(m => m.ModuleCapacity);
 
         public event PropertyChangedEventHandler PropertyChanged;
     }
@@ -160,6 +164,17 @@ namespace TurboSuite.Zones.Models
         public bool IsOverloaded { get; set; }
 
         public double TotalAmps => SlotAmps.Sum();
+
+        /// <summary>
+        /// This module was placed by a control subsystem (the DALI DIN module), not derived from dimming
+        /// circuits. It occupies a panel slot — so it counts toward <see cref="PanelResult.TotalModuleCount"/>,
+        /// <see cref="PanelResult.EmptySlots"/> and the panel-count recommendation like any module — but it
+        /// is <b>ordered and link-budgeted by its subsystem's job-wide demand</b>, so it is excluded from
+        /// the BOM roll-up (<see cref="PanelAllocationService.GroupModulesByPartNumber"/>) and from
+        /// <see cref="PanelResult.DeviceCount"/>/<see cref="PanelResult.LoadCount"/>. Its slot is labeled by
+        /// its loop (via <see cref="CircuitNumbers"/>), not by circuits.
+        /// </summary>
+        public bool OrderedBySubsystem { get; set; }
     }
 
     public class PanelSizeOption

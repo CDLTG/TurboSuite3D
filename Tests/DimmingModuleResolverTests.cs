@@ -10,12 +10,13 @@ namespace TurboSuite.Tests.Zones
     //  runs on. This replaced the connector-level "Load Classification Abbreviation" — an invisible
     //  field that silently dropped circuits out of the panel BOM when unauthored.
     //
-    //  For me (Claude): the four categories are NOT interchangeable and the distinction is the
-    //  whole point. WIFI is NoModuleByDesign (silent — it legitimately rides no module); DMX is
-    //  HandledBySubsystem (also silent, but for a different reason — TurboDMX counts the QSE-CI-DMX
-    //  interfaces, so the hardware IS ordered, just not from this map); DALI is NotYetSupported
-    //  (loud — a real module TurboSuite doesn't allocate yet). A test asserting WIFI or DMX shows up
-    //  in the Unassigned list is asserting the bug this design prevents.
+    //  For me (Claude): the categories are NOT interchangeable and the distinction is the whole point.
+    //  WIFI is NoModuleByDesign (silent — it legitimately rides no module); DMX and (since Phase 3) DALI
+    //  are HandledBySubsystem (also silent, but for a different reason — a subsystem counts the hardware
+    //  job-wide: TurboDMX the QSE-CI-DMX interfaces, the DALI subsystem the LQSE modules — so it IS
+    //  ordered, just not from this map). NotYetSupported (loud — a real module not modeled yet) currently
+    //  has no members: DALI, its last one, became a subsystem. A test asserting WIFI/DMX/DALI shows up in
+    //  the Unassigned list is asserting the bug this design prevents.
     //
     //  MLV → ELV is the entry that proves the map is needed: module type is a function of protocol,
     //  not the identity of it. Don't "simplify" the map away.
@@ -46,7 +47,7 @@ namespace TurboSuite.Tests.Zones
         [Theory]
         [InlineData("WIFI", DimmingResolveOutcome.NoModuleByDesign)]
         [InlineData("wifi", DimmingResolveOutcome.NoModuleByDesign)]
-        [InlineData("DALI", DimmingResolveOutcome.NotYetSupported)]
+        [InlineData("DALI", DimmingResolveOutcome.HandledBySubsystem)]  // Phase 3: subsystem-owned like DMX
         [InlineData("DMX", DimmingResolveOutcome.HandledBySubsystem)]
         [InlineData("dmx", DimmingResolveOutcome.HandledBySubsystem)]
         [InlineData("PHASE-CUT", DimmingResolveOutcome.NoProtocol)] // off-vocabulary → authoring gap
@@ -134,20 +135,22 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal("ELV", r.ModuleType);
         }
 
-        /// <summary>Among non-module protocols, NotYetSupported outranks Unknown (there's a real
-        /// module to point at), and all-NoModule stays silent even when duplicated.</summary>
+        /// <summary>A subsystem protocol must not launder an unrecognized one sitting next to it — DALI
+        /// owning one declared value says nothing about GIBBERISH, exactly as DMX doesn't (below). With no
+        /// protocol mapping to NotYetSupported anymore, this is the surviving "unknown isn't hidden" case.</summary>
         [Fact]
-        public void NotYetSupported_OutranksUnknown()
-            => Assert.Equal(DimmingResolveOutcome.NotYetSupported,
+        public void DaliMixedWithUnknown_IsNotSilent()
+            => Assert.Equal(DimmingResolveOutcome.NoProtocol,
                 DimmingModuleResolver.Resolve(new[] { "GIBBERISH", "DALI" }).Outcome);
 
         [Fact]
-        public void WifiMixedWithUnsupported_IsNotSilent()
+        public void WifiMixedWithDali_IsHandledBySubsystem()
         {
-            // WIFI alone is silent, but paired with DALI the circuit still has an unmodeled
-            // module in it — silence here would hide a real gap.
+            // WIFI is silent by design and DALI is subsystem-owned — both accounted for, so the circuit
+            // is HandledBySubsystem (the DALI subsystem counts its module), mirroring WIFI+DMX below.
             var r = DimmingModuleResolver.Resolve(new[] { "WIFI", "DALI" });
-            Assert.Equal(DimmingResolveOutcome.NotYetSupported, r.Outcome);
+            Assert.Equal(DimmingResolveOutcome.HandledBySubsystem, r.Outcome);
+            Assert.Equal("DALI", r.Subsystem);
         }
 
         [Fact]
@@ -165,16 +168,17 @@ namespace TurboSuite.Tests.Zones
 
         /// <summary>The owning subsystem is named, in the map's canonical casing rather than however
         /// the family author typed it — the allocator matches on it to ask whether that subsystem
-        /// actually accounted for the circuit.</summary>
-        [Fact]
-        public void HandledBySubsystem_NamesItsSubsystemCanonically()
-            => Assert.Equal("DMX", DimmingModuleResolver.Resolve(new[] { " dmx " }).Subsystem);
+        /// actually accounted for the circuit. Both subsystems (DMX and DALI) name themselves.</summary>
+        [Theory]
+        [InlineData(" dmx ", "DMX")]
+        [InlineData(" dali ", "DALI")]
+        public void HandledBySubsystem_NamesItsSubsystemCanonically(string authored, string expected)
+            => Assert.Equal(expected, DimmingModuleResolver.Resolve(new[] { authored }).Subsystem);
 
-        /// <summary>Every other outcome leaves it empty — nothing owns those circuits.</summary>
+        /// <summary>Every non-subsystem outcome leaves it empty — nothing owns those circuits.</summary>
         [Theory]
         [InlineData("ELV")]
         [InlineData("WIFI")]
-        [InlineData("DALI")]
         [InlineData("GIBBERISH")]
         public void NonSubsystemProtocols_NameNoSubsystem(string protocol)
             => Assert.Equal(string.Empty, DimmingModuleResolver.Resolve(new[] { protocol }).Subsystem);
@@ -186,11 +190,13 @@ namespace TurboSuite.Tests.Zones
             => Assert.Equal(DimmingResolveOutcome.NoProtocol,
                 DimmingModuleResolver.Resolve(new[] { "DMX", "GIBBERISH" }).Outcome);
 
-        /// <summary>DALI outranks DMX: the circuit still has a module nobody is counting, and the
-        /// subsystem's silence must not swallow it.</summary>
+        /// <summary>A circuit declaring both DMX and DALI is owned by subsystems on both counts — an
+        /// unlikely mix, but neither is an authoring gap, so it stays silent as HandledBySubsystem rather
+        /// than surfacing. (Which subsystem it names is the last in sorted order — arbitrary but
+        /// deterministic; the allocator only needs "some accounted subsystem owns this".)</summary>
         [Fact]
-        public void DaliMixedWithDmx_StaysFlagged()
-            => Assert.Equal(DimmingResolveOutcome.NotYetSupported,
+        public void DaliMixedWithDmx_IsHandledBySubsystem()
+            => Assert.Equal(DimmingResolveOutcome.HandledBySubsystem,
                 DimmingModuleResolver.Resolve(new[] { "DMX", "DALI" }).Outcome);
 
         /// <summary>Display dedupes case-insensitively but keeps the first-seen spelling.</summary>

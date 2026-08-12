@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using TurboSuite.Dali.Services;
 using TurboSuite.Dmx.Services;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
@@ -91,6 +92,7 @@ public static class BomCollectorService
         new List<ControlSubsystemDemand>
         {
             new DmxDemandProvider(doc).GetDemand(),
-            new ShadeDemandProvider(doc).GetDemand()
+            new ShadeDemandProvider(doc).GetDemand(),
+            new DaliDemandProvider(doc).GetDemand()
         };
 }
