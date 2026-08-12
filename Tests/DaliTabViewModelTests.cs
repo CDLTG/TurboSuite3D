@@ -29,7 +29,7 @@ namespace TurboSuite.Tests.Dali
 
         private sealed class CapturingStore : IDaliLoopStore
         {
-            public DaliModuleState Last;
+            public DaliModuleState Last = new DaliModuleState();
             public int SaveCount;
             public void Save(DaliModuleState state) { Last = state; SaveCount++; }
         }
@@ -44,7 +44,7 @@ namespace TurboSuite.Tests.Dali
         private static DaliTabViewModel Build(
             IReadOnlyList<DaliZoneItemViewModel> zones,
             IReadOnlyList<int> panelZones,
-            DaliModuleState saved,
+            DaliModuleState? saved,
             out CapturingStore store)
         {
             store = new CapturingStore();
@@ -115,7 +115,7 @@ namespace TurboSuite.Tests.Dali
             var saved = new DaliModuleState { Loops = { Dto("L1", 0, 0, "A", "B") } };
             var vm = Build(zones, new int[0], saved, out _);
 
-            vm.Loops[0].RemoveCommand.Execute(null);
+            vm.Loops[0].RemoveCommand!.Execute(null);
 
             Assert.Empty(vm.Loops);
             Assert.Equal(new[] { "A", "B" }, vm.Pool.Select(z => z.ZoneName));

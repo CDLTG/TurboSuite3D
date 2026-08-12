@@ -95,7 +95,7 @@ namespace TurboSuite.Tests.Dali
         [Fact]
         public void NullZoneValuesOnADtoDoesNotThrow()
         {
-            var loops = new[] { new DaliLoopDto { Name = "NoZones", Order = 1, ZoneValues = null } };
+            var loops = new[] { new DaliLoopDto { Name = "NoZones", Order = 1, ZoneValues = null! } };
 
             var result = DaliStateMapper.ToLoopDeclarations(loops, new[] { "A" });
 

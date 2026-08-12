@@ -45,7 +45,7 @@ namespace TurboSuite.Dali.Input
     /// </summary>
     public static class DaliLoadCounter
     {
-        public static Dictionary<string, int> CountByZone(IEnumerable<DaliFixtureReading> fixtures)
+        public static Dictionary<string, int> CountByZone(IEnumerable<DaliFixtureReading>? fixtures)
         {
             var byZone = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var circuitZone = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

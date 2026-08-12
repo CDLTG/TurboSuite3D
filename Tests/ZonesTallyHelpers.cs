@@ -49,7 +49,7 @@ namespace TurboSuite.Tests.Zones
         /// <summary>Rows that carry a type name distinct from the catalog number — for the
         /// missing-catalog cases, where the type name is the only thing identifying the offender.</summary>
         public static IReadOnlyList<ControlDeviceTally> Named(
-            params (string Catalog, string TypeName, int Qty)[] rows)
+            params (string? Catalog, string TypeName, int Qty)[] rows)
         {
             var list = new List<ControlDeviceTally>();
             foreach (var (catalog, typeName, qty) in rows)

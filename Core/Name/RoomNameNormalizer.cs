@@ -13,7 +13,7 @@ namespace TurboSuite.Name;
 /// </summary>
 public static class RoomNameNormalizer
 {
-    public static string Normalize(string raw)
+    public static string Normalize(string? raw)
     {
         if (string.IsNullOrEmpty(raw)) return "";
         return raw.Trim().Replace("#", "").ToUpper();

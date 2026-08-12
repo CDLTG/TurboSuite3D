@@ -21,7 +21,7 @@ namespace TurboSuite.Tests.Dali
         };
 
         private static DaliModuleState RoundTrip(DaliModuleState state) =>
-            JsonSerializer.Deserialize<DaliModuleState>(JsonSerializer.Serialize(state, Options), Options);
+            JsonSerializer.Deserialize<DaliModuleState>(JsonSerializer.Serialize(state, Options), Options)!;
 
         [Fact]
         public void FreshStateHasSensibleDefaults()
@@ -68,7 +68,7 @@ namespace TurboSuite.Tests.Dali
                 "{\"payloadVersion\":1,\"loops\":[{\"loopId\":\"x\",\"name\":\"L\",\"order\":1," +
                 "\"zoneValues\":[\"Z\"]}]}";
 
-            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options);
+            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options)!;
 
             Assert.Equal(0, Assert.Single(state.Loops).AssignedZone);
         }
@@ -81,7 +81,7 @@ namespace TurboSuite.Tests.Dali
                 "{\"payloadVersion\":1,\"loops\":[{\"loopId\":\"x\",\"name\":\"L\",\"order\":3," +
                 "\"zoneValues\":[\"Z\"]}]}";
 
-            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options);
+            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options)!;
 
             var loop = Assert.Single(state.Loops);
             Assert.Equal("L", loop.Name);
@@ -96,7 +96,7 @@ namespace TurboSuite.Tests.Dali
             const string json =
                 "{\"payloadVersion\":2,\"loops\":[],\"somethingNew\":{\"a\":1},\"futureFlag\":true}";
 
-            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options);
+            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options)!;
 
             Assert.Equal(2, state.PayloadVersion);
             Assert.Empty(state.Loops);

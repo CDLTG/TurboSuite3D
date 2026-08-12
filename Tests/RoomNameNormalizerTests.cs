@@ -34,7 +34,7 @@ namespace TurboSuite.Tests
         [InlineData(null, "")]
         [InlineData("", "")]
         [InlineData("   ", "")]
-        public void NullOrBlank_ReturnsEmpty(string raw, string expected)
+        public void NullOrBlank_ReturnsEmpty(string? raw, string expected)
             => Assert.Equal(expected, RoomNameNormalizer.Normalize(raw));
 
         [Fact]
