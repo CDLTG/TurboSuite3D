@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TurboSuite.Dali;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Zones.Models;
 
@@ -293,7 +294,13 @@ namespace TurboSuite.Zones.Services
         private static ModuleResult MakeDaliModule(DaliPanelModule dali) => new ModuleResult
         {
             DimmingType = DaliDimmingType,
-            ModuleCapacity = 1,                 // occupies one panel slot; not a dimming-load capacity
+            PartNumber = DaliSolver.ModulePartNumber,   // colors the slot (purple) + names it in the tooltip
+            // The bus load cap is the display denominator (33 / 64). Slot occupancy is by module *count*
+            // (see PlaceDaliModules), so this never inflates panel capacity; amp/BOM/link paths all skip an
+            // OrderedBySubsystem module, so a 64 here is display-only.
+            ModuleCapacity = DaliSolver.MaxLoadsPerBus,
+            UsedSlotsOverride = dali.LoadCount,          // show loads on the bus, not the loop count (1)
+            IsOverloaded = dali.LoadCount > DaliSolver.MaxLoadsPerBus,   // > one bus ⇒ red, mirrors the tab warning
             OrderedBySubsystem = true,          // ordered + link-budgeted by the job-wide DALI demand
             CircuitNumbers = { dali.LoopName }, // the slot is labeled by its loop, not circuits
         };
@@ -400,6 +407,23 @@ namespace TurboSuite.Zones.Services
                     panel.Modules.AddRange(modules);
                 }
             }
+        }
+
+        /// <summary>The distinct, valid ZONE N numbers present across these circuits' panels — the roster the
+        /// TurboZones DALI tab offers when the designer assigns a loop to a zone (Phase 3e). Reuses the same
+        /// <see cref="ParseLocationNumber"/> the allocator groups by, so an assignable zone is exactly a zone
+        /// the breakdown can place a panel in. DUMMY and unparseable panels are excluded.</summary>
+        public static IReadOnlyList<int> DiscoverPanelZones(IEnumerable<ZonesCircuitData> circuits)
+        {
+            var zones = new SortedSet<int>();
+            foreach (var c in circuits ?? Enumerable.Empty<ZonesCircuitData>())
+            {
+                if (string.IsNullOrWhiteSpace(c.PanelName)) continue;
+                if (string.Equals(c.PanelName, "DUMMY", StringComparison.OrdinalIgnoreCase)) continue;
+                int zone = ParseLocationNumber(c.PanelName);
+                if (zone > 0) zones.Add(zone);
+            }
+            return zones.ToList();
         }
 
         /// <summary>

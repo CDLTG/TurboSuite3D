@@ -25,9 +25,24 @@ namespace TurboSuite.Dali.Input
         /// </summary>
         public static List<DaliLoopDeclaration> ToLoopDeclarations(
             IEnumerable<DaliLoopDto>? loops, IEnumerable<string>? existingZoneNames)
+            => Reconcile(loops, existingZoneNames)
+                .Select(r => new DaliLoopDeclaration(r.Dto.Name, r.Zones))
+                .ToList();
+
+        /// <summary>
+        /// The one reconciliation both the job-wide demand (<see cref="ToLoopDeclarations"/> → DaliSolver)
+        /// and the panel placement (<see cref="DaliPlacementMapper"/>) run through, so the ordered count and
+        /// the placed count derive from the same loop set and cannot disagree (plan principle 6). Applies the
+        /// shared rules — order by declared Order, drop a zone no longer in the model, single membership
+        /// (first loop wins a contested zone), skip a loop left with no live zones — and returns each
+        /// surviving loop paired with the DTO it came from, so a caller that needs more than the name +
+        /// zones (placement needs the loop's <see cref="DaliLoopDto.AssignedZone"/>) can reach it.
+        /// </summary>
+        internal static List<ReconciledLoop> Reconcile(
+            IEnumerable<DaliLoopDto>? loops, IEnumerable<string>? existingZoneNames)
         {
-            var declarations = new List<DaliLoopDeclaration>();
-            if (loops == null) return declarations;
+            var result = new List<ReconciledLoop>();
+            if (loops == null) return result;
 
             var zoneSet = new HashSet<string>(existingZoneNames ?? Enumerable.Empty<string>(),
                                               StringComparer.OrdinalIgnoreCase);
@@ -43,9 +58,23 @@ namespace TurboSuite.Dali.Input
                 }
                 if (zones.Count == 0) continue;
 
-                declarations.Add(new DaliLoopDeclaration(dto.Name, zones));
+                result.Add(new ReconciledLoop(dto, zones));
             }
-            return declarations;
+            return result;
+        }
+
+        /// <summary>A loop that survived reconciliation: its live (still-in-model, singly-owned) zones,
+        /// paired with the persisted DTO for callers that need its other fields.</summary>
+        internal readonly struct ReconciledLoop
+        {
+            public ReconciledLoop(DaliLoopDto dto, IReadOnlyList<string> zones)
+            {
+                Dto = dto;
+                Zones = zones;
+            }
+
+            public DaliLoopDto Dto { get; }
+            public IReadOnlyList<string> Zones { get; }
         }
     }
 }

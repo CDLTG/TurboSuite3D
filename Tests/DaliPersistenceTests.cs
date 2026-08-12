@@ -27,7 +27,7 @@ namespace TurboSuite.Tests.Dali
         public void FreshStateHasSensibleDefaults()
         {
             var state = new DaliModuleState();
-            Assert.Equal(1, state.PayloadVersion);
+            Assert.Equal(2, state.PayloadVersion);   // v2: DaliLoopDto.AssignedZone (Phase 3e)
             Assert.Empty(state.Loops);
         }
 
@@ -39,7 +39,7 @@ namespace TurboSuite.Tests.Dali
                 PayloadVersion = 1,
                 Loops = new List<DaliLoopDto>
                 {
-                    new DaliLoopDto { LoopId = "l1", Name = "North", Order = 1,
+                    new DaliLoopDto { LoopId = "l1", Name = "North", Order = 1, AssignedZone = 4,
                                       ZoneValues = new List<string> { "Kitchen", "Hall" } },
                     new DaliLoopDto { LoopId = "l2", Name = "South", Order = 2,
                                       ZoneValues = new List<string> { "Bath" } },
@@ -52,9 +52,25 @@ namespace TurboSuite.Tests.Dali
             Assert.Equal("North", back.Loops[0].Name);
             Assert.Equal("l1", back.Loops[0].LoopId);
             Assert.Equal(1, back.Loops[0].Order);
+            Assert.Equal(4, back.Loops[0].AssignedZone);
             Assert.Equal(new[] { "Kitchen", "Hall" }, back.Loops[0].ZoneValues);
             Assert.Equal("South", back.Loops[1].Name);
+            Assert.Equal(0, back.Loops[1].AssignedZone);   // never assigned ⇒ unassigned
             Assert.Equal(new[] { "Bath" }, back.Loops[1].ZoneValues);
+        }
+
+        [Fact]
+        public void V1Payload_DefaultsAssignedZoneToUnassigned()
+        {
+            // A loop persisted before Phase 3e carries no assignedZone; it must read as 0 (unassigned),
+            // so an older job's loops are ordered-but-warned rather than mis-placed into ZONE 0.
+            const string json =
+                "{\"payloadVersion\":1,\"loops\":[{\"loopId\":\"x\",\"name\":\"L\",\"order\":1," +
+                "\"zoneValues\":[\"Z\"]}]}";
+
+            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options);
+
+            Assert.Equal(0, Assert.Single(state.Loops).AssignedZone);
         }
 
         [Fact]

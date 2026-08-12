@@ -1,11 +1,14 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Dali.Input;
 using TurboSuite.Dali.Services;
+using TurboSuite.Dali.ViewModels;
 using TurboSuite.Dmx.Services;
 using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
@@ -83,10 +86,25 @@ namespace TurboSuite.Zones
                     new DaliDemandProvider(doc).GetDemand()
                 };
 
+                // DALI tab inputs — read once at open, same rule as the demands and keypad counts. The DALI
+                // *order/link* budget rides subsystemDemands above; this is the *placement* half: the roster
+                // the tab groups (Control Zone values + loads) and assigns (discovered ZONE Ns), the persisted
+                // loops, and the zone→module map the persisted assignments already imply for the breakdown.
+                var daliLoadsByZone = DaliDemandProvider.CountDaliLoadsByZone(doc, out _);
+                var daliZones = daliLoadsByZone
+                    .OrderBy(kv => kv.Key, System.StringComparer.OrdinalIgnoreCase)
+                    .Select(kv => new DaliZoneItemViewModel(kv.Key, kv.Value))
+                    .ToList();
+                var daliPanelZones = PanelAllocationService.DiscoverPanelZones(circuits);
+                var savedDaliState = DaliStorageService.Load(doc);
+                var daliModulesByZone = DaliPlacementMapper.Build(savedDaliState.Loops, daliLoadsByZone).ByZone;
+                var daliLoopStore = new DaliLoopStore(doc);
+
                 var viewModel = new ZonesMainViewModel(circuits,
                     keypadCounts, hybridRepeaters,
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
-                    subsystemDemands);
+                    subsystemDemands, daliModulesByZone,
+                    daliZones, daliPanelZones, savedDaliState, daliLoopStore);
 
                 var window = new TurboZonesWindow
                 {

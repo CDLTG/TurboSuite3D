@@ -131,7 +131,13 @@ namespace TurboSuite.Zones.Models
         public string PartNumber { get; set; }
         public int ModuleCapacity { get; set; }
         public List<string> CircuitNumbers { get; set; } = new List<string>();
-        public int UsedSlots => CircuitNumbers.Count;
+
+        /// <summary>When set, the "used" figure shown for this module instead of the circuit count. Used by
+        /// the DALI DIN module, whose usage is its bus <i>load</i> count (e.g. 33 / 64), not a circuit tally
+        /// — its single <see cref="CircuitNumbers"/> entry is the loop label, not a load.</summary>
+        public int? UsedSlotsOverride { get; set; }
+
+        public int UsedSlots => UsedSlotsOverride ?? CircuitNumbers.Count;
         public string CircuitNumbersDisplay => string.Join(", ", CircuitNumbers);
 
         /// <summary>Per-slot amp values, parallel to <see cref="CircuitNumbers"/>.</summary>

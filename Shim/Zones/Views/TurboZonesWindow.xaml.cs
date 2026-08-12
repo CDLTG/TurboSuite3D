@@ -75,6 +75,7 @@ namespace TurboSuite.Zones.Views
         private static readonly SolidColorBrush ELVBrush = new SolidColorBrush(Color.FromRgb(0x8F, 0xAD, 0xD6));
         private static readonly SolidColorBrush ZeroTenBrush = new SolidColorBrush(Color.FromRgb(0xE0, 0xA8, 0x70));
         private static readonly SolidColorBrush RelayBrush = new SolidColorBrush(Color.FromRgb(0x7C, 0xC4, 0xA0));
+        private static readonly SolidColorBrush DaliBrush = new SolidColorBrush(Color.FromRgb(0x95, 0x75, 0xCD));
         private static readonly SolidColorBrush UnknownBrush = new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99));
 
         // Color is keyed off the actual module part number so a 0-10V module used for Relay
@@ -94,6 +95,10 @@ namespace TurboSuite.Zones.Views
             // ELV / adaptive modules
             if (pn.Contains("4A5") || pn.Contains("DIMU") || pn.Equals("ELV"))
                 return ELVBrush;
+
+            // DALI DIN module (LQSE2-1DALUNV-D) — pastel purple, distinct from the dimming-type colors
+            if (pn.Contains("DAL"))
+                return DaliBrush;
 
             return UnknownBrush;
         }

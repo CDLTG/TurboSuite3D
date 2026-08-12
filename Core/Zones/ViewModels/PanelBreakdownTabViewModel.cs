@@ -33,6 +33,11 @@ namespace TurboSuite.Zones.ViewModels
         /// re-solving DMX on every panel-size tweak would be wasted work, and the DMX design cannot
         /// change while this window is the one in front of the user.</summary>
         private readonly IReadOnlyList<ControlSubsystemDemand> _subsystemDemands;
+
+        /// <summary>DALI modules to place, keyed by the ZONE N the designer assigned each loop to (built
+        /// shim-side from the persisted DALI loops at window open — the same read-once rule as the demands).
+        /// Placement only; the DALI order/link budget rides <see cref="_subsystemDemands"/>.</summary>
+        private readonly IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> _daliModulesByZone;
         private readonly IRevitWorkQueue _workQueue;
         private readonly IPanelSettingsStore _settingsStore;
         private BrandConfig _currentBrand;
@@ -49,11 +54,13 @@ namespace TurboSuite.Zones.ViewModels
             ControlDeviceGroup hybridRepeaters,
             PanelSettings savedSettings,
             IRevitWorkQueue workQueue, IPanelSettingsStore settingsStore,
-            IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null)
+            IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
+            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null)
         {
             _workQueue = workQueue;
             _settingsStore = settingsStore;
             _subsystemDemands = subsystemDemands;
+            _daliModulesByZone = daliModulesByZone;
             keypadCounts ??= new KeypadCounts();
             _keypadCount = keypadCounts.Regular;
             _twoGangKeypadCount = keypadCounts.TwoGang;
@@ -167,7 +174,7 @@ namespace TurboSuite.Zones.ViewModels
             var circuitData = Circuits.Select(c => c.Data).ToList();
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
-                circuitData, _currentBrand, _panelSizeOverrides, _subsystemDemands);
+                circuitData, _currentBrand, _panelSizeOverrides, _subsystemDemands, _daliModulesByZone);
 
             AllocationResult = result;
             UnassignedCircuits = new ObservableCollection<ZonesCircuitData>(unassigned);

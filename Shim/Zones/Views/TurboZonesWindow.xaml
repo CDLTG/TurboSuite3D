@@ -648,6 +648,149 @@
                 </Grid>
             </TabItem>
 
+            <!-- DALI Tab (Phase 3e): declare loops, group Control Zones, assign each a ZONE -->
+            <TabItem Header="DALI"
+                     Visibility="{Binding HasDaliTab, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="8">
+                    <!-- Placeholder when the job carries no DALI fixtures -->
+                    <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontStyle="Italic"
+                               TextAlignment="Center" MaxWidth="380" TextWrapping="Wrap"
+                               Visibility="{Binding DaliTab.HasDaliHardware, Converter={StaticResource InverseBoolToVisibility}}"
+                               Text="No DALI fixtures found. Set a fixture's Dimming Protocol to DALI and give it a Control Zone, then reopen TurboZones to declare loops."/>
+
+                    <DockPanel Visibility="{Binding DaliTab.HasDaliHardware, Converter={StaticResource BoolToVisibility}}">
+                        <!-- Intro + warnings -->
+                        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}"
+                                       Text="Group Control Zones into DALI loops (one loop = one LQSE2-1DALUNV-D module) and assign each loop the ZONE its module is placed in. Modules are ordered on the Control BOM regardless; the ZONE only decides which panel a slot is shown in."/>
+
+                            <Border Margin="0,6,0,0" Padding="8,5" Background="#FFF4E5"
+                                    BorderBrush="#E0A94B" BorderThickness="1"
+                                    Visibility="{Binding DaliTab.HasUnassignedLoops, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding DaliTab.UnassignedLoopMessage}"
+                                           TextWrapping="Wrap" Foreground="#8A5A00"/>
+                            </Border>
+                            <Border Margin="0,6,0,0" Padding="8,5" Background="#FDE7E7"
+                                    BorderBrush="#D46A6A" BorderThickness="1"
+                                    Visibility="{Binding DaliTab.HasOverCapLoops, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding DaliTab.OverCapMessage}"
+                                           TextWrapping="Wrap" Foreground="#9B2C2C"/>
+                            </Border>
+                        </StackPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="230"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Unassigned Control Zone pool -->
+                            <DockPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock DockPanel.Dock="Top" Text="Unassigned Control Zones"
+                                           FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                    <Button Content="New loop from selection" Height="26"
+                                            Command="{Binding DaliTab.NewLoopFromSelectionCommand}"/>
+                                    <Button Content="New empty loop" Height="24" Margin="0,4,0,0"
+                                            Command="{Binding DaliTab.NewLoopCommand}"/>
+                                </StackPanel>
+                                <Border BorderThickness="1" BorderBrush="{StaticResource SeparatorBrush}"
+                                        Background="#FAFAFA">
+                                    <ListBox ItemsSource="{Binding DaliTab.Pool}" SelectionMode="Extended"
+                                             BorderThickness="0" Background="Transparent"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemContainerStyle>
+                                            <Style TargetType="ListBoxItem">
+                                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                            </Style>
+                                        </ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Display}"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Border>
+                            </DockPanel>
+
+                            <!-- Declared loops -->
+                            <DockPanel Grid.Column="1">
+                                <TextBlock DockPanel.Dock="Top" Text="DALI Loops" FontWeight="SemiBold"
+                                           Margin="0,0,0,4"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding DaliTab.Loops}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,6" Padding="8" BorderThickness="1"
+                                                        BorderBrush="{StaticResource SeparatorBrush}"
+                                                        Background="#FFFFFF">
+                                                    <StackPanel>
+                                                        <!-- Row header: name, zone assignment, status, remove -->
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBox Grid.Column="0" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
+                                                                     Height="24" VerticalContentAlignment="Center"
+                                                                     Margin="0,0,8,0"/>
+                                                            <ComboBox Grid.Column="1" Width="130" Height="24"
+                                                                      ItemsSource="{Binding ZoneOptions}"
+                                                                      DisplayMemberPath="Label" SelectedValuePath="Value"
+                                                                      SelectedValue="{Binding AssignedZone}"/>
+                                                            <Button Grid.Column="2" Content="✕ Loop" Height="24"
+                                                                    Margin="8,0,0,0" Padding="6,0"
+                                                                    Command="{Binding RemoveCommand}"/>
+                                                        </Grid>
+
+                                                        <TextBlock Text="{Binding StatusText}" Margin="0,4,0,0"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                                                        <!-- Member zones + add gesture -->
+                                                        <DockPanel Margin="0,6,0,0">
+                                                            <Button DockPanel.Dock="Right" VerticalAlignment="Top"
+                                                                    Content="+ Add selected" Height="24" Padding="6,0"
+                                                                    Margin="8,0,0,0"
+                                                                    Command="{Binding AddSelectedCommand}"/>
+                                                            <ItemsControl ItemsSource="{Binding Zones}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <WrapPanel/>
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Margin="0,0,4,4" Padding="5,2"
+                                                                                Background="#EEF3FA" BorderBrush="#B0BED0"
+                                                                                BorderThickness="1">
+                                                                            <StackPanel Orientation="Horizontal">
+                                                                                <TextBlock Text="{Binding Display}"
+                                                                                           VerticalAlignment="Center"/>
+                                                                                <Button Content="✕" Margin="5,0,0,0"
+                                                                                        Padding="3,0" FontSize="9"
+                                                                                        Background="Transparent" BorderThickness="0"
+                                                                                        Command="{Binding DataContext.RemoveZoneCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                                                                        CommandParameter="{Binding}"/>
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </DockPanel>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Grid>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+
         </TabControl>
 
         <!-- Bottom footer -->

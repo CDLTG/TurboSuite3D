@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Dali;
 using TurboSuite.Dali.Input;
 using TurboSuite.Dali.Services;
@@ -83,15 +84,46 @@ namespace TurboSuite.Dali.Services
             }
         }
 
-        /// <summary>DALI fixtures (Dimming Protocol = DALI) counted per Control Zone value — one load each.
-        /// <paramref name="totalDaliFixtures"/> returns every DALI fixture seen, including those with no
-        /// Control Zone (which join no loop), so the caller can tell "hardware present but undeclared" from
-        /// "no DALI at all".</summary>
+        /// <summary>DALI loads per Control Zone value, where <b>a load is a DALI address = one circuit</b>,
+        /// not one fixture. Shared-driver tape (several runs on one unassigned circuit) collapses to one
+        /// load; a downlight on its own circuit stays one — the "one driver = one circuit = one address"
+        /// convention. The collapse arithmetic is the pure <see cref="DaliLoadCounter"/>; here we only read
+        /// the model into <see cref="DaliFixtureReading"/>s.
+        ///
+        /// <paramref name="totalDaliFixtures"/> returns every DALI fixture seen (circuited or not, zoned or
+        /// not), so the caller can still tell "hardware present but undeclared" from "no DALI at all".
+        ///
+        /// The driver/decoder that shares a tape circuit is a lighting <i>device</i>, not a fixture, so it is
+        /// never collected — it neither adds nor removes a load.</summary>
         internal static Dictionary<string, int> CountDaliLoadsByZone(Document doc, out int totalDaliFixtures)
         {
-            var byZone = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            totalDaliFixtures = 0;
+            var lightingCatId = new ElementId(BuiltInCategory.OST_LightingFixtures);
+            var readings = new List<DaliFixtureReading>();
+            var circuited = new HashSet<ElementId>();
 
+            // Pass 1 — circuit-first: each DALI circuit's fixtures carry that circuit's id, so they collapse
+            // to a single address in DaliLoadCounter. Reading circuit.Elements (not a fixture→system lookup)
+            // matches how ZonesCollectorService walks circuits and keeps the driver device out by category.
+            var circuits = new FilteredElementCollector(doc)
+                .OfClass(typeof(ElectricalSystem))
+                .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
+                .Cast<ElectricalSystem>();
+
+            foreach (var circuit in circuits)
+            {
+                string circuitKey = circuit.UniqueId;
+                foreach (Element el in circuit.Elements)
+                {
+                    if (el is FamilyInstance fi && fi.Category?.Id == lightingCatId && IsDali(fi))
+                    {
+                        circuited.Add(fi.Id);
+                        readings.Add(new DaliFixtureReading(circuitKey, ReadZone(fi)));
+                    }
+                }
+            }
+
+            // Pass 2 — uncircuited DALI fixtures: their own load (empty circuit key), until the designer wires
+            // them onto a circuit, at which point pass 1 collapses them.
             var fixtures = new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_LightingFixtures)
                 .WhereElementIsNotElementType()
@@ -100,19 +132,19 @@ namespace TurboSuite.Dali.Services
 
             foreach (var fi in fixtures)
             {
-                if (!ParameterHelper.GetDimmingProtocol(fi).Trim()
-                        .Equals(DaliProtocol, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                totalDaliFixtures++;
-
-                string zone = fi.LookupParameter(ParameterNames.ControlZone)?.AsString()?.Trim() ?? "";
-                if (zone.Length == 0) continue;   // a DALI fixture with no Control Zone can join no loop
-
-                byZone[zone] = byZone.TryGetValue(zone, out int n) ? n + 1 : 1;
+                if (circuited.Contains(fi.Id) || !IsDali(fi)) continue;
+                readings.Add(new DaliFixtureReading("", ReadZone(fi)));
             }
 
-            return byZone;
+            totalDaliFixtures = readings.Count;
+            return DaliLoadCounter.CountByZone(readings);
         }
+
+        private static bool IsDali(FamilyInstance fi)
+            => ParameterHelper.GetDimmingProtocol(fi).Trim()
+                .Equals(DaliProtocol, StringComparison.OrdinalIgnoreCase);
+
+        private static string ReadZone(FamilyInstance fi)
+            => fi.LookupParameter(ParameterNames.ControlZone)?.AsString()?.Trim() ?? "";
     }
 }
