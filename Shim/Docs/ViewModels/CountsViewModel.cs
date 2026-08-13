@@ -68,6 +68,7 @@ public class CountsViewModel : ViewModelBase
     }
 
     public RelayCommand GenerateCommand { get; }
+    public RelayCommand LegacyCountsCommand { get; }
     public RelayCommand BrowseRepDirectoryCommand { get; }
     public RelayCommand BrowseHeaderImageCommand { get; }
     public RelayCommand BrowseFooterImageCommand { get; }
@@ -115,6 +116,7 @@ public class CountsViewModel : ViewModelBase
         _footerImagePath = settings.CountsFooterImagePath;
         _coverVerticalPath = settings.CountsCoverVerticalPath;
         GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && _fixtures.Count > 0);
+        LegacyCountsCommand = new RelayCommand(ExecuteLegacyCounts, () => !IsGenerating && _fixtures.Count > 0);
         BrowseRepDirectoryCommand = new RelayCommand(ExecuteBrowseRepDirectory);
         BrowseHeaderImageCommand = new RelayCommand(() => BrowseImage(p => HeaderImagePath = p, HeaderImagePath));
         BrowseFooterImageCommand = new RelayCommand(() => BrowseImage(p => FooterImagePath = p, FooterImagePath));
@@ -298,6 +300,35 @@ public class CountsViewModel : ViewModelBase
         finally
         {
             IsGenerating = false;
+        }
+    }
+
+    // Legacy raw-CSV export: two columns (Type Mark, Count), Type Mark carrying a
+    // {ft}ft{in}in suffix for linear fixtures. Uses only the collected list — no Catalog
+    // Number logic, no validation, no ClosedXML — so it stays out of the workbook flow above.
+    private void ExecuteLegacyCounts()
+    {
+        if (_fixtures.Count == 0) return;
+
+        var saveDialog = new SaveFileDialog
+        {
+            Filter = "CSV Files|*.csv",
+            FileName = $"{ProjectName}_Counts_Legacy.csv"
+        };
+        if (saveDialog.ShowDialog() != true) return;
+
+        try
+        {
+            File.WriteAllText(saveDialog.FileName, LegacyCountsCsvService.BuildCsv(_fixtures));
+            StatusText = $"Done. Saved to {Path.GetFileName(saveDialog.FileName)}";
+        }
+        catch (IOException)
+        {
+            StatusText = "Error: File is open in another application. Please close it and try again.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error: {ex.Message}";
         }
     }
 

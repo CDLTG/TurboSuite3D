@@ -1,6 +1,6 @@
 # TurboDocs
 
-Tabbed document generation utility. Seven output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Power Supplies** (RPS schedule, switch ID lookup table, and driver breakdown PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), and **Panel Schedule** (dimmer panel breakdown PDF). A **Settings** tab configures shared company info and page options.
+Tabbed document generation utility. Eight output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Power Supplies** (RPS schedule, switch ID lookup table, and driver breakdown PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), **Panel Schedule** (dimmer panel breakdown PDF), and **Counts** (fixture-quantity export for quoting). A **Settings** tab configures shared company info and page options.
 
 ## Schedule Tab
 
@@ -182,6 +182,14 @@ Notes are read from Revit key schedules: **Notes_General** and **Notes_Controls*
 ### Layout
 
 Letter-size PDF. Page 1 is a cover page with project name, location, subtitle, date, project number, and optional branding images (vertical banner top-left, footer banner bottom). Subsequent pages contain numbered notes with word wrapping. Notes pages have a header (project name, subtitle, logo) and footer (company info). The cover page has no header or footer. Project Number is read from Revit's Project Information; Project Location and branding image paths are configured in TurboDocs Settings.
+
+## Counts Tab
+
+Exports fixture quantities for quoting. Every lighting/electrical instance is collected and aggregated by **Type Mark** (`CountsCollectorService`), sorted, and carrying a per-Type instance `Count` plus the summed `Linear Length`.
+
+**Generate** (and **Update Existing**) writes the full ClosedXML workbook — Cover, Worksheet, Quote, Changes, and Counts sheets — with Catalog Number expansion and pricing hooks. See `Core/Docs/Services/CountsWorkbookService.cs` and `CatalogLengthTokenResolver.cs` for the Catalog Number length-token / Catalog-Qty grammar.
+
+**Legacy Counts** is a stripped-down raw-CSV export for the transitional pricing workflow — a `Type Mark,Count` two-column list, no header row, no ClosedXML. It reproduces the old native-Revit-schedule + Excel ritual: linear fixtures carry a `-{ft}ft{in}in` suffix on the Type Mark (summed Linear Length, rounded to the nearest inch, feet always shown), non-linear ones stay bare (`TL` with 443'-4" → `TL-443ft4in`; `A2` → `A2`). Formatting only, no Catalog Number logic or validation. The pure transform lives in `Core/Docs/Services/LegacyCountsCsvService.cs` (oracle-tested). The button sits beside **Generate** in the footer and appears only while the Counts tab is front.
 
 ## Dependencies
 

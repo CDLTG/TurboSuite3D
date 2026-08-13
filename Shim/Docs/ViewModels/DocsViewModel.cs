@@ -35,17 +35,32 @@ public class DocsViewModel : ViewModelBase
     public BomViewModel BomVM { get; }
     public CountsViewModel CountsVM { get; }
 
+    // Tab index of the Counts tab in TurboDocsWindow.xaml — gates the Counts-only footer
+    // controls (the Legacy Counts button lives beside Generate, but only there).
+    private const int CountsTabIndex = 7;
+
     public int SelectedTabIndex
     {
         get => _selectedTabIndex;
-        set => SetProperty(ref _selectedTabIndex, value);
+        set
+        {
+            if (SetProperty(ref _selectedTabIndex, value))
+                OnPropertyChanged(nameof(IsCountsTabActive));
+        }
     }
 
     public bool IsSettingsVisible
     {
         get => _isSettingsVisible;
-        set => SetProperty(ref _isSettingsVisible, value);
+        set
+        {
+            if (SetProperty(ref _isSettingsVisible, value))
+                OnPropertyChanged(nameof(IsCountsTabActive));
+        }
     }
+
+    // The Counts tab is the front tab (settings panel hidden). Shows the Legacy Counts footer button.
+    public bool IsCountsTabActive => SelectedTabIndex == CountsTabIndex && !IsSettingsVisible;
 
     public string StatusText
     {
@@ -127,6 +142,7 @@ public class DocsViewModel : ViewModelBase
     public RelayCommand BrowseCoverVerticalCommand { get; }
     public RelayCommand BrowseCoverHorizontalCommand { get; }
     public RelayCommand GenerateCommand { get; }
+    public RelayCommand LegacyCountsCommand { get; }
     public RelayCommand ToggleSettingsCommand { get; }
 
     public DocsViewModel(List<FixtureSpecModel> cutSheetFixtures, List<FixtureSpecModel> rpsCutSheetFixtures, string projectName, string projectNumber = "")
@@ -164,6 +180,9 @@ public class DocsViewModel : ViewModelBase
         BrowseCoverVerticalCommand = new RelayCommand(ExecuteBrowseCoverVertical);
         BrowseCoverHorizontalCommand = new RelayCommand(ExecuteBrowseCoverHorizontal);
         ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
+        LegacyCountsCommand = new RelayCommand(
+            () => CountsVM.LegacyCountsCommand.Execute(null),
+            () => CountsVM.LegacyCountsCommand.CanExecute(null));
 
         // Forward status text from active tab VM
         CutSheetsVM.PropertyChanged += (_, e) =>
