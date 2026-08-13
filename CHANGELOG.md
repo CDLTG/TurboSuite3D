@@ -7,6 +7,32 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-08-13
+
+### Added
+- TurboZones: DALI as a panel-slot subsystem — loop declaration + storage, `DaliSolver` (loops → control-subsystem demand), a DALI loop tab, per-circuit DALI load counts, and `LQSE-2-1DALUNV-D` DIN modules + LV compartment rendered on the Panel Schedule.
+- TurboZones: shades as a subsystem with QSE-IO legs; QS-link power supplies sized from the PDU budget per processor slot.
+- TurboName: rebuilt as a single modeless job-setup window — CAD layer list (visibility, per-layer Line Graphics, hide-by-picking, multi-select), click-to-tag layer roles, watershed region auto-generate into FilledRegions with a Preview toggle, and per-link room-name/ceiling-height scoping.
+- TurboDocs: Legacy Counts raw-CSV export beside Generate.
+- TurboDocs Counts: `min=` length-token floor for made-to-length cuts.
+- TurboDriver: shared circuit-info dialog; honors a `<None>` panel.
+- TurboNumber: Select in Project on the Keypads and Power Supplies tabs.
+- TurboWire: `<None>` panel selection, remembered as the default.
+
+### Changed
+- TurboZones: derive control links from one packer; derive module type from Dimming Protocol; unify the control BOM builder across the window and PDF; a subsystem may only silence circuits it accounted for.
+- TurboDMX: route fixture membership on Dimming Protocol (not DMX channel count); cap QSE-CI-DMX interfaces at 16 per QS link; order QSE-CI-DMX by placement from the solve.
+- Room detection: source runtime lookups from owned Spaces, not architect Rooms.
+- TurboDriver: host drivers on the view's level and pin elevation authoritatively.
+- TurboDocs: branding banners on the Counts cover sheet; logos shrunk so one fits every sheet; RPS schedule footer stripped; content-fit 8.5×28.5 lookup-table strip; Counts length tokens collapsed to a `[*]` placeholder on the Fixture Schedule; whole-foot length cuts round up to the ordered foot.
+- TurboBubble: ZC chandelier bubble nudged horizontally off the fixture by default.
+
+### Fixed
+- TurboBubble: electrical switchleg placement on wall-hosted fixtures.
+- Settings: cache doc-keying, missing-field defaults, atomic save, and family-list labels.
+- TurboName: re-run duplicate notes (split TextNote lines on CR), door-swing arc wrap, ceiling heights rounded to the nearest inch, and auto-generate's clear scoped to the crop box.
+- TurboDriver: stop naming a circuit the abort is about to discard; keep the committed split when the circuit is lost mid-run.
+
 ## [1.4.0] — 2026-07-09
 
 ### Added
@@ -171,6 +197,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.4.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.1
 [1.4.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.0
 [1.3.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.3.0
 [1.2.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.2.2

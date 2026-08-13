@@ -11,7 +11,7 @@
     <Company>CDLTG</Company>
     <Authors>CDLTG</Authors>
     <Product>TurboSuite</Product>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <!-- Updater/Installer/Abstractions/Core now live at the repo root (one level up),
