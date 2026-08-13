@@ -32,7 +32,7 @@ namespace TurboSuite.Dali.ViewModels
     {
         private readonly IRevitWorkQueue _workQueue;
         private readonly IDaliLoopStore _store;
-        private readonly IReadOnlyList<DaliZoneOption> _zoneOptions;
+        private IReadOnlyList<DaliZoneOption> _zoneOptions;
 
         // Save coalescing — identical shape to the Panel Breakdown tab, so a burst of edits never drops the
         // latest snapshot to an in-flight write.
@@ -66,6 +66,25 @@ namespace TurboSuite.Dali.ViewModels
             _loaded = true;
         }
 
+        /// <summary>Re-collect the tab from a fresh model read (the Refresh gesture) — rebuild the zone pool +
+        /// load counts + panel-ZONE options and reload the persisted loops, in place so the window's bindings
+        /// stay attached. Loops survive because every edit auto-saves, so the reloaded <paramref name="saved"/>
+        /// already carries the designer's declarations; a zone since removed drops out and a new one appears
+        /// in the pool. Saves are suppressed during the rebuild — Refresh reads, it never writes.</summary>
+        public void Reseed(
+            IReadOnlyList<DaliZoneItemViewModel> availableZones,
+            IReadOnlyList<int> availablePanelZones,
+            DaliModuleState saved)
+        {
+            _loaded = false;
+            Pool.Clear();
+            Loops.Clear();
+            _zoneOptions = BuildZoneOptions(availablePanelZones, saved);
+            LoadState(availableZones, saved);
+            Recompute();
+            _loaded = true;
+        }
+
         public string TabHeader => "DALI";
 
         /// <summary>Control Zones not yet grouped into a loop. Multi-select source for the add gesture.</summary>
@@ -78,6 +97,18 @@ namespace TurboSuite.Dali.ViewModels
 
         /// <summary>True when the job has no DALI fixtures at all — the tab shows a placeholder instead.</summary>
         public bool HasDaliHardware => Pool.Count > 0 || Loops.Any(l => l.Zones.Count > 0);
+
+        /// <summary>Loops declared — also the module count (one LQSE2-1DALUNV-D per loop).</summary>
+        public int LoopCount => Loops.Count;
+
+        /// <summary>Total DALI-addressable loads across all declared loops.</summary>
+        public int TotalLoads => Loops.Sum(l => l.LoadCount);
+
+        /// <summary>The window-header roll-up, e.g. "3 loops · 41 loads · 3 modules".</summary>
+        public string SummaryText =>
+            $"{LoopCount} loop{(LoopCount == 1 ? "" : "s")} · "
+            + $"{TotalLoads} load{(TotalLoads == 1 ? "" : "s")} · "
+            + $"{LoopCount} module{(LoopCount == 1 ? "" : "s")}";
 
         private int _unassignedLoopCount;
         public int UnassignedLoopCount
@@ -241,6 +272,9 @@ namespace TurboSuite.Dali.ViewModels
                   + string.Join("; ", overCap) + " — split into more loops.";
 
             OnPropertyChanged(nameof(HasDaliHardware));
+            OnPropertyChanged(nameof(LoopCount));
+            OnPropertyChanged(nameof(TotalLoads));
+            OnPropertyChanged(nameof(SummaryText));
         }
 
         private DaliModuleState BuildSnapshot()

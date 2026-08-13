@@ -40,6 +40,15 @@ public static class ParameterNames
     /// </summary>
     public const string ControlZone = "Control Zone";
 
+    /// <summary>
+    /// TurboDALI's per-circuit design address — the <c>L{loop}-{load##}</c> label (e.g. <c>L2-01</c>) written
+    /// back to every element on a DALI circuit (its tape/downlight fixtures AND the remote driver/decoder
+    /// device). A shared, instance-bound, taggable String param authored manually in the firm shared-param
+    /// file (Phase 0), bound to <b>both Lighting Fixtures and Lighting Devices</b> so the driver device can
+    /// carry the label too. A design/commissioning label, not a hardware DALI short address (0–63).
+    /// </summary>
+    public const string DaliAddress = "DALI Address";
+
     // Lighting Device / Fixture type parameters
     public const string TypeMark = "Type Mark";
     public const string DimmingProtocol = "Dimming Protocol";

@@ -15,10 +15,12 @@ namespace TurboSuite.App;
 /// </summary>
 public class TurboSuiteApplication : IExternalApplication
 {
-    // Gates experimental commands (e.g., TurboDMX) so they ship compiled but
+    // Gates experimental commands (e.g., TurboDMX, TurboDALI) so they ship compiled but
     // unreachable until they're ready. `static readonly` (not `const`) so the compiler doesn't
-    // flag the gated branch as unreachable (CS0162).
-    private static readonly bool ExperimentalCommandsEnabled = true;
+    // flag the gated branch as unreachable (CS0162). Public so the shipped TurboZones command can read
+    // it for the DALI single-writer transition (H6): while TurboDALI is live it owns the DALI writes, so
+    // TurboZones hands its DALI tab a NullDaliLoopStore.
+    public static readonly bool ExperimentalCommandsEnabled = true;
 
     private static bool _updateAccepted;
 
@@ -164,6 +166,14 @@ public class TurboSuiteApplication : IExternalApplication
                     "TurboSuite.Dmx.DmxCommand",
                     "Automate DMX-controlled RGBW LED tape systems",
                     "Opens the TurboDMX window to declare DMX loops and control zones, solve decoder/driver packing and addressing, and generate the one-line diagram. Experimental — under construction.",
+                    "Blank");
+
+                CreateButton(utilitiesPanel, assemblyPath,
+                    "TurboDALI",
+                    "     DALI    ",
+                    "TurboSuite.Dali.DaliCommand",
+                    "Automate DALI addressing for lighting circuits",
+                    "Opens the TurboDALI window to group Control Zones into DALI loops, assign each loop its panel ZONE, and (later) assign and write back per-circuit DALI addresses. Experimental — under construction.",
                     "Blank");
             }
 

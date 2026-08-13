@@ -98,7 +98,13 @@ namespace TurboSuite.Zones
                 var daliPanelZones = PanelAllocationService.DiscoverPanelZones(circuits);
                 var savedDaliState = DaliStorageService.Load(doc);
                 var daliModulesByZone = DaliPlacementMapper.Build(savedDaliState.Loops, daliLoadsByZone).ByZone;
-                var daliLoopStore = new DaliLoopStore(doc);
+                // Single-writer transition (H6): while TurboDALI is live it owns the DALI schema's writes, so
+                // this tab gets a no-op store — it still reads/displays, but can't persist. Placement + demand
+                // read the schema directly (above), untouched. Reverts to a real writer if TurboDALI is gated
+                // off, and the tab is removed outright when TurboDALI graduates (Phase 4).
+                IDaliLoopStore daliLoopStore = App.TurboSuiteApplication.ExperimentalCommandsEnabled
+                    ? (IDaliLoopStore)new NullDaliLoopStore()
+                    : new DaliLoopStore(doc);
 
                 var viewModel = new ZonesMainViewModel(circuits,
                     keypadCounts, hybridRepeaters,

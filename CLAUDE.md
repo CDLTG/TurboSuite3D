@@ -8,7 +8,7 @@ In production to ~5 users at CDLTG (current version in git tags). Future work sh
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers fifteen shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs, TurboMask, TurboSnoop, TurboSchedule, TurboSetup) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). One more command, TurboDMX, is compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
+TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers fifteen shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs, TurboMask, TurboSnoop, TurboSchedule, TurboSetup) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). Two more commands, TurboDMX and TurboDALI, are compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
 
 ## Build Commands
 

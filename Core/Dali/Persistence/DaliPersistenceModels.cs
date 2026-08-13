@@ -25,11 +25,59 @@ namespace TurboSuite.Dali.Persistence
         /// DTO below changes shape; readers upgrade old payloads in code.
         /// <para>v2 (Phase 3e): <see cref="DaliLoopDto.AssignedZone"/> added. A v1 payload deserializes it
         /// to 0 = unassigned, which is the safe default — the loop is still ordered job-wide, just not
-        /// placed in a panel, and it surfaces as an "unassigned loop" warning rather than silently vanishing.</para></summary>
+        /// placed in a panel, and it surfaces as an "unassigned loop" warning rather than silently vanishing.</para>
+        /// <para>v3 (TurboDALI): <see cref="Snapshot"/> added — the addressing numbering-lock flag + frozen
+        /// baseline. A v2 payload deserializes it to null = Unlocked/unaddressed, the safe default (the job
+        /// simply has no issued addresses yet). Tolerant read means an OLD v2 reader seeing a v3 payload just
+        /// ignores the field it doesn't know — the loops it does need are untouched (guarded by a
+        /// v3→v2 characterization test, plan H6).</para></summary>
         public int PayloadVersion { get; set; } = 2;
 
         /// <summary>Designer-declared DALI loops (Zone→Loop). Keyed by Control Zone VALUE, not ElementId.</summary>
         public List<DaliLoopDto> Loops { get; set; } = new List<DaliLoopDto>();
+
+        /// <summary>The addressing numbering-lock state + frozen baseline (v3, TurboDALI). Null while the job
+        /// is unaddressed / unlocked — addresses churn freely from the live spatial walk until Lock captures
+        /// this baseline. Mirrors <c>DmxModuleState.Snapshot</c>.</summary>
+        public DaliSnapshotDto? Snapshot { get; set; }
+    }
+
+    /// <summary>The frozen addressing baseline captured at Lock (v3). Empty <see cref="Circuits"/> +
+    /// <c>NumberingState="Unlocked"</c> while the job churns; a Lock freezes every issued
+    /// <c>L{loop}-{load##}</c> so a later re-walk never moves an already-issued number. Mirrors
+    /// <c>DmxSnapshotDto</c>, two-level (loop + load) because a DALI address is two numbers.</summary>
+    public sealed class DaliSnapshotDto
+    {
+        /// <summary>Numbering lifecycle. Persisted values: "Unlocked" / "Locked" (a Re-lock re-captures the
+        /// baseline while staying Locked).</summary>
+        public string NumberingState { get; set; } = "Unlocked";
+
+        /// <summary>Per-loop issued L# at lock (the level-1 anchor: <c>LoopId → L#</c>).</summary>
+        public List<DaliSnapshotLoopDto> Loops { get; set; } = new List<DaliSnapshotLoopDto>();
+
+        /// <summary>Per-circuit issued slot at lock (the level-2 anchor: <c>circuit.UniqueId → (loop, L#,
+        /// load##)</c>), denormalized with the L# + zone so a retired-circuit REVIEW can name the exact
+        /// address that was issued without re-deriving it.</summary>
+        public List<DaliSnapshotCircuitDto> Circuits { get; set; } = new List<DaliSnapshotCircuitDto>();
+    }
+
+    /// <summary>One loop's issued L# in the lock baseline, keyed by the durable <see cref="LoopId"/>.</summary>
+    public sealed class DaliSnapshotLoopDto
+    {
+        public string LoopId { get; set; } = "";
+        public int LoopNumber { get; set; }
+    }
+
+    /// <summary>One circuit's issued address in the lock baseline, keyed by <see cref="CircuitKey"/>
+    /// (<c>circuit.UniqueId</c>). Carries its lock-time loop + L# + zone so a moved/retired circuit can be
+    /// flagged and named precisely.</summary>
+    public sealed class DaliSnapshotCircuitDto
+    {
+        public string CircuitKey { get; set; } = "";
+        public string LoopId { get; set; } = "";
+        public int LoopNumber { get; set; }
+        public int LoadNumber { get; set; }
+        public string Zone { get; set; } = "";
     }
 
     /// <summary>One designer-declared DALI loop = one DALI bus = one <c>LQSE2-1DALUNV-D</c> module.</summary>

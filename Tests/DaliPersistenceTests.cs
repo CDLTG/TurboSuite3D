@@ -101,5 +101,83 @@ namespace TurboSuite.Tests.Dali
             Assert.Equal(2, state.PayloadVersion);
             Assert.Empty(state.Loops);
         }
+
+        // ── v3: the addressing lock baseline (TurboDALI) ────────────────────────────────────────────────
+
+        [Fact]
+        public void V3Snapshot_RoundTripsIntact()
+        {
+            var state = new DaliModuleState
+            {
+                PayloadVersion = 3,
+                Loops = new List<DaliLoopDto>
+                {
+                    new DaliLoopDto { LoopId = "l1", Name = "Kitchen", Order = 1, AssignedZone = 3,
+                                      ZoneValues = new List<string> { "Kitchen" } },
+                },
+                Snapshot = new DaliSnapshotDto
+                {
+                    NumberingState = "Locked",
+                    Loops = new List<DaliSnapshotLoopDto>
+                    {
+                        new DaliSnapshotLoopDto { LoopId = "l1", LoopNumber = 1 },
+                    },
+                    Circuits = new List<DaliSnapshotCircuitDto>
+                    {
+                        new DaliSnapshotCircuitDto { CircuitKey = "u-1", LoopId = "l1",
+                                                     LoopNumber = 1, LoadNumber = 2, Zone = "Kitchen" },
+                    },
+                },
+            };
+
+            var back = RoundTrip(state);
+
+            Assert.Equal(3, back.PayloadVersion);
+            Assert.NotNull(back.Snapshot);
+            Assert.Equal("Locked", back.Snapshot!.NumberingState);
+            var loop = Assert.Single(back.Snapshot.Loops);
+            Assert.Equal("l1", loop.LoopId);
+            Assert.Equal(1, loop.LoopNumber);
+            var ckt = Assert.Single(back.Snapshot.Circuits);
+            Assert.Equal("u-1", ckt.CircuitKey);
+            Assert.Equal(2, ckt.LoadNumber);
+            Assert.Equal("Kitchen", ckt.Zone);
+        }
+
+        [Fact]
+        public void V2Payload_HasNullSnapshot()
+        {
+            // A pre-TurboDALI payload carries no snapshot ⇒ null = Unlocked/unaddressed, the safe default.
+            const string json =
+                "{\"payloadVersion\":2,\"loops\":[{\"loopId\":\"x\",\"name\":\"L\",\"order\":1," +
+                "\"zoneValues\":[\"Z\"],\"assignedZone\":4}]}";
+
+            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options)!;
+
+            Assert.Null(state.Snapshot);
+            Assert.Equal(4, Assert.Single(state.Loops).AssignedZone);
+        }
+
+        [Fact]
+        public void V3Payload_DegradesCleanlyForAReaderThatIgnoresTheSnapshot()
+        {
+            // H6: an old v2 reader seeing a v3 payload must still get its loops intact — the snapshot field it
+            // doesn't consume is simply ignored, never corrupting the loops it does need. We characterize this
+            // with tolerant read (unknown/unused fields dropped, loops preserved).
+            const string json =
+                "{\"payloadVersion\":3,\"loops\":[{\"loopId\":\"l1\",\"name\":\"Kitchen\",\"order\":1," +
+                "\"zoneValues\":[\"Kitchen\"],\"assignedZone\":3}]," +
+                "\"snapshot\":{\"numberingState\":\"Locked\"," +
+                "\"loops\":[{\"loopId\":\"l1\",\"loopNumber\":1}]," +
+                "\"circuits\":[{\"circuitKey\":\"u-1\",\"loopId\":\"l1\",\"loopNumber\":1," +
+                "\"loadNumber\":2,\"zone\":\"Kitchen\"}]}}";
+
+            var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options)!;
+
+            var loop = Assert.Single(state.Loops);
+            Assert.Equal("Kitchen", loop.Name);
+            Assert.Equal(3, loop.AssignedZone);
+            Assert.Equal(new[] { "Kitchen" }, loop.ZoneValues);
+        }
     }
 }
