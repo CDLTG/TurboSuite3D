@@ -81,7 +81,7 @@ namespace TurboSuite.Zones.Services
                 { "ELV",   new Entry(Category.Module, "ELV") },
                 { "0-10V", new Entry(Category.Module, "0-10V") },
                 { "MLV",   new Entry(Category.Module, "ELV") },   // not identity — MLV dims on an ELV module
-                { "RELAY", new Entry(Category.Module, "Relay") }, // "switch a dimmable load", expressed as a type
+                { "RELAY", new Entry(Category.Module, "RELAY") }, // "switch a dimmable load", expressed as a type
 
                 // Network-controlled: never rides a dimming module. Excluded silently, like a
                 // switch-wired circuit — this is a design decision, not a missing parameter.

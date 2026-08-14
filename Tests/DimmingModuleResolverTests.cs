@@ -30,8 +30,8 @@ namespace TurboSuite.Tests.Zones
         [InlineData("ELV", "ELV")]
         [InlineData("0-10V", "0-10V")]
         [InlineData("MLV", "ELV")]      // not identity — MLV dims on an ELV module
-        [InlineData("RELAY", "Relay")]
-        [InlineData("relay", "Relay")]  // case-insensitive
+        [InlineData("RELAY", "RELAY")]
+        [InlineData("relay", "RELAY")]  // case-insensitive; canonical key is upper, matching authoring
         [InlineData(" ELV ", "ELV")]    // trimmed
         [InlineData("mlv", "ELV")]
         public void ModuleProtocols_Allocatable(string protocol, string expectedKey)

@@ -533,14 +533,17 @@ namespace TurboSuite.Tests.Zones
                 CircuitNumber = number,
                 PanelName = "ZONE 1",
                 DimmingType = type,
-                DimmingProtocolDisplay = string.Equals(type, "Relay", System.StringComparison.OrdinalIgnoreCase) ? "RELAY" : type,
+                // Authored casing is deliberately different from the resolved key ("Relay" vs "RELAY")
+                // so these tests prove TypeLabel reads the configured module-type channel, not the
+                // fixture's authored protocol — the whole point of the single-source label.
+                DimmingProtocolDisplay = string.Equals(type, "RELAY", System.StringComparison.OrdinalIgnoreCase) ? "Relay" : type,
                 ApparentLoadVA = 120,
             };
 
         private static List<ZonesCircuitData> Circuits(int relay, int zeroTen)
         {
             var list = new List<ZonesCircuitData>();
-            for (int i = 0; i < relay; i++) list.Add(C($"R{i:00}", "Relay"));
+            for (int i = 0; i < relay; i++) list.Add(C($"R{i:00}", "RELAY"));
             for (int i = 0; i < zeroTen; i++) list.Add(C($"V{i:00}", "0-10V"));
             return list;
         }
@@ -630,7 +633,7 @@ namespace TurboSuite.Tests.Zones
                 new List<ZonesCircuitData> { mlv }, BrandConfig.Lutron, allowRelayZeroTenPacking: true);
 
             var module = Modules(result).Single();
-            Assert.False(module.LabelFromSlotProtocols);
+            Assert.False(module.LabelFromSlotModuleTypes);
             Assert.Equal("ELV", module.TypeLabel);
             Assert.Equal("MLV", module.SlotProtocol(0));   // per-slot truth still intact
         }

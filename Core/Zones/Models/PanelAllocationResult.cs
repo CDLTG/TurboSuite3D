@@ -220,29 +220,41 @@ namespace TurboSuite.Zones.Models
                 : DimmingType;
 
         /// <summary>
+        /// Per-slot resolved MODULE-type key (the circuit's <c>DimmingType</c>), parallel to
+        /// <see cref="CircuitNumbers"/>. This is the module-identity channel — always the configured
+        /// vocabulary ("ELV" / "0-10V" / "RELAY"), never the fixture's authored casing — as opposed to
+        /// <see cref="SlotProtocols"/>, which is the load-identity channel the panel schedule prints
+        /// (an MLV load reads "MLV" there, "ELV" here). <see cref="TypeLabel"/> joins these for a merged
+        /// module so both the split and packed views speak one casing, immune to how fixtures were typed.
+        /// </summary>
+        public List<string> SlotModuleTypes { get; set; } = new List<string>();
+
+        /// <summary>
         /// Set only on modules from the merged Relay+0-10V packing pool, where <see cref="DimmingType"/>
         /// is a synthetic sort/selection key ("0-10V", so part number, amp limits, BOM rank, and color
         /// stay correct) rather than a display truth. When true, <see cref="TypeLabel"/> reads the actual
-        /// protocol(s) off the slots instead of the module key — otherwise a pure-relay module in the pool
-        /// would mislabel itself "0-10V".
+        /// module type(s) off the slots instead of the module key — otherwise a pure-relay module in the
+        /// pool would mislabel itself "0-10V".
         /// </summary>
-        public bool LabelFromSlotProtocols { get; set; }
+        public bool LabelFromSlotModuleTypes { get; set; }
 
         /// <summary>
         /// The label shown on the module tile's top line. For a normal module (the overwhelmingly common
         /// case) this is the module's <see cref="DimmingType"/> — so an MLV load riding an ELV module
         /// still reads "ELV", exactly as before. For a merged Relay+0-10V module
-        /// (<see cref="LabelFromSlotProtocols"/>) it is the distinct per-slot protocols joined
-        /// "RELAY / 0-10V" (relay first) — or the single protocol when the module happens to be pure —
-        /// because the module key "0-10V" alone would hide the relay loads sharing it.
+        /// (<see cref="LabelFromSlotModuleTypes"/>) it is the distinct per-slot module-type keys joined
+        /// "RELAY / 0-10V" (relay first) — or the single type when the module happens to be pure — because
+        /// the module key "0-10V" alone would hide the relay loads sharing it. Both branches report the
+        /// configured vocabulary (<see cref="SlotModuleTypes"/>, not the authored protocol), so the split
+        /// and packed views agree on casing regardless of how fixtures were typed.
         /// </summary>
         public string TypeLabel
         {
             get
             {
-                if (!LabelFromSlotProtocols) return DimmingType;
+                if (!LabelFromSlotModuleTypes) return DimmingType;
 
-                var distinct = SlotProtocols
+                var distinct = SlotModuleTypes
                     .Where(p => !string.IsNullOrWhiteSpace(p))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();

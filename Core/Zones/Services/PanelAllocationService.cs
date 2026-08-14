@@ -530,13 +530,13 @@ namespace TurboSuite.Zones.Services
                     var modules = BuildModules(type, panelCircuits, moduleCount, moduleCapacity, brand);
 
                     // The merged Relay+0-10V pool lives under the 0-10V key. Mark its modules so the tile
-                    // labels itself from its actual slot protocols (not the "0-10V" sort key), and re-sort
+                    // labels itself from its actual slot module types (not the "0-10V" sort key), and re-sort
                     // relay-heavy first so the panel reads pure-relay → mixed → pure-0-10V even when the
                     // amp-aware FFD fallback scrambled the packing. Only the merged bucket is touched — an
                     // ELV module keeps its "ELV" label (an MLV slot still reads "ELV", not "MLV").
                     if (mergeRelayZeroTen && string.Equals(type, ZeroTenType, StringComparison.OrdinalIgnoreCase))
                     {
-                        foreach (var mod in modules) mod.LabelFromSlotProtocols = true;
+                        foreach (var mod in modules) mod.LabelFromSlotModuleTypes = true;
                         modules = OrderMergedModulesRelayFirst(modules);
                     }
 
@@ -555,7 +555,7 @@ namespace TurboSuite.Zones.Services
             => modules.OrderByDescending(RelaySlotCount).ToList();
 
         private static int RelaySlotCount(ModuleResult module)
-            => module.SlotProtocols.Count(p =>
+            => module.SlotModuleTypes.Count(p =>
                 !string.IsNullOrWhiteSpace(p) && p.IndexOf("RELAY", StringComparison.OrdinalIgnoreCase) >= 0);
 
         /// <summary>The distinct, valid ZONE N numbers present across these circuits' panels — the roster
@@ -666,6 +666,7 @@ namespace TurboSuite.Zones.Services
                 {
                     module.CircuitNumbers.Add(circuits[circuitIdx].CircuitNumber);
                     module.SlotProtocols.Add(circuits[circuitIdx].DimmingProtocolDisplay);
+                    module.SlotModuleTypes.Add(circuits[circuitIdx].DimmingType);
                     circuitIdx++;
                 }
 
@@ -825,6 +826,7 @@ namespace TurboSuite.Zones.Services
                     module.CircuitNumbers.Add(ordered[i].Circuit.CircuitNumber);
                     module.SlotAmps.Add(ordered[i].Amps);
                     module.SlotProtocols.Add(ordered[i].Circuit.DimmingProtocolDisplay);
+                    module.SlotModuleTypes.Add(ordered[i].Circuit.DimmingType);
                     moduleTotal += ordered[i].Amps;
                     if (ordered[i].Amps > limits.GetSlotLimit(i) + Eps)
                         overloaded = true;
