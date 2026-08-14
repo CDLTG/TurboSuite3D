@@ -15,7 +15,7 @@ public static class RoomNameNormalizer
 {
     public static string Normalize(string? raw)
     {
-        if (string.IsNullOrEmpty(raw)) return "";
+        if (raw is null) return "";
         return raw.Trim().Replace("#", "").ToUpper();
     }
 }
