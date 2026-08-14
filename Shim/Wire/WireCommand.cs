@@ -13,6 +13,7 @@ using TurboSuite.Wire.Constants;
 using TurboSuite.Wire.Helpers;
 using TurboSuite.Wire.Services;
 using TurboSuite.Tag.Services;
+using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Wire;
 
@@ -55,8 +56,10 @@ public class WireCommand : IExternalCommand
                 }
 
                 // Circuit-info dialog for every pre-selected circuit that was wired (switched
-                // circuits are filtered out inside the service). Setting-gated.
-                if (CircuitInfoService.PromptAndApply(doc, preSelectedCircuits, "TurboWire")
+                // circuits are filtered out inside the service). Setting-gated. When the whole
+                // batch is shade circuits, the picker offers shade (35 V) locations instead.
+                bool shadeCircuits = preSelectedCircuits.All(ShadeDemandProvider.IsShadeCircuit);
+                if (CircuitInfoService.PromptAndApply(doc, preSelectedCircuits, "TurboWire", shadeCircuits)
                     == CircuitInfoResult.Cancelled)
                 {
                     txGroup.RollBack();
@@ -68,6 +71,23 @@ public class WireCommand : IExternalCommand
             }
 
             List<FamilyInstance> preSelectedFixtures = GetPreSelectedFixtures(uiDoc);
+
+            // Shade mode: a shade motor is circuited one-shade-per-circuit onto a shade (35 V)
+            // location. It fires only for a single shade with nothing else selected — a shade
+            // mixed with any other fixture, or multiple shades, is rejected (shades wire one at
+            // a time, so each keeps its own comment/circuit).
+            int shadeCount = preSelectedFixtures.Count(ShadeDemandProvider.IsShadeMotor);
+            if (shadeCount > 0)
+            {
+                if (preSelectedFixtures.Count != 1)
+                {
+                    TaskDialog.Show("TurboWire",
+                        "Shade motors are wired one at a time. Select a single shade — not " +
+                        "several, and not mixed with other fixtures.");
+                    return Result.Cancelled;
+                }
+                return HandleSingleShade(uiDoc, doc, preSelectedFixtures[0]);
+            }
 
             if (preSelectedFixtures.Count == 1)
             {
@@ -151,6 +171,58 @@ public class WireCommand : IExternalCommand
         }
 
         if (CircuitInfoService.PromptAndApply(doc, new[] { circuit }, "TurboWire")
+            == CircuitInfoResult.Cancelled)
+        {
+            txGroup.RollBack();
+            return Result.Cancelled;
+        }
+
+        txGroup.Assimilate();
+        return Result.Succeeded;
+    }
+
+    /// <summary>
+    /// Shade mode: one shade → one circuit on a shade (35 V) location. Mirrors
+    /// <see cref="HandleSingleFixture"/> minus the switch and wire-routing branches (a lone shade
+    /// has nothing to route to), and defaults/filters the panel picker to shade locations. The
+    /// circuit-info dialog is otherwise identical — Comment, "Zone", and Room Override (the last
+    /// captured for a future Lutron export, though nothing in TurboSuite reads it for shades yet).
+    /// </summary>
+    private static Result HandleSingleShade(UIDocument uiDoc, Document doc, FamilyInstance shade)
+    {
+        var analysis = CircuitService.AnalyzeFixtures(new List<FamilyInstance> { shade });
+
+        // Already circuited with a comment → nothing to do, same as the lighting single path.
+        if (analysis.SingleCircuit)
+        {
+            string existingComment = ParameterHelper.GetCircuitComments(analysis.SingleCircuitRef!);
+            if (!string.IsNullOrEmpty(existingComment))
+            {
+                uiDoc.Selection.SetElementIds(new List<ElementId>());
+                return Result.Succeeded;
+            }
+        }
+
+        using var txGroup = new TransactionGroup(doc, "TurboWire");
+        txGroup.Start();
+
+        ElectricalSystem? circuit;
+        if (analysis.SingleCircuit)
+        {
+            circuit = analysis.SingleCircuitRef!;
+        }
+        else
+        {
+            circuit = CircuitService.CreateCircuit(doc, new List<FamilyInstance> { shade },
+                assignPanel: true, shadePanels: true);
+            if (circuit == null)
+            {
+                txGroup.RollBack();
+                return Result.Failed;
+            }
+        }
+
+        if (CircuitInfoService.PromptAndApply(doc, new[] { circuit }, "TurboWire", shadePanels: true)
             == CircuitInfoResult.Cancelled)
         {
             txGroup.RollBack();

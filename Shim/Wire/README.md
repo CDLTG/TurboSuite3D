@@ -10,6 +10,7 @@ Creates electrical circuits and wire connections between lighting fixtures and e
 2. **Pre-selected fixtures (2+)** — Creates or joins a **single** circuit for the whole selection (Lighting and Electrical fixtures can share one circuit — e.g. a relay-switched closet), wires one nearest-neighbor run through all of them regardless of category, then prompts for circuit comments. Rejects selections that already span multiple existing circuits, or whose fixtures have mismatched voltages (Revit can't form the circuit — surfaced as a plain-language "voltage mismatch" message instead of Revit's cryptic error).
 3. **Pre-selected fixture (1)** — Creates a circuit if none exists and prompts for circuit comments. If the circuit already has a comment, silently deselects and does nothing.
 4. **Manual pick** — If nothing is selected, prompts for first and second fixture. Wire only — no circuit creation or comments dialog.
+5. **Shade mode** — A single pre-selected **shade motor** (Electrical Fixture whose family name contains "Shade Motor") is circuited **one shade per circuit** onto a shade **location**, then prompts. No wire routing (a lone shade has nothing to route to). Fires only for exactly one shade with nothing else selected — a shade mixed with any other fixture, or multiple shades at once, is rejected (shades are wired one at a time so each keeps its own comment/circuit). Takes precedence over modes 2–3 when a shade is in the selection. See [Shade Mode](#shade-mode).
 
 ## Circuit Creation
 
@@ -33,6 +34,16 @@ The **Zone** dropdown includes a `<None>` option so circuits that never belong o
 It is labelled **Zone** rather than **Panel** because that is what the choice means: the user is declaring which control zone the circuit belongs to, and TurboZones later *recommends* how many panels that zone needs. The mechanism is still Revit's Panel parameter — there is nothing else on a circuit to hold it — so the dropdown lists Electrical Equipment and the code keeps the API's vocabulary. **Shade/control panels are excluded** — a lighting circuit cannot live on them — identified by their **35 V distribution system** (`PanelClassifier`, driven off `RBS_FAMILY_CONTENT_DISTRIBUTION_SYSTEM`, not the panel name, so a blank-named shade panel is still filtered out). The same rule stops a shade panel from becoming the remembered default in `CircuitService.FindLastPanelChoice`. `PanelAllocationService.ParseLocationNumber` takes only the zone **number** off the selected name (`ZONE 3` → 3; legacy `3-A` → 3, letter discarded), so equipment should be named `ZONE N`.
 
 The **Room Override** field prefills with the circuit's room — resolved from its first fixture the same way TurboZones does (linked Room, or a "Room Region" filled region in 2D drafting jobs), or an existing saved override — and offers project room names for autofill/search. Editing it stores a per-circuit room override in shared ExtensibleStorage (`RoomOverrideStorageService`, read by TurboZones for load naming); the base room is never written, so clearing the field falls back to the geometry. Leaving the field unchanged writes nothing. When a batch of circuits resolves to different rooms, the field shows `<varies>` and stays a no-op unless typed over.
+
+## Shade Mode
+
+Selecting a single shade motor and running TurboWire follows the **same gesture** as wiring a light — select → command → set comment/location → done — but routes to the shade subsystem instead of the lighting panels. It is deliberately thin: **one branch** in `WireCommand` (`HandleSingleShade`), and a `shadePanels` flag threaded through the shared `CircuitService`/`CircuitInfoService`. Everything else — the "Zone" label, the Comment and Room Override fields, the `<None>` option — is identical to lighting.
+
+The **only** difference the user sees is which panels the Zone dropdown lists: shade mode shows **only 35 V shade locations** (`CircuitService.GetShadePanels`, the inverse of the lighting filter), and the remembered default is the last shade location, not the last lighting panel (`FindLastPanelChoice(shadePanels: true)`). No naming guard — like lighting, it trusts the `SHADE N` convention (TurboZones groups shade circuits by the location's name).
+
+Downstream is untouched: `ShadeDemandProvider` reads these per-shade circuits by motor family and groups them by location, and `ShadeSolver` recommends the QSPS-10PNL count (ceil each location's shade count ÷ 10, then sum) — so one Revit shade **location** can hold many shades (e.g. 52 → 6 physical panels). The **Room Override** is captured on the shade circuit but has **no TurboSuite consumer today** — it is staged for a future Lutron export (`ZonesCollectorService` drops shade circuits before load-naming, so it sits inert and collision-free).
+
+Re-selecting an existing all-shade circuit batch (mode 1) likewise gets the shade picker, detected via `ShadeDemandProvider.IsShadeCircuit`.
 
 ## Wire Routing
 

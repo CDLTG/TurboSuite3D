@@ -40,7 +40,8 @@ public static class CircuitInfoService
     /// keep their own grouping (e.g. TurboWire's TransactionGroup) around it.
     /// </summary>
     public static CircuitInfoResult PromptAndApply(
-        Document doc, IReadOnlyList<ElectricalSystem> circuits, string caption)
+        Document doc, IReadOnlyList<ElectricalSystem> circuits, string caption,
+        bool shadePanels = false)
     {
         if (!GeneralSettingsCache.Get(doc).ShowCircuitCommentsDialog)
             return CircuitInfoResult.Skipped;
@@ -56,12 +57,16 @@ public static class CircuitInfoService
             .Where(n => !string.IsNullOrEmpty(n)));
 
         var existingComments = CircuitService.GetExistingComments(doc);
-        var panels = CircuitService.GetAllPanels(doc);
+        // Shade mode lists only shade (35 V) locations; lighting lists everything else. The
+        // dropdown label ("Zone") and every other field are identical either way.
+        var panels = shadePanels
+            ? CircuitService.GetShadePanels(doc)
+            : CircuitService.GetAllPanels(doc);
         // Default the panel dropdown to the last circuit's choice — a real panel, or <None>
         // when the previous circuit was deliberately left unassigned. Exclude the circuits
         // being handled now so they reflect the prior state, not themselves.
         var (autoPanel, preferNone) = CircuitService.FindLastPanelChoice(
-            doc, targets.Select(c => c.Id).ToList());
+            doc, targets.Select(c => c.Id).ToList(), shadePanels);
 
         // Resolve each circuit's live base room (owned Spaces, region fallback in 2D) the same
         // way TurboZones does — first lighting/electrical fixture on the circuit.
