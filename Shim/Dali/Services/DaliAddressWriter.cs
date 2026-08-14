@@ -11,8 +11,8 @@ namespace TurboSuite.Dali.Services
     /// <summary>
     /// Shim-side <see cref="IDaliAddressWriter"/> — writes the reconciler's <c>circuit.UniqueId → "L2-01"</c>
     /// map to the <b>"DALI Address" param on every element of each addressed circuit</b> (fixtures AND the
-    /// remote driver/decoder device — H10), then <b>clears</b> any bound element no longer on an addressed
-    /// circuit so no orphan label lingers (H8). Idempotent (an unchanged model re-writes the same values),
+    /// remote driver/decoder device), then <b>clears</b> any bound element no longer on an addressed
+    /// circuit so no orphan label lingers. Idempotent (an unchanged model re-writes the same values),
     /// one transaction. Runs inside the work queue (Revit API thread), so it opens its own transaction like
     /// the other DALI writes.
     /// </summary>
@@ -62,7 +62,7 @@ namespace TurboSuite.Dali.Services
         }
 
         /// <summary>Blank the DALI Address on every bound Lighting Fixture / Lighting Device that carries a
-        /// value but was not written this pass — spanning both categories (H8).</summary>
+        /// value but was not written this pass — spanning both categories.</summary>
         private int ClearStale(HashSet<ElementId> written)
         {
             int cleared = 0;

@@ -3,11 +3,11 @@ using System.Collections.Generic;
 
 namespace TurboSuite.Dali.Addressing
 {
-    // Pure, Revit-free types for the TurboDALI addressing engine (Phase 2). The engine turns a set of DALI
+    // Pure, Revit-free types for the TurboDALI addressing engine. The engine turns a set of DALI
     // circuits (each one address = one load) plus the designer's loop declarations into concrete
     // "L{loop}-{load##}" labels, lock-aware, all without touching Revit so it is fully unit-testable.
     //
-    // Three element sets ride off one model walk (plan H1/H10), and they are DIFFERENT sets on purpose:
+    // Three element sets ride off one model walk, and they are DIFFERENT sets on purpose:
     //   • counting   — one load per circuit (DaliLoadCounter, unchanged),
     //   • ordering    — the centroid of a circuit's LIGHTING FIXTURES (the driver device is excluded so its
     //                   arbitrary ceiling spot never drags the spatial walk),
@@ -57,7 +57,7 @@ namespace TurboSuite.Dali.Addressing
     }
 
     /// <summary>One DALI circuit as the addressing engine reads it — the identity-preserving sibling read
-    /// (plan H1) that <c>DaliLoadCounter</c> throws away. <see cref="CircuitKey"/> is <c>circuit.UniqueId</c>
+    /// that <c>DaliLoadCounter</c> throws away. <see cref="CircuitKey"/> is <c>circuit.UniqueId</c>
     /// (the load anchor); <see cref="Zone"/> is the circuit's Control Zone; <see cref="Centroid"/> is the
     /// centroid of its LIGHTING FIXTURES (null ⇒ uncomputable — the walk falls back to a stable-key order).</summary>
     public readonly struct DaliCircuitReading

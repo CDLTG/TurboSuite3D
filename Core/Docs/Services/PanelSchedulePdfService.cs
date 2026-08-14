@@ -385,7 +385,7 @@ public static class PanelSchedulePdfService
                     };
                     double daliBaseline = y + BaselineOffset;
 
-                    // Over the 64-load bus cap highlights red, mirroring the DALI tab's over-cap warning.
+                    // Over the 64-load bus cap highlights red, mirroring TurboDALI's over-cap warning.
                     if (module.IsOverloaded)
                     {
                         var overloadFill = new XSolidBrush(XColor.FromArgb(255, 250, 210, 210));

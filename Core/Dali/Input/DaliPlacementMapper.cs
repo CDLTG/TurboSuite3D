@@ -6,16 +6,16 @@ using TurboSuite.Zones.Models;
 namespace TurboSuite.Dali.Input
 {
     /// <summary>
-    /// The persisted DALI loops → panel-placement mapping (Phase 3e). Turns each declared loop's required
+    /// The persisted DALI loops → panel-placement mapping. Turns each declared loop's required
     /// ZONE N assignment into the <c>zone → DaliPanelModule[]</c> map that
     /// <see cref="TurboSuite.Zones.Services.PanelAllocationService.BuildPanelBreakdown"/> consumes, plus the
-    /// set of loops that carry loads but were never assigned a zone (the tab's "not placed" warning).
+    /// set of loops that carry loads but were never assigned a zone (the "not placed" warning).
     ///
     /// <b>Placement, never order.</b> The module count and QS-link budget are the job-wide
     /// <see cref="TurboSuite.Dali.Services"/>/DaliSolver authority; this only decides <i>which panel</i> a
     /// module occupies a slot in. It shares <see cref="DaliStateMapper.Reconcile"/> with the demand path, so
     /// the placed loops and the ordered loops are the same reconciled set — an assigned loop is placed, an
-    /// unassigned loop is ordered-but-warned, and neither can drift from the other (plan principle 6).
+    /// unassigned loop is ordered-but-warned, and neither can drift from the other (one computation, two questions).
     ///
     /// A reconciled loop with <b>zero loads</b> (its zones carry no DALI fixtures) is dropped from both the
     /// map and the warning: it orders no module (matching <c>DaliSolver</c>), so there is nothing to place

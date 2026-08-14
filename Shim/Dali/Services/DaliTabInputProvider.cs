@@ -9,9 +9,9 @@ using TurboSuite.Zones.Services;
 namespace TurboSuite.Dali.Services
 {
     /// <summary>
-    /// Shim-side <see cref="IDaliTabInputProvider"/> — collects the DALI tab's inputs from the model (plan
-    /// H4: TurboDALI reads its own inputs, no dependency on TurboZones' persisted state). Used at window open
-    /// AND on Refresh, so both paths read the model identically: DALI loads-by-zone for the pool, the
+    /// Shim-side <see cref="IDaliTabInputProvider"/> — collects TurboDALI's loop-declaration inputs from the
+    /// model (TurboDALI reads its own inputs, no dependency on TurboZones' persisted state). Used at window
+    /// open AND on Refresh, so both paths read the model identically: DALI loads-by-zone for the pool, the
     /// model-derived panel-ZONE list, and the persisted loops.
     /// </summary>
     public sealed class DaliTabInputProvider : IDaliTabInputProvider

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace TurboSuite.Dali.Services
 {
     /// <summary>
-    /// Revit-free contract for DALI address write-back (plan H8/H10). Given the reconciler's
+    /// Revit-free contract for DALI address write-back. Given the reconciler's
     /// <c>circuit.UniqueId → "L2-01"</c> map, the shim writes that label to the <b>"DALI Address" param on
     /// every element of each addressed circuit</b> — its tape/downlight fixtures AND the remote driver/decoder
     /// device (both categories carry the param) — and <b>clears</b> any bound element that is no longer on an

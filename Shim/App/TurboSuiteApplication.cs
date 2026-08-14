@@ -11,15 +11,15 @@ using TurboSuite.Tab;
 namespace TurboSuite.App;
 
 /// <summary>
-/// External Application that registers the TurboSuite ribbon panels (Commands and Utilities).
+/// External Application that registers the TurboSuite ribbon panels — Settings, Commands, Utilities, and
+/// (gated on <see cref="ExperimentalCommandsEnabled"/>) Controls and Debug, in that ribbon order.
 /// </summary>
 public class TurboSuiteApplication : IExternalApplication
 {
     // Gates experimental commands (e.g., TurboDMX, TurboDALI) so they ship compiled but
     // unreachable until they're ready. `static readonly` (not `const`) so the compiler doesn't
-    // flag the gated branch as unreachable (CS0162). Public so the shipped TurboZones command can read
-    // it for the DALI single-writer transition (H6): while TurboDALI is live it owns the DALI writes, so
-    // TurboZones hands its DALI tab a NullDaliLoopStore.
+    // flag the gated branch as unreachable (CS0162). TurboDALI owns DALI loop declaration outright now
+    // (the transitional TurboZones DALI tab is gone) — DALI editing is dev-only until this gate ungates.
     public static readonly bool ExperimentalCommandsEnabled = true;
 
     private static bool _updateAccepted;
@@ -156,27 +156,6 @@ public class TurboSuiteApplication : IExternalApplication
                 "Opens a window to view electrical circuits with lighting devices and change device family types based on Switch ID groupings.",
                 "TurboRPS");
 
-            // Experimental — gated so it ships compiled but unreachable until ready. Positioned between
-            // RPS and Docs in the Utilities panel order.
-            if (ExperimentalCommandsEnabled)
-            {
-                CreateButton(utilitiesPanel, assemblyPath,
-                    "TurboDMX",
-                    "     DMX     ",
-                    "TurboSuite.Dmx.DmxCommand",
-                    "Automate DMX-controlled RGBW LED tape systems",
-                    "Opens the TurboDMX window to declare DMX loops and control zones, solve decoder/driver packing and addressing, and generate the one-line diagram. Experimental — under construction.",
-                    "Blank");
-
-                CreateButton(utilitiesPanel, assemblyPath,
-                    "TurboDALI",
-                    "     DALI    ",
-                    "TurboSuite.Dali.DaliCommand",
-                    "Automate DALI addressing for lighting circuits",
-                    "Opens the TurboDALI window to group Control Zones into DALI loops, assign each loop its panel ZONE, and (later) assign and write back per-circuit DALI addresses. Experimental — under construction.",
-                    "Blank");
-            }
-
             CreateButton(utilitiesPanel, assemblyPath,
                 "TurboDocs",
                 "    Docs     ",
@@ -200,6 +179,32 @@ public class TurboSuiteApplication : IExternalApplication
                 "Suggested shortcut: BB\nMask selected elements while preserving fixture graphics",
                 "Places a masking region around the selected elements and overlays a view-level annotation stamp at each lighting fixture so the visible footprint graphics remain readable on top of the mask.",
                 "TurboMask");
+
+            // ── Controls panel (TurboDMX + TurboDALI) ──
+            // The digital-lighting-control commands, kept as separate buttons in their own panel. Rides the
+            // shared ExperimentalCommandsEnabled gate (both commands are experimental), so the whole panel
+            // ships compiled but hidden. Created here — after Utilities, before the Debug panel below — so it
+            // lands between them on the ribbon (panels render in creation order).
+            if (ExperimentalCommandsEnabled)
+            {
+                RibbonPanel controlsPanel = application.CreateRibbonPanel("TurboSuite", "Controls");
+
+                CreateButton(controlsPanel, assemblyPath,
+                    "TurboDMX",
+                    "     DMX     ",
+                    "TurboSuite.Dmx.DmxCommand",
+                    "Automate DMX-controlled RGBW LED tape systems",
+                    "Opens the TurboDMX window to declare DMX loops and control zones, solve decoder/driver packing and addressing, and generate the one-line diagram. Experimental — under construction.",
+                    "Blank");
+
+                CreateButton(controlsPanel, assemblyPath,
+                    "TurboDALI",
+                    "     DALI    ",
+                    "TurboSuite.Dali.DaliCommand",
+                    "Automate DALI addressing for lighting circuits",
+                    "Opens the TurboDALI window to group Control Zones into DALI loops, assign each loop its panel ZONE, and assign and write back per-circuit DALI addresses with a job-wide numbering lock. Experimental — under construction.",
+                    "Blank");
+            }
 
             // ── Debug panel (TurboSpike) ──
             // Rides the shared ExperimentalCommandsEnabled gate, so the spike bench surfaces every dev

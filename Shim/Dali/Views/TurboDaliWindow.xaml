@@ -31,6 +31,14 @@
             </StackPanel>
         </Border>
 
+        <!-- ── Lock banner (amber; shown only while numbering is locked) ─────────────────────────── -->
+        <Border DockPanel.Dock="Top" Background="#FFF4E5" BorderBrush="#E0A94B" BorderThickness="0,0,0,1"
+                Padding="14,6"
+                Visibility="{Binding IsLocked, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="{Binding LockStateText}" Foreground="#8A5A00" FontWeight="SemiBold"
+                       TextWrapping="Wrap"/>
+        </Border>
+
         <!-- ── Footer bar: status + primary action ──────────────────────────────────────────────── -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource FooterBgBrush}"
                 BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0" Padding="10,7">
@@ -39,7 +47,11 @@
                         Margin="8,0,0,0" IsCancel="True" Click="Close_Click"/>
                 <Button DockPanel.Dock="Right" Content="Write addresses ▸" Height="28" Padding="12,0"
                         FontWeight="SemiBold" Command="{Binding WriteAddressesCommand}"/>
-                <Button DockPanel.Dock="Right" Content="Refresh" Height="28" Width="80" Margin="0,0,8,0"
+                <Button DockPanel.Dock="Right" Content="{Binding LockButtonText}" Height="28" Width="72"
+                        Margin="8,0,0,0" Command="{Binding LockCommand}"/>
+                <Button DockPanel.Dock="Right" Content="Unlock" Height="28" Width="72" Margin="8,0,0,0"
+                        Command="{Binding UnlockCommand}"/>
+                <Button DockPanel.Dock="Right" Content="Refresh" Height="28" Width="80" Margin="8,0,8,0"
                         Command="{Binding RefreshCommand}"/>
                 <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"
                            TextTrimming="CharacterEllipsis" Text="{Binding StatusText}"/>

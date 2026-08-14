@@ -9,7 +9,7 @@ using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Dali.ViewModels
 {
-    /// <summary>One Control Zone value in the DALI tab — either sitting in the unassigned pool or as a
+    /// <summary>One Control Zone value in TurboDALI's loop pool — either sitting unassigned or as a
     /// member of a loop. Carries its DALI load count (one addressable load per DALI fixture in that zone) so
     /// a loop can sum its legs, and an <see cref="IsSelected"/> flag bound to the pool ListBox for the
     /// multi-select "add to loop" gesture (the scaled-down DMX pool pattern).</summary>

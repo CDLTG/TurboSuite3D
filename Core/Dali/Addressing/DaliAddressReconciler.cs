@@ -24,13 +24,13 @@ namespace TurboSuite.Dali.Addressing
     ///   never re-offered while locked).</item>
     /// </list>
     ///
-    /// <para><b>Why per-zone high-water collapses to loop high-water here.</b> The plan (H7) frames the load
-    /// append as "past the zone's high-water within the loop." Under the two invariants this engine enforces —
+    /// <para><b>Why per-zone high-water collapses to loop high-water here.</b> The load append is naturally
+    /// framed as "past the zone's high-water within the loop." Under the two invariants this engine enforces —
     /// numbering is contiguous at lock, and a retired slot is never reused — every number at or below a loop's
     /// high-water is already taken (by a live-frozen or a retired circuit), so "smallest free number above
     /// this zone's frozen block" is ALWAYS the loop's high-water + 1. The two rules therefore produce the
-    /// identical result; the zone-block tidiness the plan wants is realized on the next <b>unlock + re-walk</b>
-    /// (Fresh), exactly as the plan's within-loop-move note anticipates. We keep the code as the simpler,
+    /// identical result; the zone-block tidiness is realized on the next <b>unlock + re-walk</b>
+    /// (Fresh), exactly as the within-loop-move rule anticipates. We keep the code as the simpler,
     /// provably freeze-safe loop-high-water append and document the equivalence here rather than build a
     /// per-zone scheme with no observable effect.</para>
     ///
@@ -262,7 +262,7 @@ namespace TurboSuite.Dali.Addressing
                 }
                 else
                 {
-                    // Gone from the model — deleted. No reuse; unlock to reclaim (plan copy, 2026-08-13).
+                    // Gone from the model — deleted. No reuse; unlock to reclaim.
                     reviews.Add(new DaliReviewItem(b.CircuitKey,
                         $"{issued}{zoneLabel} — circuit deleted; address retired. Unlock to reclaim the number."));
                 }

@@ -21,8 +21,8 @@ namespace TurboSuite.Dali.Services
     /// LQSE2-1DALUNV-D module count (= loop count) and the QS-link device/leg budget.
     ///
     /// <b>This reports the job-wide order + link budget, not placement.</b> Which ZONE N panel each module
-    /// sits in is the designer's required per-loop assignment, collected by the TurboZones DALI tab and fed
-    /// to the allocator as a separate <c>daliModulesByZone</c> map (Phase 3e). Here we only answer "how many
+    /// sits in is the designer's required per-loop assignment, declared in TurboDALI and fed to the allocator
+    /// as a separate <c>daliModulesByZone</c> map. Here we only answer "how many
     /// modules does the job need, and what do they cost the link" — the single BOM/link authority, so the
     /// placed panel slots are deliberately excluded from both (see <c>ModuleResult.OrderedBySubsystem</c>).
     ///

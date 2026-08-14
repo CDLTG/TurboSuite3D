@@ -7,8 +7,8 @@ using Xunit;
 namespace TurboSuite.Tests.Dali
 {
     /// <summary>
-    /// Oracles for <see cref="DaliPlacementMapper"/> — the persisted-loops → panel-placement boundary
-    /// (Phase 3e). Pins the split the plan mandates: an assigned loop lands in its ZONE N with a load count
+    /// Oracles for <see cref="DaliPlacementMapper"/> — the persisted-loops → panel-placement boundary.
+    /// Pins the placement/order split: an assigned loop lands in its ZONE N with a load count
     /// summed over its zones, an unassigned loop (AssignedZone 0) is warned-not-placed, and a zero-load loop
     /// is dropped from both (it orders no module, so there is nothing to place or warn). Reconciliation is
     /// the same shared pass DaliStateMapper runs, so the load-affecting rules (renamed zone dropped,

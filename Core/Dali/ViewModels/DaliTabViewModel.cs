@@ -13,17 +13,16 @@ using TurboSuite.Shared.ViewModels;
 namespace TurboSuite.Dali.ViewModels
 {
     /// <summary>
-    /// The TurboZones <b>DALI</b> tab: declare DALI loops (named groupings of Control Zone values) and give
-    /// each the required <b>ZONE N</b> its <c>LQSE2-1DALUNV-D</c> module is placed in (Phase 3e). Deliberately
-    /// barren — a transitional home. A future TurboDALI owns solve visualization, one-lines and numbering;
-    /// what lives here is only what 3e needs: declare, group, assign, warn, persist.
+    /// TurboDALI's loop-declaration surface: declare DALI loops (named groupings of Control Zone values) and
+    /// give each the required <b>ZONE N</b> its <c>LQSE2-1DALUNV-D</c> module is placed in. This VM does the
+    /// declare/group/assign/warn/persist half; the addressing + numbering lock live on the
+    /// <c>DaliMainViewModel</c> that wraps it.
     ///
     /// <b>This produces placement, not order.</b> The module count and QS-link budget are the job-wide
-    /// <c>DaliDemandProvider</c>/<c>DaliSolver</c> authority (read once at window open, like the DMX demand
-    /// and keypad counts). The loop→zone assignments here are read the same way — the shim builds the
-    /// <c>zone → modules</c> placement map from the persisted state at open (<c>DaliPlacementMapper</c>) and
-    /// feeds it to the Panel Breakdown. Edits persist and reflect on the next open; there is deliberately no
-    /// live cross-tab wiring, because TurboZones is not open alongside the DALI programming in practice.
+    /// <c>DaliDemandProvider</c>/<c>DaliSolver</c> authority. TurboZones consumes the loop→zone assignments the
+    /// same way — its shim builds the <c>zone → modules</c> placement map from the persisted state at its own
+    /// window open (<c>DaliPlacementMapper</c>) and feeds it to the Panel Breakdown. Edits persist and reflect
+    /// on the next TurboZones open (the two windows are not open in tandem in practice).
     ///
     /// Zone membership is single: a Control Zone lives in the pool or in exactly one loop. The pool + loops
     /// together always partition every DALI-carrying Control Zone in the job.
@@ -144,7 +143,7 @@ namespace TurboSuite.Dali.ViewModels
 
         private void AddLoop(bool fromSelection)
         {
-            var row = NewRow(NextLoopName(), assignedZone: 0);
+            var row = NewRow(Guid.NewGuid().ToString("N"), NextLoopName(), assignedZone: 0);
             Loops.Add(row);
 
             if (fromSelection)
@@ -154,10 +153,10 @@ namespace TurboSuite.Dali.ViewModels
             SaveSettings();
         }
 
-        private DaliLoopRowViewModel NewRow(string name, int assignedZone,
+        private DaliLoopRowViewModel NewRow(string loopId, string name, int assignedZone,
                                             IEnumerable<DaliZoneItemViewModel>? members = null)
         {
-            var row = new DaliLoopRowViewModel(Guid.NewGuid().ToString("N"), name, assignedZone, _zoneOptions);
+            var row = new DaliLoopRowViewModel(loopId, name, assignedZone, _zoneOptions);
             row.Changed = () => { if (_loaded) { Recompute(); SaveSettings(); } };
             row.AddSelectedCommand = new RelayCommand(() => MoveSelectedInto(row),
                                                       () => Pool.Any(z => z.IsSelected));
@@ -236,7 +235,10 @@ namespace TurboSuite.Dali.ViewModels
 
                 // Preserve even a loop left with no live zones — the designer declared it; an empty row is
                 // fixable, a silently dropped one is confusing. It orders no module until it has loads.
-                Loops.Add(NewRow(string.IsNullOrWhiteSpace(dto.Name) ? NextLoopName() : dto.Name,
+                // Restore the persisted LoopId — it is the durable L# anchor the numbering lock pins to, so it
+                // MUST survive a reload; only a pre-LoopId (blank) payload gets a fresh one.
+                Loops.Add(NewRow(string.IsNullOrWhiteSpace(dto.LoopId) ? Guid.NewGuid().ToString("N") : dto.LoopId,
+                                 string.IsNullOrWhiteSpace(dto.Name) ? NextLoopName() : dto.Name,
                                  dto.AssignedZone, members));
             }
 

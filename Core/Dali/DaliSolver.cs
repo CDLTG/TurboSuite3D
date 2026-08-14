@@ -11,7 +11,7 @@ namespace TurboSuite.Dali
     /// The third concrete subsystem after DMX and shades — pure, so the shim only reads the model, counts
     /// the loads per loop, and hands over the per-loop tallies.
     ///
-    /// <b>The grain (Open Data #3, module <c>LQSE2-1DALUNV-D</c> NA, 1 DALI bus per module):</b>
+    /// <b>The grain (module <c>LQSE2-1DALUNV-D</c> NA, 1 DALI bus per module):</b>
     /// <list type="bullet">
     ///   <item><b>module count = loop count</b> — one module per declared loop, because a module carries
     ///   exactly one bus. There is no auto-splitting; a loop bigger than a bus is the designer's to split

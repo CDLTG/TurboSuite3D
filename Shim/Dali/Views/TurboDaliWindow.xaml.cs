@@ -7,11 +7,10 @@ using System.Windows.Data;
 namespace TurboSuite.Dali.Views
 {
     /// <summary>
-    /// The standalone <b>TurboDALI</b> modeless window (Phase 1) — the DALI loop-declaration UI lifted out of
-    /// the TurboZones DALI tab into its own command, dressed in the DMX chrome (blue header + roll-up, footer
-    /// bar). DataContext is a <c>DaliTabViewModel</c> directly (no <c>DaliTab.</c> prefix), collected + shown
-    /// by <c>DaliCommand</c>. Addressing, the numbering lock, "Write addresses", and the zone color overlay
-    /// arrive in Phase 3 — this window is the re-parented editor skeleton.
+    /// The standalone <b>TurboDALI</b> modeless window — the DALI loop-declaration UI plus the addressing
+    /// surface (Write addresses, numbering lock, REVIEW list) and the live zone color overlay, dressed in the
+    /// DMX chrome (blue header + roll-up, footer bar). DataContext is a <c>DaliMainViewModel</c> (which wraps
+    /// the loop-declaration <c>DaliTab</c>), collected + shown by <c>DaliCommand</c>.
     /// </summary>
     public partial class TurboDaliWindow : Window
     {

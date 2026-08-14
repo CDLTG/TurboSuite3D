@@ -9,10 +9,9 @@ namespace TurboSuite.Dali
     /// <see cref="TurboSuite.Dmx.LoopDeclaration"/>, deliberately narrower — a DALI loop has no interface
     /// channel budget, so there is no <c>ReservedChannels</c> knob; it is only a name plus its zones.
     ///
-    /// The grain is settled (Open Data #3, module <c>LQSE2-1DALUNV-D</c> NA, 1 bus/module): <b>module
-    /// count = loop count</b>, and each DALI-addressable load in a loop is one switch leg. Phase 3c's
-    /// <c>DaliSolver</c> consumes these declarations to emit the subsystem's demand (modules → panel slots,
-    /// loads → link legs); Phase 3b only produces and persists them.
+    /// The grain (module <c>LQSE2-1DALUNV-D</c> NA, 1 bus/module): <b>module count = loop count</b>, and each
+    /// DALI-addressable load in a loop is one switch leg. <c>DaliSolver</c> consumes these declarations to emit
+    /// the subsystem's demand (modules → panel slots, loads → link legs).
     /// </summary>
     public sealed class DaliLoopDeclaration
     {

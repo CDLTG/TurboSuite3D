@@ -12,17 +12,15 @@ using TurboSuite.Shared.Services;
 namespace TurboSuite.Dali
 {
     /// <summary>
-    /// TurboDALI — the standalone DALI addressing command (Phase 1: the loop-declaration UI lifted out of the
-    /// TurboZones DALI tab into its own modeless window). Owns DALI end to end going forward: collect DALI
-    /// fixtures, group Control Zones into loops, declare each loop's panel ZONE, and (Phase 3) assign +
-    /// write back per-circuit addresses. TurboZones stays a pure consumer of the resulting demand.
+    /// TurboDALI — the standalone DALI addressing command. Owns DALI end to end: collect DALI fixtures, group
+    /// Control Zones into loops, declare each loop's panel ZONE, and assign + write back per-circuit addresses
+    /// (with a job-wide numbering lock). TurboZones stays a pure consumer of the resulting demand + placement.
     ///
     /// STATE: experimental — registered only when <c>ExperimentalCommandsEnabled</c> is set
-    /// (App/TurboSuiteApplication.cs). While it is live it is the <b>sole writer</b> of the DALI schema; the
-    /// still-present TurboZones DALI tab is handed a <see cref="NullDaliLoopStore"/> so two writers can't
-    /// disagree (plan H6). The tab is removed when TurboDALI graduates (Phase 4).
+    /// (App/TurboSuiteApplication.cs). It is the <b>sole writer</b> of the DALI schema: the transitional
+    /// TurboZones DALI tab has been removed, so DALI loop declaration is dev-only until this command ungates.
     ///
-    /// INDEPENDENT COLLECTION (plan H4): TurboDALI reads its own inputs from the doc — DALI fixtures/zones,
+    /// INDEPENDENT COLLECTION: TurboDALI reads its own inputs from the doc — DALI fixtures/zones,
     /// and the model-derived panel-ZONE list via <c>PanelAllocationService.DiscoverPanelZones</c> — so it has
     /// no read/write dependency on TurboZones' persisted state.
     ///
@@ -59,7 +57,7 @@ namespace TurboSuite.Dali
                     return Result.Failed;
                 }
 
-                // ── Independent collection (H4) ──────────────────────────────────────────────────────────
+                // ── Independent collection ─────────────────────────────────────────────────────────────────
                 // One collector reads the DALI zones + panel-ZONE list + persisted loops from the model, at
                 // open AND on Refresh — TurboDALI discovers it all itself, no dependency on TurboZones' state.
                 var inputProvider = new DaliTabInputProvider(doc);
@@ -70,13 +68,24 @@ namespace TurboSuite.Dali
 
                 var tab = new DaliTabViewModel(inputs.Zones, inputs.PanelZones, inputs.Saved, workQueue, store);
 
-                // Addressing seams (Phase 3): read the model, write the "DALI Address" param, color the
+                // Addressing seams: read the model, write the "DALI Address" param, color the
                 // active-view zones — all routed through the work queue by the ViewModel.
                 var reader = new DaliModelReader(doc);
                 var writer = new DaliAddressWriter(doc);
                 var zoneColor = new DaliZoneColorService(uidoc);
 
-                var viewModel = new DaliMainViewModel(tab, workQueue, reader, writer, zoneColor, inputProvider);
+                // Yes/No gate for the destructive numbering-lock actions (Re-lock / Unlock).
+                Func<string, bool> confirm = msg =>
+                    new TaskDialog("TurboDALI")
+                    {
+                        MainInstruction = "Numbering lock",
+                        MainContent = msg,
+                        CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+                        DefaultButton = TaskDialogResult.No,
+                    }.Show() == TaskDialogResult.Yes;
+
+                var viewModel = new DaliMainViewModel(tab, workQueue, reader, writer, zoneColor, store,
+                                                      inputProvider, inputs.Saved, confirm);
 
                 var window = new TurboDaliWindow { DataContext = viewModel };
                 new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };

@@ -12,12 +12,12 @@ using TurboSuite.Shared.Helpers;
 namespace TurboSuite.Dali.Services
 {
     /// <summary>
-    /// Shim-side <see cref="IDaliModelReader"/> — the addressing read (plan H1). Walks the model's electrical
+    /// Shim-side <see cref="IDaliModelReader"/> — the addressing read. Walks the model's electrical
     /// circuits and, for every circuit carrying DALI fixtures, produces a <see cref="DaliCircuitReading"/>:
     /// the circuit's <c>UniqueId</c> (the load anchor), its Control Zone (first non-blank among its DALI
     /// fixtures), and the <b>centroid of its lighting fixtures</b> (the remote driver/decoder device is a
     /// lighting <i>device</i>, deliberately excluded from the centroid so its arbitrary ceiling spot can't
-    /// drag the spatial order — H10).
+    /// drag the spatial order).
     ///
     /// This is the identity-preserving sibling of <c>DaliDemandProvider.CountDaliLoadsByZone</c>: the demand
     /// side needs only counts (and throws identity away); addressing needs the per-circuit key + geometry.
@@ -74,7 +74,7 @@ namespace TurboSuite.Dali.Services
                 readings.Add(new DaliCircuitReading(circuit.UniqueId, zone, centroid));
             }
 
-            // Uncircuited DALI fixtures — warned-and-excluded (H2), counted for the "circuit them" nudge.
+            // Uncircuited DALI fixtures — warned-and-excluded, counted for the "circuit them" nudge.
             int uncircuited = new FilteredElementCollector(_doc)
                 .OfCategory(BuiltInCategory.OST_LightingFixtures)
                 .WhereElementIsNotElementType()

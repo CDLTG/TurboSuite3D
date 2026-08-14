@@ -10,7 +10,7 @@ using Xunit;
 namespace TurboSuite.Tests.Dali
 {
     /// <summary>
-    /// Oracles for <see cref="DaliTabViewModel"/> — the TurboZones DALI tab (Phase 3e). Revit-free, so the
+    /// Oracles for <see cref="DaliTabViewModel"/> — TurboDALI's loop-declaration surface. Revit-free, so the
     /// grouping/assignment/warning logic and the persisted snapshot are pinned directly. Covers: persisted
     /// loops rehydrate (pool gets the remainder, single membership), the add/remove gestures move zones,
     /// the unassigned + over-cap warnings, and that a snapshot is saved on edit but never during load.
@@ -31,7 +31,10 @@ namespace TurboSuite.Tests.Dali
         {
             public DaliModuleState Last = new DaliModuleState();
             public int SaveCount;
+            public DaliSnapshotDto? LastSnapshot;
+            public int SnapshotSaveCount;
             public void Save(DaliModuleState state) { Last = state; SaveCount++; }
+            public void SaveSnapshot(DaliSnapshotDto? snapshot) { LastSnapshot = snapshot; SnapshotSaveCount++; }
         }
 
         private static DaliZoneItemViewModel Zone(string name, int loads) =>

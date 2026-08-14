@@ -10,9 +10,8 @@ namespace TurboSuite.Dali.Input
     /// The persisted <see cref="DaliModuleState"/> → engine-input mapping, in one place — the DALI analog of
     /// <see cref="TurboSuite.Dmx.Input.DmxStateMapper"/>.
     ///
-    /// As with DMX, a single mapping is shared so a future headless solve (the DALI demand feeding the
-    /// TurboZones Panel Breakdown) and the TurboZones DALI tab cannot disagree about what the saved job
-    /// declares. Phase 3b provides only the loop mapping; the solve itself is Phase 3c.
+    /// As with DMX, a single mapping is shared so the headless solve (the DALI demand feeding the TurboZones
+    /// Panel Breakdown) and TurboDALI's own loop editing cannot disagree about what the saved job declares.
     /// </summary>
     public static class DaliStateMapper
     {
@@ -32,7 +31,7 @@ namespace TurboSuite.Dali.Input
         /// <summary>
         /// The one reconciliation both the job-wide demand (<see cref="ToLoopDeclarations"/> → DaliSolver)
         /// and the panel placement (<see cref="DaliPlacementMapper"/>) run through, so the ordered count and
-        /// the placed count derive from the same loop set and cannot disagree (plan principle 6). Applies the
+        /// the placed count derive from the same loop set and cannot disagree. Applies the
         /// shared rules — order by declared Order, drop a zone no longer in the model, single membership
         /// (first loop wins a contested zone), skip a loop left with no live zones — and returns each
         /// surviving loop paired with the DTO it came from, so a caller that needs more than the name +

@@ -3,8 +3,8 @@ namespace TurboSuite.Zones.Models
 {
     /// <summary>
     /// One DALI module to place into a zone's panel — a declared loop that the designer assigned to this
-    /// ZONE N. The shim (TurboZones DALI tab) builds a <c>zone → list of these</c> map from the persisted
-    /// loops and their required zone assignment, and hands it to
+    /// ZONE N. The TurboZones shim builds a <c>zone → list of these</c> map from the persisted loops (declared
+    /// in TurboDALI) and their required zone assignment, and hands it to
     /// <see cref="Services.PanelAllocationService.BuildPanelBreakdown"/>.
     ///
     /// <b>This drives placement only, never the order.</b> The DALI module count and the QS-link budget

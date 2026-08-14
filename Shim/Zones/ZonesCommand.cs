@@ -86,31 +86,18 @@ namespace TurboSuite.Zones
                     new DaliDemandProvider(doc).GetDemand()
                 };
 
-                // DALI tab inputs — read once at open, same rule as the demands and keypad counts. The DALI
-                // *order/link* budget rides subsystemDemands above; this is the *placement* half: the roster
-                // the tab groups (Control Zone values + loads) and assigns (discovered ZONE Ns), the persisted
-                // loops, and the zone→module map the persisted assignments already imply for the breakdown.
+                // DALI *placement* half — read once at open, same rule as the demands and keypad counts. Loop
+                // DECLARATION moved to the standalone TurboDALI command; TurboZones is now a pure consumer of
+                // the persisted DALI state. The order/link budget rides subsystemDemands above; this is the
+                // zone→module map the persisted loop assignments already imply for the panel breakdown.
                 var daliLoadsByZone = DaliDemandProvider.CountDaliLoadsByZone(doc, out _);
-                var daliZones = daliLoadsByZone
-                    .OrderBy(kv => kv.Key, System.StringComparer.OrdinalIgnoreCase)
-                    .Select(kv => new DaliZoneItemViewModel(kv.Key, kv.Value))
-                    .ToList();
-                var daliPanelZones = PanelAllocationService.DiscoverPanelZones(circuits);
                 var savedDaliState = DaliStorageService.Load(doc);
                 var daliModulesByZone = DaliPlacementMapper.Build(savedDaliState.Loops, daliLoadsByZone).ByZone;
-                // Single-writer transition (H6): while TurboDALI is live it owns the DALI schema's writes, so
-                // this tab gets a no-op store — it still reads/displays, but can't persist. Placement + demand
-                // read the schema directly (above), untouched. Reverts to a real writer if TurboDALI is gated
-                // off, and the tab is removed outright when TurboDALI graduates (Phase 4).
-                IDaliLoopStore daliLoopStore = App.TurboSuiteApplication.ExperimentalCommandsEnabled
-                    ? (IDaliLoopStore)new NullDaliLoopStore()
-                    : new DaliLoopStore(doc);
 
                 var viewModel = new ZonesMainViewModel(circuits,
                     keypadCounts, hybridRepeaters,
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
-                    subsystemDemands, daliModulesByZone,
-                    daliZones, daliPanelZones, savedDaliState, daliLoopStore);
+                    subsystemDemands, daliModulesByZone);
 
                 var window = new TurboZonesWindow
                 {

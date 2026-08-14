@@ -20,7 +20,7 @@ namespace TurboSuite.Dali.Addressing
     }
 
     /// <summary>
-    /// The spatial ordering step for DALI addressing (plan §Ordering, H3) — a <b>pure port of TurboWire's
+    /// The spatial ordering step for DALI addressing — a <b>pure port of TurboWire's
     /// <c>FixtureOrderingService</c></b> (double-farthest-point diameter → greedy nearest-neighbor → shorter
     /// of the two paths), lifted off Revit types so it walks plain points and is unit-testable with synthetic
     /// layouts. Ported by COPY, not shared reference — <c>Shim/Wire</c> keeps its own copy; the algorithm is

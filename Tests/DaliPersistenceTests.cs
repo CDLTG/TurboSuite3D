@@ -27,7 +27,7 @@ namespace TurboSuite.Tests.Dali
         public void FreshStateHasSensibleDefaults()
         {
             var state = new DaliModuleState();
-            Assert.Equal(2, state.PayloadVersion);   // v2: DaliLoopDto.AssignedZone (Phase 3e)
+            Assert.Equal(2, state.PayloadVersion);   // v2: DaliLoopDto.AssignedZone
             Assert.Empty(state.Loops);
         }
 
@@ -62,7 +62,7 @@ namespace TurboSuite.Tests.Dali
         [Fact]
         public void V1Payload_DefaultsAssignedZoneToUnassigned()
         {
-            // A loop persisted before Phase 3e carries no assignedZone; it must read as 0 (unassigned),
+            // A loop persisted before the AssignedZone field carries none; it must read as 0 (unassigned),
             // so an older job's loops are ordered-but-warned rather than mis-placed into ZONE 0.
             const string json =
                 "{\"payloadVersion\":1,\"loops\":[{\"loopId\":\"x\",\"name\":\"L\",\"order\":1," +
@@ -161,7 +161,7 @@ namespace TurboSuite.Tests.Dali
         [Fact]
         public void V3Payload_DegradesCleanlyForAReaderThatIgnoresTheSnapshot()
         {
-            // H6: an old v2 reader seeing a v3 payload must still get its loops intact — the snapshot field it
+            // An old v2 reader seeing a v3 payload must still get its loops intact — the snapshot field it
             // doesn't consume is simply ignored, never corrupting the loops it does need. We characterize this
             // with tolerant read (unknown/unused fields dropped, loops preserved).
             const string json =

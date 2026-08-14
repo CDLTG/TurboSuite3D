@@ -8,10 +8,9 @@ namespace TurboSuite.Dali.Persistence
     // division TurboDMX uses; see Core/Dmx/Persistence/DmxPersistenceModels.cs).
     //
     // Deliberately far smaller than DmxModuleState. A DALI loop is only a named, ordered grouping of Control
-    // Zone VALUES; there is no cluster/decoder-packing grain, no placement or one-line registry, and no
-    // numbering-lock snapshot (those DMX features are reserved for a future TurboDALI — see the plan's §3e).
-    // Keep this lean: do NOT port DMX fields that carry no DALI meaning. When DALI later grows a field, ride
-    // PayloadVersion for the migration rather than minting a new schema GUID (DaliStorageService).
+    // Zone VALUES; there is no cluster/decoder-packing grain and no one-line registry. Keep this lean: do NOT
+    // port DMX fields that carry no DALI meaning. When DALI grows a field, ride PayloadVersion for the
+    // migration rather than minting a new schema GUID (DaliStorageService).
     //
     // What lives WHERE (deliberate, same as DMX):
     //   • Control Zone — a native Revit instance parameter ON the fixture, set in Properties; NOT here.
@@ -23,14 +22,14 @@ namespace TurboSuite.Dali.Persistence
     {
         /// <summary>Payload-shape version for forward migration without a new ES schema GUID. Bump when a
         /// DTO below changes shape; readers upgrade old payloads in code.
-        /// <para>v2 (Phase 3e): <see cref="DaliLoopDto.AssignedZone"/> added. A v1 payload deserializes it
+        /// <para>v2: <see cref="DaliLoopDto.AssignedZone"/> added. A v1 payload deserializes it
         /// to 0 = unassigned, which is the safe default — the loop is still ordered job-wide, just not
         /// placed in a panel, and it surfaces as an "unassigned loop" warning rather than silently vanishing.</para>
-        /// <para>v3 (TurboDALI): <see cref="Snapshot"/> added — the addressing numbering-lock flag + frozen
+        /// <para>v3: <see cref="Snapshot"/> added — the addressing numbering-lock flag + frozen
         /// baseline. A v2 payload deserializes it to null = Unlocked/unaddressed, the safe default (the job
         /// simply has no issued addresses yet). Tolerant read means an OLD v2 reader seeing a v3 payload just
         /// ignores the field it doesn't know — the loops it does need are untouched (guarded by a
-        /// v3→v2 characterization test, plan H6).</para></summary>
+        /// v3→v2 characterization test).</para></summary>
         public int PayloadVersion { get; set; } = 2;
 
         /// <summary>Designer-declared DALI loops (Zone→Loop). Keyed by Control Zone VALUE, not ElementId.</summary>
@@ -90,9 +89,9 @@ namespace TurboSuite.Dali.Persistence
         /// <summary>The Control Zone VALUES grouped into this loop (the native param values).</summary>
         public List<string> ZoneValues { get; set; } = new List<string>();
 
-        /// <summary>The ZONE N (panel LocationNumber) the designer assigned this loop's module to
-        /// (Phase 3e). <b>0 = unassigned</b>: the loop is still ordered by the job-wide DALI demand, but has
-        /// no panel to sit in, so the TurboZones DALI tab warns and the allocator places no slot for it.
+        /// <summary>The ZONE N (panel LocationNumber) the designer assigned this loop's module to.
+        /// <b>0 = unassigned</b>: the loop is still ordered by the job-wide DALI demand, but has
+        /// no panel to sit in, so TurboDALI warns and the allocator places no slot for it.
         /// Placement is display-only — a loop's fixtures are all within one zone, but DALI circuits are
         /// created unassigned (like DMX), so the zone can't be derived and the designer must pick it.</summary>
         public int AssignedZone { get; set; }

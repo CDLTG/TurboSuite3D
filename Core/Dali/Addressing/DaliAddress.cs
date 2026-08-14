@@ -6,7 +6,7 @@ namespace TurboSuite.Dali.Addressing
     /// <summary>
     /// A DALI design address — form <c>L{loop#}-{load##}</c> (e.g. <c>L2-01</c> = Loop 2, load 01). It is a
     /// design/commissioning LABEL the installer references, <b>not</b> a hardware DALI short address (0–63)
-    /// that programs a ballast — that decision (plan §Addressing) makes it a string with no 0–63 bookkeeping.
+    /// that programs a ballast — a deliberate choice that makes it a string with no 0–63 bookkeeping.
     /// The load is two digits because a bus holds up to 64 loads; a third digit is tolerated defensively but
     /// never expected.
     /// </summary>

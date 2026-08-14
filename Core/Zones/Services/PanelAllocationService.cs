@@ -409,8 +409,8 @@ namespace TurboSuite.Zones.Services
             }
         }
 
-        /// <summary>The distinct, valid ZONE N numbers present across these circuits' panels — the roster the
-        /// TurboZones DALI tab offers when the designer assigns a loop to a zone (Phase 3e). Reuses the same
+        /// <summary>The distinct, valid ZONE N numbers present across these circuits' panels — the roster
+        /// TurboDALI offers when the designer assigns a loop to a zone. Reuses the same
         /// <see cref="ParseLocationNumber"/> the allocator groups by, so an assignable zone is exactly a zone
         /// the breakdown can place a panel in. DUMMY and unparseable panels are excluded.</summary>
         public static IReadOnlyList<int> DiscoverPanelZones(IEnumerable<ZonesCircuitData> circuits)
