@@ -18,6 +18,7 @@ namespace TurboSuite.Zones.ViewModels
 
         private string _selectedBrandName;
         private bool _useDedicatedRelayModule;
+        private bool _allowRelayZeroTenPacking;
         private PanelAllocationResult _allocationResult;
         private ObservableCollection<LocationDisplayViewModel> _locationDisplays;
         private ObservableCollection<BomLineItem> _bomItems;
@@ -106,9 +107,31 @@ namespace TurboSuite.Zones.ViewModels
             set
             {
                 if (SetProperty(ref _useDedicatedRelayModule, value))
+                {
+                    // The Relay+0-10V toggle is only meaningful when NOT on a dedicated relay module.
+                    OnPropertyChanged(nameof(CanMergeRelayZeroTen));
+                    BuildPanelBreakdown();
+                }
+            }
+        }
+
+        /// <summary>Pack RELAY and 0-10V loads onto one LQSE-4T5 module instead of splitting them.
+        /// The allocator ignores this whenever the two don't share a part number (dedicated relay module,
+        /// or Crestron), so no guard is needed here beyond the greyed-out UI.</summary>
+        public bool AllowRelayZeroTenPacking
+        {
+            get => _allowRelayZeroTenPacking;
+            set
+            {
+                if (SetProperty(ref _allowRelayZeroTenPacking, value))
                     BuildPanelBreakdown();
             }
         }
+
+        /// <summary>The Relay+0-10V toggle is offered only when a dedicated relay module is NOT selected —
+        /// the LQSE-4S8 is a physically distinct module the two loads cannot share. Bound to the checkbox's
+        /// IsEnabled; visibility is Lutron-only, matching the dedicated toggle.</summary>
+        public bool CanMergeRelayZeroTen => !_useDedicatedRelayModule;
 
         public PanelAllocationResult AllocationResult
         {
@@ -174,7 +197,8 @@ namespace TurboSuite.Zones.ViewModels
             var circuitData = Circuits.Select(c => c.Data).ToList();
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
-                circuitData, _currentBrand, _panelSizeOverrides, _subsystemDemands, _daliModulesByZone);
+                circuitData, _currentBrand, _panelSizeOverrides, _subsystemDemands, _daliModulesByZone,
+                _allowRelayZeroTenPacking);
 
             AllocationResult = result;
             UnassignedCircuits = new ObservableCollection<ZonesCircuitData>(unassigned);
@@ -206,9 +230,12 @@ namespace TurboSuite.Zones.ViewModels
             {
                 _selectedBrandName = settings.Brand ?? "Lutron";
                 _useDedicatedRelayModule = settings.UseDedicatedRelayModule;
+                _allowRelayZeroTenPacking = settings.AllowRelayZeroTenPacking;
                 OnPropertyChanged(nameof(SelectedBrandName));
                 OnPropertyChanged(nameof(IsLutronSelected));
                 OnPropertyChanged(nameof(UseDedicatedRelayModule));
+                OnPropertyChanged(nameof(AllowRelayZeroTenPacking));
+                OnPropertyChanged(nameof(CanMergeRelayZeroTen));
 
                 // Restore special device selections
                 foreach (var kvp in settings.SpecialDeviceSelections)
@@ -228,7 +255,8 @@ namespace TurboSuite.Zones.ViewModels
             var settings = new PanelSettings
             {
                 Brand = _selectedBrandName,
-                UseDedicatedRelayModule = _useDedicatedRelayModule
+                UseDedicatedRelayModule = _useDedicatedRelayModule,
+                AllowRelayZeroTenPacking = _allowRelayZeroTenPacking
             };
 
             // Save current special device selections

@@ -34,7 +34,8 @@ public static class BomCollectorService
         var subsystemDemands = SubsystemDemandCollector.Collect(doc);
 
         var (allocation, _) = PanelAllocationService.BuildPanelBreakdown(
-            circuits, brand, overrides, subsystemDemands);
+            circuits, brand, overrides, subsystemDemands,
+            allowRelayZeroTenPacking: panelSettings?.AllowRelayZeroTenPacking ?? false);
         if (allocation == null)
             return new BomData { BrandName = brandName };
 

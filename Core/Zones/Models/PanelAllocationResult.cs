@@ -166,6 +166,46 @@ namespace TurboSuite.Zones.Models
                 ? SlotProtocols[slotIndex]
                 : DimmingType;
 
+        /// <summary>
+        /// Set only on modules from the merged Relay+0-10V packing pool, where <see cref="DimmingType"/>
+        /// is a synthetic sort/selection key ("0-10V", so part number, amp limits, BOM rank, and color
+        /// stay correct) rather than a display truth. When true, <see cref="TypeLabel"/> reads the actual
+        /// protocol(s) off the slots instead of the module key — otherwise a pure-relay module in the pool
+        /// would mislabel itself "0-10V".
+        /// </summary>
+        public bool LabelFromSlotProtocols { get; set; }
+
+        /// <summary>
+        /// The label shown on the module tile's top line. For a normal module (the overwhelmingly common
+        /// case) this is the module's <see cref="DimmingType"/> — so an MLV load riding an ELV module
+        /// still reads "ELV", exactly as before. For a merged Relay+0-10V module
+        /// (<see cref="LabelFromSlotProtocols"/>) it is the distinct per-slot protocols joined
+        /// "RELAY / 0-10V" (relay first) — or the single protocol when the module happens to be pure —
+        /// because the module key "0-10V" alone would hide the relay loads sharing it.
+        /// </summary>
+        public string TypeLabel
+        {
+            get
+            {
+                if (!LabelFromSlotProtocols) return DimmingType;
+
+                var distinct = SlotProtocols
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (distinct.Count == 0) return DimmingType;   // empty/padding module in the pool
+                distinct.Sort((a, b) => TypeLabelRank(a).CompareTo(TypeLabelRank(b)));
+                return string.Join(" / ", distinct);
+            }
+        }
+
+        private static int TypeLabelRank(string protocol)
+        {
+            if (protocol.IndexOf("RELAY", StringComparison.OrdinalIgnoreCase) >= 0) return 0;
+            if (protocol.IndexOf("0-10", StringComparison.OrdinalIgnoreCase) >= 0) return 1;
+            return 2;
+        }
+
         /// <summary>True if any slot or the module total exceeds amp limits.</summary>
         public bool IsOverloaded { get; set; }
 

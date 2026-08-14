@@ -508,4 +508,125 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(new[] { 1, 2, 3 }, result.Locations.Select(l => l.LocationNumber));
         }
     }
+
+    /// <summary>
+    /// Relay+0-10V packing (the max-packing toggle). Enabled AND both dimming types sharing one physical
+    /// module (Lutron non-dedicated → both LQSE-4T5) folds them into a single protocol-clustered pool:
+    /// pure-relay modules, one seam module at the boundary, then pure-0-10V — reclaiming the spare slots
+    /// the split wasted. The flag is silently ignored wherever the modules differ (dedicated LQSE-4S8,
+    /// Crestron), and the mixed module labels itself "RELAY / 0-10V" off its slots rather than its
+    /// synthetic "0-10V" sort key.
+    /// </summary>
+    public class MergeRelayZeroTenTests
+    {
+        // Loads kept at 1.0 A each — well under the LQSE-4T5's 5 A slot / 20 A module limits — so the
+        // sequential seam layout stands and the amp-aware FFD fallback never fires.
+        private static ZonesCircuitData C(string number, string type)
+            => new ZonesCircuitData
+            {
+                CircuitNumber = number,
+                PanelName = "ZONE 1",
+                DimmingType = type,
+                DimmingProtocolDisplay = string.Equals(type, "Relay", System.StringComparison.OrdinalIgnoreCase) ? "RELAY" : type,
+                ApparentLoadVA = 120,
+            };
+
+        private static List<ZonesCircuitData> Circuits(int relay, int zeroTen)
+        {
+            var list = new List<ZonesCircuitData>();
+            for (int i = 0; i < relay; i++) list.Add(C($"R{i:00}", "Relay"));
+            for (int i = 0; i < zeroTen; i++) list.Add(C($"V{i:00}", "0-10V"));
+            return list;
+        }
+
+        private static List<ModuleResult> Modules(PanelAllocationResult result)
+            => result.Locations.SelectMany(l => l.Panels).SelectMany(p => p.Modules).ToList();
+
+        /// <summary>6 relay + 1 0-10V. Split → 3 modules (2 relay + 1 0-10V, two half-empty spares).
+        /// Merged → 2: one pure-relay, one seam. The seam is where the two former spares combine.</summary>
+        [Fact]
+        public void MergesIntoOnePool_WithOnePureModuleAndOneSeam()
+        {
+            var circuits = Circuits(relay: 6, zeroTen: 1);
+
+            var (merged, _) = PanelAllocationService.BuildPanelBreakdown(
+                Circuits(relay: 6, zeroTen: 1), BrandConfig.Lutron, allowRelayZeroTenPacking: true);
+            var (split, _) = PanelAllocationService.BuildPanelBreakdown(
+                circuits, BrandConfig.Lutron, allowRelayZeroTenPacking: false);
+
+            // Split: ceil(6*1.05/4)=2 relay + ceil(1*1.05/4)=1 0-10V = 3.
+            Assert.Equal(3, Modules(split).Count);
+
+            // Merged: 7 loads → ceil(7*1.05/4)=2. Gradient order: pure relay first, then the seam.
+            var mods = Modules(merged);
+            Assert.Equal(2, mods.Count);
+            Assert.Equal("RELAY", mods[0].TypeLabel);
+            Assert.Equal(4, mods[0].UsedSlots);
+            Assert.Equal("RELAY / 0-10V", mods[1].TypeLabel);
+            Assert.Equal(3, mods[1].UsedSlots);
+        }
+
+        /// <summary>When the relay count is a multiple of the module capacity the boundary aligns to a
+        /// module edge, so there is NO seam — both sides stay pure.</summary>
+        [Fact]
+        public void AlignedBoundary_ProducesNoMixedModule()
+        {
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                Circuits(relay: 4, zeroTen: 4), BrandConfig.Lutron, allowRelayZeroTenPacking: true);
+
+            var mods = Modules(result);
+            Assert.Equal(2, mods.Count);                                   // 8 loads → 2 modules
+            Assert.Equal("RELAY", mods[0].TypeLabel);
+            Assert.Equal("0-10V", mods[1].TypeLabel);
+            Assert.DoesNotContain(mods, m => m.TypeLabel.Contains("/"));   // nothing mixed
+        }
+
+        /// <summary>The dedicated relay module (LQSE-4S8 ≠ LQSE-4T5) makes the merge physically invalid,
+        /// so the flag is ignored — relay and 0-10V stay on separate modules.</summary>
+        [Fact]
+        public void DedicatedRelayModule_SuppressesMerge_EvenWhenFlagSet()
+        {
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                Circuits(relay: 6, zeroTen: 1),
+                BrandConfig.CreateLutron(useDedicatedRelayModule: true),
+                allowRelayZeroTenPacking: true);
+
+            var mods = Modules(result);
+            Assert.Equal(3, mods.Count);                                   // 2 relay (LQSE-4S8) + 1 0-10V
+            Assert.DoesNotContain(mods, m => m.TypeLabel.Contains("/"));
+        }
+
+        /// <summary>Crestron's relay module (CLX-4HSW4) differs from its 0-10V module too, so the guard
+        /// suppresses the merge there as well — the engine stays correct even though the UI never offers
+        /// the toggle for Crestron.</summary>
+        [Fact]
+        public void Crestron_SuppressesMerge_EvenWhenFlagSet()
+        {
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                Circuits(relay: 6, zeroTen: 1), BrandConfig.Crestron, allowRelayZeroTenPacking: true);
+
+            Assert.DoesNotContain(Modules(result), m => m.TypeLabel.Contains("/"));
+        }
+
+        /// <summary>Even with the flag on, a non-merged bucket (ELV) is untouched: an MLV load riding an
+        /// ELV module still reads "ELV" on the tile, not "MLV". Only the merged Relay+0-10V pool labels
+        /// itself from its slots.</summary>
+        [Fact]
+        public void NonMergedBucket_LabelsByModuleType_NotSlotProtocol()
+        {
+            var mlv = new ZonesCircuitData
+            {
+                CircuitNumber = "1", PanelName = "ZONE 1",
+                DimmingType = "ELV", DimmingProtocolDisplay = "MLV", ApparentLoadVA = 120
+            };
+
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData> { mlv }, BrandConfig.Lutron, allowRelayZeroTenPacking: true);
+
+            var module = Modules(result).Single();
+            Assert.False(module.LabelFromSlotProtocols);
+            Assert.Equal("ELV", module.TypeLabel);
+            Assert.Equal("MLV", module.SlotProtocol(0));   // per-slot truth still intact
+        }
+    }
 }

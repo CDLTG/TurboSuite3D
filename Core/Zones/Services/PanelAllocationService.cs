@@ -15,6 +15,11 @@ namespace TurboSuite.Zones.Services
         // Module ordering inside panels: Relay first, then 0-10V, then ELV
         public static readonly string[] ModuleTypeOrder = { "Relay", "0-10V", "ELV" };
 
+        // The two dimming-type keys that Relay+0-10V packing may fold together. The merged pool keeps the
+        // 0-10V key so part number, amp limits, BOM rank, and tile color are all unchanged.
+        private const string RelayType = "Relay";
+        private const string ZeroTenType = "0-10V";
+
         // The module's DimmingType label for a placed DALI DIN module. Not in ModuleTypeOrder (DALI modules
         // are injected after the circuit-driven distribution, so they need no place in that ordering), and
         // never rolled up into the BOM — see OrderedBySubsystem.
@@ -68,10 +73,20 @@ namespace TurboSuite.Zones.Services
             BrandConfig brand,
             Dictionary<string, int> panelSizeOverrides = null,
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
-            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null)
+            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
+            bool allowRelayZeroTenPacking = false)
         {
             var unassigned = new List<ZonesCircuitData>();
             var accountedSubsystems = AccountedSubsystems(subsystemDemands);
+
+            // Relay+0-10V packing is only physically valid when both dimming types resolve to the SAME
+            // module part number — true for Lutron non-dedicated (both LQSE-4T5), false for the dedicated
+            // relay module (LQSE-4S8) and for Crestron (its relay module differs). So the flag is silently
+            // ignored where the modules differ: the UI greys the toggle out, and this precondition makes
+            // the engine correct regardless of what it's handed.
+            bool mergeRelayZeroTen = allowRelayZeroTenPacking
+                && string.Equals(brand.GetModulePartNumber(RelayType), brand.GetModulePartNumber(ZeroTenType),
+                                 StringComparison.OrdinalIgnoreCase);
 
             // DALI placement map, normalized: drop empty lists so a zone with no placed modules never
             // conjures a spurious empty panel.
@@ -150,6 +165,21 @@ namespace TurboSuite.Zones.Services
                 var circuitsByType = zoneCircuits
                     .GroupBy(c => c.DimmingType, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.OrderBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+
+                // Fold the Relay bucket into the 0-10V bucket as one packing pool, protocol-clustered
+                // (all relay circuits, then all 0-10V). The sequential packer then yields pure-relay
+                // modules, a single seam module at the boundary, then pure-0-10V modules — filling the
+                // spare slots the split used to waste. Under amp pressure the FFD fallback may reshuffle
+                // which circuits share a module (accepted: max packing is the point), but the display is
+                // re-sorted relay-first in DistributeModulesAcrossPanels so it still reads as a gradient.
+                if (mergeRelayZeroTen && circuitsByType.TryGetValue(RelayType, out var relayPool))
+                {
+                    circuitsByType.TryGetValue(ZeroTenType, out var zeroTenPool);
+                    var merged = new List<ZonesCircuitData>(relayPool);
+                    if (zeroTenPool != null) merged.AddRange(zeroTenPool);
+                    circuitsByType.Remove(RelayType);
+                    circuitsByType[ZeroTenType] = merged;
+                }
 
                 // Calculate modules needed per dimming type
                 var moduleCountByType = new Dictionary<string, int>();
@@ -247,7 +277,7 @@ namespace TurboSuite.Zones.Services
                 }
 
                 // Distribute modules across panels evenly
-                DistributeModulesAcrossPanels(panelResults, circuitsByType, moduleCountByType, brand);
+                DistributeModulesAcrossPanels(panelResults, circuitsByType, moduleCountByType, brand, mergeRelayZeroTen);
 
                 // Then drop the zone's DALI modules into the slots the sizing above already reserved for
                 // them — appended after the dimming modules, so they read last in each panel.
@@ -313,7 +343,8 @@ namespace TurboSuite.Zones.Services
             List<PanelResult> panels,
             Dictionary<string, List<ZonesCircuitData>> circuitsByType,
             Dictionary<string, int> moduleCountByType,
-            BrandConfig brand)
+            BrandConfig brand,
+            bool mergeRelayZeroTen = false)
         {
             if (panels.Count == 0) return;
 
@@ -404,10 +435,35 @@ namespace TurboSuite.Zones.Services
                     circuitOffsetByType[type] = offset + panelCircuits.Count;
 
                     var modules = BuildModules(type, panelCircuits, moduleCount, moduleCapacity, brand);
+
+                    // The merged Relay+0-10V pool lives under the 0-10V key. Mark its modules so the tile
+                    // labels itself from its actual slot protocols (not the "0-10V" sort key), and re-sort
+                    // relay-heavy first so the panel reads pure-relay → mixed → pure-0-10V even when the
+                    // amp-aware FFD fallback scrambled the packing. Only the merged bucket is touched — an
+                    // ELV module keeps its "ELV" label (an MLV slot still reads "ELV", not "MLV").
+                    if (mergeRelayZeroTen && string.Equals(type, ZeroTenType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        foreach (var mod in modules) mod.LabelFromSlotProtocols = true;
+                        modules = OrderMergedModulesRelayFirst(modules);
+                    }
+
                     panel.Modules.AddRange(modules);
                 }
             }
         }
+
+        /// <summary>
+        /// Orders a merged Relay+0-10V pool's modules relay-heavy first (pure-relay → mixes → pure-0-10V,
+        /// empties last), so the panel presents as a clean gradient even after the amp-aware FFD fallback
+        /// scrambled which circuits share a module. <see cref="Enumerable.OrderByDescending{T,TKey}"/> is
+        /// stable, so a run of equally-relay modules keeps its built (circuit-number) order.
+        /// </summary>
+        private static List<ModuleResult> OrderMergedModulesRelayFirst(List<ModuleResult> modules)
+            => modules.OrderByDescending(RelaySlotCount).ToList();
+
+        private static int RelaySlotCount(ModuleResult module)
+            => module.SlotProtocols.Count(p =>
+                !string.IsNullOrWhiteSpace(p) && p.IndexOf("RELAY", StringComparison.OrdinalIgnoreCase) >= 0);
 
         /// <summary>The distinct, valid ZONE N numbers present across these circuits' panels — the roster
         /// TurboDALI offers when the designer assigns a loop to a zone. Reuses the same

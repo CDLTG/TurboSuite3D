@@ -36,7 +36,8 @@ public static class PanelScheduleCollectorService
             DaliDemandProvider.CountDaliLoadsByZone(doc, out _)).ByZone;
 
         var (allocation, _) = PanelAllocationService.BuildPanelBreakdown(
-            circuits, brand, overrides, subsystemDemands, daliModulesByZone);
+            circuits, brand, overrides, subsystemDemands, daliModulesByZone,
+            allowRelayZeroTenPacking: panelSettings?.AllowRelayZeroTenPacking ?? false);
 
         // Restore the designer's LV-compartment device choices so the schedule's LV block shows the
         // interfaces they actually placed, not the "Empty" defaults — same helper the Control BOM uses.

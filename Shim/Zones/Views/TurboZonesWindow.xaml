@@ -195,6 +195,12 @@
                                       IsChecked="{Binding PanelTab.UseDedicatedRelayModule}"
                                       VerticalAlignment="Center"
                                       Visibility="{Binding PanelTab.IsLutronSelected, Converter={StaticResource BoolToVisibility}}"/>
+                            <CheckBox Content="Pack RELAY + 0-10V together"
+                                      IsChecked="{Binding PanelTab.AllowRelayZeroTenPacking}"
+                                      IsEnabled="{Binding PanelTab.CanMergeRelayZeroTen}"
+                                      VerticalAlignment="Center" Margin="12,0,0,0"
+                                      ToolTip="Pack RELAY and 0-10V loads onto the same LQSE-4T5 module to reclaim spare slots. Unavailable with a dedicated relay module."
+                                      Visibility="{Binding PanelTab.IsLutronSelected, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                     </DockPanel>
 
@@ -448,7 +454,7 @@
                                                                                                     <TextBlock>
                                                                                                         <Run Text="{Binding PartNumber, Mode=OneWay}"/>
                                                                                                         <Run Text=" ("/>
-                                                                                                        <Run Text="{Binding DimmingType, Mode=OneWay}"/>
+                                                                                                        <Run Text="{Binding TypeLabel, Mode=OneWay}"/>
                                                                                                         <Run Text=")"/>
                                                                                                         <LineBreak/>
                                                                                                         <Run Text="Circuits: "/>
@@ -465,7 +471,7 @@
                                                                                                 </Border.ToolTip>
                                                                                                 <StackPanel HorizontalAlignment="Center"
                                                                                                            VerticalAlignment="Center">
-                                                                                                    <TextBlock Text="{Binding DimmingType}"
+                                                                                                    <TextBlock Text="{Binding TypeLabel}"
                                                                                                                Foreground="White"
                                                                                                                FontWeight="SemiBold"
                                                                                                                FontSize="9"
