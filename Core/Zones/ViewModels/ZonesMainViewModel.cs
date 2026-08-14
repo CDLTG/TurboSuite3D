@@ -21,11 +21,13 @@ namespace TurboSuite.Zones.ViewModels
             IPanelSettingsStore panelSettingsStore,
             ICircuitSelector circuitSelector,
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
-            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null)
+            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
+            IReadOnlyList<ShadeLocationTally> shadeLocations = null)
         {
             PanelTab = new PanelBreakdownTabViewModel(circuits,
                 keypadCounts, hybridRepeaters,
-                savedSettings, workQueue, panelSettingsStore, subsystemDemands, daliModulesByZone);
+                savedSettings, workQueue, panelSettingsStore, subsystemDemands, daliModulesByZone,
+                shadeLocations);
             LoadNameTab = new LoadNameTabViewModel(circuits, workQueue, loadNameWriter, circuitSelector);
         }
 

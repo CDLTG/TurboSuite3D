@@ -18,14 +18,20 @@ namespace TurboSuite.Tests.Zones
     //  based, Relay cap 4) are the ready-made real configs used as fixtures.
     // ─────────────────────────────────────────────────────────────────────────────────────────────
 
-    /// <summary>Zone number is parsed from the panel name: "ZONE N" (case-insensitive) or the
-    /// legacy "{n}-{letter}" form. Anything else → 0 (caller treats 0 as unassigned).</summary>
+    /// <summary>Zone number is parsed from the panel name: "ZONE N" / "SHADE N" (case-insensitive) or the
+    /// legacy "{n}-{letter}" form. Anything else → 0 (caller treats 0 as unassigned). Shades share the ZONE
+    /// number space so SHADE 3 merges into Location 3.</summary>
     public class ParseLocationNumberTests
     {
         [Theory]
         [InlineData("ZONE 3", 3)]
         [InlineData("zone 12", 12)]        // case-insensitive
         [InlineData("ZONE 007", 7)]        // leading zeros parse
+        [InlineData("SHADE 3", 3)]         // shade location shares the ZONE number space
+        [InlineData("shade 1", 1)]         // case-insensitive
+        [InlineData("SHADE 12", 12)]
+        [InlineData("SHADE X", 0)]         // non-numeric → unassigned
+        [InlineData("(unassigned)", 0)]    // the shade fallback bucket
         [InlineData("3-A", 3)]             // legacy number-letter
         [InlineData("12-B", 12)]
         [InlineData("0-A", 0)]             // legacy with zero → 0 (unassigned upstream)

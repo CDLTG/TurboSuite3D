@@ -19,6 +19,43 @@ namespace TurboSuite.Zones.Models
         public int TotalModules { get; set; }
         public int TotalCapacity => Panels.Sum(p => p.PanelCapacity);
         public bool IsOverCapacity => TotalModules > TotalCapacity;
+
+        /// <summary>The shade (Sivoia QS) panels recommended for this location, appended after the lighting
+        /// panels in the letter run (…1-C lighting, 1-D 1-E shades). Deliberately separate from
+        /// <see cref="Panels"/>: a shade panel carries a shade fill, not dimming modules, so it must not feed
+        /// the module/overcapacity math above. A pure-shade location has these with no <see cref="Panels"/>.</summary>
+        public List<ShadePanelResult> ShadePanels { get; set; } = new List<ShadePanelResult>();
+
+        public bool HasShadePanels => ShadePanels.Count > 0;
+
+        /// <summary>Shade panels grouped into bottom-aligned stacks of three, mimicking the field: the first
+        /// shade panel opens a new column beside the lighting, the next two stack above it, then a fourth
+        /// starts a second column. Each inner list is top-to-bottom render order (1-F, 1-E, 1-D) so a normal
+        /// top-down stack puts the lowest-lettered panel at the bottom.</summary>
+        public List<List<ShadePanelResult>> ShadeColumns =>
+            ShadePanels
+                .Select((p, i) => (Panel: p, Index: i))
+                .GroupBy(x => x.Index / ShadePanelsPerColumn)
+                .Select(g => Enumerable.Reverse(g.Select(x => x.Panel)).ToList())
+                .ToList();
+
+        /// <summary>Max shade panels stacked in one column before wrapping to the next — a fixed 3-cap,
+        /// which fits within a PD4-or-larger location row without growing it.</summary>
+        public const int ShadePanelsPerColumn = 3;
+    }
+
+    /// <summary>One recommended QSPS-10PNL in a shade location — the visualizer twin of a dimmer
+    /// <see cref="PanelResult"/>, but with a shade fill (n / 10) instead of dimming modules and no size,
+    /// compartment, or override controls (a shade panel is a fixed ten-output device, a pure
+    /// recommendation). Its <see cref="ShadeCount"/> comes from <c>ShadeSolver.PanelFills</c>, so the tiles
+    /// drawn total exactly what the BOM orders.</summary>
+    public class ShadePanelResult
+    {
+        public int LocationNumber { get; set; }
+        public string PanelName { get; set; }          // e.g. "1-D"
+        public int ShadeCount { get; set; }            // shades landed on this panel (the fill)
+        public int Capacity { get; set; } = 10;        // QSPS-10PNL outputs
+        public string FillDisplay => $"{ShadeCount} / {Capacity}";
     }
 
     public class PanelResult : INotifyPropertyChanged

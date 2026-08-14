@@ -94,10 +94,14 @@ namespace TurboSuite.Zones
                 var savedDaliState = DaliStorageService.Load(doc);
                 var daliModulesByZone = DaliPlacementMapper.Build(savedDaliState.Loops, daliLoadsByZone).ByZone;
 
+                // Shade panels are drawn per location in the Panel Breakdown from the same per-location
+                // tallies the shade demand/BOM is built from — read once here (Core VM can't touch Revit).
+                var shadeLocations = ShadeDemandProvider.CollectLocations(doc);
+
                 var viewModel = new ZonesMainViewModel(circuits,
                     keypadCounts, hybridRepeaters,
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
-                    subsystemDemands, daliModulesByZone);
+                    subsystemDemands, daliModulesByZone, shadeLocations);
 
                 var window = new TurboZonesWindow
                 {

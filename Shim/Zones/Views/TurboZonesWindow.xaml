@@ -389,8 +389,9 @@
                                                                     <Run Text="{Binding Location.LocationNumber, Mode=OneWay}"/>
                                                                 </TextBlock>
                                                             </StackPanel>
-                                                            <!-- Panels for this location (bottom-aligned) -->
-                                                            <ItemsControl Grid.Row="1" ItemsSource="{Binding Location.Panels}"
+                                                            <!-- Panels for this location (bottom-aligned): lighting panels, then shade columns -->
+                                                            <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                                            <ItemsControl ItemsSource="{Binding Location.Panels}"
                                                                           VerticalAlignment="Bottom">
                                                                 <ItemsControl.ItemsPanel>
                                                                     <ItemsPanelTemplate>
@@ -546,6 +547,69 @@
                                                                     </DataTemplate>
                                                                 </ItemsControl.ItemTemplate>
                                                             </ItemsControl>
+
+                                                            <!-- Shade panels (Sivoia QS): own columns to the right of the lighting,
+                                                                 stacked in bottom-aligned groups of three, mimicking the field. -->
+                                                            <ItemsControl ItemsSource="{Binding Location.ShadeColumns}"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Visibility="{Binding Location.HasShadePanels, Converter={StaticResource BoolToVisibility}}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <WrapPanel Orientation="Horizontal"/>
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <!-- One shade column: bottom-aligned vertical stack of up to 3 cards -->
+                                                                        <ItemsControl ItemsSource="{Binding}" VerticalAlignment="Bottom" Margin="4,0,0,0">
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                    <!-- Shade panel card (QSPS-10PNL) — LV21-sized, pastel-gray fill -->
+                                                                                    <Border CornerRadius="4" Margin="0,3,0,0"
+                                                                                            Background="#FAFAFA" Width="94"
+                                                                                            BorderThickness="1" BorderBrush="#888888"
+                                                                                            Padding="0,3,0,0" VerticalAlignment="Bottom">
+                                                                                        <Border.ToolTip>
+                                                                                            <TextBlock>
+                                                                                                <Run Text="QSPS-10PNL (Sivoia QS shade panel)"/>
+                                                                                                <LineBreak/>
+                                                                                                <Run Text="{Binding PanelName, Mode=OneWay}"/>
+                                                                                                <Run Text=" — "/>
+                                                                                                <Run Text="{Binding FillDisplay, Mode=OneWay}"/>
+                                                                                                <Run Text=" shade outputs"/>
+                                                                                            </TextBlock>
+                                                                                        </Border.ToolTip>
+                                                                                        <StackPanel>
+                                                                                            <!-- Pastel-gray fill body. Height matches the LV21: its two-compartment
+                                                                                                 region (64) plus the 18px size-selector combo the shade footer omits. -->
+                                                                                            <Border Background="#8B939C" CornerRadius="2"
+                                                                                                    Margin="3,0,3,2" Height="82">
+                                                                                                <TextBlock Text="Shades"
+                                                                                                           Foreground="White"
+                                                                                                           FontWeight="SemiBold" FontSize="9"
+                                                                                                           HorizontalAlignment="Center"
+                                                                                                           VerticalAlignment="Center"/>
+                                                                                            </Border>
+                                                                                            <!-- Footer: panel name + shade count -->
+                                                                                            <Border CornerRadius="0,0,3,3"
+                                                                                                    Padding="4,3" Background="#E8E8E8">
+                                                                                                <TextBlock HorizontalAlignment="Center"
+                                                                                                           FontSize="9"
+                                                                                                           Foreground="{StaticResource TextPrimaryBrush}">
+                                                                                                    <Run Text="{Binding PanelName, Mode=OneWay}" FontWeight="Bold"/>
+                                                                                                    <Run Text="  "/>
+                                                                                                    <Run Text="{Binding FillDisplay, Mode=OneWay}"/>
+                                                                                                </TextBlock>
+                                                                                            </Border>
+                                                                                        </StackPanel>
+                                                                                    </Border>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                            </StackPanel>
 
                                                         </Grid>
                                                         </Border>

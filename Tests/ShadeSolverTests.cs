@@ -105,5 +105,92 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(24, d.LinkDevices);                    // 21 shades + 3 panels
             Assert.Equal(21, d.LinkLoads);
         }
+
+        // ── Unassigned shades: no SHADE N panel → a BOM warning, never a counted panel or a column. ──
+
+        /// <summary>A shade with no SHADE N panel (the "(unassigned)" bucket) is not counted — you can't
+        /// order a panel for a location that doesn't exist — and it surfaces as a diagnostic instead.</summary>
+        [Fact]
+        public void UnassignedShades_AreNotCounted_ButWarn()
+        {
+            var d = Solve(Loc(6, "(unassigned)"));
+
+            Assert.Empty(d.Parts);          // nothing to order
+            Assert.Equal(0, d.LinkDevices);
+            Assert.Equal(0, d.LinkLoads);
+            Assert.True(d.HasDiagnostic);
+            Assert.Contains("6 shade motors", d.Diagnostic);
+        }
+
+        /// <summary>Assigned shades count as before; unassigned ones ride alongside as a warning without
+        /// inflating the order or the link budget.</summary>
+        [Fact]
+        public void MixedAssignedAndUnassigned_CountsAssigned_WarnsUnassigned()
+        {
+            var d = Solve(Loc(20, "SHADE 1"), Loc(1, "(unassigned)"));
+
+            Assert.Equal(2, Assert.Single(d.Parts).Quantity);   // 20 → 2 panels; the lone unassigned isn't ordered
+            Assert.Equal(22, d.LinkDevices);                    // 20 shades + 2 panels (unassigned excluded)
+            Assert.Equal(20, d.LinkLoads);
+            Assert.True(d.HasDiagnostic);
+            Assert.Contains("1 shade motor ", d.Diagnostic);    // singular
+        }
+
+        /// <summary>All shades assigned → a clean solve with no diagnostic.</summary>
+        [Fact]
+        public void AllAssigned_HasNoDiagnostic()
+            => Assert.False(Solve(Loc(33, "SHADE 1"), Loc(4, "SHADE 2")).HasDiagnostic);
+
+        // ── PanelFills / PanelsForLocation: the per-location shade tiles the Panel Breakdown draws. ──
+        //  These feed the visualizer; the invariant that matters is they cannot drift from the BOM, which
+        //  sums PanelsForLocation. So: fills.Count == PanelsForLocation, and the fills sum to the shades.
+
+        /// <summary>33 shades front-load into 10, 10, 10, 3 — three full panels and a partial last, the
+        /// "a lone shade costs a whole panel" picture the tiles are there to show.</summary>
+        [Fact]
+        public void PanelFills_FrontLoadsFullPanelsThenRemainder()
+            => Assert.Equal(new[] { 10, 10, 10, 3 }, ShadeSolver.PanelFills(33));
+
+        [Fact]
+        public void PanelFills_ExactMultiple_IsAllFull()
+            => Assert.Equal(new[] { 10, 10 }, ShadeSolver.PanelFills(20));
+
+        [Fact]
+        public void PanelFills_LoneShade_IsOnePartialPanel()
+            => Assert.Equal(new[] { 1 }, ShadeSolver.PanelFills(1));
+
+        [Fact]
+        public void PanelFills_ZeroShades_IsEmpty()
+            => Assert.Empty(ShadeSolver.PanelFills(0));
+
+        /// <summary>The no-drift guard, over a range: the number of tiles drawn equals the panels ordered,
+        /// and the fills account for every shade — so the visualizer and the BOM can never disagree.</summary>
+        [Theory]
+        [InlineData(1)]
+        [InlineData(9)]
+        [InlineData(10)]
+        [InlineData(11)]
+        [InlineData(33)]
+        [InlineData(100)]
+        public void PanelFills_MatchesPanelCount_AndSumsToShades(int shades)
+        {
+            var fills = ShadeSolver.PanelFills(shades);
+
+            Assert.Equal(ShadeSolver.PanelsForLocation(shades), fills.Count);
+            Assert.Equal(shades, fills.Sum());
+            Assert.All(fills, f => Assert.InRange(f, 1, ShadeSolver.ShadesPerPanel));
+        }
+
+        /// <summary>The summed tile count across locations equals the ordered QSPS-10PNL quantity — the same
+        /// per-location function on both sides, checked end to end.</summary>
+        [Fact]
+        public void TileTotal_EqualsOrderedPanelQuantity()
+        {
+            var locations = new[] { Loc(33, "SHADE 1"), Loc(4, "SHADE 2"), Loc(1, "SHADE 3") };
+            int drawnTiles = locations.Sum(l => ShadeSolver.PanelFills(l.ShadeCount).Count);
+            int ordered = Assert.Single(Solve(locations).Parts).Quantity;
+
+            Assert.Equal(ordered, drawnTiles);   // 4 + 1 + 1 = 6
+        }
     }
 }

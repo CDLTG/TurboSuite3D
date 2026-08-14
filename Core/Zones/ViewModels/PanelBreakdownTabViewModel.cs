@@ -39,6 +39,11 @@ namespace TurboSuite.Zones.ViewModels
         /// shim-side from the persisted DALI loops at window open — the same read-once rule as the demands).
         /// Placement only; the DALI order/link budget rides <see cref="_subsystemDemands"/>.</summary>
         private readonly IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> _daliModulesByZone;
+
+        /// <summary>Per-location shade tallies read once at window open (like the demands). The Panel
+        /// Breakdown draws shade panels per location from these; the shade BOM/link demand rides
+        /// <see cref="_subsystemDemands"/>, both derived from the same ShadeSolver per-location count.</summary>
+        private readonly IReadOnlyList<ShadeLocationTally> _shadeLocations;
         private readonly IRevitWorkQueue _workQueue;
         private readonly IPanelSettingsStore _settingsStore;
         private BrandConfig _currentBrand;
@@ -56,12 +61,14 @@ namespace TurboSuite.Zones.ViewModels
             PanelSettings savedSettings,
             IRevitWorkQueue workQueue, IPanelSettingsStore settingsStore,
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
-            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null)
+            IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
+            IReadOnlyList<ShadeLocationTally> shadeLocations = null)
         {
             _workQueue = workQueue;
             _settingsStore = settingsStore;
             _subsystemDemands = subsystemDemands;
             _daliModulesByZone = daliModulesByZone;
+            _shadeLocations = shadeLocations;
             keypadCounts ??= new KeypadCounts();
             _keypadCount = keypadCounts.Regular;
             _twoGangKeypadCount = keypadCounts.TwoGang;
@@ -198,7 +205,7 @@ namespace TurboSuite.Zones.ViewModels
 
             var (result, unassigned) = PanelAllocationService.BuildPanelBreakdown(
                 circuitData, _currentBrand, _panelSizeOverrides, _subsystemDemands, _daliModulesByZone,
-                _allowRelayZeroTenPacking);
+                _allowRelayZeroTenPacking, _shadeLocations);
 
             AllocationResult = result;
             UnassignedCircuits = new ObservableCollection<ZonesCircuitData>(unassigned);

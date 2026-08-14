@@ -74,10 +74,29 @@ namespace TurboSuite.Zones.Services
             Dictionary<string, int> panelSizeOverrides = null,
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
             IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
-            bool allowRelayZeroTenPacking = false)
+            bool allowRelayZeroTenPacking = false,
+            IReadOnlyList<ShadeLocationTally> shadeLocations = null)
         {
             var unassigned = new List<ZonesCircuitData>();
             var accountedSubsystems = AccountedSubsystems(subsystemDemands);
+
+            // Shade panels recommended per location, keyed by the same location number the lighting groups by
+            // (SHADE 1 → 1, exactly as ZONE 1 → 1). Each value is the per-panel fill list from ShadeSolver, so
+            // the tiles drawn here total exactly what the BOM orders. Shades merge into the matching lighting
+            // location; a shade number with no lighting spawns its own (pure-shade) location below.
+            var shadeFillsByZone = new Dictionary<int, IReadOnlyList<int>>();
+            foreach (var loc in shadeLocations ?? Array.Empty<ShadeLocationTally>())
+            {
+                if (loc == null || loc.ShadeCount <= 0) continue;
+                int z = ParseLocationNumber(loc.LocationName);
+                // A shade with no SHADE N panel can't be placed at a location — it surfaces as a shade BOM
+                // warning (ShadeSolver), never a phantom "(unassigned)" column here.
+                if (z <= 0) continue;
+                var fills = ShadeSolver.PanelFills(loc.ShadeCount);
+                shadeFillsByZone[z] = shadeFillsByZone.TryGetValue(z, out var existing)
+                    ? existing.Concat(fills).ToList()
+                    : fills;
+            }
 
             // Relay+0-10V packing is only physically valid when both dimming types resolve to the SAME
             // module part number — true for Lutron non-dedicated (both LQSE-4T5), false for the dedicated
@@ -149,10 +168,12 @@ namespace TurboSuite.Zones.Services
 
             var result = new PanelAllocationResult();
 
-            // The zones to build = those with dimming circuits ∪ those the designer assigned DALI loops to.
-            // The union is what lets a DALI-only zone (no dimming circuits) get a panel at all.
+            // The zones to build = those with dimming circuits ∪ those the designer assigned DALI loops to
+            // ∪ those with recommended shade panels. The union lets a DALI-only or shade-only zone (no dimming
+            // circuits) get a location column at all.
             var allZones = new SortedSet<int>(circuitsByZone.Keys);
             allZones.UnionWith(daliByZone.Keys);
+            allZones.UnionWith(shadeFillsByZone.Keys);
 
             foreach (var zone in allZones)
             {
@@ -200,10 +221,18 @@ namespace TurboSuite.Zones.Services
                 // recommendation exactly like a dimming module (their slot footprint is identical).
                 int zoneTotalModules = moduleCountByType.Values.Sum() + zoneDali.Count;
 
-                // Determine default panel size and recommended panel count
+                // Determine default panel size and recommended panel count. A zone present ONLY because it has
+                // shade panels (no dimming circuits, no DALI) gets zero lighting panels — its shades stand
+                // alone in their own column — rather than a phantom empty 1-A dimmer panel.
+                bool hasLightingWork = zoneCircuits.Count > 0 || zoneDali.Count > 0;
                 int defaultSize = brand.DefaultPanelSize;
-                int panelCount = zoneTotalModules == 0 ? 1 : (int)Math.Ceiling((double)zoneTotalModules / defaultSize);
-                panelCount = Math.Max(panelCount, 1);
+                int panelCount;
+                if (!hasLightingWork)
+                    panelCount = 0;
+                else
+                    panelCount = zoneTotalModules == 0
+                        ? 1
+                        : Math.Max((int)Math.Ceiling((double)zoneTotalModules / defaultSize), 1);
 
                 // Generate recommended panel names and apply size overrides
                 var panelSizes = new List<(string Name, int Size)>();
@@ -287,6 +316,23 @@ namespace TurboSuite.Zones.Services
                 {
                     locationResult.Panels.Add(panel);
                     locationResult.TotalModules += panel.TotalModuleCount;
+                }
+
+                // Append this location's recommended shade panels, continuing the letter run after the
+                // lighting panels (…1-C lighting, then 1-D, 1-E shades). They carry a shade fill, not modules,
+                // and stay out of the location's module/overcapacity math (their own ShadePanels list).
+                if (shadeFillsByZone.TryGetValue(zone, out var shadeFills))
+                {
+                    for (int i = 0; i < shadeFills.Count; i++)
+                    {
+                        locationResult.ShadePanels.Add(new ShadePanelResult
+                        {
+                            LocationNumber = zone,
+                            PanelName = $"{zone}-{(char)('A' + locationResult.Panels.Count + i)}",
+                            ShadeCount = shadeFills[i],
+                            Capacity = ShadeSolver.ShadesPerPanel
+                        });
+                    }
                 }
 
                 result.Locations.Add(locationResult);
@@ -498,6 +544,15 @@ namespace TurboSuite.Zones.Services
                 string numPart = panelName.Substring(5).Trim();
                 if (int.TryParse(numPart, out int zoneNum))
                     return zoneNum;
+            }
+
+            // "SHADE N" format — shade locations share the ZONE N number space (SHADE 1 = ZONE 1 =
+            // Location 1), so a shade panel merges into the matching lighting location.
+            if (panelName.StartsWith("SHADE ", StringComparison.OrdinalIgnoreCase))
+            {
+                string numPart = panelName.Substring(6).Trim();
+                if (int.TryParse(numPart, out int shadeNum))
+                    return shadeNum;
             }
 
             // Legacy "{number}-{letter}" format

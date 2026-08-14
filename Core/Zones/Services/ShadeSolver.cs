@@ -41,22 +41,71 @@ namespace TurboSuite.Zones.Services
             if (locations == null || locations.Count == 0)
                 return ControlSubsystemDemand.None(SubsystemName);
 
-            int totalShades = locations.Sum(l => l.ShadeCount);
-            if (totalShades == 0)
+            // Split by whether the shade location resolves to a real location number (SHADE 1 → 1, the
+            // same parse the panel breakdown groups by). Shades with no SHADE N panel can't be assigned a
+            // panel at a location that doesn't exist, so they are NOT counted — they surface as a BOM
+            // warning instead, and are likewise dropped from the panel-breakdown display.
+            int assignedShades = 0, unassignedShades = 0, recommendedPanels = 0;
+            foreach (var l in locations)
+            {
+                if (l == null || l.ShadeCount <= 0) continue;
+                if (PanelAllocationService.ParseLocationNumber(l.LocationName) > 0)
+                {
+                    assignedShades += l.ShadeCount;
+                    recommendedPanels += PanelsForLocation(l.ShadeCount);   // per location, then summed
+                }
+                else
+                {
+                    unassignedShades += l.ShadeCount;
+                }
+            }
+
+            if (assignedShades == 0 && unassignedShades == 0)
                 return ControlSubsystemDemand.None(SubsystemName);
 
-            // Recommended per location, then summed — never ceil of the grand total, which would let a
-            // stray shade in one location absorb into another location's slack it can't physically share.
-            int recommendedPanels = locations.Sum(l => CeilDiv(l.ShadeCount, ShadesPerPanel));
+            string? diagnostic = unassignedShades == 0 ? null
+                : $"{unassignedShades} shade motor{(unassignedShades == 1 ? "" : "s")} not assigned to a " +
+                  "SHADE panel — assign them so their panels can be counted.";
 
+            // Nothing assignable — warning only, no QSPS-10PNL to order.
+            if (recommendedPanels == 0)
+                return new ControlSubsystemDemand(SubsystemName, diagnostic: diagnostic);
+
+            // Both the summed order and the Panel Breakdown's per-location tiles derive from
+            // PanelsForLocation, so the count drawn can never disagree with the count ordered. The link
+            // budget counts only the assigned shades (an unassigned shade rides no known link yet).
             return new ControlSubsystemDemand(
                 SubsystemName,
                 parts: new List<DemandPart>
                 {
                     new DemandPart(PanelPartNumber, recommendedPanels, DemandMount.External)
                 },
-                linkDevices: totalShades + recommendedPanels,
-                linkLoads: totalShades);
+                linkDevices: assignedShades + recommendedPanels,
+                linkLoads: assignedShades,
+                diagnostic: diagnostic);
+        }
+
+        /// <summary>QSPS-10PNL panels one location needs — its shades ceil'd to whole ten-output panels.
+        /// The single per-location count: the BOM sums it (see <see cref="Solve"/>) and the Panel Breakdown
+        /// draws exactly this many tiles, so the two can never drift.</summary>
+        public static int PanelsForLocation(int shadeCount) => CeilDiv(shadeCount, ShadesPerPanel);
+
+        /// <summary>How the shades in one location fill its recommended panels, front-loaded: full tens,
+        /// then the remainder on the last panel (33 → 10, 10, 10, 3). The count equals
+        /// <see cref="PanelsForLocation"/> and the sum equals <paramref name="shadeCount"/>, so the tiles
+        /// the visualizer draws total exactly what the BOM orders. Empty for a zero-shade location.</summary>
+        public static IReadOnlyList<int> PanelFills(int shadeCount)
+        {
+            int panels = PanelsForLocation(shadeCount);
+            var fills = new List<int>(panels);
+            int remaining = shadeCount;
+            for (int i = 0; i < panels; i++)
+            {
+                int f = remaining < ShadesPerPanel ? remaining : ShadesPerPanel;
+                fills.Add(f);
+                remaining -= f;
+            }
+            return fills;
         }
 
         private static int CeilDiv(int n, int d) => (n + d - 1) / d;   // n, d ≥ 0
