@@ -116,6 +116,11 @@ public static class PanelSchedulePdfService
         XGraphics gfx = null;
         double y = 0;
 
+        // A panel's outline bookmark, set just before the panel's FIRST page and consumed by the next
+        // StartNewPage. Continuation pages (which also call StartNewPage) leave it null, so each panel
+        // gets exactly one bookmark, on its opening page.
+        string pendingBookmark = null;
+
         void StartNewPage()
         {
             gfx?.Dispose();
@@ -124,6 +129,12 @@ public static class PanelSchedulePdfService
             page.Height = XUnit.FromPoint(PageHeight);
             gfx = XGraphics.FromPdfPage(page);
             y = MarginTop;
+
+            if (pendingBookmark != null)
+            {
+                pdf.Outlines.Add(pendingBookmark, page);
+                pendingBookmark = null;
+            }
 
             // Header: project name + subtitle (left), logo (right)
             gfx.DrawString(projectName, fontHeaderProject, XBrushes.Black,
@@ -346,6 +357,7 @@ public static class PanelSchedulePdfService
             var slotCenter = new XStringFormat
             { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
 
+            pendingBookmark = $"Panel {sp.PanelName.ToUpperInvariant()}";
             StartNewPage();
 
             // Dark panel header — PANEL 1-D [QSPS-10PNL]. No wattage: a QS motor is not a VA dimming load.
@@ -463,6 +475,7 @@ public static class PanelSchedulePdfService
             double panelWatts = moduleWattsList.Sum(w => w < 1 ? 0 : Math.Round(w));
 
             // Each panel starts on a new page
+            pendingBookmark = $"Panel {panel.PanelName.ToUpperInvariant()}";
             StartNewPage();
             DrawPanelHeader(panel.PanelName, panel.SelectedPanelSize, panelWatts, false);
             y += ModuleGap;
