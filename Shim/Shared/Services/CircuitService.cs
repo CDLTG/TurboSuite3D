@@ -118,7 +118,10 @@ public static class CircuitService
     }
 
     /// <summary>
-    /// Get all electrical panels (distribution boards) in the document, sorted by name.
+    /// Get the electrical panels a lighting/power circuit can be assigned to, sorted by name.
+    /// Shade/control panels (on the 35 V distribution system) are excluded — a lighting circuit
+    /// cannot live on them, and they must not appear in the TurboWire/TurboDriver panel picker.
+    /// See <see cref="PanelClassifier"/>.
     /// </summary>
     public static List<FamilyInstance> GetAllPanels(Document doc)
     {
@@ -126,9 +129,15 @@ public static class CircuitService
             .OfCategory(BuiltInCategory.OST_ElectricalEquipment)
             .OfClass(typeof(FamilyInstance))
             .Cast<FamilyInstance>()
+            .Where(IsLightingPanel)
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    /// <summary>True when a lighting/power circuit may be assigned to this panel (not a 35 V
+    /// shade/control panel). Reads the panel's downstream distribution system.</summary>
+    private static bool IsLightingPanel(FamilyInstance panel) =>
+        PanelClassifier.IsLightingPanel(ParameterHelper.GetPanelDistributionSystemName(panel));
 
     /// <summary>
     /// Assign a circuit to a specific panel.
@@ -179,7 +188,9 @@ public static class CircuitService
     /// own default (first available panel).</description></item>
     /// </list>
     /// "Switched" circuits are skipped — they are unassigned by design (no dialog) and
-    /// must not poison the panel that regular wiring remembers. <paramref name="exclude"/>
+    /// must not poison the panel that regular wiring remembers. Circuits on a shade/control
+    /// (35 V) panel are likewise skipped, so lighting never defaults to a shade panel.
+    /// <paramref name="exclude"/>
     /// omits circuits already being wired in the current run so they don't answer for
     /// themselves.
     /// </summary>
@@ -190,7 +201,8 @@ public static class CircuitService
             .OfClass(typeof(ElectricalSystem))
             .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
             .Cast<ElectricalSystem>()
-            .Where(c => (exclude == null || !exclude.Contains(c.Id)) && !IsSwitchedCircuit(c))
+            .Where(c => (exclude == null || !exclude.Contains(c.Id)) && !IsSwitchedCircuit(c)
+                        && !IsOnShadePanel(c))
             .OrderByDescending(c => c.Id.Value)
             .FirstOrDefault();
 
@@ -198,6 +210,11 @@ public static class CircuitService
             return (null, false);
         return newest.BaseEquipment is FamilyInstance panel ? (panel, false) : (null, true);
     }
+
+    /// <summary>A circuit sitting on a shade/control (35 V) panel — skipped when remembering the
+    /// last lighting panel, so wiring lights never defaults to a shade panel.</summary>
+    private static bool IsOnShadePanel(ElectricalSystem circuit) =>
+        circuit.BaseEquipment is FamilyInstance panel && !IsLightingPanel(panel);
 
     private static bool IsSwitchedCircuit(ElectricalSystem circuit) =>
         string.Equals(ParameterHelper.GetCircuitComments(circuit), "switched",

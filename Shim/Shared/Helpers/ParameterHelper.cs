@@ -398,6 +398,19 @@ namespace TurboSuite.Shared.Helpers
 
         #region Panel Parameters
 
+        /// <summary>
+        /// The name of the distribution system a panel distributes downstream (e.g. "35 V", "120 V"),
+        /// read from <c>RBS_FAMILY_CONTENT_DISTRIBUTION_SYSTEM</c> as its display string. Empty when the
+        /// panel has no distribution system set. This is the signal
+        /// <see cref="TurboSuite.Shared.Services.PanelClassifier"/> uses to tell lighting panels from
+        /// shade/control (35 V) panels.
+        /// </summary>
+        public static string GetPanelDistributionSystemName(FamilyInstance panel)
+        {
+            Parameter param = panel?.get_Parameter(BuiltInParameter.RBS_FAMILY_CONTENT_DISTRIBUTION_SYSTEM);
+            return param?.AsValueString() ?? string.Empty;
+        }
+
         /// <summary>Returns the electrical equipment panel instance with the given name, or null if not found.</summary>
         public static Element GetPanelElement(Document doc, string panelName)
         {
