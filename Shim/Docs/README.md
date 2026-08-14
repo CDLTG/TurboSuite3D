@@ -116,9 +116,15 @@ A **subsystem-placed module** (the DALI DIN module, `ModuleResult.OrderedBySubsy
 
 Each panel page leads with an **LV-compartment block** listing the interfaces the designer sited there (Processor / QSE-IO / QSE-CI-DMX) as part number + description. Interfaces only — no served-zones column (no compartment→zone linkage exists, and one-panel-per-page makes the page itself the location). Nothing draws for an Empty compartment.
 
+### Shade panels
+
+Each recommended **QSPS-10PNL** also gets its own page, appended within its location **after** the lighting panels and continuing the letter run (…`1-C` lighting, then `1-D`, `1-E` shades) — page order is location number, then lighting panels, then shade panels. Same dark header (`PANEL 1-D [QSPS-10PNL]`) but **no wattage** (a Sivoia QS motor is not a VA dimming load), and a **three-column** table — **# | Load | Ckt** — one row per shade output, padded with "— spare —" to the fixed ten. The Dimming/Watts columns are dropped: a QS motor has neither. **Circuit = output** — each shade circuit carries one motor, so `Load` is the shade circuit's load name (built in the TurboZones **Shade Names** tab, `ROOM - comment`) and `Ckt` is the number Revit assigned when the shade was powered to its panel. A shade panel is always ≤10 rows, so it never needs a continuation page.
+
+The outputs come from the shade circuits themselves, bucketed into panels of ten by `ShadeSolver.PanelFills` — the **same** per-location count the BOM sums (`PanelsForLocation`) and the visualizer tiles use — so the rows drawn, the tiles shown, and the QSPS-10PNL quantity ordered can never disagree (pinned by `ShadeCircuitBucketingTests`).
+
 ### Data Source
 
-Re-derives the panel breakdown **exactly as the Control BOM does**, so the two never disagree about what a panel holds: `PanelAllocationService.BuildPanelBreakdown` with saved TurboZones settings (brand, panel size overrides) plus the control-subsystem demands (`SubsystemDemandCollector` — DMX/shades/DALI) and the DALI placement map (`DaliPlacementMapper`), then `SpecialDeviceRestore` reapplies the saved LV-compartment device choices. Circuit wattage is read from `RBS_ELEC_APPARENT_LOAD`.
+Re-derives the panel breakdown **exactly as the Control BOM does**, so the two never disagree about what a panel holds: `PanelAllocationService.BuildPanelBreakdown` with saved TurboZones settings (brand, panel size overrides) plus the control-subsystem demands (`SubsystemDemandCollector` — DMX/shades/DALI), the DALI placement map (`DaliPlacementMapper`), and the shade circuits (`ShadeCircuitCollectorService`, which drive the shade pages' rows), then `SpecialDeviceRestore` reapplies the saved LV-compartment device choices. Circuit wattage is read from `RBS_ELEC_APPARENT_LOAD`.
 
 ## Power Supplies Tab
 

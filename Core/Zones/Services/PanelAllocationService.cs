@@ -75,7 +75,8 @@ namespace TurboSuite.Zones.Services
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
             IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
             bool allowRelayZeroTenPacking = false,
-            IReadOnlyList<ShadeLocationTally> shadeLocations = null)
+            IReadOnlyList<ShadeLocationTally> shadeLocations = null,
+            IReadOnlyList<ZonesCircuitData> shadeCircuits = null)
         {
             var unassigned = new List<ZonesCircuitData>();
             var accountedSubsystems = AccountedSubsystems(subsystemDemands);
@@ -84,18 +85,50 @@ namespace TurboSuite.Zones.Services
             // (SHADE 1 → 1, exactly as ZONE 1 → 1). Each value is the per-panel fill list from ShadeSolver, so
             // the tiles drawn here total exactly what the BOM orders. Shades merge into the matching lighting
             // location; a shade number with no lighting spawns its own (pure-shade) location below.
+            //
+            // Two inputs, one fill computation. The visualizer path passes tallies (counts only) and draws
+            // count tiles; the schedule path passes the shade CIRCUITS and prints a row per output. When
+            // circuits are supplied the fills derive from the row counts, so rows == tiles == BOM by
+            // construction; a shade with no SHADE N panel can't be placed and surfaces as a shade BOM warning
+            // (ShadeSolver), never a phantom "(unassigned)" column here.
             var shadeFillsByZone = new Dictionary<int, IReadOnlyList<int>>();
-            foreach (var loc in shadeLocations ?? Array.Empty<ShadeLocationTally>())
+            var shadeRowsByZone = new Dictionary<int, List<ShadeOutputRow>>();
+            if (shadeCircuits != null)
             {
-                if (loc == null || loc.ShadeCount <= 0) continue;
-                int z = ParseLocationNumber(loc.LocationName);
-                // A shade with no SHADE N panel can't be placed at a location — it surfaces as a shade BOM
-                // warning (ShadeSolver), never a phantom "(unassigned)" column here.
-                if (z <= 0) continue;
-                var fills = ShadeSolver.PanelFills(loc.ShadeCount);
-                shadeFillsByZone[z] = shadeFillsByZone.TryGetValue(z, out var existing)
-                    ? existing.Concat(fills).ToList()
-                    : fills;
+                foreach (var c in shadeCircuits)
+                {
+                    if (c == null) continue;
+                    int z = ParseLocationNumber(c.PanelName);
+                    if (z <= 0) continue;
+                    if (!shadeRowsByZone.TryGetValue(z, out var list))
+                        shadeRowsByZone[z] = list = new List<ShadeOutputRow>();
+                    list.Add(new ShadeOutputRow
+                    {
+                        LoadName = !string.IsNullOrWhiteSpace(c.UpdatedLoadName)
+                            ? c.UpdatedLoadName
+                            : (c.CurrentLoadName ?? string.Empty),
+                        CircuitNumber = c.CircuitNumber ?? string.Empty
+                    });
+                }
+                foreach (var kv in shadeRowsByZone)
+                {
+                    kv.Value.Sort((a, b) =>
+                        NaturalStringComparer.OrdinalIgnoreCase.Compare(a.CircuitNumber, b.CircuitNumber));
+                    shadeFillsByZone[kv.Key] = ShadeSolver.PanelFills(kv.Value.Count);
+                }
+            }
+            else
+            {
+                foreach (var loc in shadeLocations ?? Array.Empty<ShadeLocationTally>())
+                {
+                    if (loc == null || loc.ShadeCount <= 0) continue;
+                    int z = ParseLocationNumber(loc.LocationName);
+                    if (z <= 0) continue;
+                    var fills = ShadeSolver.PanelFills(loc.ShadeCount);
+                    shadeFillsByZone[z] = shadeFillsByZone.TryGetValue(z, out var existing)
+                        ? existing.Concat(fills).ToList()
+                        : fills;
+                }
             }
 
             // Relay+0-10V packing is only physically valid when both dimming types resolve to the SAME
@@ -323,15 +356,29 @@ namespace TurboSuite.Zones.Services
                 // and stay out of the location's module/overcapacity math (their own ShadePanels list).
                 if (shadeFillsByZone.TryGetValue(zone, out var shadeFills))
                 {
+                    // Per-output rows for this zone (schedule path), in circuit order — distributed across
+                    // the fills in the same front-loaded order the fills were derived from, so panel 1-D
+                    // takes the first fills[0] outputs, 1-E the next, and so on. Empty on the visualizer path.
+                    shadeRowsByZone.TryGetValue(zone, out var zoneRows);
+                    int rowCursor = 0;
+
                     for (int i = 0; i < shadeFills.Count; i++)
                     {
-                        locationResult.ShadePanels.Add(new ShadePanelResult
+                        var shadePanel = new ShadePanelResult
                         {
                             LocationNumber = zone,
                             PanelName = $"{zone}-{(char)('A' + locationResult.Panels.Count + i)}",
                             ShadeCount = shadeFills[i],
                             Capacity = ShadeSolver.ShadesPerPanel
-                        });
+                        };
+
+                        if (zoneRows != null)
+                        {
+                            for (int k = 0; k < shadeFills[i] && rowCursor < zoneRows.Count; k++)
+                                shadePanel.Outputs.Add(zoneRows[rowCursor++]);
+                        }
+
+                        locationResult.ShadePanels.Add(shadePanel);
                     }
                 }
 

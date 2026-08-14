@@ -175,6 +175,81 @@
                 </Grid>
             </TabItem>
 
+            <!-- Shade Names Tab — the same grid as Load Names, fed shade circuits and the shade
+                 override store. Collapses entirely on jobs with no shade circuits. Dimming/Load-
+                 Classification columns are dropped: a QS motor has none. -->
+            <TabItem Header="{Binding ShadeNameTab.TabHeader}"
+                     Visibility="{Binding HasShadeNameTab, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <DataGrid x:Name="ShadeNamesGrid"
+                              Grid.Row="0"
+                              ItemsSource="{Binding ShadeNameTab.Circuits}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserReorderColumns="False"
+                              SelectionMode="Single"
+                              SelectionUnit="Cell"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              HorizontalGridLinesBrush="{StaticResource SeparatorBrush}"
+                              BorderThickness="1"
+                              BorderBrush="{StaticResource SeparatorBrush}"
+                              RowHeaderWidth="0"
+                              CurrentCellChanged="ShadeNamesGrid_CurrentCellChanged"
+                              PreviewKeyDown="LoadNamesGrid_PreviewKeyDown"
+                              Margin="4,6,4,4">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="BorderThickness" Value="4,0,0,0"/>
+                                <Setter Property="BorderBrush" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsActiveRow}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource HeaderBlueBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                        <DataGrid.Columns>
+                            <!-- Source: read-only reference -->
+                            <DataGridTextColumn Header="Room" Binding="{Binding RoomName}" Width="90" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <DataGridTextColumn Header="Current Load Name" Binding="{Binding CurrentLoadName}" Width="150" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <DataGridTextColumn Header="Circuit #" Binding="{Binding CircuitNumber}" Width="70" IsReadOnly="True" CellStyle="{StaticResource SourceCellStyle}"/>
+                            <!-- Action: user inputs + computed result -->
+                            <DataGridTextColumn Header="Room Override" Binding="{Binding RoomOverride, UpdateSourceTrigger=LostFocus}" Width="90" CellStyle="{StaticResource ActionFirstCellStyle}" HeaderStyle="{StaticResource ActionHeaderStyle}"/>
+                            <DataGridTextColumn Header="Circuit Comments" Binding="{Binding CircuitComments, UpdateSourceTrigger=LostFocus}" Width="128" CellStyle="{StaticResource ActionSeparatorCellStyle}" HeaderStyle="{StaticResource ActionHeaderStyle}"/>
+                            <DataGridTextColumn Header="Updated Load Name" Binding="{Binding UpdatedLoadName}" Width="*" IsReadOnly="True" CellStyle="{StaticResource ActionResultCellStyle}" HeaderStyle="{StaticResource ActionHeaderStyle}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Border Grid.Row="1" Background="{StaticResource FooterBgBrush}"
+                            BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0"
+                            Padding="8,6">
+                        <DockPanel>
+                            <Button Content="Apply Shade Names"
+                                    Command="{Binding ShadeNameTab.ApplyCommand}"
+                                    Style="{StaticResource RevitButtonStyle}" Height="28"
+                                    DockPanel.Dock="Right"/>
+                            <Button Content="Select in Project"
+                                    Command="{Binding ShadeNameTab.SelectInProjectCommand}"
+                                    Style="{StaticResource RevitButtonStyle}" Height="28"
+                                    Margin="0,0,6,0"
+                                    DockPanel.Dock="Right"/>
+                            <TextBlock VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}">
+                                <Run Text="{Binding ShadeNameTab.Circuits.Count, Mode=OneWay}"/>
+                                <Run Text=" shade circuits"/>
+                            </TextBlock>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
             <!-- Panel Breakdown Tab -->
             <TabItem Header="{Binding PanelTab.TabHeader}">
                 <Grid>

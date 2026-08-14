@@ -1,8 +1,8 @@
 # TurboZones
 
-Two-tab modeless utility: circuit load names and dimmer-panel allocation. The window stays open while you work in Revit — pan, zoom, select, and run other commands without closing it. All Revit writes go through an `IExternalEventHandler` (see CLAUDE.md "Modeless pattern"). DALI loop *declaration* used to be a third tab here; it now lives in the standalone **TurboDALI** command, and TurboZones is a pure consumer of the persisted DALI state (placement + demand only).
+Modeless utility: circuit load names, shade load names, and dimmer-panel allocation. The window stays open while you work in Revit — pan, zoom, select, and run other commands without closing it. All Revit writes go through an `IExternalEventHandler` (see CLAUDE.md "Modeless pattern"). DALI loop *declaration* used to be a third tab here; it now lives in the standalone **TurboDALI** command, and TurboZones is a pure consumer of the persisted DALI state (placement + demand only). A **Shade Names** tab appears between Load Names and Panel Breakdown **only on jobs that have shade circuits**, so non-shade jobs keep the two-tab layout.
 
-## Tab 1 — Load Names
+## Tab — Load Names
 
 Scans every circuit connected to Lighting or Electrical Fixtures and resolves a load name using:
 
@@ -12,7 +12,13 @@ Scans every circuit connected to Lighting or Electrical Fixtures and resolves a 
 
 The resolved label is combined with the room name of the first fixture: `ROOM NAME - label`. A per-circuit **Room Override** column lets you substitute a different room name for a single circuit; overrides are persisted in ExtensibleStorage (keyed by circuit) so they survive reopening the window, and apply only to the circuit they were set on. Review the proposed updates in the table, then click **Apply Load Names** to write all changes in a single transaction. Click any row to mark it active (blue left-edge stripe), then click **Select in Project** to highlight and zoom to that circuit in Revit's active view without closing the window.
 
-## Tab 2 — Panel Breakdown
+## Tab — Shade Names
+
+The **same grid and machinery as Load Names**, fed shade circuits instead of lighting ones (`ShadeCircuitCollectorService`, the mirror of the lighting collector's shade drop). A shade circuit is one shade motor by convention — **circuit = output** — so each row is one QSPS-10PNL output, named exactly like lighting: `ROOM NAME - comment`, room from owned Spaces (region fallback in 2D, override as the escape hatch), comment typically supplied at wire-time by TurboWire. `LoadNameTabViewModel` is reused verbatim (only the header and the fed circuit list differ); **Apply Shade Names** writes `RBS_ELEC_CIRCUIT_NAME` back per circuit. The dimming/load-classification columns are dropped — a QS motor has none.
+
+**Separate override store.** Shade room overrides live in their **own** ExtensibleStorage schema (`ShadeRoomOverrideStorageService`, a distinct GUID) rather than the lighting store. This is load-bearing: a Load-Names "Apply" does a full-overwrite `Write` built from *its* circuit snapshot, pruning any key it didn't enumerate — so a single shared store would have each tab's Apply prune the other's overrides. The lighting `RoomOverrideStorageService` and the shade one share one instance core (`RoomOverrideStore`, injected GUID/name); TurboWire routes a shade circuit's wire-time override to the shade store by its `shadePanels` mode. (New schema, so no migration — nothing stale to clear.)
+
+## Tab — Panel Breakdown
 
 Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selected brand.
 

@@ -72,7 +72,11 @@ public static class CircuitInfoService
         // way TurboZones does — first lighting/electrical fixture on the circuit.
         var regionFallback = new RegionRoomLookupService(doc);
         var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
-        var existingOverrides = RoomOverrideStorageService.Load(doc);
+        // Shade circuits keep their overrides in a separate store (its own schema GUID) so the two
+        // Load-Names tabs' full-overwrite Applies never prune each other's — route by mode.
+        var existingOverrides = shadePanels
+            ? ShadeRoomOverrideStorageService.Load(doc)
+            : RoomOverrideStorageService.Load(doc);
 
         var states = targets
             .Select(c => new CircuitRoomState(
@@ -117,8 +121,11 @@ public static class CircuitInfoService
         {
             using var t = new Transaction(doc, "Circuit room override");
             t.Start();
-            RoomOverrideStorageService.Upsert(doc,
-                decision.Changes.ToDictionary(kv => kv.Key, kv => kv.Value));
+            var changes = decision.Changes.ToDictionary(kv => kv.Key, kv => kv.Value);
+            if (shadePanels)
+                ShadeRoomOverrideStorageService.Upsert(doc, changes);
+            else
+                RoomOverrideStorageService.Upsert(doc, changes);
             t.Commit();
         }
 

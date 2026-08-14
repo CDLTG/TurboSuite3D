@@ -635,4 +635,100 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal("MLV", module.SlotProtocol(0));   // per-slot truth still intact
         }
     }
+
+    /// <summary>The schedule path of BuildPanelBreakdown: shade CIRCUITS distributed into per-location
+    /// QSPS-10PNL panels as per-output rows. The invariant that matters is the schedule can't drift from
+    /// the BOM/visualizer — every shade panel's row count equals its fill, the fills equal
+    /// <c>ShadeSolver.PanelFills</c>, and every output is accounted for exactly once, in circuit order.</summary>
+    public class ShadeCircuitBucketingTests
+    {
+        // A shade circuit is identified only by its panel (SHADE N); the shade path reads its load name
+        // and circuit number, nothing else.
+        private static ZonesCircuitData SC(string number, string? panel, string? loadName = null)
+            => new ZonesCircuitData
+            {
+                CircuitNumber = number,
+                PanelName = panel,
+                UpdatedLoadName = loadName ?? $"ROOM - {number}",
+            };
+
+        private static List<ShadePanelResult> ShadePanels(PanelAllocationResult r)
+            => r.Locations.SelectMany(l => l.ShadePanels).ToList();
+
+        /// <summary>33 shade circuits in SHADE 1 → four panels filled 10,10,10,3 (pure-shade location, so
+        /// the letter run starts at A). Row counts equal the fills, and the fills equal PanelFills.</summary>
+        [Fact]
+        public void ShadeCircuits_BucketIntoPanels_MatchingPanelFills()
+        {
+            var shade = Enumerable.Range(1, 33).Select(i => SC(i.ToString("D2"), "SHADE 1")).ToList();
+
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData>(), BrandConfig.Crestron, shadeCircuits: shade);
+
+            var loc = Assert.Single(result.Locations);
+            Assert.Equal(1, loc.LocationNumber);
+            Assert.Empty(loc.Panels);                       // pure-shade: no lighting panels
+            Assert.Equal(new[] { "1-A", "1-B", "1-C", "1-D" }, loc.ShadePanels.Select(p => p.PanelName));
+            Assert.Equal(ShadeSolver.PanelFills(33), loc.ShadePanels.Select(p => p.ShadeCount).ToList());
+            Assert.Equal(loc.ShadePanels.Select(p => p.ShadeCount).ToList(),
+                         loc.ShadePanels.Select(p => p.Outputs.Count).ToList());
+        }
+
+        /// <summary>Shade panels continue the letter run AFTER the location's lighting panels: one ELV
+        /// lighting panel "1-A", then 12 shades → "1-B" (10) and "1-C" (2).</summary>
+        [Fact]
+        public void ShadeCircuits_ContinueLetterRun_AfterLightingPanels()
+        {
+            var lighting = new List<ZonesCircuitData>
+            {
+                new ZonesCircuitData { CircuitNumber = "L1", PanelName = "ZONE 1", DimmingType = "ELV" },
+            };
+            var shade = Enumerable.Range(1, 12).Select(i => SC(i.ToString("D2"), "SHADE 1")).ToList();
+
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                lighting, BrandConfig.Crestron, shadeCircuits: shade);
+
+            var loc = Assert.Single(result.Locations);
+            Assert.Equal("1-A", Assert.Single(loc.Panels).PanelName);
+            Assert.Equal(new[] { "1-B", "1-C" }, loc.ShadePanels.Select(p => p.PanelName));
+            Assert.Equal(new[] { 10, 2 }, loc.ShadePanels.Select(p => p.ShadeCount).ToArray());
+        }
+
+        /// <summary>End-to-end no-drift guard: total rows drawn equal the shade circuit count, and each
+        /// output appears on exactly one panel, in circuit-number order across the location's panels.</summary>
+        [Fact]
+        public void ShadeCircuits_EveryOutputAccountedForOnce_InCircuitOrder()
+        {
+            // Deliberately out of order in the input to prove the sort.
+            var numbers = new[] { "03", "01", "11", "02", "10" };
+            var shade = numbers.Select(n => SC(n, "SHADE 2")).ToList();
+
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData>(), BrandConfig.Crestron, shadeCircuits: shade);
+
+            var panels = ShadePanels(result);
+            var flat = panels.SelectMany(p => p.Outputs.Select(o => o.CircuitNumber)).ToList();
+
+            Assert.Equal(numbers.Length, flat.Count);                 // all five, none dropped/duplicated
+            Assert.Equal(new[] { "01", "02", "03", "10", "11" }, flat); // natural circuit order
+            Assert.Single(panels);                                    // 5 ≤ 10 → one QSPS-10PNL
+        }
+
+        /// <summary>A shade circuit whose panel is not a SHADE N (blank/off-vocabulary) is not placed — no
+        /// phantom "(unassigned)" location, no panel. It surfaces as a shade BOM warning elsewhere.</summary>
+        [Fact]
+        public void UnassignedShadeCircuit_GetsNoPanelAndNoLocation()
+        {
+            var shade = new List<ZonesCircuitData>
+            {
+                SC("1", ""),            // no panel
+                SC("2", "SHADE X"),     // not a SHADE N number
+            };
+
+            var (result, _) = PanelAllocationService.BuildPanelBreakdown(
+                new List<ZonesCircuitData>(), BrandConfig.Crestron, shadeCircuits: shade);
+
+            Assert.Empty(result.Locations);
+        }
+    }
 }

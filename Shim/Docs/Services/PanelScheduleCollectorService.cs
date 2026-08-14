@@ -35,9 +35,15 @@ public static class PanelScheduleCollectorService
             DaliStorageService.Load(doc).Loops,
             DaliDemandProvider.CountDaliLoadsByZone(doc, out _)).ByZone;
 
+        // Shade circuits carry the per-output rows (load name + circuit number) the shade schedule
+        // pages print. Passing them also drives the shade panel count off the same PanelFills the
+        // BOM/visualizer use, so the schedule can't order a different number of QSPS-10PNL than shown.
+        var shadeCircuits = new ShadeCircuitCollectorService().GetShadeCircuits(doc);
+
         var (allocation, _) = PanelAllocationService.BuildPanelBreakdown(
             circuits, brand, overrides, subsystemDemands, daliModulesByZone,
-            allowRelayZeroTenPacking: panelSettings?.AllowRelayZeroTenPacking ?? false);
+            allowRelayZeroTenPacking: panelSettings?.AllowRelayZeroTenPacking ?? false,
+            shadeCircuits: shadeCircuits);
 
         // Restore the designer's LV-compartment device choices so the schedule's LV block shows the
         // interfaces they actually placed, not the "Empty" defaults — same helper the Control BOM uses.

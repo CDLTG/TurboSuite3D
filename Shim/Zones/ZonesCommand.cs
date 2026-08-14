@@ -73,6 +73,9 @@ namespace TurboSuite.Zones
                 // Work-queue + Revit-free operation impls — both tabs are Core VMs now.
                 var workQueue = new RevitWorkQueue("TurboZones Error", "TurboZones Work Queue");
                 var loadNameWriter = new LoadNameWriter(doc, new LoadNameService());
+                // Shade writer targets the shade override store (its own schema GUID) so a Shade-Names
+                // Apply and a Load-Names Apply never prune each other's overrides.
+                var shadeLoadNameWriter = new LoadNameWriter(doc, new LoadNameService(useShadeOverrideStore: true));
                 var panelSettingsStore = new PanelSettingsStore(doc);
                 var circuitSelector = new CircuitSelector(uidoc);
 
@@ -98,10 +101,14 @@ namespace TurboSuite.Zones
                 // tallies the shade demand/BOM is built from — read once here (Core VM can't touch Revit).
                 var shadeLocations = ShadeDemandProvider.CollectLocations(doc);
 
+                // Shade circuits for the Shade Names tab — the mirror of the lighting Load Names grid.
+                var shadeCircuits = new ShadeCircuitCollectorService().GetShadeCircuits(doc);
+
                 var viewModel = new ZonesMainViewModel(circuits,
                     keypadCounts, hybridRepeaters,
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
-                    subsystemDemands, daliModulesByZone, shadeLocations);
+                    subsystemDemands, daliModulesByZone, shadeLocations,
+                    shadeCircuits, shadeLoadNameWriter);
 
                 var window = new TurboZonesWindow
                 {

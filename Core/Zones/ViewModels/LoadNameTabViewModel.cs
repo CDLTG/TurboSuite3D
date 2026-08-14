@@ -18,13 +18,16 @@ namespace TurboSuite.Zones.ViewModels
 
         private bool _isBusy;
         private ZonesCircuitViewModel _selectedRow;
+        private readonly string _tabHeader;
 
         public LoadNameTabViewModel(List<ZonesCircuitData> circuits,
-            IRevitWorkQueue workQueue, ILoadNameWriter loadNameWriter, ICircuitSelector selector)
+            IRevitWorkQueue workQueue, ILoadNameWriter loadNameWriter, ICircuitSelector selector,
+            string tabHeader = "Load Names")
         {
             _workQueue = workQueue;
             _loadNameWriter = loadNameWriter;
             _selector = selector;
+            _tabHeader = tabHeader;
 
             Circuits = new ObservableCollection<ZonesCircuitViewModel>(
                 circuits
@@ -35,7 +38,9 @@ namespace TurboSuite.Zones.ViewModels
             SelectInProjectCommand = new RelayCommand(SelectInProject, CanSelectInProject);
         }
 
-        public string TabHeader => "Load Names";
+        // "Load Names" (lighting) or "Shade Names" — the tab is reused for both, fed a different
+        // circuit list and override store; the header is the only per-instance label.
+        public string TabHeader => _tabHeader;
 
         public ObservableCollection<ZonesCircuitViewModel> Circuits { get; }
 

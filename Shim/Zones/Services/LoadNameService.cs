@@ -11,6 +11,16 @@ namespace TurboSuite.Zones.Services
 {
     public class LoadNameService
     {
+        // Shade circuits persist their room overrides in a separate store (its own schema GUID) so
+        // this full-overwrite Write and the lighting tab's never prune each other. Set once per
+        // service instance — a lighting service and a shade service back the two tabs.
+        private readonly bool _useShadeOverrideStore;
+
+        public LoadNameService(bool useShadeOverrideStore = false)
+        {
+            _useShadeOverrideStore = useShadeOverrideStore;
+        }
+
         public int UpdateLoadNames(Document doc, List<ZonesCircuitData> circuits)
         {
             int updatedCount = 0;
@@ -59,7 +69,10 @@ namespace TurboSuite.Zones.Services
                         updatedCount++;
                 }
 
-                RoomOverrideStorageService.Write(doc, roomOverrides);
+                if (_useShadeOverrideStore)
+                    ShadeRoomOverrideStorageService.Write(doc, roomOverrides);
+                else
+                    RoomOverrideStorageService.Write(doc, roomOverrides);
 
                 trans.Commit();
             }

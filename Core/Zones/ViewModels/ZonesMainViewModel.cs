@@ -22,16 +22,31 @@ namespace TurboSuite.Zones.ViewModels
             ICircuitSelector circuitSelector,
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
             IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
-            IReadOnlyList<ShadeLocationTally> shadeLocations = null)
+            IReadOnlyList<ShadeLocationTally> shadeLocations = null,
+            List<ZonesCircuitData> shadeCircuits = null,
+            ILoadNameWriter shadeLoadNameWriter = null)
         {
             PanelTab = new PanelBreakdownTabViewModel(circuits,
                 keypadCounts, hybridRepeaters,
                 savedSettings, workQueue, panelSettingsStore, subsystemDemands, daliModulesByZone,
                 shadeLocations);
             LoadNameTab = new LoadNameTabViewModel(circuits, workQueue, loadNameWriter, circuitSelector);
+
+            // Shade Names — the same Load-Names grid fed shade circuits and the shade override store.
+            // Only appears on jobs that actually have shade circuits, so non-shade jobs keep the
+            // two-tab layout untouched.
+            if (shadeCircuits != null && shadeCircuits.Count > 0 && shadeLoadNameWriter != null)
+                ShadeNameTab = new LoadNameTabViewModel(
+                    shadeCircuits, workQueue, shadeLoadNameWriter, circuitSelector, "Shade Names");
         }
 
         public PanelBreakdownTabViewModel PanelTab { get; }
         public LoadNameTabViewModel LoadNameTab { get; }
+
+        /// <summary>The Shade Names tab, or null when no shade writer was supplied. The view binds a
+        /// tab whose visibility follows this being non-null.</summary>
+        public LoadNameTabViewModel ShadeNameTab { get; }
+
+        public bool HasShadeNameTab => ShadeNameTab != null;
     }
 }

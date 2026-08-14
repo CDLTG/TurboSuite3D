@@ -56,6 +56,22 @@ namespace TurboSuite.Zones.Models
         public int ShadeCount { get; set; }            // shades landed on this panel (the fill)
         public int Capacity { get; set; } = 10;        // QSPS-10PNL outputs
         public string FillDisplay => $"{ShadeCount} / {Capacity}";
+
+        /// <summary>The individual shade outputs on this panel, in circuit order — the per-output rows
+        /// the TurboDocs shade schedule prints (Load / Ckt). Populated only when the caller supplies
+        /// shade circuits (the schedule path); empty on the visualizer path, which needs only the
+        /// count. The row count equals <see cref="ShadeCount"/> when populated, so the schedule and the
+        /// tiles/BOM cannot drift.</summary>
+        public List<ShadeOutputRow> Outputs { get; set; } = new List<ShadeOutputRow>();
+    }
+
+    /// <summary>One shade output on a QSPS-10PNL — a shade circuit's identity for the schedule: the
+    /// load name the designer built (ROOM - comment) and the circuit number Revit assigned when the
+    /// shade was powered to its panel. One circuit = one motor = one output.</summary>
+    public class ShadeOutputRow
+    {
+        public string LoadName { get; set; } = "";
+        public string CircuitNumber { get; set; } = "";
     }
 
     public class PanelResult : INotifyPropertyChanged

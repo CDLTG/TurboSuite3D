@@ -45,6 +45,21 @@ namespace TurboSuite.Zones.Views
             }
         }
 
+        private void ShadeNamesGrid_CurrentCellChanged(object sender, EventArgs e)
+        {
+            if (sender is not DataGrid grid) return;
+
+            grid.BeginEdit();
+
+            // Same active-row sync as the lighting grid, targeting the Shade Names tab VM.
+            if (DataContext is ZonesMainViewModel vm
+                && vm.ShadeNameTab != null
+                && grid.CurrentCell.Item is ZonesCircuitViewModel row)
+            {
+                vm.ShadeNameTab.SelectedRow = row;
+            }
+        }
+
         private void LoadNamesGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Enter || sender is not DataGrid grid)

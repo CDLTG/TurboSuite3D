@@ -7,6 +7,7 @@ using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using TurboSuite.Docs.Models;
 using TurboSuite.Zones.Models;
+using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Docs.Services;
 
@@ -322,14 +323,129 @@ public static class PanelSchedulePdfService
             y += ModuleGap;
         }
 
-        // ── Main rendering loop ──
-        var allPanels = data.Allocation.Locations
-            .OrderBy(l => l.LocationNumber)
-            .SelectMany(l => l.Panels)
-            .ToList();
-
-        foreach (var panel in allPanels)
+        // A shade (Sivoia QS) panel page: the same dark header + module-style block as a lighting panel,
+        // but a fixed ten-output QSPS-10PNL with no dimming — so the table is # | Load | Ckt (no
+        // Dimming/Watts), one row per shade output padded with spares to ten. A shade panel is always
+        // ≤10 rows, so it never needs a continuation page.
+        void DrawShadePanel(ShadePanelResult sp)
         {
+            // Shade columns: # | Load | Ckt. Deliberately mirror the lighting table's #/Load/Ckt geometry
+            // (colSlot 28, colLoad = ContentWidth − 28 − 70 − 70 − 70) so the shade Ckt column lines up
+            // with the lighting panels' Ckt column. A lighting panel's trailing Dimming+Watts columns
+            // become white space here — acceptable, a QS motor has neither.
+            const double sColSlot = 28;
+            double sColLoad = ContentWidth - sColSlot - 70 - 70 - 70;
+            double sxSlot = MarginLeft;
+            double sxLoad = sxSlot + sColSlot;
+            double sxCkt  = sxLoad + sColLoad;
+
+            var nearCenter = new XStringFormat
+            { Alignment = XStringAlignment.Near, LineAlignment = XLineAlignment.Center };
+            var farCenter = new XStringFormat
+            { Alignment = XStringAlignment.Far, LineAlignment = XLineAlignment.Center };
+            var slotCenter = new XStringFormat
+            { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
+
+            StartNewPage();
+
+            // Dark panel header — PANEL 1-D [QSPS-10PNL]. No wattage: a QS motor is not a VA dimming load.
+            gfx.DrawRectangle(new XSolidBrush(XColor.FromGrayScale(0.15)),
+                MarginLeft, y, ContentWidth, PanelHeaderHeight);
+            double hCenterY = y + PanelHeaderHeight / 2;
+            gfx.DrawString($"PANEL {sp.PanelName.ToUpperInvariant()} [{ShadeSolver.PanelPartNumber}]",
+                fontPanelHeader, XBrushes.White, new XPoint(MarginLeft + ColumnPadding, hCenterY), nearCenter);
+            // Right side of the panel header stays empty — a shade panel has no wattage to show there.
+            y += PanelHeaderHeight;
+            y += ModuleGap;
+
+            double blockTop = y;
+
+            // Sub-header band — the panel's fill (n / 10 used), matching a lighting module header.
+            gfx.DrawRectangle(new XSolidBrush(XColor.FromGrayScale(0.88)),
+                MarginLeft, y, ContentWidth, ModuleHeaderHeight);
+            double mCenterY = y + ModuleHeaderHeight / 2;
+            gfx.DrawString("Shade Outputs", fontModuleHeader, XBrushes.Black,
+                new XPoint(MarginLeft + ColumnPadding, mCenterY), nearCenter);
+            gfx.DrawString($"{sp.ShadeCount} / {sp.Capacity} used", fontModuleHeader, XBrushes.Black,
+                new XPoint(PageWidth - MarginRight - ColumnPadding, mCenterY), farCenter);
+            y += ModuleHeaderHeight;
+
+            // Column headers: # | Load | Ckt.
+            var headerBrush = new XSolidBrush(XColor.FromGrayScale(0.15));
+            gfx.DrawString("#", fontColHeader, headerBrush,
+                new XPoint(sxSlot + sColSlot / 2, y + BaselineOffset - 2),
+                new XStringFormat { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine });
+            gfx.DrawString("Load", fontColHeader, headerBrush,
+                new XPoint(sxLoad + ColumnPadding, y + BaselineOffset - 2));
+            gfx.DrawString("Ckt", fontColHeader, headerBrush,
+                new XPoint(sxCkt + ColumnPadding, y + BaselineOffset - 2));
+            y += ColumnHeaderHeight;
+            gfx.DrawLine(new XPen(XColor.FromGrayScale(0.85), 0.5),
+                MarginLeft, y, PageWidth - MarginRight, y);
+
+            // One row per shade output, then spare rows padding to the ten-output capacity.
+            int outputNum = 0;
+            foreach (var row in sp.Outputs)
+            {
+                outputNum++;
+                double baseline = y + BaselineOffset;
+
+                gfx.DrawString(outputNum.ToString(), fontRow, XBrushes.Black,
+                    new XPoint(sxSlot + sColSlot / 2, baseline), slotCenter);
+
+                string load = row.LoadName ?? "";
+                double loadMax = sColLoad - ColumnPadding * 2;
+                if (gfx.MeasureString(load, fontRow).Width > loadMax && load.Length > 0)
+                {
+                    while (load.Length > 1 && gfx.MeasureString(load + "…", fontRow).Width > loadMax)
+                        load = load[..^1];
+                    load += "…";
+                }
+                gfx.DrawString(load, fontRow, XBrushes.Black,
+                    new XPoint(sxLoad + ColumnPadding, baseline));
+
+                gfx.DrawString(row.CircuitNumber ?? "", fontRow, XBrushes.Black,
+                    new XPoint(sxCkt + ColumnPadding, baseline));
+
+                y += LineHeight;
+            }
+
+            var spareBrush = new XSolidBrush(XColor.FromGrayScale(0.60));
+            for (; outputNum < sp.Capacity; )
+            {
+                outputNum++;
+                double baseline = y + BaselineOffset;
+                gfx.DrawString(outputNum.ToString(), fontRow, XBrushes.Black,
+                    new XPoint(sxSlot + sColSlot / 2, baseline), slotCenter);
+                gfx.DrawString("— spare —", fontRow, spareBrush,
+                    new XPoint(sxLoad + ColumnPadding, baseline));
+                y += LineHeight;
+            }
+
+            gfx.DrawRectangle(new XPen(XColor.FromGrayScale(0.50), 0.75),
+                MarginLeft, blockTop, ContentWidth, y - blockTop);
+            y += ModuleGap;
+        }
+
+        // ── Main rendering loop ──
+        // Page-ordered render items: within each location its lighting panels, then its shade panels
+        // (…1-C lighting, then 1-D, 1-E shades), locations in number order. Each item is its own page.
+        var renderItems = new List<object>();
+        foreach (var location in data.Allocation.Locations.OrderBy(l => l.LocationNumber))
+        {
+            foreach (var panel in location.Panels) renderItems.Add(panel);
+            foreach (var shade in location.ShadePanels) renderItems.Add(shade);
+        }
+
+        foreach (var item in renderItems)
+        {
+            if (item is ShadePanelResult shadePanel)
+            {
+                DrawShadePanel(shadePanel);
+                continue;
+            }
+            var panel = (PanelResult)item;
+            {
             // Pre-calculate each module's displayed wattage, then sum for panel total.
             // This ensures the panel total matches the sum of displayed module totals
             // (avoids rounding discrepancies from summing raw values).
@@ -552,6 +668,7 @@ public static class PanelSchedulePdfService
                 gfx.DrawRectangle(boxPen, MarginLeft, moduleTop, ContentWidth, y - moduleTop);
 
                 y += ModuleGap;
+            }
             }
         }
 
