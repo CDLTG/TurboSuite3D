@@ -112,6 +112,54 @@ public static class GeometryHelper
     }
 
     /// <summary>
+    /// Outward horizontal wall normal for a wall-mounted fixture, derived from the fixture's
+    /// OWN transform rather than by re-resolving the host-face reference across the linked model.
+    ///
+    /// Why: <see cref="GetHostFaceNormal"/> only yields a PlanarFace when the host is a wall
+    /// (a top-level BREP solid face, REFERENCE_TYPE_SURFACE). A fixture face-hosted to a *family*
+    /// in the link (casework, doors — geometry nested inside a GeometryInstance) resolves
+    /// LINEAR/NONE, so the reference path returned null and the offset collapsed to zero (tag on
+    /// the wall) or flipped to the opposite face — and it was nondeterministic across link regens.
+    /// The transform (HandOrientation × FacingOrientation) is baked at placement and stable.
+    ///
+    /// Priority (validated in-model via TurboSpike — matched the correctly resolved host-face normal
+    /// on all 41 hosted keypads and all 12 hosted sconces of commit 471ef22, plus a later broad
+    /// parity sweep, and yielded the correct value even where the reference failed to resolve):
+    /// 1. Hand × Facing horizontalized, if it has a usable horizontal component. Non-degenerate
+    ///    for wall fixtures whose Facing is vertical (0,0,1) — the AL_..._(Hosted) convention.
+    /// 2. Else FacingOrientation horizontalized — the genuine-2D case, where in-plane facing makes
+    ///    Hand × Facing vertical/degenerate. (Matches the old helper's fallback.)
+    /// 3. Else XYZ.BasisY — last-ditch, matches the old helper.
+    ///
+    /// MIRROR CORRECTION: a mirrored face-based instance has a left-handed basis, so Hand × Facing
+    /// points INTO the wall, not out. Negate it when fixture.Mirrored. Verified via TurboSpike: 3
+    /// mirrored wall fixtures (keypad/receptacle/sconce, Facing = (0,0,1)) flipped 180° without this
+    /// (dot = -1 vs the resolved host-face normal) and agreed exactly with it once negated. It is a
+    /// no-op for degenerate (facing-fallback) fixtures — negating a zero-length horizontal cross
+    /// changes nothing, and the FacingOrientation fallback is not mirror-sensitive — so mirrored
+    /// ceiling/recessed fixtures are unaffected.
+    ///
+    /// Gate on "is candidate 1 horizontally usable?", not on HostFace != null: this also covers an
+    /// orphaned face-based fixture whose host is null but whose transform still encodes the wall
+    /// frame. Never returns zero-length.
+    /// </summary>
+    public static XYZ GetWallFaceNormalFromTransform(FamilyInstance fixture)
+    {
+        var transformNormal = fixture.HandOrientation.CrossProduct(fixture.FacingOrientation);
+        if (fixture.Mirrored)
+            transformNormal = transformNormal.Negate();
+
+        var horizontal = new XYZ(transformNormal.X, transformNormal.Y, 0);
+        if (horizontal.GetLength() > NormalEpsilon)
+            return horizontal.Normalize();
+
+        // Genuine 2D case: facing is in-plane, so Hand × Facing is vertical/degenerate.
+        var facingOrientation = fixture.FacingOrientation;
+        var facing = new XYZ(facingOrientation.X, facingOrientation.Y, 0);
+        return facing.GetLength() > NormalEpsilon ? facing.Normalize() : XYZ.BasisY;
+    }
+
+    /// <summary>
     /// Determines if a fixture is a wall sconce family (3D hosted or 2D unhosted).
     /// </summary>
     public static bool IsWallSconce(FamilyInstance fixture)
