@@ -18,41 +18,84 @@
                 <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+
+            <!-- Flat expander header for a loop's member-zone list: a chevron + "Zones (N)" label, chrome-less.
+                 IsChecked = expanded (▾); collapsed shows ▸. Hover darkens the text like the IconButton glyphs. -->
+            <Style x:Key="ZonesToggle" TargetType="ToggleButton">
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border Background="Transparent" Padding="0,2">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="Chevron" Text="▾" FontSize="10" Margin="0,0,5,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{TemplateBinding Foreground}"/>
+                                    <ContentPresenter VerticalAlignment="Center"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="False">
+                                    <Setter TargetName="Chevron" Property="Text" Value="▸"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
     <DockPanel>
         <!-- ── Header (DMX chrome: blue bar + roll-up summary) ───────────────────────────────────── -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="14,9">
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="TurboDALI" Foreground="White" FontSize="15" FontWeight="SemiBold"/>
-                <TextBlock Text="{Binding DaliTab.SummaryText}" Foreground="#DCE6F5" FontSize="12"
-                           VerticalAlignment="Center" Margin="14,0,0,0"/>
+                <TextBlock Text="TurboDALI" FontSize="16" FontWeight="SemiBold" Foreground="White"
+                           VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding DaliTab.SummaryText}" Foreground="White" Opacity="0.85"
+                           VerticalAlignment="Center" Margin="12,0,0,0"/>
             </StackPanel>
         </Border>
 
-        <!-- ── Lock banner (amber; shown only while numbering is locked) ─────────────────────────── -->
-        <Border DockPanel.Dock="Top" Background="#FFF4E5" BorderBrush="#E0A94B" BorderThickness="0,0,0,1"
-                Padding="14,6"
-                Visibility="{Binding IsLocked, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock Text="{Binding LockStateText}" Foreground="#8A5A00" FontWeight="SemiBold"
-                       TextWrapping="Wrap"/>
+        <!-- ── Numbering-lock banner (matches TurboDMX): always shown — grey while unlocked, amber when Locked. -->
+        <Border DockPanel.Dock="Top" Margin="12,6,12,6" Padding="6,3">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{StaticResource FooterBgBrush}"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsLocked}" Value="True">
+                            <Setter Property="Background" Value="#FFF3CD"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding LockStateText}" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
         </Border>
 
         <!-- ── Footer bar: status + primary action ──────────────────────────────────────────────── -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource FooterBgBrush}"
                 BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0" Padding="10,7">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Close" Width="80" Height="28"
-                        Margin="8,0,0,0" IsCancel="True" Click="Close_Click"/>
-                <Button DockPanel.Dock="Right" Content="Write addresses ▸" Height="28" Padding="12,0"
-                        FontWeight="SemiBold" Command="{Binding WriteAddressesCommand}"/>
-                <Button DockPanel.Dock="Right" Content="{Binding LockButtonText}" Height="28" Width="72"
-                        Margin="8,0,0,0" Command="{Binding LockCommand}"/>
-                <Button DockPanel.Dock="Right" Content="Unlock" Height="28" Width="72" Margin="8,0,0,0"
-                        Command="{Binding UnlockCommand}"/>
-                <Button DockPanel.Dock="Right" Content="Refresh" Height="28" Width="80" Margin="8,0,8,0"
-                        Command="{Binding RefreshCommand}"/>
+                <!-- Right-docked, so document order is right→left. Visual L→R: Lock · Unlock · Refresh · Write · Close.
+                     Height 28 matches the footer buttons in TurboNumber/RPS/Docs. -->
+                <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource RevitButtonStyle}"
+                        Height="28" MinWidth="68" Padding="8,3" Margin="8,0,0,0" IsCancel="True" Click="Close_Click"/>
+                <Button DockPanel.Dock="Right" Content="Write addresses ▸" Style="{StaticResource PrimaryButtonStyle}"
+                        Height="28" Padding="12,3" Margin="8,0,0,0" Command="{Binding WriteAddressesCommand}"/>
+                <Button DockPanel.Dock="Right" Content="Refresh" Style="{StaticResource RevitButtonStyle}"
+                        Height="28" MinWidth="80" Padding="10,3" Margin="8,0,0,0" Command="{Binding RefreshCommand}"/>
+                <Button DockPanel.Dock="Right" Content="Unlock" Style="{StaticResource RevitButtonStyle}"
+                        Height="28" MinWidth="68" Padding="8,3" Margin="8,0,0,0" Command="{Binding UnlockCommand}"/>
+                <Button DockPanel.Dock="Right" Content="{Binding LockButtonText}" Style="{StaticResource RevitButtonStyle}"
+                        Height="28" MinWidth="68" Padding="8,3" Margin="8,0,0,0" Command="{Binding LockCommand}"/>
                 <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"
                            TextTrimming="CharacterEllipsis" Text="{Binding StatusText}"/>
             </DockPanel>
@@ -76,7 +119,8 @@
         </Border>
 
         <!-- ── Body ──────────────────────────────────────────────────────────────────────────────── -->
-        <Grid Margin="10">
+        <!-- Top margin 0 (DMX's body grid) so the gap under the lock banner matches; sides/bottom keep the inset. -->
+        <Grid Margin="10,0,10,10">
             <!-- Placeholder when the job carries no DALI fixtures -->
             <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center"
                        Foreground="{StaticResource TextSecondaryBrush}" FontStyle="Italic"
@@ -85,17 +129,14 @@
                        Text="No DALI fixtures found. Set a fixture's Dimming Protocol to DALI and give it a Control Zone, then reopen TurboDALI to declare loops."/>
 
             <DockPanel Visibility="{Binding DaliTab.HasDaliHardware, Converter={StaticResource BoolToVisibility}}">
-                <!-- Intro + warnings -->
-                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}"
-                               Text="Group Control Zones into DALI loops (one loop = one LQSE2-1DALUNV-D module) and assign each loop the ZONE its module is placed in. Then Write addresses to stamp each circuit's L#-## onto its fixtures and driver."/>
-
-                    <Border Margin="0,6,0,0" Padding="8,5" Background="#FFF4E5"
+                <!-- Transient warnings (unassigned / over-cap loops) -->
+                <StackPanel DockPanel.Dock="Top">
+                    <Border Margin="0,0,0,8" Padding="8,5" Background="#FFF4E5"
                             BorderBrush="#E0A94B" BorderThickness="1"
                             Visibility="{Binding DaliTab.HasUnassignedLoops, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="{Binding DaliTab.UnassignedLoopMessage}" TextWrapping="Wrap" Foreground="#8A5A00"/>
                     </Border>
-                    <Border Margin="0,6,0,0" Padding="8,5" Background="#FDE7E7"
+                    <Border Margin="0,0,0,8" Padding="8,5" Background="#FDE7E7"
                             BorderBrush="#D46A6A" BorderThickness="1"
                             Visibility="{Binding DaliTab.HasOverCapLoops, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="{Binding DaliTab.OverCapMessage}" TextWrapping="Wrap" Foreground="#9B2C2C"/>
@@ -108,17 +149,12 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Unassigned Control Zone pool -->
+                    <!-- ZONE POOL column: column title + Control Zones box (GroupBox chrome; the border dies
+                         into the header). The two-level structure matches TurboDMX. -->
                     <DockPanel Grid.Column="0" Margin="0,0,8,0">
-                        <TextBlock DockPanel.Dock="Top" Text="Unassigned Control Zones"
-                                   FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                            <Button Content="New loop from selection" Height="26"
-                                    Command="{Binding DaliTab.NewLoopFromSelectionCommand}"/>
-                            <Button Content="New empty loop" Height="24" Margin="0,4,0,0"
-                                    Command="{Binding DaliTab.NewLoopCommand}"/>
-                        </StackPanel>
-                        <Border BorderThickness="1" BorderBrush="{StaticResource SeparatorBrush}" Background="#FAFAFA">
+                        <TextBlock DockPanel.Dock="Top" Text="ZONE POOL" Style="{StaticResource SectionHeader}"
+                                   Margin="0,4,0,6"/>
+                        <GroupBox Header="Control Zones" Style="{StaticResource BoldHeaderGroupBox}">
                             <ListBox ItemsSource="{Binding DaliTab.Pool}" SelectionMode="Extended"
                                      BorderThickness="0" Background="Transparent"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -133,18 +169,25 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                        </Border>
+                        </GroupBox>
                     </DockPanel>
 
                     <!-- Declared loops -->
                     <DockPanel Grid.Column="1">
-                        <TextBlock DockPanel.Dock="Top" Text="DALI Loops" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <!-- Bottom gap (15, DMX's value) drops the first loop card so its top border lines up with
+                             the Control Zones box border in the pool column, whose GroupBox header eats the extra. -->
+                        <TextBlock DockPanel.Dock="Top" Text="LOOPS" Style="{StaticResource SectionHeader}"
+                                   Margin="0,4,0,15"/>
+                        <!-- Pinned at the bottom (DMX's loops-column pattern): one context-sensitive add button -
+                             seeds from the pool selection, or empty if nothing is selected. -->
+                        <Button DockPanel.Dock="Bottom" Content="+ New loop" Style="{StaticResource RevitButtonStyle}"
+                                Padding="6,3" Margin="0,6,0,0" Command="{Binding DaliTab.NewLoopCommand}"
+                                ToolTip="New loop — seeded with the selected pool zones, or empty if none selected."/>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding DaliTab.Loops}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Margin="0,0,0,6" Padding="8" BorderThickness="1"
-                                                BorderBrush="{StaticResource SeparatorBrush}" Background="#FFFFFF">
+                                        <Border Style="{StaticResource LoopCard}">
                                             <StackPanel>
                                                 <!-- Row header: name, zone assignment, remove -->
                                                 <Grid>
@@ -156,44 +199,54 @@
                                                     <TextBox Grid.Column="0" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
                                                              Height="24" VerticalContentAlignment="Center" Margin="0,0,8,0"/>
                                                     <ComboBox Grid.Column="1" Width="130" Height="24"
+                                                              VerticalContentAlignment="Center"
                                                               ItemsSource="{Binding ZoneOptions}"
                                                               DisplayMemberPath="Label" SelectedValuePath="Value"
                                                               SelectedValue="{Binding AssignedZone}"/>
-                                                    <Button Grid.Column="2" Content="✕ Loop" Height="24"
-                                                            Margin="8,0,0,0" Padding="6,0" Command="{Binding RemoveCommand}"/>
+                                                    <Button Grid.Column="2" Content="🗑" Style="{StaticResource IconButton}"
+                                                            Margin="8,0,0,0" Command="{Binding RemoveCommand}"
+                                                            ToolTip="Delete this loop — its zones return to the pool."/>
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding StatusText}" Margin="0,4,0,0"
                                                            Foreground="{StaticResource TextSecondaryBrush}"/>
 
-                                                <!-- Member zones + add gesture -->
-                                                <DockPanel Margin="0,6,0,0">
-                                                    <Button DockPanel.Dock="Right" VerticalAlignment="Top"
-                                                            Content="+ Add selected" Height="24" Padding="6,0"
-                                                            Margin="8,0,0,0" Command="{Binding AddSelectedCommand}"/>
-                                                    <ItemsControl ItemsSource="{Binding Zones}">
-                                                        <ItemsControl.ItemsPanel>
-                                                            <ItemsPanelTemplate>
-                                                                <WrapPanel/>
-                                                            </ItemsPanelTemplate>
-                                                        </ItemsControl.ItemsPanel>
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Border Margin="0,0,4,4" Padding="5,2"
-                                                                        Background="#EEF3FA" BorderBrush="#B0BED0"
-                                                                        BorderThickness="1">
-                                                                    <StackPanel Orientation="Horizontal">
-                                                                        <TextBlock Text="{Binding Display}" VerticalAlignment="Center"/>
-                                                                        <Button Content="✕" Margin="5,0,0,0" Padding="3,0" FontSize="9"
-                                                                                Background="Transparent" BorderThickness="0"
-                                                                                Command="{Binding DataContext.RemoveZoneCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
-                                                                                CommandParameter="{Binding}"/>
-                                                                    </StackPanel>
-                                                                </Border>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </DockPanel>
+                                                <!-- Action strip: + Add selected (left), mirroring the DMX loop card. -->
+                                                <Button Content="+ Add selected" Style="{StaticResource RevitButtonStyle}"
+                                                        Padding="6,2" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                                        Command="{Binding AddSelectedCommand}"
+                                                        ToolTip="Add the zones selected in the pool to this loop."/>
+
+                                                <!-- Divider between the header and the zone list (DMX card rhythm). -->
+                                                <Border BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0"
+                                                        Margin="0,6,0,0"/>
+
+                                                <!-- Collapsible member-zone list (expanded by default). Each zone is a
+                                                     ← (return to pool) + name row, matching DMX's zone rows. -->
+                                                <ToggleButton Style="{StaticResource ZonesToggle}" Margin="0,4,0,0"
+                                                              IsChecked="{Binding IsZonesExpanded}"
+                                                              Content="{Binding ZonesHeader}"
+                                                              ToolTip="Show or hide this loop's member zones."/>
+                                                <ItemsControl ItemsSource="{Binding Zones}" Margin="0,2,0,0"
+                                                              Visibility="{Binding IsZonesExpanded, Converter={StaticResource BoolToVisibility}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Margin="0,1">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Button Grid.Column="0" Content="←" Style="{StaticResource IconButton}"
+                                                                        Margin="0,0,6,0"
+                                                                        Command="{Binding DataContext.RemoveZoneCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        ToolTip="Return this zone to the pool."/>
+                                                                <TextBlock Grid.Column="1" Text="{Binding Display}" VerticalAlignment="Center"
+                                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>

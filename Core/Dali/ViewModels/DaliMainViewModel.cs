@@ -93,10 +93,11 @@ namespace TurboSuite.Dali.ViewModels
         public bool IsLocked =>
             string.Equals(_snapshot?.NumberingState, "Locked", StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>The amber lock-banner text (shown only while locked).</summary>
+        /// <summary>The lock-banner text — always shown (grey while unlocked, amber when Locked). Mirrors
+        /// TurboDMX's wording (issued values preserved, conflicts flag REVIEW), with "addresses" for DALI.</summary>
         public string LockStateText => IsLocked
-            ? "Numbering LOCKED — issued addresses frozen; new loads append past the high-water."
-            : "Numbering unlocked — addresses churn freely from the spatial walk until locked.";
+            ? "LOCKED — issued addresses preserved; conflicts flag REVIEW"
+            : "UNLOCKED — numbering re-derives freely each run";
 
         /// <summary>The Lock button's label — "Lock" first time, "Re-lock" once locked (re-baseline).</summary>
         public string LockButtonText => IsLocked ? "Re-lock" : "Lock";

@@ -18,11 +18,8 @@
                 <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <Style x:Key="SectionHeader" TargetType="TextBlock">
-                <Setter Property="FontWeight" Value="SemiBold"/>
-                <Setter Property="Margin" Value="0,10,0,4"/>
-                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            </Style>
+            <!-- SectionHeader (DECLARATIONS / ZONE POOL / LOOPS / BILL column titles) now lives in the shared
+                 TurboSuiteStyles dictionary, shared with TurboDALI. -->
             <Style x:Key="FieldLabel" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
@@ -39,49 +36,15 @@
                 <Setter Property="Margin" Value="0,0,0,4"/>
             </Style>
 
-            <!-- Flat, chrome-less icon/text button for the demoted loop-row actions (←, + Cluster, ⊙, ✕, 🗑).
-                 Keeps Place ▸ / One-line ▸ / + Add selected as the only chromed = primary buttons. -->
-            <Style x:Key="IconButton" TargetType="Button">
-                <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="BorderThickness" Value="0"/>
-                <Setter Property="Padding" Value="4,1"/>
-                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-                <Style.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                    </Trigger>
-                    <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Opacity" Value="0.4"/>
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
+            <!-- IconButton (flat, chrome-less row actions ←/+ Cluster/⊙/✕/🗑) now lives in the shared
+                 TurboSuiteStyles dictionary, shared with TurboDALI. -->
 
             <!-- Shared width of every loop-row "right region" — the gutter all name-box right edges align to.
                  Repeated on the identity row, the action strip, and each cluster row; edit here only. -->
             <GridLength x:Key="LoopGutter">150</GridLength>
 
-            <!-- Loop card = column-1 GroupBox look (Option A): the loop's Border matches the GroupBox
-                 chrome — the Aero2 GroupBox border tone (#D5DFE5), white fill, and the same 10px
-                 inter-card gap — but stays squared. The editable name-box is the card's header, so
-                 there's no title notch. -->
-            <Style x:Key="LoopCard" TargetType="Border">
-                <Setter Property="BorderBrush" Value="#D5DFE5"/>
-                <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="CornerRadius" Value="0"/>
-                <Setter Property="Background" Value="{StaticResource ContentBgBrush}"/>
-                <Setter Property="Padding" Value="8"/>
-                <Setter Property="Margin" Value="0,0,0,10"/>
-            </Style>
+            <!-- LoopCard (the GroupBox-toned card chrome) now lives in the shared TurboSuiteStyles
+                 dictionary, shared with TurboDALI. -->
 
             <!-- Dim BOM badge in the loop header ("{n} dec/drv · {ch} ch"). -->
             <Style x:Key="LoopBadge" TargetType="Border">
@@ -474,7 +437,7 @@
                 <!-- One card like the left column: header tooltip carries the former hint. -->
                 <GroupBox>
                     <GroupBox.Header>
-                        <TextBlock Text="Zones" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"
+                        <TextBlock Text="Control Zones" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"
                                    ToolTip="Unassigned zones — the engine auto-packs. Select, then '+ Add' on a loop."/>
                     </GroupBox.Header>
                     <ListBox ItemsSource="{Binding ZonePool}" SelectionMode="Extended"
@@ -835,15 +798,19 @@
                            VerticalAlignment="Center" Margin="0,0,12,0"
                            Foreground="{StaticResource TextSecondaryBrush}"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <!-- Height 28 matches the footer buttons in TurboNumber/RPS/Docs. -->
                     <Button Content="{Binding LockButtonText}" Command="{Binding LockCommand}" Style="{StaticResource RevitButtonStyle}"
-                            MinWidth="68" Padding="8,3" Margin="0,0,6,0"
+                            Height="28" MinWidth="68" Padding="8,3" Margin="0,0,6,0"
                             ToolTip="Lock: snapshot the current numbering as the issued baseline (§8c) — re-runs then preserve issued DEC #s and flag conflicts as REVIEW. Press again while Locked to re-baseline (re-issue) without renumbering — confirmed."/>
                     <Button Content="Unlock" Command="{Binding UnlockCommand}" Style="{StaticResource RevitButtonStyle}"
-                            MinWidth="68" Padding="8,3" Margin="0,0,12,0"
+                            Height="28" MinWidth="68" Padding="8,3" Margin="0,0,12,0"
                             ToolTip="Return to free renumbering (clobber) — confirmed."/>
                     <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource RevitButtonStyle}"
-                            MinWidth="80" Padding="10,3"
+                            Height="28" MinWidth="80" Padding="10,3"
                             ToolTip="Re-read the model (zones, fixtures, loaded decoder/driver types) and re-solve — preserving your declarations. The bill re-solves automatically whenever you change a declaration, so use this when the model itself changed."/>
+                    <!-- Escape also closes (Window_KeyDown), so no IsCancel here to avoid a double-close. -->
+                    <Button Content="Close" Style="{StaticResource RevitButtonStyle}"
+                            Height="28" MinWidth="68" Padding="8,3" Margin="12,0,0,0" Click="Close_Click"/>
                 </StackPanel>
             </Grid>
         </Border>

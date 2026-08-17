@@ -129,6 +129,39 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Flat, chrome-less icon/text button for demoted row actions (←, + Cluster, ⊙, ✕, 🗑). Transparent,
+         borderless, hover darkens the glyph — leaves the chromed RevitButton/PrimaryButton as the only
+         primary affordances. Content alignment follows house rule 2 (TemplateBound, Center default).
+         NOTE: TurboName deliberately overrides this key in its own window resources with a red-hover
+         delete variant; a local resource shadows this merged one, so that window is unaffected. -->
+    <Style x:Key="IconButton" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="4,1"/>
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- Hand cursor for interactive controls (content areas inherit Arrow) -->
     <Style TargetType="ComboBox">
         <Setter Property="Cursor" Value="Hand"/>
@@ -155,6 +188,14 @@
     <Style TargetType="GroupBox">
         <Setter Property="Cursor" Value="Arrow"/>
     </Style>
+    <!-- Column/section title (TurboDMX's DECLARATIONS / ZONE POOL / LOOPS / BILL headers). SemiBold, primary
+         ink, with a default top gap; consumers override Margin per placement. Shared with TurboDALI. -->
+    <Style x:Key="SectionHeader" TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Margin" Value="0,10,0,4"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+    </Style>
+
     <!-- SemiBold-header GroupBox (matches TurboDMX's section headers). Keyed, not implicit, so
          GroupBoxes with custom element headers (context menus, dropdown buttons) are unaffected.
          Apply only to boxes whose Header is a plain string. -->
@@ -167,6 +208,18 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- Loop card = GroupBox-toned chrome for an editable-header card (the name box IS the header, so no title
+         notch): the Aero2 GroupBox border tone (#D5DFE5), white fill, squared, with a 10px inter-card gap.
+         Shared by TurboDMX and TurboDALI loop cards. -->
+    <Style x:Key="LoopCard" TargetType="Border">
+        <Setter Property="BorderBrush" Value="#D5DFE5"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="Background" Value="{StaticResource ContentBgBrush}"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+
     <!-- Sortable DataGrid: apply to grids with column sorting enabled -->
     <Style x:Key="SortableDataGridStyle" TargetType="DataGrid">
         <Setter Property="Cursor" Value="Arrow"/>

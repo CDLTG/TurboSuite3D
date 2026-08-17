@@ -36,7 +36,7 @@ namespace TurboSuite.Dali.ViewModels
         public string Display => $"{ZoneName}  ({LoadCount})";
     }
 
-    /// <summary>A ZONE N choice in a loop's assignment dropdown. Value 0 is the "— unassigned" sentinel;
+    /// <summary>A ZONE N choice in a loop's assignment dropdown. Value 0 is the "&lt;Unassigned&gt;" sentinel;
     /// any positive value is a panel ZONE N discovered in the job.</summary>
     public sealed class DaliZoneOption
     {
@@ -68,6 +68,7 @@ namespace TurboSuite.Dali.ViewModels
 
         private string _name;
         private int _assignedZone;
+        private bool _isZonesExpanded = true;
 
         public DaliLoopRowViewModel(string loopId, string name, int assignedZone,
                                     IReadOnlyList<DaliZoneOption> zoneOptions)
@@ -94,6 +95,18 @@ namespace TurboSuite.Dali.ViewModels
 
         /// <summary>The Control Zones on this loop's bus, in declared order.</summary>
         public ObservableCollection<DaliZoneItemViewModel> Zones { get; }
+
+        /// <summary>The collapse header for the member-zone list, e.g. "Control Zones (3)".</summary>
+        public string ZonesHeader => $"Control Zones ({Zones.Count})";
+
+        /// <summary>Whether the member-zone list is expanded — pure view state (not persisted). Starts open;
+        /// lets the designer collapse a long zone list on a crowded loops column. Mirrors no DMX control —
+        /// TurboDALI can carry more zones per loop, so its list earns a collapse toggle.</summary>
+        public bool IsZonesExpanded
+        {
+            get => _isZonesExpanded;
+            set => SetProperty(ref _isZonesExpanded, value);
+        }
 
         /// <summary>The ZONE N options for the assignment dropdown (0 = unassigned, then each discovered zone).</summary>
         public IReadOnlyList<DaliZoneOption> ZoneOptions { get; }
@@ -147,6 +160,7 @@ namespace TurboSuite.Dali.ViewModels
             OnPropertyChanged(nameof(IsOverCap));
             OnPropertyChanged(nameof(IsUnassigned));
             OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(ZonesHeader));
         }
     }
 }

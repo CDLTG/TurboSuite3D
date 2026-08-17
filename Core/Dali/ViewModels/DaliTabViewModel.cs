@@ -56,7 +56,10 @@ namespace TurboSuite.Dali.ViewModels
             Pool = new ObservableCollection<DaliZoneItemViewModel>();
             Loops = new ObservableCollection<DaliLoopRowViewModel>();
 
-            NewLoopCommand = new RelayCommand(() => AddLoop(fromSelection: false));
+            // One context-sensitive create button (DMX's + New loop pattern): seeds from the pool selection
+            // when any zone is picked, else an empty loop. NewLoopFromSelectionCommand remains as an explicit
+            // from-selection entry point (exercised by the oracle tests).
+            NewLoopCommand = new RelayCommand(() => AddLoop(fromSelection: Pool.Any(z => z.IsSelected)));
             NewLoopFromSelectionCommand = new RelayCommand(
                 () => AddLoop(fromSelection: true), () => Pool.Any(z => z.IsSelected));
 
@@ -330,7 +333,7 @@ namespace TurboSuite.Dali.ViewModels
             foreach (var loop in saved?.Loops ?? new List<DaliLoopDto>())
                 if (loop.AssignedZone > 0) zones.Add(loop.AssignedZone);
 
-            var options = new List<DaliZoneOption> { new DaliZoneOption(0, "— unassigned") };
+            var options = new List<DaliZoneOption> { new DaliZoneOption(0, "<Unassigned>") };
             foreach (int z in zones)
                 options.Add(new DaliZoneOption(z, $"ZONE {z}"));
             return options;
