@@ -350,52 +350,28 @@ public class TagCommand : IExternalCommand
             XYZ globalOffset;
             double angle;
 
-            if (keypad.HostFace != null)
+            // Derive the outward wall normal from the keypad's OWN transform
+            // (HandOrientation × FacingOrientation, i.e. the transform Z axis) — NOT by
+            // re-resolving the host-face reference across the link. That resolution only
+            // yields a PlanarFace when the host is a wall (a top-level BREP solid face,
+            // REFERENCE_TYPE_SURFACE); for keypads face-hosted to a *family* in the link
+            // (casework, doors — nested GeometryInstance geometry) the reference comes back
+            // LINEAR/NONE and never resolves, so the offset collapsed to zero (tag on wall)
+            // or flipped to the opposite face. The transform is baked at placement and stable.
+            // Verified in-model via TurboSpike.
+            //
+            // We gate on whether this normal has a usable HORIZONTAL component rather than on
+            // HostFace: it is usable for every wall-oriented keypad — including an orphaned
+            // face-based "(Hosted)" keypad whose host is null but whose transform still encodes
+            // the wall frame (Facing = (0,0,1)). It is degenerate (vertical) only for a genuine
+            // 2D drafting keypad (Facing in-plane), which falls through to the BasisX path below.
+            XYZ wallNormal = keypad.HandOrientation.CrossProduct(keypad.FacingOrientation);
+            XYZ horizontalNormal = new XYZ(wallNormal.X, wallNormal.Y, 0);
+
+            if (horizontalNormal.GetLength() > 0.001)
             {
-                // Wall-hosted on linked model: derive offset from host face normal,
-                // matching the TryPlaceTagFaceBased approach for wall sconces.
-                XYZ offsetDirection = XYZ.Zero;
-                Reference hostFaceRef = keypad.HostFace;
-                Element? host = keypad.Host;
-
-                if (host is RevitLinkInstance linkInstance)
-                {
-                    Document? linkedDoc = linkInstance.GetLinkDocument();
-                    if (linkedDoc != null)
-                    {
-                        GeometryObject? geomObj = linkedDoc.GetElement(hostFaceRef.LinkedElementId)
-                            ?.GetGeometryObjectFromReference(hostFaceRef.CreateReferenceInLink());
-
-                        if (geomObj is PlanarFace planarFace)
-                        {
-                            Transform linkTransform = linkInstance.GetTotalTransform();
-                            XYZ faceNormal = linkTransform.OfVector(planarFace.FaceNormal);
-                            offsetDirection = new XYZ(faceNormal.X, faceNormal.Y, 0).Normalize();
-                        }
-                    }
-                }
-                else if (host != null)
-                {
-                    GeometryObject? geomObj = host.GetGeometryObjectFromReference(hostFaceRef);
-
-                    if (geomObj is PlanarFace planarFace)
-                    {
-                        XYZ faceNormal = planarFace.FaceNormal;
-                        offsetDirection = new XYZ(faceNormal.X, faceNormal.Y, 0).Normalize();
-                    }
-                }
-
-                if (offsetDirection.IsZeroLength())
-                {
-                    XYZ facing = keypad.FacingOrientation;
-                    XYZ horizontal = new XYZ(facing.X, facing.Y, 0);
-                    if (horizontal.GetLength() > 0.001)
-                        offsetDirection = horizontal.Normalize();
-                }
-
-                globalOffset = !offsetDirection.IsZeroLength()
-                    ? offsetDirection * TagConstants.KeypadOffsetFeet
-                    : XYZ.Zero;
+                XYZ offsetDirection = horizontalNormal.Normalize();
+                globalOffset = offsetDirection * TagConstants.KeypadOffsetFeet;
 
                 // Rotate tag to align with the wall direction (perpendicular to offset)
                 XYZ hand = -keypad.HandOrientation;
@@ -403,7 +379,8 @@ public class TagCommand : IExternalCommand
             }
             else
             {
-                // Unhosted (2D): BasisX rotation works directly in the horizontal plane.
+                // Genuine 2D drafting keypad: facing is in-plane, so Hand × Facing is vertical.
+                // BasisX rotation of a local +Y offset works directly in the horizontal plane.
                 XYZ localOffset = new XYZ(0, TagConstants.KeypadOffsetFeet, 0);
                 globalOffset = TagPlacementService.TransformToGlobal(keypad, localOffset);
 
@@ -485,43 +462,26 @@ public class TagCommand : IExternalCommand
             if (tag == null)
                 return false;
 
+            // Outward wall normal from the fixture's OWN transform, NOT by re-resolving the
+            // host-face reference across the link. That resolution only yields a PlanarFace when
+            // the host is a wall (a top-level BREP solid face, REFERENCE_TYPE_SURFACE); a sconce
+            // face-hosted to a *family* in the link (casework, doors — nested GeometryInstance
+            // geometry) would resolve LINEAR/NONE and never produce a normal (→ tag left on the
+            // fixture). Same failure the keypad path had; see TryPlaceKeypadTag. Verified in-model
+            // via TurboSpike: Hand × Facing matches the correctly-resolved normal on all 12 hosted
+            // sconces on this job, and is degenerate (vertical) only for genuine 2D sconces, whose
+            // in-plane FacingOrientation is the correct normal instead.
             XYZ offsetDirection = XYZ.Zero;
-            Reference? hostFaceRef = fixture.HostFace;
-            if (hostFaceRef != null)
+            XYZ wallNormal = fixture.HandOrientation.CrossProduct(fixture.FacingOrientation);
+            XYZ horizontalNormal = new XYZ(wallNormal.X, wallNormal.Y, 0);
+
+            if (horizontalNormal.GetLength() > 0.001)
             {
-                Element? host = fixture.Host;
-
-                if (host is RevitLinkInstance linkInstance)
-                {
-                    Document? linkedDoc = linkInstance.GetLinkDocument();
-                    if (linkedDoc != null)
-                    {
-                        GeometryObject? geomObj = linkedDoc.GetElement(hostFaceRef.LinkedElementId)
-                            ?.GetGeometryObjectFromReference(hostFaceRef.CreateReferenceInLink());
-
-                        if (geomObj is PlanarFace planarFace)
-                        {
-                            Transform linkTransform = linkInstance.GetTotalTransform();
-                            XYZ faceNormal = linkTransform.OfVector(planarFace.FaceNormal);
-                            offsetDirection = new XYZ(faceNormal.X, faceNormal.Y, 0).Normalize();
-                        }
-                    }
-                }
-                else if (host != null)
-                {
-                    GeometryObject? geomObj = host.GetGeometryObjectFromReference(hostFaceRef);
-
-                    if (geomObj is PlanarFace planarFace)
-                    {
-                        XYZ faceNormal = planarFace.FaceNormal;
-                        offsetDirection = new XYZ(faceNormal.X, faceNormal.Y, 0).Normalize();
-                    }
-                }
+                offsetDirection = horizontalNormal.Normalize();
             }
-
-            if (offsetDirection.IsZeroLength())
+            else
             {
-                // Fallback for unhosted sconces: use FacingOrientation as wall normal
+                // Genuine 2D sconce: facing is in-plane, so Hand × Facing is vertical.
                 XYZ facing = fixture.FacingOrientation;
                 XYZ horizontal = new XYZ(facing.X, facing.Y, 0);
                 if (horizontal.GetLength() > 0.001)
