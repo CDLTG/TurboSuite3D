@@ -22,7 +22,11 @@ public class WallLocalCoordinateSystem
         Origin = GeometryHelper.GetFixtureLocation(fixture)
             ?? throw new InvalidOperationException("Fixture has no valid location.");
 
-        WallNormal = GeometryHelper.GetWallFaceNormal(fixture);
+        // Transform-derived (mirror-corrected) wall normal, not the host-face reference — so the
+        // wall-local frame (Y = out of wall) stays correct for casework/door-hosted fixtures, whose
+        // reference falls back to a constant BasisY and would place the spline vertices inside the
+        // wall. See GeometryHelper.GetWallFaceNormalFromTransform.
+        WallNormal = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
         WallParallel = new XYZ(-WallNormal.Y, WallNormal.X, 0);
 
         WallAngle = Math.Atan2(WallNormal.Y, WallNormal.X) - Math.PI / 2.0;

@@ -469,8 +469,13 @@ public class WireCommand : IExternalCommand
 
         if (isSplineCondition)
         {
-            XYZ wallNormal1 = GeometryHelper.GetWallFaceNormal(fixture1);
-            XYZ wallNormal2 = GeometryHelper.GetWallFaceNormal(fixture2);
+            // Normals from each fixture's own transform (mirror-corrected), not the host-face
+            // reference — so casework/door-hosted sconces/receptacles no longer collapse to the
+            // constant BasisY fallback, which broke both the sameOrientation gate (spline skipped)
+            // and the connector-offset direction (stubs along the wall instead of out of it).
+            // See GeometryHelper.GetWallFaceNormalFromTransform.
+            XYZ wallNormal1 = GeometryHelper.GetWallFaceNormalFromTransform(fixture1);
+            XYZ wallNormal2 = GeometryHelper.GetWallFaceNormalFromTransform(fixture2);
 
             double dotProduct = wallNormal1.DotProduct(wallNormal2);
             bool sameOrientation = Math.Abs(Math.Abs(dotProduct) - 1.0) < 0.001;
@@ -556,8 +561,11 @@ public class WireCommand : IExternalCommand
     {
         if (fixture.HostFace != null)
         {
-            // 3D wall-hosted: connector at origin, offset 9" away from wall
-            XYZ wallNormal = GeometryHelper.GetWallFaceNormal(fixture);
+            // 3D wall-hosted: connector at origin, offset 9" away from wall. Normal derived from the
+            // fixture's own transform (mirror-corrected), not the host-face reference — so casework/
+            // door-hosted switches nudge the right way instead of collapsing to the wall. See
+            // GeometryHelper.GetWallFaceNormalFromTransform.
+            XYZ wallNormal = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
             return wallNormal * (9.0 / 12.0);
         }
 
