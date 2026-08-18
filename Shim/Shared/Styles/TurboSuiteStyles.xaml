@@ -30,6 +30,7 @@
     <!-- Converters -->
     <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
     <converters:IntEqualConverter x:Key="IntEqualConverter"/>
+    <converters:WidthSubtractConverter x:Key="WidthSubtract"/>
 
     <!-- Core Brushes -->
     <SolidColorBrush x:Key="HeaderBlueBrush" Color="#2B579A"/>

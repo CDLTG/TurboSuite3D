@@ -43,7 +43,7 @@ The "TurboSuite" ribbon tab has three panels:
 | Button | Shortcut | Description |
 |--------|----------|-------------|
 | [TurboCompact](Shim/Compact/README.md) | `Ctrl+Shift+S` | Remove unused materials and compact-save the active family |
-| [TurboSnoop](Shim/Snoop/README.md) | `TS` | List the Visibility/Graphics checkboxes a linked family draws under |
+| [TurboSnoop](Shim/Snoop/README.md) | `TS` | Selection-aware: snoop your own element's host (churn/orphan risk), or pick a linked family to list the Visibility/Graphics checkboxes it draws under |
 | [TurboTag](Shim/Tag/README.md) | `TT` | Batch-place type tags on selected lighting fixtures |
 | [TurboWire](Shim/Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
 | [TurboBubble](Shim/Bubble/README.md) | `TB` | Place switchleg tag and stub wire on a fixture |

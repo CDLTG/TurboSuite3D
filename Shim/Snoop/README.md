@@ -1,14 +1,29 @@
 # TurboSnoop
 
-Read-only "which Visibility/Graphics checkbox do I uncheck?" reporter for linked architectural geometry.
+Read-only reporter for the two "what is this connected to?" questions Revit hides. **Selection-aware, one button, two branches:**
 
-Clearance, path, and egress lines (and other content) often ride inside deeply nested families in a linked model, and finding the right **Category → Subcategory** to uncheck in **VG → RVT Links → Custom** by hand is slow trial-and-error. TurboSnoop picks one linked family and lists every VG checkbox its geometry draws under, so you know exactly which box to clear.
+- **Nothing selected → pick a linked family → VG report** — "which Visibility/Graphics checkbox do I uncheck?"
+- **Your own element selected → host report** — "what is this element hosted to?"
 
 **Suggested shortcut:** `TS` (replaces the unused Revit default for Toposolid → Smooth Shading)
 
-## Usage
+## Host report — "what am I hosted to?"
 
-1. Run TurboSnoop.
+Revit's Properties shows a link-hosted element only as *hosted to `<the link>`* — never *which* element in that link. That gap bites: a keypad can land face-hosted to a linked **casework** family (authored square, geometry on one side, sitting flush on the real wall) with no visual tell, which both misroutes wall-normalization and leaves the keypad **orphaned** the moment that volatile casework is deleted or reworked.
+
+Select one of your own families and run TurboSnoop: it resolves the actual host through the link and names it, with a **risk tier** — *stable* (linked Walls/Ceilings/Floors/Roofs), *churn risk* (linked Casework/Furniture/Generic Models/Stairs/Doors — deletion orphans you), *intentional* (hosted to your own in-model element, e.g. a track fixture on its track), *orphaned* (link-hosted but the host no longer resolves), or *unhosted* (2D/free). The tier boundaries live in one editable set in `Core/Host/HostRiskClassifier.cs`.
+
+The resolver is `Core/Host/` (pure result + classifier, unit-tested) plus `Shim/Shared/Services/HostResolutionService.cs` (the Revit walk). Its `ResolveAll` sweep is a deliberate stub — a **future full-model host audit** (report home TBD) will reuse the same resolver; only the single-element path ships today. Like the VG branch, the host report is **read-only** — it names the host and the risk; re-hosting stays a manual act.
+
+**Why selection-aware, not one pick:** no `PickObject` mode accepts both a host-doc element and a nested linked sub-element, so the split is "own element already selected → host; else pick into a link → VG." To reach the VG path, deselect first.
+
+## VG report — "which checkbox do I uncheck?"
+
+Clearance, path, and egress lines (and other content) often ride inside deeply nested families in a linked model, and finding the right **Category → Subcategory** to uncheck in **VG → RVT Links → Custom** by hand is slow trial-and-error. TurboSnoop picks one linked family and lists every VG checkbox its geometry draws under, so you know exactly which box to clear.
+
+### Usage
+
+1. Run TurboSnoop with **nothing selected**.
 2. Pick a linked architectural family in the view (press **Escape** to cancel before anything opens).
 3. A modeless window lists the **Category → Subcategory** Visibility/Graphics checkboxes the family's geometry draws under, split into two sections:
    - **Model geometry** — always drawn, collected in one pass.

@@ -1,9 +1,12 @@
 #nullable disable
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
+using TurboSuite.Shared.Hosting;
 using TurboSuite.Shared.Services;
 using TurboSuite.Snoop.Models;
 using TurboSuite.Snoop.Services;
@@ -14,25 +17,24 @@ using RvtOperationCanceled = Autodesk.Revit.Exceptions.OperationCanceledExceptio
 namespace TurboSuite.Snoop;
 
 /// <summary>
-/// TurboSnoop — read-only "which VG checkbox do I uncheck?" reporter for arch-link geometry.
+/// TurboSnoop — read-only reporter for the two "what is this connected to?" questions that Revit hides.
+/// Selection-aware, single window, two branches off one button:
 ///
-/// PURPOSE: clearance / path / egress lines (and other content) ride inside deeply nested linked-model
-/// families, and finding the right Category/Subcategory to uncheck in VG → RVT Links → Custom by hand is slow
-/// trial-and-error. TurboSnoop picks a linked family and lists every VG checkbox its geometry draws under. The
-/// user does the single uncheck — being modeless, the Revit view keeps its VG/VV keybind with the window open.
+///   • YOUR OWN element(s) selected → HOST report: what is this hosted to? (HostResolutionService →
+///     HostReportTree). Answers "why is this behaving strangely?" for a keypad/fixture you're staring
+///     at — surfaces a link-hosted casework/stairs host (churn/orphan risk) or an already-orphaned host
+///     that Revit shows only as "hosted to <the link>".
+///   • NOTHING selected → pick a LINKED element → VG report: which VG checkbox do I uncheck to hide it?
+///     (LinkedGeometryTreeBuilder — the original TurboSnoop). Modeless so the Revit VG/VV keybind stays live.
 ///
-/// STATE: shipped (ribbon still uses the `Blank` placeholder icon pending a dedicated one). The pick is
-/// synchronous here (before the window exists), so no external-event work queue.
+/// Why selection-aware and not one unified pick: no PickObject ObjectType accepts both a host-doc element
+/// AND a nested linked sub-element — LinkedElement mode rejects your own elements, Element mode collapses
+/// a link click to the whole RevitLinkInstance (no nested family for the VG walk). So the natural split is
+/// "own element already selected → host; else pick into a link → VG." Escape: deselect to reach the VG path.
 ///
-/// DELIBERATELY A FINDER, NOT A HIDER — there is no API to flip the VG checkbox this tool names, so do NOT add
-/// an "Apply":
-///   • Individual linked ELEMENTS: View.SetElementOverrides takes only a host-doc ElementId (no linked
-///     overload); the sole "hide" path is the async Reference.CreateLinkReference + PostCommand(HideElements).
-///   • Per-link CATEGORY/subcategory overrides (VG → RVT Links → Custom): RevitLinkGraphicsSettings exposes
-///     only whole-link knobs (ObjectStyles/ColorFill/ViewRange/LinkedViewId) — no per-category setter — and
-///     Custom isn't even settable in the 2024 API. Host-view View.SetCategoryHidden can drive a link under
-///     ObjectStyles=ByHostView, but only for categories that exist in the HOST doc, and host-view-wide; the
-///     link-DEFINED subcategories this tool exists to find (e.g. a nested "x_DI_Clearance") aren't reachable.
+/// DELIBERATELY A FINDER, NOT A HIDER (VG branch) — there is no API to flip the VG checkbox this tool
+/// names. See the rejected-alternatives note that used to head this file, preserved on LinkedGeometryTreeBuilder.
+/// The host branch is likewise read-only — it names the host and its risk; re-hosting stays a manual act.
 /// </summary>
 [Transaction(TransactionMode.ReadOnly)]
 public class SnoopCommand : IExternalCommand
@@ -50,12 +52,45 @@ public class SnoopCommand : IExternalCommand
         }
 
         Document doc = uidoc.Document;
+
+        // ── Selection-aware branch: your own element(s) selected → host report, no pick needed. ──
+        // (A RevitLinkInstance is not a FamilyInstance, so a selected whole-link falls through to VG.)
+        List<FamilyInstance> ownSelected = uidoc.Selection.GetElementIds()
+            .Select(doc.GetElement)
+            .OfType<FamilyInstance>()
+            .ToList();
+
+        if (ownSelected.Count > 0)
+            return ShowHostReport(uiapp, doc, ownSelected);
+
+        // ── Otherwise: pick a linked element → VG-checkbox report (the original TurboSnoop). ──
+        return ShowVgReport(uiapp, uidoc, doc);
+    }
+
+    private Result ShowHostReport(UIApplication uiapp, Document doc, List<FamilyInstance> ownSelected)
+    {
+        // Single-object report: the first selected own element (multi-selection is the future full audit).
+        FamilyInstance target = ownSelected[0];
+        HostResolution res = HostResolutionService.ResolveOne(target, doc);
+
+        string header = ownSelected.Count > 1
+            ? $"{res.PickedLabel}   (first of {ownSelected.Count} selected)"
+            : res.PickedLabel;
+
+        SnoopNode root = HostReportTree.Build(res);
+        ShowWindow(uiapp, doc, header, SnoopNodeViewModel.BuildTree(root));
+        return Result.Succeeded;
+    }
+
+    private Result ShowVgReport(UIApplication uiapp, UIDocument uidoc, Document doc)
+    {
         Reference reference;
         try
         {
             reference = uidoc.Selection.PickObject(
                 ObjectType.LinkedElement,
-                "TurboSnoop: pick a linked family to list the VG checkboxes its geometry draws under.");
+                "TurboSnoop: pick a linked family to list the VG checkboxes its geometry draws under "
+                + "(or select your own element first to snoop its host).");
         }
         catch (RvtOperationCanceled)
         {
@@ -84,9 +119,14 @@ public class SnoopCommand : IExternalCommand
 
         string header = LinkedGeometryTreeBuilder.DescribeFamily(linkedElement);
         SnoopNode root = new LinkedGeometryTreeBuilder().BuildUnion(linkedElement, linkedDoc);
-        SnoopNodeViewModel rootVm = SnoopNodeViewModel.BuildTree(root);
+        ShowWindow(uiapp, doc, header, SnoopNodeViewModel.BuildTree(root));
+        return Result.Succeeded;
+    }
 
-        // One window at a time — a fresh pick replaces the previous report.
+    /// <summary>Opens (or replaces) the single modeless TurboSnoop window over the given report tree.</summary>
+    private void ShowWindow(UIApplication uiapp, Document doc, string header, SnoopNodeViewModel rootVm)
+    {
+        // One window at a time — a fresh run replaces the previous report.
         _activeWindow?.Close();
 
         var window = new TurboSnoopWindow { DataContext = new SnoopMainViewModel(header, rootVm) };
@@ -100,6 +140,5 @@ public class SnoopCommand : IExternalCommand
         ModelessWindowGuard.Register(doc, window, window.Close);
         _activeWindow = window;
         window.Show();
-        return Result.Succeeded;
     }
 }

@@ -41,7 +41,7 @@
         <TreeView Grid.Row="2" Margin="8,4,8,6" BorderThickness="1"
                   BorderBrush="{StaticResource SeparatorBrush}"
                   ItemsSource="{Binding Roots}"
-                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <TreeView.Resources>
                 <!-- Read-only viewer: no row selection, so the unreadable dark-blue highlight never paints. -->
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent"/>
@@ -51,14 +51,26 @@
 
                 <HierarchicalDataTemplate DataType="{x:Type vm:SnoopNodeViewModel}"
                                           ItemsSource="{Binding Children}">
-                    <StackPanel Orientation="Horizontal">
+                    <!-- Grid (not a horizontal StackPanel): the * column constrains the label's width so
+                         long host-report notes wrap instead of forcing a horizontal scrollbar. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
                         <!-- Leaf VG checkboxes get a bullet — the row the user finds in the V/G dialog. -->
-                        <TextBlock Text="•" Margin="0,0,5,0" VerticalAlignment="Center"
+                        <TextBlock Grid.Column="0" Text="•" Margin="0,0,5,0" VerticalAlignment="Top"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    Visibility="{Binding IsLeafCheckbox, Converter={StaticResource BoolToVisibility}}"/>
-                        <TextBlock Text="{Binding Label}" TextWrapping="NoWrap"
-                                   Foreground="{StaticResource TextPrimaryBrush}"/>
-                    </StackPanel>
+                        <!-- Cap width to the viewport (ScrollContentPresenter) less the expander/indent
+                             gutter, so long notes wrap. The default TreeViewItem header column is Auto,
+                             so without this cap it measures at full desired width and never wraps. -->
+                        <TextBlock Grid.Column="1" Text="{Binding Label}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   MaxWidth="{Binding ActualWidth,
+                                       RelativeSource={RelativeSource AncestorType={x:Type ScrollContentPresenter}},
+                                       Converter={StaticResource WidthSubtract}, ConverterParameter=52}"/>
+                    </Grid>
                 </HierarchicalDataTemplate>
             </TreeView.Resources>
             <TreeView.ItemContainerStyle>
@@ -66,6 +78,8 @@
                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
                     <!-- Only the expander chevrons are interactive; rows can't take selection focus. -->
                     <Setter Property="Focusable" Value="False"/>
+                    <!-- Stretch the row to the viewport width so the label's * column has a bound to wrap in. -->
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 </Style>
             </TreeView.ItemContainerStyle>
         </TreeView>
