@@ -370,7 +370,10 @@ public class TagCommand : IExternalCommand
 
             if (horizontalNormal.GetLength() > 0.001)
             {
-                XYZ offsetDirection = horizontalNormal.Normalize();
+                // Mirror-corrected outward normal from the shared helper (horizontalNormal above is
+                // used only as the wall-vs-2D gate). Raw Hand × Facing points INTO the wall for a
+                // mirrored keypad, which placed the tag on the wrong side. See GetWallFaceNormalFromTransform.
+                XYZ offsetDirection = GeometryHelper.GetWallFaceNormalFromTransform(keypad);
                 globalOffset = offsetDirection * TagConstants.KeypadOffsetFeet;
 
                 // Rotate tag to align with the wall direction (perpendicular to offset)
@@ -477,7 +480,10 @@ public class TagCommand : IExternalCommand
 
             if (horizontalNormal.GetLength() > 0.001)
             {
-                offsetDirection = horizontalNormal.Normalize();
+                // Mirror-corrected outward normal from the shared helper (horizontalNormal above is
+                // the wall-vs-2D gate only). Raw Hand × Facing points INTO the wall for a mirrored
+                // sconce. See GetWallFaceNormalFromTransform.
+                offsetDirection = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
             }
             else
             {
