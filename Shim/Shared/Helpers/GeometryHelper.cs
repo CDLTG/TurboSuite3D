@@ -14,16 +14,36 @@ public static class GeometryHelper
     private const double NormalEpsilon = 0.001;
 
     /// <summary>
-    /// Determines if a fixture is mounted on a vertical face (e.g., wall).
-    /// Vertical faces have horizontal normals where the Z component is near zero.
+    /// Determines if a hosted fixture is mounted on a vertical face (e.g., wall) — the strategy
+    /// selector for TurboTag/TurboBubble wall placement.
+    ///
+    /// Derived from the fixture's OWN transform, not by re-resolving the host-face reference:
+    /// <c>host != null</c> AND <see cref="GetWallFaceNormalFromTransform"/>'s primary candidate
+    /// (Hand × Facing) has a usable horizontal component. This is the same reasoning as that
+    /// helper — see its remarks for why the reference path was abandoned.
+    ///
+    /// Why this replaced the old host-face-reference Z-test (a retired GetHostFaceNormal that resolved
+    /// the HostFace to a PlanarFace and checked its normal): a fixture face-hosted to a
+    /// *family* in the link (casework, doors — geometry nested in a GeometryInstance) resolves
+    /// LINEAR/NONE, so the reference returned no PlanarFace and the fixture was mis-classified as
+    /// non-vertical, losing wall placement entirely. Validated in-model via TurboSpike across a broad
+    /// mixed selection (101 fixtures): this predicate DROPS zero fixtures the reference path resolved
+    /// as vertical, and ADDS exactly the casework/door-hosted wall fixtures it used to miss.
+    ///
+    /// The <c>host != null</c> clause is load-bearing: it keeps a genuinely unhosted (host == null)
+    /// fixture — e.g. an "&lt;not associated&gt;" switch, a modeling error — classified non-vertical,
+    /// diverging it from a real-but-casework-hosted fixture that this now correctly rescues. A truly
+    /// unhosted 2D drafting family is unaffected (it was, and stays, non-vertical here — TurboTag
+    /// routes it via IsVerticalFamily/IsWallSconce instead).
     /// </summary>
     public static bool IsOnVerticalFace(FamilyInstance fixture)
     {
-        var faceNormal = GetHostFaceNormal(fixture);
-        if (faceNormal == null)
+        if (fixture.Host == null)
             return false;
 
-        return Math.Abs(faceNormal.Z) < NormalEpsilon;
+        var transformNormal = fixture.HandOrientation.CrossProduct(fixture.FacingOrientation);
+        var horizontal = new XYZ(transformNormal.X, transformNormal.Y, 0);
+        return horizontal.GetLength() > NormalEpsilon;
     }
 
     /// <summary>
@@ -36,87 +56,12 @@ public static class GeometryHelper
     }
 
     /// <summary>
-    /// Gets the face normal from a fixture's host face.
-    /// Supports both local hosts and hosts in linked models.
-    /// Returns null if the normal cannot be determined.
-    /// </summary>
-    public static XYZ? GetHostFaceNormal(FamilyInstance fixture)
-    {
-        if (fixture.Host == null)
-            return null;
-
-        try
-        {
-            var hostFaceRef = fixture.HostFace;
-            if (hostFaceRef == null)
-                return null;
-
-            var host = fixture.Host;
-
-            if (host is RevitLinkInstance linkInstance)
-            {
-                var linkedDoc = linkInstance.GetLinkDocument();
-                if (linkedDoc == null)
-                    return null;
-
-                var linkedElement = linkedDoc.GetElement(hostFaceRef.LinkedElementId);
-                var linkRef = hostFaceRef.CreateReferenceInLink();
-                var geomObj = linkedElement?.GetGeometryObjectFromReference(linkRef);
-
-                if (geomObj is PlanarFace planarFace)
-                {
-                    var linkTransform = linkInstance.GetTotalTransform();
-                    return linkTransform.OfVector(planarFace.FaceNormal);
-                }
-            }
-            else
-            {
-                var geomObj = host.GetGeometryObjectFromReference(hostFaceRef);
-
-                if (geomObj is PlanarFace planarFace)
-                {
-                    return planarFace.FaceNormal;
-                }
-            }
-        }
-        catch
-        {
-            // Could not get face normal
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Gets the wall face normal for a fixture, normalized to horizontal plane.
-    /// Supports both local hosts and hosts in linked models.
-    /// Falls back to fixture's facing orientation if wall normal unavailable.
-    /// </summary>
-    public static XYZ GetWallFaceNormal(FamilyInstance fixture)
-    {
-        var normal = GetHostFaceNormal(fixture);
-
-        if (normal != null)
-        {
-            var horizontal = new XYZ(normal.X, normal.Y, 0);
-            var length = horizontal.GetLength();
-            if (length > NormalEpsilon)
-                return horizontal.Normalize();
-        }
-
-        // Default to fixture's facing orientation
-        var facingOrientation = fixture.FacingOrientation;
-        var facing = new XYZ(facingOrientation.X, facingOrientation.Y, 0);
-        var facingLength = facing.GetLength();
-        return facingLength > NormalEpsilon ? facing.Normalize() : XYZ.BasisY;
-    }
-
-    /// <summary>
     /// Outward horizontal wall normal for a wall-mounted fixture, derived from the fixture's
     /// OWN transform rather than by re-resolving the host-face reference across the linked model.
     ///
-    /// Why: <see cref="GetHostFaceNormal"/> only yields a PlanarFace when the host is a wall
-    /// (a top-level BREP solid face, REFERENCE_TYPE_SURFACE). A fixture face-hosted to a *family*
+    /// Why: resolving the HostFace reference to a PlanarFace (the retired reference path) only
+    /// succeeds when the host is a wall (a top-level BREP solid face, REFERENCE_TYPE_SURFACE). A
+    /// fixture face-hosted to a *family*
     /// in the link (casework, doors — geometry nested inside a GeometryInstance) resolves
     /// LINEAR/NONE, so the reference path returned null and the offset collapsed to zero (tag on
     /// the wall) or flipped to the opposite face — and it was nondeterministic across link regens.

@@ -241,10 +241,10 @@ public class BubbleCommand : IExternalCommand
             // both to the normal (as the lighting path does in VerticalFacePlacementCalculator)
             // fixes two failure modes: localY mirrored across the wall line, AND localX pointing
             // across the wall instead of along it (bubble stacks on top of the fixture).
-            // Transform-derived (mirror-corrected) wall normal, not the host-face reference. Behavior
-            // is identical today (this branch is gated by IsOnVerticalFace, which currently only
-            // admits real-wall fixtures, where both paths agree); the swap makes the frame correct
-            // for casework/door hosts once Phase 4 migrates that detection. See GetWallFaceNormalFromTransform.
+            // Transform-derived (mirror-corrected) wall normal, not the host-face reference — so the
+            // frame is correct for casework/door-hosted fixtures too, which IsOnVerticalFace now admits
+            // (both it and this derivation read the fixture's own transform, agreeing on real walls and
+            // resolving where the host-face reference collapsed). See GetWallFaceNormalFromTransform.
             localY = GeometryHelper.GetWallFaceNormalFromTransform(fixture);   // out of wall
             localX = new XYZ(-localY.Y, localY.X, 0);             // along wall
             rotation = Math.Atan2(localX.Y, localX.X);            // keep tag glyph + flip frame consistent
