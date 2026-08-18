@@ -7,6 +7,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-08-18
+
+### Added
+- Revit 2026 support: a new net10.0-windows shim channel alongside the 2024 (net48) and 2025 (net8) channels; the combined installer and per-version auto-update discover it automatically.
+- TurboWire/TurboZones/TurboDocs: shades as a wired subsystem — one shade per circuit onto a 35 V location, shade panels drawn per location in the Panel Breakdown, and shade panel pages plus a Shade Names tab in the Panel Schedule.
+- TurboDocs: PDF outline bookmark at each Panel Schedule panel.
+- TurboDALI (experimental, gated off in shipped builds): standalone DALI command — addressing engine, per-circuit `L#-##` write-back, Control-Zone overlay, a job-wide numbering lock, and its own Controls ribbon panel; DALI declaration moved off the TurboZones tab.
+
+### Changed
+- TurboWire/TurboBubble/TurboTag: derive wall and vertical-face normals and face-hosted tag offsets from the instance transform, retiring the host-face reference path — correct placement on wall- and vertical-face-hosted fixtures.
+- TurboZones: pack RELAY + 0-10V loads onto one LQSE-4T5 module, with consistent module-type label casing on the pack toggle.
+- TurboWire/TurboDriver: exclude shade panels from the circuit panel picker.
+
 ## [1.4.1] — 2026-08-13
 
 ### Added
@@ -197,6 +210,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.4.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.2
 [1.4.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.1
 [1.4.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.0
 [1.3.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.3.0
