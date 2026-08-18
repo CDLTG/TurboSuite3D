@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Release Status
 
-In production to ~5 users at CDLTG (current version in git tags). Future work ships via the network-share auto-update channel — assume every change reaches production users on their next Revit launch. Breaking changes to ExtensibleStorage schemas, parameter names, or settings shapes require a coordinated rollout (see "ExtensibleStorage Schema Changes" below).
+In production to ~5 users at CDLTG (current shipped version in git tags). Those users update **only when a release is published** to the per-version network-share auto-update channel (via `publish.ps1`) — they pick it up on their next Revit launch. A commit/push to `main` by itself reaches **no one**: it updates the public GitHub repo (outward-facing there) and the solo dev's own next local build, but does not deploy to the ~5 users until a release is cut (see `/release`). Breaking changes to ExtensibleStorage schemas, parameter names, or settings shapes require a coordinated rollout (see "ExtensibleStorage Schema Changes" below).
 
 ## Project Overview
 
@@ -86,7 +86,7 @@ When asked to explain something, provide the explanation only. Do not assume a c
 ### Never Commit or Push Without Approval
 **IMPORTANT**: Do NOT run `git commit` or `git push` unless explicitly asked. Finishing a change is not permission to commit it — make the edits, build, run the tests, report what changed, and stop. Approval is per-request and does not carry over to the next change. This applies even mid-task, and even when the work is obviously complete and green.
 
-Every push reaches production users on their next Revit launch (see "Release Status"), so a commit is an outward-facing action, not a bookkeeping step. `/ship` is the explicit approval to commit and push.
+Every push updates the **public** GitHub repo (see "Release Status"), so a commit is an outward-facing action, not a bookkeeping step — even though it does not by itself deploy to the ~5 production users (only a published release does). `/ship` is the explicit approval to commit and push.
 
 ### Revit API Parameter Safety
 **IMPORTANT**: Before implementing anything that reads or writes a Revit parameter:
