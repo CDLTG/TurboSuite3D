@@ -8,7 +8,7 @@ In production to ~5 users at CDLTG (current version in git tags). Future work sh
 
 ## Project Overview
 
-TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024 and 2025**. A per-version `TurboSuite.dll` (.NET 8.0-windows for 2025, .NET Framework 4.8 for 2024) implements `IExternalApplication` and registers fifteen shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs, TurboMask, TurboSnoop, TurboSchedule, TurboSetup) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). Two more commands, TurboDMX and TurboDALI, are compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
+TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation, written in C#, supporting **Revit 2024, 2025, and 2026**. A per-version `TurboSuite.dll` (.NET Framework 4.8 for 2024, .NET 8.0-windows for 2025, .NET 10.0-windows for 2026) implements `IExternalApplication` and registers fifteen shipped commands (TurboDriver, TurboRPS, TurboName, TurboBubble, TurboTag, TurboWire, TurboZones, TurboNumber, TurboCompact, TurboTab, TurboDocs, TurboMask, TurboSnoop, TurboSchedule, TurboSetup) plus a Settings dialog across three ribbon panels (Settings, Commands, Utilities). Two more commands, TurboDMX and TurboDALI, are compiled in but gated behind `ExperimentalCommandsEnabled` in `App/TurboSuiteApplication.cs`.
 
 ## Build Commands
 
@@ -16,17 +16,18 @@ TurboSuite is a unified Autodesk Revit add-in for electrical/lighting automation
 dotnet build TurboSuite.sln
 ```
 
-Platform target is **x64**. All Revit-coupled add-in source lives **once** in `Shim/` (a Visual Studio Shared Project — `Shim/Shim.projitems` imported by both csprojs; `Shim/Shim.shproj` is the VS node, never built by the CLI). It compiles into **two thin per-version shims** — `Revit2025/TurboSuite.Revit2025.csproj` (net8.0-windows, Revit 2025 API) and `Revit2024/TurboSuite.Revit2024.csproj` (net48, Revit 2024 API) — each emitting `TurboSuite.dll` via `AssemblyName` into its own `Addins\{year}\` folder. **The shared source carries no version constant: the Revit year comes from the running Revit at runtime** (`UIControlledApplication.ControlledApplication.VersionNumber`, captured in `OnStartup`), so compile-time divergence is confined to the csproj TFM/API refs plus two seam patterns:
+Platform target is **x64**. All Revit-coupled add-in source lives **once** in `Shim/` (a Visual Studio Shared Project — `Shim/Shim.projitems` imported by every shim csproj; `Shim/Shim.shproj` is the VS node, never built by the CLI). It compiles into **three thin per-version shims** — `Revit2024/TurboSuite.Revit2024.csproj` (net48, Revit 2024 API), `Revit2025/TurboSuite.Revit2025.csproj` (net8.0-windows, Revit 2025 API), and `Revit2026/TurboSuite.Revit2026.csproj` (net10.0-windows, Revit 2026 API) — each emitting `TurboSuite.dll` via `AssemblyName` into its own `Addins\{year}\` folder. **The shared source carries no version constant: the Revit year comes from the running Revit at runtime** (`UIControlledApplication.ControlledApplication.VersionNumber`, captured in `OnStartup`), so compile-time divergence is confined to the csproj TFM/API refs plus two seam patterns:
 
-- **Single shared file** (`Shim/.../ElementRefConversions`, the `.Value`↔`.IntegerValue` boundary): compiles for both because the member exists in each API, just differently typed.
-- **Per-shim split file** (`Revit{year}/Setup/LinkGraphicsSeam.cs`): same namespace + class declared once under each `Revit{year}/`, each picked up only by its own shim's default globbing. Use this when an API member exists in *only one* version — e.g. the 2025-only RVT link *Custom* display settings, which the 2024 file stubs out.
+- **Single shared file** (`Shim/.../ElementRefConversions`, the `.Value`↔`.IntegerValue` boundary): compiles for all shims because the member exists in each API, just differently typed (2025/2026 are `long`-based, 2024 is `int`-based).
+- **Per-shim split file** (`Revit{year}/Setup/LinkGraphicsSeam.cs`): same namespace + class declared once under each `Revit{year}/`, each picked up only by its own shim's default globbing. Use this when an API member exists in *only some* versions — e.g. the 2025+-only RVT link *Custom* display settings, whose real implementation is shared verbatim by the 2025 and 2026 files while the 2024 file stubs it out.
 
-Supporting these: version-agnostic, multi-targeted (`net48;net8.0-windows`) `Core/` and `Abstractions/` (no Revit refs), plus `Updater/` and `Installer/`. Tests live in `Tests/TurboSuite.Core.Tests.csproj` (xUnit, net8.0-windows; run `dotnet test`) — oracle suites over the pure, Revit-free logic in `Core/`, expanding as more lands; the shims are validated by manual in-Revit testing. Core exposes internals to the test assembly via `<InternalsVisibleTo>` (compile-time only) so internal helpers can be pinned directly. No linting configs.
+Supporting these: version-agnostic `Core/` (multi-targeted `net48;net8.0-windows;net10.0-windows`) and `Abstractions/` (netstandard2.0), no Revit refs, plus `Updater/` (multi-targeted to match each channel's runtime) and `Installer/`. Tests live in `Tests/TurboSuite.Core.Tests.csproj` (xUnit, net8.0-windows; run `dotnet test`) — oracle suites over the pure, Revit-free logic in `Core/`, expanding as more lands; the shims are validated by manual in-Revit testing. Core exposes internals to the test assembly via `<InternalsVisibleTo>` (compile-time only) so internal helpers can be pinned directly. No linting configs.
 
-To build just one channel (e.g. in CI or a quick check): `dotnet build Revit2025/TurboSuite.Revit2025.csproj` (or `Revit2024/...`). In Visual Studio, set the desired shim as startup project and F5 to launch that Revit.
+To build just one channel (e.g. in CI or a quick check): `dotnet build Revit2025/TurboSuite.Revit2025.csproj` (or `Revit2024/...`, `Revit2026/...`). In Visual Studio, set the desired shim as startup project and F5 to launch that Revit.
 
 To publish a release to the server share (run from non-admin PowerShell), **once per Revit version** into that version's share subfolder:
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -RevitVersion "2026" -Version "1.2.0"
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -RevitVersion "2025" -Version "1.2.0"
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVER\ShareName\path\to\TurboSuite" -RevitVersion "2024" -Version "1.2.0"
 ```
@@ -51,9 +52,9 @@ Each shim's post-build target copies `TurboSuite.addin` and `TurboSuite.dll`/`.p
 %APPDATA%\Autodesk\Revit\Addins\{year}\
 %APPDATA%\Autodesk\Revit\Addins\{year}\TurboSuite\
 ```
-It also copies the version-matched `TurboSuiteUpdater.exe` (net48 for 2024 — exe only; net8 for 2025 — exe + dll + runtimeconfig) to `%LOCALAPPDATA%\TurboSuite\{year}\`.
+It also copies the version-matched `TurboSuiteUpdater.exe` (net48 for 2024 — exe only; net8 for 2025 and net10 for 2026 — exe + dll + runtimeconfig) to `%LOCALAPPDATA%\TurboSuite\{year}\`.
 
-Revit auto-discovers `.addin` files from that directory on startup. The two channels are fully isolated — same DLL name, different per-version folders.
+Revit auto-discovers `.addin` files from that directory on startup. The channels are fully isolated — same DLL name, different per-version folders.
 
 ### Installation and Auto-Update
 
@@ -145,7 +146,7 @@ Each shipped module keeps its own `Shim/<Module>/README.md` — workflow, design
 | `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, control BOM PDF, load schedule PDF, panel schedule PDF, and cover/notes PDF (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |
 | `TurboSuite.Mask` | TurboMask — masking region + per-fixture annotation stamps + detail-line overlays of connected wires. Real wires stay connected/hidden under the mask — overlays are view-only stand-ins, never a delete-recreate, so connectivity is untouched |
-| `TurboSuite.Setup` | TurboSetup — landing menu routing to (a) **Project Setup**: copy levels from the linked arch model, create Floor/RCP views with firm templates, configure RVT link display (**3D RVT-linked only**; the link-graphics path is Revit 2025-only — 2024 does levels/views/templates and leaves links manual); and (b) **Name Spaces from Rooms** (`SpaceNamingService`): seed Space names from the architect Rooms (BAND_ROOM), blank-only by default with a force re-pull |
+| `TurboSuite.Setup` | TurboSetup — landing menu routing to (a) **Project Setup**: copy levels from the linked arch model, create Floor/RCP views with firm templates, configure RVT link display (**3D RVT-linked only**; the link-graphics path is Revit 2025+-only — 2024 does levels/views/templates and leaves links manual); and (b) **Name Spaces from Rooms** (`SpaceNamingService`): seed Space names from the architect Rooms (BAND_ROOM), blank-only by default with a force re-pull |
 | `TurboSuite.Dmx` | TurboDMX — DMX-controlled RGBW LED tape/fixture automation (decoder/driver packing, addressing, one-line, wire legend, Control-Zone view overlay). **Gated behind `ExperimentalCommandsEnabled`; feature-complete + live-tested, end-of-project polish only** — gets its own README when it ships. Pure engine + VMs in `Core/Dmx/` (unit-tested in `Tests/`); Revit-coupled half in `Shim/Dmx/`, loop-centric modeless window (`DmxMainViewModel`). State persists in one JSON-backed ExtensibleStorage schema (`DmxStorageService`). Design rationale + domain vocabulary live **in the code**: start at the canonical containment-ladder / overloaded-word glossary on `DmxSolver` (`Core/Dmx/DmxSolver.cs`), then the per-file doc-comments — there are no separate DMX design docs |
 | `TurboSuite.Dali` | TurboDALI — standalone DALI addressing command: group Control Zones into **loops**, declare each loop's panel **ZONE**, and **write per-circuit `L#-##` addresses** back onto every element of a DALI circuit (fixtures + driver device), with a job-wide numbering lock. **Gated behind `ExperimentalCommandsEnabled`** (with TurboDMX); it is the **sole DALI editor** — the transitional TurboZones DALI tab was removed, so DALI declaration is **dev-only until this ungates**. TurboZones is now a pure consumer (demand via `DaliDemandProvider`, placement via `DaliPlacementMapper`). Pure engine + VMs in `Core/Dali/` (addressing/lock reconciler, NW-seeded `ProximityWalk`, unit-tested); Revit-coupled half in `Shim/Dali/` (modeless `DaliMainViewModel`). Rides the existing DALI schema (`DaliStorageService`, `PayloadVersion` v3 adds the lock snapshot). Has its own `Shim/Dali/README.md` |
 | `TurboSuite.Snoop` | TurboSnoop — read-only "which VG checkbox do I uncheck?" reporter for linked arch families. Deliberately **read-only, no Apply** — no API can flip a per-link VG checkbox, so it names the box and the user unchecks it |
@@ -193,7 +194,7 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 
 ## Dependencies
 
-- `RevitAPI.dll`, `RevitAPIUI.dll`, `Xceed.Wpf.AvalonDock.dll` (from the matching Revit 2024/2025 install, per shim)
+- `RevitAPI.dll`, `RevitAPIUI.dll`, `Xceed.Wpf.AvalonDock.dll` (from the matching Revit 2024/2025/2026 install, per shim)
 - `ACadSharp` (NuGet) — DWG/DXF reading for TurboName
 - `PdfSharpCore` (NuGet) — PDF operations for TurboDocs
-- .NET 8.0-windows (Revit 2025 shim) / .NET Framework 4.8 (Revit 2024 shim) / Core multi-targets both / WPF
+- .NET Framework 4.8 (Revit 2024 shim) / .NET 8.0-windows (Revit 2025 shim) / .NET 10.0-windows (Revit 2026 shim) / Core multi-targets all three / WPF

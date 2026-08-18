@@ -5,9 +5,10 @@
     a previously published version.
 
 .DESCRIPTION
-    TurboSuite ships a separate DLL per Revit version (net8 for 2025, net48 for 2024).
-    The share is laid out with one subfolder per version:
+    TurboSuite ships a separate DLL per Revit version (net10 for 2026, net8 for 2025,
+    net48 for 2024). The share is laid out with one subfolder per version:
 
+        <ServerPath>\2026\   net10 TurboSuite.dll + updater + version.txt + Archive\
         <ServerPath>\2025\   net8 TurboSuite.dll + updater + version.txt + Archive\
         <ServerPath>\2024\   net48 TurboSuite.dll + updater + version.txt + Archive\
         <ServerPath>\        the (version-agnostic) combined TurboSuiteInstaller
@@ -18,7 +19,7 @@
     The UNC path to the share root (e.g., \\SERVER\TurboSuite). Version subfolders live under it.
 
 .PARAMETER RevitVersion
-    Which Revit channel to publish: "2024" or "2025".
+    Which Revit channel to publish: "2024", "2025", or "2026".
 
 .PARAMETER Version
     The version string to write to that channel's version.txt (e.g., 1.1.0). Prompted if omitted.
@@ -42,7 +43,7 @@ param(
     [string]$ServerPath,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("2024", "2025")]
+    [ValidateSet("2024", "2025", "2026")]
     [string]$RevitVersion,
 
     [string]$Version,
@@ -59,8 +60,13 @@ $installerCsproj = Join-Path $projectRoot "Installer\TurboSuiteInstaller.csproj"
 $versionShare = Join-Path $ServerPath $RevitVersion
 $archiveRoot = Join-Path $versionShare "Archive"
 
-# Per-version build outputs. The shim project + target framework differ by version.
-$tfm = if ($RevitVersion -eq "2024") { "net48" } else { "net8.0-windows" }
+# Per-version build outputs. The shim project + target framework differ by version:
+# 2024 = net48 (Revit 2024), 2025 = net8 (Revit 2025), 2026 = net10 (Revit 2026).
+$tfm = switch ($RevitVersion) {
+    "2024" { "net48" }
+    "2025" { "net8.0-windows" }
+    "2026" { "net10.0-windows" }
+}
 $shimProjDir = Join-Path $projectRoot "Revit$RevitVersion"
 $shimProj = Join-Path $shimProjDir "TurboSuite.Revit$RevitVersion.csproj"
 $addinFile = Join-Path $shimProjDir "TurboSuite.addin"

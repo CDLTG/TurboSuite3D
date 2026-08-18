@@ -4,8 +4,9 @@
     <!-- Multi-target so each Revit channel ships a runtime-matched updater: the
          Revit 2024 (net48) channel can't assume the .NET 8 desktop runtime is
          present, so it gets a net48 updater exe; Revit 2025 (net8) gets the net8
-         build. Program.cs is pure System.IO/Diagnostics/Threading — no BCL gaps. -->
-    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
+         build; Revit 2026 (net10) gets the net10 build. Program.cs is pure
+         System.IO/Diagnostics/Threading — no BCL gaps. -->
+    <TargetFrameworks>net48;net8.0-windows;net10.0-windows</TargetFrameworks>
     <!-- net48's SDK-default LangVersion (7.3) predates top-level statements; the
          program uses them, so force latest (matches the shims/Core). -->
     <LangVersion>latest</LangVersion>
