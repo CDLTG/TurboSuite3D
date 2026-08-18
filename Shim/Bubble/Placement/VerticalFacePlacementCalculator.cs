@@ -43,7 +43,11 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
 
         RotatesWithComponent = PlacementCalculatorBase.DetermineRotationMode(sourceTag);
 
-        _wallNormal = GeometryHelper.GetWallFaceNormal(fixture);
+        // Transform-derived (mirror-corrected) wall normal, not the host-face reference — so the
+        // whole wall-local frame (rotation, X along wall, Y out of wall) is correct for casework/
+        // door-hosted sconces, whose reference collapses to a constant BasisY and rotates the
+        // bubble/tag/wire ~90° on any wall that isn't east-west. See GetWallFaceNormalFromTransform.
+        _wallNormal = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
         _wallParallel = new XYZ(-_wallNormal.Y, _wallNormal.X, 0);
 
         var wallAngle = Math.Atan2(_wallNormal.Y, _wallNormal.X) - Math.PI / 2.0;

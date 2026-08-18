@@ -186,7 +186,10 @@ public class BubbleCommand : IExternalCommand
         XYZ? wallNormal = null;
         if (isWallSconce)
         {
-            wallNormal = GeometryHelper.GetWallFaceNormal(fixture);
+            // Transform-derived (mirror-corrected) wall normal for the sconce wire offset — not the
+            // host-face reference, which collapses to BasisY for casework/door hosts and stubs the
+            // wire along the wall instead of out of it. See GetWallFaceNormalFromTransform.
+            wallNormal = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
         }
 
         CreateTagAndWire(doc, activeView, fixture, selectedTag, placement, tagTypeId, wireTypeId, fixtureConnector, isLineBased, isWallSconce, wallNormal);
@@ -238,7 +241,11 @@ public class BubbleCommand : IExternalCommand
             // both to the normal (as the lighting path does in VerticalFacePlacementCalculator)
             // fixes two failure modes: localY mirrored across the wall line, AND localX pointing
             // across the wall instead of along it (bubble stacks on top of the fixture).
-            localY = GeometryHelper.GetWallFaceNormal(fixture);   // out of wall
+            // Transform-derived (mirror-corrected) wall normal, not the host-face reference. Behavior
+            // is identical today (this branch is gated by IsOnVerticalFace, which currently only
+            // admits real-wall fixtures, where both paths agree); the swap makes the frame correct
+            // for casework/door hosts once Phase 4 migrates that detection. See GetWallFaceNormalFromTransform.
+            localY = GeometryHelper.GetWallFaceNormalFromTransform(fixture);   // out of wall
             localX = new XYZ(-localY.Y, localY.X, 0);             // along wall
             rotation = Math.Atan2(localX.Y, localX.X);            // keep tag glyph + flip frame consistent
         }
