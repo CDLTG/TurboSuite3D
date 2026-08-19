@@ -116,6 +116,7 @@ public class PanelScheduleViewModel : ViewModelBase
                 CompanyPhone = _parent.CompanyPhone,
                 CompanyEmail = _parent.CompanyEmail,
                 CompanyWebsite = _parent.CompanyWebsite,
+                FooterDate = _parent.HeaderDate.ToString("yyyy.MM.dd"),
             };
             await Task.Run(() => PanelSchedulePdfService.Generate(_data, ProjectName, outputPath, settings));
 

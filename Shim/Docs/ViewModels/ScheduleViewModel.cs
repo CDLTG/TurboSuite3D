@@ -192,6 +192,7 @@ public class ScheduleViewModel : ViewModelBase
                 CompanyPhone = _parent.CompanyPhone,
                 CompanyEmail = _parent.CompanyEmail,
                 CompanyWebsite = _parent.CompanyWebsite,
+                FooterDate = _parent.HeaderDate.ToString("yyyy.MM.dd"),
                 SpecificationNotes = [SpecNote1, SpecNote2, SpecNote3, SpecNote4, SpecNote5, SpecNote6],
             };
             await Task.Run(() => SchedulePdfService.Generate(selected, ProjectName, outputPath, largeFormat, settings));

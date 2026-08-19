@@ -11,6 +11,10 @@ public class DocsSettings
     public string CompanyEmail { get; set; } = string.Empty;
     public string CompanyWebsite { get; set; } = string.Empty;
     public string HeaderDate { get; set; } = string.Empty;
+
+    // Release date stamped at the left of footered deliverables (yyyy.MM.dd), mirroring the
+    // page-number position. Set by each footered export's viewmodel from the shared HeaderDate.
+    public string FooterDate { get; set; } = string.Empty;
     public Dictionary<string, string> LocalPdfPaths { get; set; } = new();
     public List<string> SelectedTypeMarks { get; set; } = new();
 

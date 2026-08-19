@@ -438,6 +438,11 @@ public static class RPSBreakdownPdfService
                 new XPoint(PageWidth / 2, fTop + 10), XStringFormats.TopCenter);
         }
 
+        // Release date left-aligned, mirroring the page number
+        if (!string.IsNullOrWhiteSpace(settings.FooterDate))
+            gfx.DrawString(settings.FooterDate, fontPageNum, XBrushes.Gray,
+                new XPoint(MarginLeft, fTop + 10), XStringFormats.TopLeft);
+
         gfx.DrawString($"Page {pageNumber} of {pageCount}", fontPageNum, XBrushes.Gray,
             new XPoint(PageWidth - MarginRight, fTop + 10), XStringFormats.TopRight);
     }

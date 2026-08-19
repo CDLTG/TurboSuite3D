@@ -144,6 +144,7 @@ public class LoadsViewModel : ViewModelBase
                 CompanyPhone = _parent.CompanyPhone,
                 CompanyEmail = _parent.CompanyEmail,
                 CompanyWebsite = _parent.CompanyWebsite,
+                FooterDate = _parent.HeaderDate.ToString("yyyy.MM.dd"),
             };
             await Task.Run(() => LoadsPdfService.Generate(sorted, ProjectName, outputPath, settings));
 

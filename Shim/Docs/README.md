@@ -33,7 +33,7 @@ A **Specification Notes** block is appended after all fixture entries — up to 
 - **8.5" x 28.5"** — construction document strip (default)
 - **8.5" x 11"** — standard letter
 
-Page breaks never split a fixture entry. Classification headers are kept with at least one entry. Headers (project name, subtitle, note, logo) repeat on every page. Footer (company info + page numbers) appears on letter format only — the 8.5" × 28.5" construction strip is a field reference, not a deliverable, so it ships unfooted.
+Page breaks never split a fixture entry. Classification headers are kept with at least one entry. Headers (project name, subtitle, note, logo) repeat on every page. Footer (release date left-aligned in `yyyy.MM.dd`, company info centered, page numbers right-aligned) appears on letter format only — the 8.5" × 28.5" construction strip is a field reference, not a deliverable, so it ships unfooted. The release date (the shared `HeaderDate` cut sheets stamp in their header) is stamped on every footered deliverable — RPS schedule/lookup/breakdown, Control BOM, Load Schedule, and Panel Schedule — mirroring the page-number position; the unfooted construction strips and the Cover/Notes package are unaffected.
 
 ### Parameter Mapping
 

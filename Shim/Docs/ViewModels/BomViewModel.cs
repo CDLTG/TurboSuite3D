@@ -114,6 +114,7 @@ public class BomViewModel : ViewModelBase
                 CompanyPhone = _parent.CompanyPhone,
                 CompanyEmail = _parent.CompanyEmail,
                 CompanyWebsite = _parent.CompanyWebsite,
+                FooterDate = _parent.HeaderDate.ToString("yyyy.MM.dd"),
             };
             await Task.Run(() => BomPdfService.Generate(_data.Items, ProjectName, _data.BrandName, outputPath, settings));
 
