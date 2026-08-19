@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.UI;
 using TurboSuite.Dali.Overlay;
 using TurboSuite.Dali.Services;
@@ -17,6 +18,12 @@ namespace TurboSuite.Dali.Services
     /// <c>Dimming Protocol = DALI</c> instead of <c>= DMX</c>. That re-scope is not optional — DMX's service
     /// already scopes to DMX <i>specifically so it won't cross-color DALI fixtures sharing a zone name</i>;
     /// this DALI service scoping to DALI is the symmetric half that lets both overlays coexist.
+    ///
+    /// <b>Drivers ride along.</b> Beyond the fixtures, this also colors the DALI driver/decoder <i>devices</i>
+    /// (<c>OST_LightingDevices</c>) so a driver reads out the same color as the fixtures it drives — the
+    /// visual "which driver runs this zone" link. A device carries no Control Zone of its own (deliberately —
+    /// its zone is derived, never authored), so its color comes from the zone of the DALI fixtures sharing its
+    /// circuit: the same circuit membership by which the DALI address reaches it (<c>circuit.Elements</c>).
     ///
     /// Mechanism (verbatim from DMX): direct per-element overrides (<see cref="View.SetElementOverrides"/>) on
     /// the ACTIVE view — works under a view template (unlike filters), and the firm's <c>Control Zone</c>
@@ -65,8 +72,23 @@ namespace TurboSuite.Dali.Services
                 if (!string.IsNullOrEmpty(zone) && zoneColors.TryGetValue(zone, out var col))
                     toColor.Add(new KeyValuePair<ElementId, DaliColor>(fi.Id, col));
             }
+            // Extend the colored set to the DALI driver/decoder devices, keyed by their circuit's zone (they
+            // carry no Control Zone of their own). Same override as the fixtures, so a driver reads out its
+            // fixtures' color. Only devices visible in the active view are touched, matching the fixture path.
+            var deviceColors = ResolveDeviceColors(doc, zoneColors);
+            if (deviceColors.Count > 0)
+            {
+                var visibleDevices = new FilteredElementCollector(doc, view.Id)
+                    .OfCategory(BuiltInCategory.OST_LightingDevices)
+                    .WhereElementIsNotElementType()
+                    .ToElementIds();
+                foreach (var id in visibleDevices)
+                    if (deviceColors.TryGetValue(id, out var col))
+                        toColor.Add(new KeyValuePair<ElementId, DaliColor>(id, col));
+            }
+
             if (toColor.Count == 0)
-                return "Zone colors skipped — no DALI Control-Zone fixtures are visible in the active view.";
+                return "Zone colors skipped — no DALI Control-Zone fixtures or drivers are visible in the active view.";
 
             ElementId solidFill = FindSolidFillPatternId(doc);
 
@@ -116,6 +138,58 @@ namespace TurboSuite.Dali.Services
                     view.SetElementOverrides(id, blank);
             _appliedByView.Remove(view.Id);
         }
+
+        /// <summary>
+        /// Map each DALI driver/decoder device to its circuit's zone color. Walks the electrical circuits
+        /// (the identity path <see cref="DaliModelReader"/> and <see cref="DaliDemandProvider"/> also use):
+        /// a circuit's zone is the first non-blank Control Zone among its DALI fixtures, and every lighting
+        /// <i>device</i> on that circuit (the driver/decoder) inherits that zone's color. A circuit whose zone
+        /// has no palette entry — or that carries no DALI fixtures — contributes nothing, so a non-DALI
+        /// device on some other circuit is never colored.
+        /// </summary>
+        private static Dictionary<ElementId, DaliColor> ResolveDeviceColors(
+            Document doc, IReadOnlyDictionary<string, DaliColor> zoneColors)
+        {
+            var fixtureCatId = new ElementId(BuiltInCategory.OST_LightingFixtures);
+            var deviceCatId = new ElementId(BuiltInCategory.OST_LightingDevices);
+            var result = new Dictionary<ElementId, DaliColor>();
+
+            var circuits = new FilteredElementCollector(doc)
+                .OfClass(typeof(ElectricalSystem))
+                .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
+                .Cast<ElectricalSystem>();
+
+            foreach (var circuit in circuits)
+            {
+                string zone = "";
+                var devices = new List<ElementId>();
+
+                foreach (Element el in circuit.Elements)
+                {
+                    if (!(el is FamilyInstance fi)) continue;
+                    var catId = fi.Category?.Id;
+                    if (catId == deviceCatId)
+                    {
+                        devices.Add(fi.Id);
+                    }
+                    else if (catId == fixtureCatId && zone.Length == 0 && IsDali(fi))
+                    {
+                        string z = fi.LookupParameter(ParameterNames.ControlZone)?.AsString()?.Trim();
+                        if (!string.IsNullOrEmpty(z)) zone = z;
+                    }
+                }
+
+                if (zone.Length == 0 || devices.Count == 0) continue;   // no DALI zone here, or no device to color
+                if (!zoneColors.TryGetValue(zone, out var col)) continue;   // zone not in the palette
+                foreach (var id in devices) result[id] = col;
+            }
+
+            return result;
+        }
+
+        private static bool IsDali(FamilyInstance fi)
+            => ParameterHelper.GetDimmingProtocol(fi).Trim()
+                .Equals("DALI", StringComparison.OrdinalIgnoreCase);
 
         private static OverrideGraphicSettings MakeOverride(DaliColor c, ElementId solidFill)
         {
