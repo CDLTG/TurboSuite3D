@@ -116,10 +116,15 @@ public static class PanelSchedulePdfService
         XGraphics gfx = null;
         double y = 0;
 
-        // A panel's outline bookmark, set just before the panel's FIRST page and consumed by the next
-        // StartNewPage. Continuation pages (which also call StartNewPage) leave it null, so each panel
-        // gets exactly one bookmark, on its opening page.
-        string pendingBookmark = null;
+        // Two-level PDF outline tree: a "Location {n}" parent node, with each of that location's panels
+        // ("Panel {name}") nested beneath it — mirroring TurboZones' Panel Breakdown grouping. Both are
+        // set just before a panel's FIRST page and consumed by the next StartNewPage; continuation pages
+        // (which also call StartNewPage) leave both null, so each parent/child appears exactly once, on its
+        // opening page. pendingLocationBookmark is non-null only on a location's first panel — where a new
+        // parent is created (pointing at that same first page) and remembered for the panels that follow.
+        string pendingLocationBookmark = null;
+        string pendingPanelBookmark = null;
+        PdfOutline currentLocationOutline = null;
 
         void StartNewPage()
         {
@@ -130,10 +135,17 @@ public static class PanelSchedulePdfService
             gfx = XGraphics.FromPdfPage(page);
             y = MarginTop;
 
-            if (pendingBookmark != null)
+            if (pendingLocationBookmark != null)
             {
-                pdf.Outlines.Add(pendingBookmark, page);
-                pendingBookmark = null;
+                // opened: true so viewers render the location node expanded, its panels visible by default.
+                currentLocationOutline = pdf.Outlines.Add(pendingLocationBookmark, page, true);
+                pendingLocationBookmark = null;
+            }
+            if (pendingPanelBookmark != null)
+            {
+                var parent = currentLocationOutline?.Outlines ?? pdf.Outlines;
+                parent.Add(pendingPanelBookmark, page);
+                pendingPanelBookmark = null;
             }
 
             // Header: project name + subtitle (left), logo (right)
@@ -357,7 +369,7 @@ public static class PanelSchedulePdfService
             var slotCenter = new XStringFormat
             { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
 
-            pendingBookmark = $"Panel {sp.PanelName.ToUpperInvariant()}";
+            pendingPanelBookmark = $"Panel {sp.PanelName.ToUpperInvariant()}";
             StartNewPage();
 
             // Dark panel header — PANEL 1-D [QSPS-10PNL]. No wattage: a QS motor is not a VA dimming load.
@@ -442,15 +454,29 @@ public static class PanelSchedulePdfService
         // ── Main rendering loop ──
         // Page-ordered render items: within each location its lighting panels, then its shade panels
         // (…1-C lighting, then 1-D, 1-E shades), locations in number order. Each item is its own page.
-        var renderItems = new List<object>();
+        // StartsLocation flags the first render item of each location (lighting panels, then shade panels),
+        // where the "Location {n}" parent bookmark is opened; the rest nest under it.
+        var renderItems = new List<(int LocationNumber, bool StartsLocation, object Item)>();
         foreach (var location in data.Allocation.Locations.OrderBy(l => l.LocationNumber))
         {
-            foreach (var panel in location.Panels) renderItems.Add(panel);
-            foreach (var shade in location.ShadePanels) renderItems.Add(shade);
+            bool firstInLocation = true;
+            foreach (var panel in location.Panels)
+            {
+                renderItems.Add((location.LocationNumber, firstInLocation, panel));
+                firstInLocation = false;
+            }
+            foreach (var shade in location.ShadePanels)
+            {
+                renderItems.Add((location.LocationNumber, firstInLocation, shade));
+                firstInLocation = false;
+            }
         }
 
-        foreach (var item in renderItems)
+        foreach (var (locationNumber, startsLocation, item) in renderItems)
         {
+            if (startsLocation)
+                pendingLocationBookmark = $"Location {locationNumber}";
+
             if (item is ShadePanelResult shadePanel)
             {
                 DrawShadePanel(shadePanel);
@@ -475,7 +501,7 @@ public static class PanelSchedulePdfService
             double panelWatts = moduleWattsList.Sum(w => w < 1 ? 0 : Math.Round(w));
 
             // Each panel starts on a new page
-            pendingBookmark = $"Panel {panel.PanelName.ToUpperInvariant()}";
+            pendingPanelBookmark = $"Panel {panel.PanelName.ToUpperInvariant()}";
             StartNewPage();
             DrawPanelHeader(panel.PanelName, panel.SelectedPanelSize, panelWatts, false);
             y += ModuleGap;

@@ -98,7 +98,7 @@ Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**
 
 ## Panel Schedule Tab
 
-Generates a dimmer panel schedule PDF from TurboZones panel breakdown data. Each panel starts on its own page so pages can be separated and distributed, and each panel gets a PDF outline bookmark (`Panel {name}`) on its opening page — a panel spanning continuation pages is bookmarked once, at its first page (a `pendingBookmark` set before the panel's first `StartNewPage` and consumed there; continuation `StartNewPage` calls leave it null).
+Generates a dimmer panel schedule PDF from TurboZones panel breakdown data. Each panel starts on its own page so pages can be separated and distributed. The PDF outline is a two-level tree mirroring the Panel Breakdown grouping: a `Location {n}` parent node (opened, so viewers render it expanded) with each of that location's panels nested beneath as `Panel {name}` — lighting panels then shade panels, matching page order. Both are set before a panel's first `StartNewPage` and consumed there (`pendingLocationBookmark` non-null only on a location's first panel, where the parent is created and remembered in `currentLocationOutline`; `pendingPanelBookmark` on every panel); a panel spanning continuation pages is bookmarked once, at its first page (continuation `StartNewPage` calls leave both null).
 
 ### Layout
 
