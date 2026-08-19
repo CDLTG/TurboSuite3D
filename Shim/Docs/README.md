@@ -90,7 +90,7 @@ Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**
 |-------|--------|
 | Circuit Number | RBS_ELEC_CIRCUIT_NUMBER |
 | Load Name | RBS_ELEC_CIRCUIT_NAME |
-| Dimming | Dimming Protocol (raw, aggregated across the circuit's fixtures — e.g. `MLV`, `ELV; 0-10V`; the protocol as authored, not the module type it maps to) |
+| Dimming | The control a load *needs* (a purchasing signal), not the module the BOM allocates. Raw Dimming Protocol aggregated across the circuit's fixtures (`MLV`, `ELV; 0-10V`) — **except `RELAY` dominates**: a Switch-type wall device (authored `Dimming Protocol = RELAY`, its Dimmer-type siblings left blank so the fixtures' protocol passes through) or a relay-authored fixture forces the whole circuit to read `RELAY`, so a dimmable fixture switched on/off shows `RELAY` ("buy a switch"), not its latent `ELV` ("buy an ELV dimmer"). Loads-only, via `Core/Docs/Services/LoadsDimmingResolver` — the control BOM and panel breakdown are unaffected (switched circuits are excluded there by `ZonesCircuitData.IsWiredToSwitch`). |
 | Fixtures | ALL_MODEL_TYPE_MARK (from OST_LightingFixtures + OST_ElectricalFixtures) |
 | Qty | Element count or Linear Length sum |
 | Driver | Switch ID (from OST_LightingDevices on circuit) |

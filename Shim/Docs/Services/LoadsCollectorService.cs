@@ -5,7 +5,6 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Docs.Models;
 using TurboSuite.Shared.Helpers;
-using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Docs.Services;
 
@@ -83,7 +82,7 @@ public static class LoadsCollectorService
                 {
                     CircuitNumber = circuitNumber,
                     LoadName = ParameterHelper.GetLoadName(circuit),
-                    DimmingProtocol = DimmingModuleResolver.Resolve(fixtureProtocols).ProtocolDisplay,
+                    DimmingProtocol = LoadsDimmingResolver.ResolveDisplay(fixtureProtocols),
                     ApparentLoadVA = ParameterHelper.GetApparentLoad(circuit),
                     FixtureGroups = fixtureGroups,
                     DriverSwitchIDs = driverSwitchIds
