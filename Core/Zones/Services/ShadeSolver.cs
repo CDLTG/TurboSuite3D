@@ -64,8 +64,8 @@ namespace TurboSuite.Zones.Services
                 return ControlSubsystemDemand.None(SubsystemName);
 
             string? diagnostic = unassignedShades == 0 ? null
-                : $"{unassignedShades} shade motor{(unassignedShades == 1 ? "" : "s")} not assigned to a " +
-                  "SHADE panel — assign them so their panels can be counted.";
+                : $"{unassignedShades} motor{(unassignedShades == 1 ? "" : "s")} not assigned to a " +
+                  "SHADE panel — assign to count panels.";
 
             // Nothing assignable — warning only, no QSPS-10PNL to order.
             if (recommendedPanels == 0)

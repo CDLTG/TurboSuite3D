@@ -119,7 +119,7 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(0, d.LinkDevices);
             Assert.Equal(0, d.LinkLoads);
             Assert.True(d.HasDiagnostic);
-            Assert.Contains("6 shade motors", d.Diagnostic);
+            Assert.Contains("6 motors", d.Diagnostic);
         }
 
         /// <summary>Assigned shades count as before; unassigned ones ride alongside as a warning without
@@ -133,7 +133,7 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(22, d.LinkDevices);                    // 20 shades + 2 panels (unassigned excluded)
             Assert.Equal(20, d.LinkLoads);
             Assert.True(d.HasDiagnostic);
-            Assert.Contains("1 shade motor ", d.Diagnostic);    // singular
+            Assert.Contains("1 motor ", d.Diagnostic);          // singular
         }
 
         /// <summary>All shades assigned → a clean solve with no diagnostic.</summary>

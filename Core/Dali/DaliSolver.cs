@@ -82,10 +82,8 @@ namespace TurboSuite.Dali
         {
             var loops = string.Join("; ", overCap.Select(l => $"\"{l.LoopName}\" ({l.LoadCount})"));
             return overCap.Count == 1
-                ? $"DALI loop {loops} exceeds {MaxLoadsPerBus} loads on one bus — split its zones into "
-                  + "more loops."
-                : $"{overCap.Count} DALI loops exceed {MaxLoadsPerBus} loads on one bus — {loops} — split "
-                  + "each into more loops.";
+                ? $"loop {loops} over {MaxLoadsPerBus} loads/bus — split it into more loops."
+                : $"{overCap.Count} loops over {MaxLoadsPerBus} loads/bus ({loops}) — split each up.";
         }
     }
 }

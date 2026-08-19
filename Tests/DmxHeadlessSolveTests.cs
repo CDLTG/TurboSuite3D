@@ -102,12 +102,12 @@ namespace TurboSuite.Tests.Dmx
 
             Assert.Null(result.Bill);
             Assert.Contains("Control Zone", result.Diagnostic);
-            Assert.Contains("2 DMX fixtures have", result.Diagnostic);
+            Assert.Contains("2 fixtures have", result.Diagnostic);
         }
 
         [Fact]
         public void UnzonedFixtureDiagnosticReadsSingularForOne()
-            => Assert.Contains("1 DMX fixture has",
+            => Assert.Contains("1 fixture has",
                 DmxHeadlessSolve.Solve(Snapshot(Tape("")), CuratedState()).Diagnostic);
 
         /// <summary>The dangerous middle case: some tape zoned, some not. The solve is complete for

@@ -68,10 +68,9 @@ namespace TurboSuite.Dali.Services
                     if (totalDaliFixtures > 0)
                         return ControlSubsystemDemand.Unsolvable(
                             DaliSolver.SubsystemName,
-                            $"{totalDaliFixtures} DALI fixture"
-                            + (totalDaliFixtures == 1 ? " is" : "s are")
-                            + " in the model but no DALI loops are declared — declare loops in TurboZones "
-                            + "so their modules can be counted.");
+                            $"{totalDaliFixtures} fixture"
+                            + (totalDaliFixtures == 1 ? "" : "s")
+                            + " present but no loops declared — declare loops in TurboDALI.");
                     return ControlSubsystemDemand.None(DaliSolver.SubsystemName);
                 }
 

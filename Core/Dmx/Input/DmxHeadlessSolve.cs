@@ -43,10 +43,9 @@ namespace TurboSuite.Dmx.Input
                     // a line on a purchasing document must be something you can order.
                     if (zoneResult.UnassignedFixtures > 0)
                         return DmxHeadlessResult.Blocked(
-                            $"{zoneResult.UnassignedFixtures} DMX fixture"
+                            $"{zoneResult.UnassignedFixtures} fixture"
                             + (zoneResult.UnassignedFixtures == 1 ? " has" : "s have")
-                            + " no Control Zone assigned, so no interfaces can be counted — set Control "
-                            + "Zone on the DMX fixtures.");
+                            + " no Control Zone — assign one so interfaces can be counted.");
 
                     // No DMX in this job at all. A clean nothing, not a problem to report: most jobs
                     // have no DMX, and a BOM warning on every one of them would be noise.
@@ -58,14 +57,14 @@ namespace TurboSuite.Dmx.Input
                 var decoders = DmxStateMapper.ToCuratedDecoders(snapshot.DecoderCandidates, settingsDto);
                 if (decoders.Count == 0)
                     return DmxHeadlessResult.Blocked(
-                        "DMX zones exist but no decoder type is selected in TurboDMX — open TurboDMX "
-                        + "and pick the job's decoder kit.", zoneResult.ZoneNames);
+                        "zones exist but no decoder type selected — pick one in TurboDMX.",
+                        zoneResult.ZoneNames);
 
                 var drivers = DmxStateMapper.ToCuratedDrivers(snapshot.DriverCandidates, settingsDto);
                 if (drivers.Count == 0)
                     return DmxHeadlessResult.Blocked(
-                        "DMX zones exist but no driver type is selected in TurboDMX — open TurboDMX "
-                        + "and pick the job's driver kit.", zoneResult.ZoneNames);
+                        "zones exist but no driver type selected — pick one in TurboDMX.",
+                        zoneResult.ZoneNames);
 
                 var contract = DmxContractBuilder.Build(
                     DmxStateMapper.ToProfile(settingsDto),
@@ -83,9 +82,9 @@ namespace TurboSuite.Dmx.Input
                 // Only unzoned fixtures caveat the bill — they are orderable hardware the count missed.
                 // Zero-channel fixtures order nothing, so they never undercount and never caveat here.
                 string? caveat = zoneResult.UnassignedFixtures > 0
-                    ? $"{zoneResult.UnassignedFixtures} DMX fixture"
+                    ? $"{zoneResult.UnassignedFixtures} fixture"
                       + (zoneResult.UnassignedFixtures == 1 ? " is" : "s are")
-                      + " not in any Control Zone and is not counted below."
+                      + " not in any Control Zone — not counted below."
                     : null;
 
                 return DmxHeadlessResult.Solved(bill, zoneResult.ZoneNames, caveat);
