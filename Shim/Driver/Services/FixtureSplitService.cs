@@ -55,9 +55,15 @@ public class FixtureSplitService
 
             if (!GeometryHelper.IsLineBasedFixture(fixture)) continue;
 
-            // Skip face-hosted (3D) fixtures — auto-split only supports
-            // work-plane-hosted fixtures. Face-hosted fixtures on linked model
-            // faces cannot be recreated via the API without losing their host.
+            // Skip face-hosted / linked-work-plane-hosted (3D) fixtures — auto-split only
+            // supports work-plane-hosted (2D) fixtures. This is PERMANENT (WONTFIX), not a TODO:
+            // proven impossible on Revit 2024/2025/2026. Every path either never hosts
+            // (NewFamilyInstance rejects the linked work-plane reference — it does not resolve to a
+            // face) or de-hosts (CopyElements at every offset, including in-place, snaps the copy to
+            // a Level and drops the link host), and there is no re-host API. A split segment can
+            // therefore never be left hosted to the link, which is the hard requirement. Full probe
+            // evidence: Specs/_Tools/AutoSplitFixtures_3D_Research.txt → "FINAL RESOLUTION".
+            // Sub-drivers still deploy for 3D tape; only the physical segmentation is unavailable.
             if (fixture.HostFace != null) continue;
 
             // Capture tag type from the first fixture that has one
