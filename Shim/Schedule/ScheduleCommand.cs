@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Schedule.Models;
 using TurboSuite.Schedule.Services;
 using TurboSuite.Schedule.ViewModels;
 using TurboSuite.Schedule.Views;
@@ -20,6 +21,10 @@ namespace TurboSuite.Schedule
     public class ScheduleCommand : IExternalCommand
     {
         private static TurboScheduleWindow _activeWindow;
+
+        // Last-selected type, remembered across close/reopen for the life of the Revit session.
+        private static string _lastTypeMark;
+        private static PageKind? _lastKind;
 
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
@@ -56,13 +61,16 @@ namespace TurboSuite.Schedule
 
                 var workQueue = new RevitWorkQueue("TurboSchedule Error", "TurboSchedule Work Queue");
                 var writer = new ScheduleWriterService(doc);
-                var viewModel = new ScheduleMainViewModel(pages, workQueue, writer);
+                var viewModel = new ScheduleMainViewModel(pages, workQueue, writer,
+                    _lastTypeMark, _lastKind);
 
                 var window = new TurboScheduleWindow { DataContext = viewModel };
                 new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
 
                 window.Closed += (s, e) =>
                 {
+                    _lastTypeMark = viewModel.CurrentPage?.TypeMark;
+                    _lastKind = viewModel.CurrentPage?.Kind;
                     _activeWindow = null;
                     workQueue.Dispose();
                 };

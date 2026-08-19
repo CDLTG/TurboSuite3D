@@ -24,7 +24,8 @@ public class ScheduleMainViewModel : ViewModelBase
     private string _statusMessage = "";
 
     public ScheduleMainViewModel(IReadOnlyList<FixtureTypeSpec> pages,
-        IRevitWorkQueue workQueue, IScheduleWriter writer)
+        IRevitWorkQueue workQueue, IScheduleWriter writer,
+        string initialTypeMark = null, PageKind? initialKind = null)
     {
         _workQueue = workQueue;
         _writer = writer;
@@ -33,7 +34,11 @@ public class ScheduleMainViewModel : ViewModelBase
         foreach (var p in Pages)
             p.DirtyChanged += _ => OnDirtyChanged();
 
-        _currentPage = Pages.FirstOrDefault();
+        // Restore the last-selected type within this Revit session, falling back to the
+        // first page if it no longer exists (renamed/deleted type, different project).
+        _currentPage =
+            Pages.FirstOrDefault(p => p.TypeMark == initialTypeMark && p.Kind == initialKind)
+            ?? Pages.FirstOrDefault();
 
         PrevCommand = new RelayCommand(Prev, () => CurrentIndex > 0);
         NextCommand = new RelayCommand(Next, () => CurrentIndex >= 0 && CurrentIndex < Pages.Count - 1);

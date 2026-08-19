@@ -86,6 +86,12 @@ namespace TurboSuite.Schedule.Views
                 vm.DiscardCommand.Execute(null);
         }
 
+        // Footer Close — routes through Window_Closing, so unsaved edits still prompt Save/Discard/Cancel.
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });

@@ -11,7 +11,7 @@ Instead of scrolling a wide schedule grid, TurboSchedule shows **one Type Mark p
 3. Edit fields in place. A blue dot marks a field (and its page) with unsaved edits.
 4. Click **Save** to flush every dirty page in one transaction, or **Discard** to drop all unsaved edits.
 
-The window is modeless — leave it open while you work in Revit. Press **Esc** to close (you'll be prompted if there are unsaved changes).
+The window is modeless — leave it open while you work in Revit. **Close** (footer), the ✕, or **Esc** all close it (you'll be prompted if there are unsaved changes). Reopening within the same Revit session returns you to the type you were last on; a since-removed type falls back to the first page.
 
 ## Field states
 

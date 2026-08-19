@@ -415,6 +415,8 @@
                         IsEnabled="{Binding HasUnsavedChanges}"/>
                 <Button Content="{Binding SaveLabel}" Width="110" Height="28"
                         Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SaveCommand}"/>
+                <Button Content="Close" Width="80" Height="28" Margin="8,0,0,0"
+                        Style="{StaticResource RevitButtonStyle}" Click="CloseButton_Click"/>
             </StackPanel>
         </Grid>
     </Grid>
