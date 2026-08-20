@@ -80,6 +80,20 @@ namespace TurboSuite.Tests.Dmx
         }
 
         [Fact]
+        public void EachDeviceCarriesItsControlZone_TheCircuitingGrain()
+        {
+            // Every placed decoder knows the Control Zone it serves — the shim groups decoders by this to make
+            // one circuit per zone. Two zones ⇒ each device tagged with its own zone name.
+            var bill = DmxSolver.Solve(Contract(), new[] { Zone("Theater", 2), Zone("Lobby", 1) });
+            var plan = DmxPlacementPlanner.Build(bill, Fresh(bill), DecoderIds, DriverIds);
+
+            var byZone = plan.Loops.SelectMany(l => l.Devices)
+                .GroupBy(d => d.ZoneName).ToDictionary(g => g.Key, g => g.Count());
+            Assert.Equal(2, byZone["Theater"]);
+            Assert.Equal(1, byZone["Lobby"]);
+        }
+
+        [Fact]
         public void UnmappedTypeNameYieldsNullIdNotException()
         {
             var bill = DmxSolver.Solve(Contract(), new[] { Zone("Z1", 1) });

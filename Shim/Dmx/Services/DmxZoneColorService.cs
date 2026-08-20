@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.UI;
 using TurboSuite.Dmx;
 using TurboSuite.Dmx.Overlay;
@@ -15,6 +16,11 @@ namespace TurboSuite.Dmx.Services
     /// Shim-side <see cref="IDmxZoneColorService"/> — the Control-Zone color overlay. While the
     /// TurboDMX window is open, the active view's DMX fixtures are colored by their <c>Control Zone</c> so the
     /// designer can tell zones apart; on close the overlay reverts and the view looks as it did before.
+    ///
+    /// <b>Devices ride along.</b> Beyond the fixtures, this also colors the DMX decoder/driver <i>devices</i>
+    /// (<c>OST_LightingDevices</c>) by their circuit's zone — the visual "which decoder + driver run this zone"
+    /// link. A device carries no Control Zone of its own (its zone is derived), so its color comes from the DMX
+    /// fixtures sharing its §2/§3 circuit (<c>circuit.Elements</c>). Exact parity with the DALI overlay.
     ///
     /// Mechanism: <b>direct per-element overrides</b> (<see cref="View.SetElementOverrides"/>) — the same thing
     /// as the UI's "Override Graphics in View ▸ By Element". We tried named <c>ParameterFilterElement</c>s
@@ -77,8 +83,25 @@ namespace TurboSuite.Dmx.Services
                 if (!string.IsNullOrEmpty(zone) && zoneColors.TryGetValue(zone, out var col))
                     toColor.Add(new KeyValuePair<ElementId, DmxColor>(fi.Id, col));
             }
+
+            // Extend the colored set to the DMX decoder/driver DEVICES, keyed by their circuit's zone (they
+            // carry no Control Zone of their own — a member of one <unnamed> circuit per decoder). Same override
+            // as the fixtures, so decoder + driver read out their zone's color — the "which device runs this
+            // zone" link. Only devices visible in the active view are touched, matching the fixture path.
+            var deviceColors = ResolveDeviceColors(doc, zoneColors);
+            if (deviceColors.Count > 0)
+            {
+                var visibleDevices = new FilteredElementCollector(doc, view.Id)
+                    .OfCategory(BuiltInCategory.OST_LightingDevices)
+                    .WhereElementIsNotElementType()
+                    .ToElementIds();
+                foreach (var id in visibleDevices)
+                    if (deviceColors.TryGetValue(id, out var col))
+                        toColor.Add(new KeyValuePair<ElementId, DmxColor>(id, col));
+            }
+
             if (toColor.Count == 0)
-                return "Zone colors skipped — no Control-Zone fixtures are visible in the active view.";
+                return "Zone colors skipped — no Control-Zone fixtures or devices are visible in the active view.";
 
             ElementId solidFill = FindSolidFillPatternId(doc);
 
@@ -129,6 +152,58 @@ namespace TurboSuite.Dmx.Services
                     view.SetElementOverrides(id, blank);
             _appliedByView.Remove(view.Id);
         }
+
+        /// <summary>
+        /// Map each DMX decoder/driver device to its circuit's zone color. Walks the electrical circuits (§2/§3
+        /// creates one <c>&lt;unnamed&gt;</c> circuit per decoder = tape fixtures + decoder + driver): a circuit's
+        /// zone is the first non-blank Control Zone among its DMX fixtures, and every lighting <i>device</i> on
+        /// that circuit inherits that zone's color. A circuit whose zone isn't in the palette — or that carries no
+        /// DMX fixtures — contributes nothing, so a non-DMX device on some other circuit is never colored. This is
+        /// the exact DALI overlay template (<c>DaliZoneColorService.ResolveDeviceColors</c>) re-scoped to DMX.
+        /// </summary>
+        private static Dictionary<ElementId, DmxColor> ResolveDeviceColors(
+            Document doc, IReadOnlyDictionary<string, DmxColor> zoneColors)
+        {
+            var fixtureCatId = new ElementId(BuiltInCategory.OST_LightingFixtures);
+            var deviceCatId = new ElementId(BuiltInCategory.OST_LightingDevices);
+            var result = new Dictionary<ElementId, DmxColor>();
+
+            var circuits = new FilteredElementCollector(doc)
+                .OfClass(typeof(ElectricalSystem))
+                .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
+                .Cast<ElectricalSystem>();
+
+            foreach (var circuit in circuits)
+            {
+                string zone = "";
+                var devices = new List<ElementId>();
+
+                foreach (Element el in circuit.Elements)
+                {
+                    if (!(el is FamilyInstance fi)) continue;
+                    var catId = fi.Category?.Id;
+                    if (catId == deviceCatId)
+                    {
+                        devices.Add(fi.Id);
+                    }
+                    else if (catId == fixtureCatId && zone.Length == 0 && IsDmx(fi))
+                    {
+                        string z = fi.LookupParameter(DmxParameterNames.ControlZone)?.AsString()?.Trim();
+                        if (!string.IsNullOrEmpty(z)) zone = z;
+                    }
+                }
+
+                if (zone.Length == 0 || devices.Count == 0) continue;   // no DMX zone here, or no device to color
+                if (!zoneColors.TryGetValue(zone, out var col)) continue;   // zone not in the palette
+                foreach (var id in devices) result[id] = col;
+            }
+
+            return result;
+        }
+
+        private static bool IsDmx(FamilyInstance fi)
+            => ParameterHelper.GetDimmingProtocol(fi).Trim()
+                .Equals("DMX", StringComparison.OrdinalIgnoreCase);
 
         private static OverrideGraphicSettings MakeOverride(DmxColor c, ElementId solidFill)
         {

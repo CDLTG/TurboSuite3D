@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Structure;
 using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
@@ -11,6 +12,7 @@ using TurboSuite.Dmx.Placement;
 using TurboSuite.Dmx.Services;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Dmx.Services
 {
@@ -28,9 +30,14 @@ namespace TurboSuite.Dmx.Services
     /// when Locked). This preserves the designer's click-placement + any manual switch systems on survivors,
     /// while still reconciling removals (Option A, decided 2026-06-26).
     ///
-    /// No wiring / circuits here — DMX decoders aren't power-circuited like RPS (that's the feed half,
-    /// deferred). Each loop places in its own transaction, committed before the next pick (you can't pick
-    /// inside an open transaction). Escape during any pick stops the run and keeps what's already placed.
+    /// After placement, a circuiting pass creates one <c>&lt;unnamed&gt;</c> (unpaneled) power circuit per
+    /// <b>Control Zone</b> — all the zone's DMX fixtures + all its decoders + all its drivers — because a
+    /// Control Zone is one control behaviour = one address = one load (a zone's several decoders are power
+    /// subdivision under that one address, not separate loads). So the Load Schedule sees one row per zone with
+    /// the zone's tape load, and TurboZones assigns one Load Name per zone. It reconciles the whole system (tear
+    /// down changed/orphaned circuits, then create), preserving Load Names across a rebuild. Each loop places in
+    /// its own transaction, committed before the next pick (you can't pick inside an open transaction). Escape
+    /// during any pick stops the run and keeps what's already placed.
     ///
     /// Invoked through the work queue, so this runs on the Revit API thread (UIDocument.Selection picks +
     /// the placement transactions are both legal there).
@@ -115,6 +122,12 @@ namespace TurboSuite.Dmx.Services
                     }
                 }
             }
+
+            // Circuiting pass — after the WHOLE loop (every decoder committed; CircuitService opens its own
+            // transaction so nothing may be open here). Whole-system scope like RemoveOrphans: reconciles every
+            // Control Zone in the plan, not just this run's placements (heals AlreadyPlaced skips and pre-feature
+            // models), and ignores onlyInterfaceNumber for the same reason.
+            CircuitZones(plan, registry, result);
 
             if (placedIds.Count > 0)
                 _uidoc.Selection.SetElementIds(placedIds);
@@ -242,6 +255,263 @@ namespace TurboSuite.Dmx.Services
                 if (tx.HasStarted()) tx.RollBack();
                 result.RemovedDecs.Clear();               // rolled back ⇒ keep the registry intact
                 result.RemovedDecoders = 0;
+            }
+        }
+
+        // ── §2/§3 Circuiting: one <unnamed> power circuit per CONTROL ZONE = all the zone's DMX fixtures + all
+        // its decoders + all its drivers. A Control Zone is one control address = one load; its several decoders
+        // are power subdivision under that one address, so they share the ONE circuit (not one each). Whole-system
+        // reconcile, two-phase (tear down all changed/orphaned circuits, THEN create) so a fixture that moved
+        // zones is freed before any create — ElectricalSystem.Create THROWS (not null) on an already-circuited
+        // member (spike B), and two-phase means we never hit it. Runs with no transaction open.
+        //
+        // Our circuits are identified by SHAPE, not a tag: an UNPANELED power circuit carrying ≥1 DMX fixture.
+        // Foreign circuits (TurboWire / a user) are paneled, so they are never touched. Keying on fixtures (not
+        // decoders) means an orphaned zone whose decoders were just deleted by RemoveOrphans is still recognized.
+        private void CircuitZones(DmxPlacementPlan plan, IReadOnlyList<DmxPlacedPair> registry,
+                                  DmxPlacementResult result)
+        {
+            // Plan: Control Zone → the DEC#s serving it (all loops).
+            var decsByZone = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var loop in plan.Loops)
+                foreach (var dev in loop.Devices)
+                {
+                    int dec = ParseDec(dev.SwitchId);
+                    if (dec <= 0 || string.IsNullOrWhiteSpace(dev.ZoneName)) continue;
+                    if (!decsByZone.TryGetValue(dev.ZoneName, out var list))
+                        decsByZone[dev.ZoneName] = list = new List<int>();
+                    list.Add(dec);
+                }
+            if (decsByZone.Count == 0) return;
+            var planZones = new HashSet<string>(decsByZone.Keys, StringComparer.OrdinalIgnoreCase);
+
+            // Live decoders by DEC#, driver ids by DEC# (this run's placements first, then persisted registry).
+            var decoderByDec = new Dictionary<int, FamilyInstance>();
+            foreach (var fi in LightingDevices())
+            {
+                int dec = ParseDec(fi.LookupParameter(ParameterNames.SwitchId)?.AsString());
+                if (dec > 0 && !decoderByDec.ContainsKey(dec)) decoderByDec[dec] = fi;
+            }
+            var driverByDec = new Dictionary<int, long>();
+            if (registry != null)
+                foreach (var p in registry) if (p.DriverId != 0L) driverByDec[p.Dec] = p.DriverId;
+            foreach (var p in result.PlacedPairs) if (p.DriverId != 0L) driverByDec[p.Dec] = p.DriverId;
+
+            // Model: DMX fixtures grouped by Control Zone (scoped on Dimming Protocol = DMX).
+            var fixturesByZone = new Dictionary<string, List<FamilyInstance>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var fi in LightingFixtures())
+            {
+                if (!IsDmxFixture(fi)) continue;
+                string zone = fi.LookupParameter(ParameterNames.ControlZone)?.AsString()?.Trim();
+                if (string.IsNullOrEmpty(zone)) continue;
+                if (!fixturesByZone.TryGetValue(zone, out var list))
+                    fixturesByZone[zone] = list = new List<FamilyInstance>();
+                list.Add(fi);
+            }
+
+            // Our existing circuits: unpaneled power circuits carrying ≥1 DMX fixture, grouped by that zone.
+            var ourCircuitsByZone = new Dictionary<string, List<ElectricalSystem>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var circuit in UnpaneledPowerCircuits())
+            {
+                string zone = GetCircuitDmxZone(circuit);
+                if (zone == null) continue;
+                if (!ourCircuitsByZone.TryGetValue(zone, out var list))
+                    ourCircuitsByZone[zone] = list = new List<ElectricalSystem>();
+                list.Add(circuit);
+            }
+
+            var toTearDown = new HashSet<ElementId>();
+            var toCreate = new List<(string Zone, List<FamilyInstance> Members)>();
+            var preservedLoadName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // Orphan circuits: our circuits whose zone left the plan → tear down, no rebuild (frees their fixtures).
+            foreach (var kv in ourCircuitsByZone)
+                if (!planZones.Contains(kv.Key))
+                    foreach (var c in kv.Value) toTearDown.Add(c.Id);
+
+            // Plan zones: skip (already correct) / rebuild (changed, split, or a decoder missing) / create.
+            foreach (var kv in decsByZone)
+            {
+                string zone = kv.Key;
+                var decoders = kv.Value.Where(decoderByDec.ContainsKey).Select(d => decoderByDec[d]).ToList();
+                if (decoders.Count == 0) continue;   // nothing placed for this zone yet
+
+                fixturesByZone.TryGetValue(zone, out var fixtures);
+                if (fixtures == null || fixtures.Count == 0)
+                {
+                    result.Warnings.Add($"Zone \"{zone}\": no live DMX fixtures resolved — no circuit created.");
+                    continue;
+                }
+
+                // Foreign-circuit guard: a zone fixture already on a paneled (TurboWire/user) circuit — don't steal.
+                if (fixtures.Any(IsOnForeignCircuit))
+                {
+                    result.Warnings.Add($"Zone \"{zone}\": a fixture is already on a paneled circuit — skipped (left as wired).");
+                    continue;
+                }
+
+                var desiredIds = new HashSet<long>(fixtures.Select(f => f.Id.ToRef().Value));
+                ourCircuitsByZone.TryGetValue(zone, out var existing);
+                var existingList = existing ?? new List<ElectricalSystem>();
+
+                // Idempotent skip: exactly one circuit, its fixtures already match, and every zone decoder is on it.
+                if (existingList.Count == 1 &&
+                    GetCircuitFixtureIds(existingList[0]).SetEquals(desiredIds) &&
+                    AllOnCircuit(decoders, existingList[0]))
+                    continue;
+
+                // Otherwise → (re)create. Preserve one Load Name off a recognized existing circuit for this zone.
+                foreach (var c in existingList)
+                {
+                    var ln = ParameterHelper.GetLoadName(c);
+                    if (!string.IsNullOrEmpty(ln)) { preservedLoadName[zone] = ln; break; }
+                }
+
+                var members = new List<FamilyInstance>(fixtures);
+                members.AddRange(decoders);
+                foreach (var dec in kv.Value)
+                    if (driverByDec.TryGetValue(dec, out var did) &&
+                        _doc.GetElement(new ElementRef(did).ToElementId()) is FamilyInstance drv)
+                        members.Add(drv);
+
+                toCreate.Add((zone, members));
+            }
+
+            if (toCreate.Count == 0 && toTearDown.Count == 0) return;
+
+            // Free EVERY member we're about to circuit: tear down any unpaneled circuit that holds one of them —
+            // not just the zone circuits we recognized. This is what makes reconcile robust to a recognition gap
+            // or a prior partial run (ElectricalSystem.Create THROWS on an already-circuited member, spike B), so
+            // every to-create member must be un-circuited first. Foreign PANELED circuits are never scanned.
+            var createMemberIds = new HashSet<ElementId>(toCreate.SelectMany(t => t.Members).Select(m => m.Id));
+            if (createMemberIds.Count > 0)
+                foreach (var circuit in UnpaneledPowerCircuits())
+                    foreach (Element el in circuit.Elements)
+                        if (createMemberIds.Contains(el.Id)) { toTearDown.Add(circuit.Id); break; }
+
+            // Phase 1 — tear down all those circuits in one transaction, freeing every to-create member so no
+            // create in Phase 2 ever meets an already-circuited member. (No manual Regenerate — the commit
+            // regenerates, and a Regenerate outside a transaction is itself illegal.)
+            if (toTearDown.Count > 0)
+            {
+                using var tx = new Transaction(_doc, "TurboDMX — Reconcile zone circuits (teardown)");
+                tx.Start();
+                try
+                {
+                    foreach (var id in toTearDown)
+                        if (_doc.GetElement(id) != null) { _doc.Delete(id); result.CircuitsRemoved++; }
+                    tx.Commit();
+                }
+                catch (Exception ex)
+                {
+                    result.Warnings.Add($"Circuit teardown failed — {ex.Message}");
+                    if (tx.HasStarted()) tx.RollBack();
+                    return;   // don't create against circuits we failed to free
+                }
+            }
+
+            // Phase 2 — create the fresh <unnamed> per-zone circuits (CircuitService opens its own tx each call).
+            foreach (var (zone, members) in toCreate)
+            {
+                ElectricalSystem circuit = null;
+                try
+                {
+                    circuit = CircuitService.CreateCircuit(_doc, members, assignPanel: false);
+                }
+                catch (Exception ex)
+                {
+                    // Create THROWS on an already-circuited member (spike B) — treat like the null return.
+                    result.Warnings.Add($"Zone \"{zone}\": circuit create failed — {ex.Message}");
+                    continue;
+                }
+                if (circuit == null)
+                {
+                    result.Warnings.Add($"Zone \"{zone}\": circuit create rejected the member set — skipped.");
+                    continue;
+                }
+                result.CircuitsCreated++;
+                if (preservedLoadName.TryGetValue(zone, out var ln)) RestoreLoadName(circuit, ln);
+            }
+        }
+
+        private IEnumerable<FamilyInstance> LightingFixtures() =>
+            new FilteredElementCollector(_doc)
+                .OfCategory(BuiltInCategory.OST_LightingFixtures)
+                .WhereElementIsNotElementType()
+                .OfClass(typeof(FamilyInstance))
+                .Cast<FamilyInstance>();
+
+        private IEnumerable<ElectricalSystem> UnpaneledPowerCircuits() =>
+            new FilteredElementCollector(_doc)
+                .OfClass(typeof(ElectricalSystem))
+                .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
+                .Cast<ElectricalSystem>()
+                .Where(c => c.SystemType == ElectricalSystemType.PowerCircuit && c.BaseEquipment == null);
+
+        private static bool IsDmxFixture(FamilyInstance fi) =>
+            ParameterHelper.GetDimmingProtocol(fi).Trim().Equals("DMX", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The Control Zone of a circuit's first DMX fixture member, or null if it has none — used to
+        /// recognize an unpaneled circuit as one of ours and which zone it belongs to.</summary>
+        private static string GetCircuitDmxZone(ElectricalSystem circuit)
+        {
+            foreach (Element el in circuit.Elements)
+                if (el is FamilyInstance fi &&
+                    fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingFixtures &&
+                    IsDmxFixture(fi))
+                {
+                    string zone = fi.LookupParameter(ParameterNames.ControlZone)?.AsString()?.Trim();
+                    if (!string.IsNullOrEmpty(zone)) return zone;
+                }
+            return null;
+        }
+
+        /// <summary>True when the fixture is on a PANELED power circuit — one TurboWire or a user made. Our own
+        /// per-zone circuits are unpaneled, so a fixture on ours reads as not-foreign.</summary>
+        private static bool IsOnForeignCircuit(FamilyInstance fixture)
+        {
+            var systems = fixture.MEPModel?.GetElectricalSystems();
+            if (systems == null) return false;
+            foreach (ElectricalSystem s in systems)
+                if (s.SystemType == ElectricalSystemType.PowerCircuit && s.BaseEquipment != null)
+                    return true;
+            return false;
+        }
+
+        /// <summary>The lighting-fixture members of a circuit as ids (excludes decoder/driver devices) — the
+        /// grain the idempotent skip compares against the zone's fixture set.</summary>
+        private static HashSet<long> GetCircuitFixtureIds(ElectricalSystem circuit)
+        {
+            var ids = new HashSet<long>();
+            foreach (Element el in circuit.Elements)
+                if (el is FamilyInstance fi &&
+                    fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingFixtures)
+                    ids.Add(fi.Id.ToRef().Value);
+            return ids;
+        }
+
+        /// <summary>True when every one of <paramref name="devices"/> is a member of <paramref name="circuit"/>
+        /// — the idempotent skip also requires the zone's decoders to already be on the circuit.</summary>
+        private static bool AllOnCircuit(IEnumerable<FamilyInstance> devices, ElectricalSystem circuit)
+        {
+            var memberIds = new HashSet<ElementId>();
+            foreach (Element el in circuit.Elements) memberIds.Add(el.Id);
+            return devices.All(d => memberIds.Contains(d.Id));
+        }
+
+        /// <summary>Restore a preserved TurboZones Load Name onto a rebuilt circuit (its own transaction).</summary>
+        private void RestoreLoadName(ElectricalSystem circuit, string loadName)
+        {
+            using var tx = new Transaction(_doc, "TurboDMX — Restore Load Name");
+            tx.Start();
+            try
+            {
+                circuit.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_NAME)?.Set(loadName);
+                tx.Commit();
+            }
+            catch
+            {
+                if (tx.HasStarted()) tx.RollBack();
             }
         }
 

@@ -45,7 +45,8 @@ namespace TurboSuite.Dmx.Placement
                         devices.Add(new DmxDevicePlacement(
                             switchId: $"DEC {dec}",
                             decoderTypeId: decoderId, decoderName: sol.Decoder.Name,
-                            driverTypeId: driverId, driverName: pd.Driver.Name));
+                            driverTypeId: driverId, driverName: pd.Driver.Name,
+                            zoneName: addressed.ZoneName));   // circuiting grain: one circuit per Control Zone
                     }
                 }
 
