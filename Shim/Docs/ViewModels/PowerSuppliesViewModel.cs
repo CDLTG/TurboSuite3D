@@ -18,10 +18,10 @@ public class PowerSuppliesViewModel : ViewModelBase
     [
         "All remote power supplies shall be installed per manufacturer's requirements.",
         "Maximum wire run lengths to be verified with manufacturer prior to installation.",
-        "Electrical Contractor to verify circuit capacity before connecting power supplies.",
-        "All power supply locations to be coordinated with General Contractor prior to rough-in.",
-        "Power supply mounting heights and locations per lighting plan unless otherwise noted.",
+        "Power supplies shall be field-located unless otherwise indicated.",
         "No substitutions permitted without prior approval from the Lighting Designer.",
+        "",
+        "",
     ];
 
     private readonly DocsViewModel _parent;
