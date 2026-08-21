@@ -8,6 +8,7 @@ using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Structure;
 using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
+using TurboSuite.Dmx.Helpers;
 using TurboSuite.Dmx.Placement;
 using TurboSuite.Dmx.Services;
 using TurboSuite.Shared.Constants;
@@ -416,7 +417,8 @@ namespace TurboSuite.Dmx.Services
                 ElectricalSystem circuit = null;
                 try
                 {
-                    circuit = CircuitService.CreateCircuit(_doc, members, assignPanel: false);
+                    circuit = CircuitService.CreateCircuit(_doc, members, assignPanel: false,
+                        preprocessor: new DmxCircuitFailurePreprocessor());
                 }
                 catch (Exception ex)
                 {

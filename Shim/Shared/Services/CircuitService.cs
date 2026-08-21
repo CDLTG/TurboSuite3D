@@ -88,11 +88,20 @@ public static class CircuitService
     /// most recently used panel in the document (matching Revit's default UI behavior).
     /// <paramref name="shadePanels"/> switches the remembered default to the last shade
     /// (35 V) location — used by TurboWire's one-shade-per-circuit shade mode.
+    /// <paramref name="preprocessor"/> is an optional failure preprocessor for the create
+    /// transaction — TurboDMX passes one to swallow the expected over-amp warning on its
+    /// intentionally-overpacked zone circuits; other callers leave it null.
     /// </summary>
     public static ElectricalSystem? CreateCircuit(Document doc, List<FamilyInstance> fixtures,
-        bool assignPanel = true, bool shadePanels = false)
+        bool assignPanel = true, bool shadePanels = false, IFailuresPreprocessor? preprocessor = null)
     {
         using var t = new Transaction(doc, "Create circuit");
+        if (preprocessor != null)
+        {
+            var opts = t.GetFailureHandlingOptions();
+            opts.SetFailuresPreprocessor(preprocessor);
+            t.SetFailureHandlingOptions(opts);
+        }
         t.Start();
 
         var fixtureIds = fixtures.Select(f => f.Id).ToList();
