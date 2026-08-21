@@ -134,17 +134,23 @@ namespace TurboSuite.Dali.ViewModels
         /// <summary>Has loads but no ZONE N — ordered by the job-wide demand, placed nowhere.</summary>
         public bool IsUnassigned => LoadCount > 0 && AssignedZone <= 0;
 
+        /// <summary>A <c>used/64</c> bus meter (a loop = one DALI bus). Zero-padded to two digits to match the
+        /// address short-address slots (00–63), so the 64-cap is legible at a glance instead of hiding behind
+        /// an ambiguous "loads" word — this is the surface where the per-unit count fix becomes visible.</summary>
         public string StatusText
         {
             get
             {
                 if (Zones.Count == 0) return "empty";
-                string legs = $"{LoadCount} load" + (LoadCount == 1 ? "" : "s");
-                if (IsOverCap) return $"{legs} — over {MaxLoadsPerBus}/bus, split this loop";
-                if (IsUnassigned) return $"{legs} — no zone, not placed";
-                return legs;
+                string meter = $"{LoadCount:00}/{MaxLoadsPerBus}";
+                if (IsOverCap) return $"{meter} — over bus limit, split this loop";
+                if (IsUnassigned) return $"{meter} — no zone, not placed";
+                return meter;
             }
         }
+
+        /// <summary>Tooltip for the status meter — spells out what the <c>used/64</c> ratio means.</summary>
+        public string StatusTooltip => "DALI addresses used / bus capacity";
 
         /// <summary>Raised on any edit the owning tab must react to (recompute aggregates + persist).</summary>
         public Action? Changed { get; set; }

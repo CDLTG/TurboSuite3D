@@ -5,82 +5,34 @@ using System.Linq;
 
 namespace TurboSuite.Dali.Input
 {
-    /// <summary>One DALI lighting fixture as read from the model: the circuit it sits on (its DALI address)
-    /// and its Control Zone. <see cref="CircuitKey"/> empty ⇒ the fixture is not on a circuit yet.</summary>
-    public readonly struct DaliFixtureReading
-    {
-        public DaliFixtureReading(string? circuitKey, string? zone)
-        {
-            CircuitKey = (circuitKey ?? "").Trim();
-            Zone = (zone ?? "").Trim();
-        }
-
-        /// <summary>Stable id of the fixture's circuit (the DALI address). Empty = uncircuited.</summary>
-        public string CircuitKey { get; }
-
-        /// <summary>The fixture's Control Zone value. Empty = unzoned (joins no loop).</summary>
-        public string Zone { get; }
-    }
-
     /// <summary>
-    /// Reduces DALI fixtures to <b>loads per Control Zone</b>, where the unit of a load is a <b>DALI address =
-    /// one circuit</b>, not one fixture. This is the fix for shared-driver tape: six tape runs wired to one
-    /// remote DALI driver sit on one circuit and present <b>one</b> address, so they must collapse to one
-    /// load — while a downlight on its own circuit stays one load. The designer's convention ("one driver =
-    /// one circuit = one address", confirmed 2026-08-12) makes counting by circuit exactly right for both.
+    /// Reduces <see cref="DaliUnitReading"/>s to <b>loads per Control Zone</b>, where the unit of a load is a
+    /// single <b>addressable unit = one DALI address</b> — a driver device or a self-driven downlight fixture.
+    /// This is the per-unit fix for the 64/bus warning: a circuit carrying N drivers presents <b>N</b>
+    /// addresses (not one), so a zone's load count is its true DALI address count — exactly what the 64-cap
+    /// limits. The old "one load per circuit" collapse lived here; it is gone, because the shim's
+    /// <c>DaliUnitEnumerator</c> now hands us units directly (each already one load).
     ///
     /// <b>Rules:</b>
     /// <list type="bullet">
-    ///   <item>Each distinct circuit contributes <b>one</b> load to its zone — the collapse.</item>
-    ///   <item>A circuit's zone is the first non-blank Control Zone among its fixtures (they should all
-    ///   agree; a blank one is tolerated as long as another fixture on the circuit carries the zone).</item>
-    ///   <item>A circuit whose fixtures are all unzoned adds no load (an unassigned address — the demand
-    ///   provider still sees the fixtures for its "hardware present but undeclared" check).</item>
-    ///   <item>An <b>uncircuited</b> DALI fixture counts as its own load — conservative (never under-orders),
-    ///   and it collapses into the circuit's single load the moment the designer wires it.</item>
+    ///   <item>Each unit with a non-blank zone contributes <b>one</b> load to that zone.</item>
+    ///   <item>A unit whose zone is blank adds no load (unassigned hardware — the demand provider still sees
+    ///   the units for its "hardware present but undeclared" check).</item>
     /// </list>
     ///
-    /// The driver/decoder device itself never appears here: it is a lighting <i>device</i>, and the shim only
-    /// feeds lighting <i>fixtures</i>, so a driver sharing the circuit neither adds nor removes a load.
+    /// The per-circuit zone reconciliation (all a circuit's fixtures should agree on the zone; a blank one is
+    /// tolerated as long as another carries it) now happens upstream in the enumerator, which stamps every
+    /// driver unit with its circuit's resolved zone. Counting is therefore a flat tally.
     /// </summary>
     public static class DaliLoadCounter
     {
-        public static Dictionary<string, int> CountByZone(IEnumerable<DaliFixtureReading>? fixtures)
+        public static Dictionary<string, int> CountByZone(IEnumerable<DaliUnitReading>? units)
         {
             var byZone = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var circuitZone = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var circuitOrder = new List<string>();
-
-            foreach (var f in fixtures ?? Enumerable.Empty<DaliFixtureReading>())
-            {
-                if (f.CircuitKey.Length == 0)
-                {
-                    if (f.Zone.Length > 0) Add(byZone, f.Zone);   // uncircuited ⇒ its own load
-                    continue;
-                }
-
-                if (!circuitZone.TryGetValue(f.CircuitKey, out string? zone))
-                {
-                    circuitZone[f.CircuitKey] = f.Zone;           // first fixture on this circuit (may be blank)
-                    circuitOrder.Add(f.CircuitKey);
-                }
-                else if (zone.Length == 0 && f.Zone.Length > 0)
-                {
-                    circuitZone[f.CircuitKey] = f.Zone;           // upgrade a blank to the circuit's real zone
-                }
-            }
-
-            // One load per circuit that resolved to a zone.
-            foreach (string key in circuitOrder)
-            {
-                string zone = circuitZone[key];
-                if (zone.Length > 0) Add(byZone, zone);
-            }
-
+            foreach (var u in units ?? Enumerable.Empty<DaliUnitReading>())
+                if (u.Zone.Length > 0)
+                    byZone[u.Zone] = byZone.TryGetValue(u.Zone, out int n) ? n + 1 : 1;
             return byZone;
         }
-
-        private static void Add(Dictionary<string, int> byZone, string zone)
-            => byZone[zone] = byZone.TryGetValue(zone, out int n) ? n + 1 : 1;
     }
 }

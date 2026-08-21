@@ -4,17 +4,17 @@ using System.Collections.Generic;
 namespace TurboSuite.Dali.Services
 {
     /// <summary>
-    /// Revit-free contract for DALI address write-back. Given the reconciler's
-    /// <c>circuit.UniqueId → "L2-01"</c> map, the shim writes that label to the <b>"DALI Address" param on
-    /// every element of each addressed circuit</b> — its tape/downlight fixtures AND the remote driver/decoder
-    /// device (both categories carry the param) — and <b>clears</b> any bound element that is no longer on an
-    /// addressed circuit, so the model never accumulates orphan labels. Idempotent, one transaction; invoked
-    /// through the work queue so it runs on the Revit API thread.
+    /// Revit-free contract for DALI address write-back. Given the reconciler's <c>unitKey → "L2-00"</c> map,
+    /// the shim resolves each unit key to its <b>one live element</b> — the driver device (driver unit) or the
+    /// self-driven fixture (downlight unit) — and writes the label to that element's "DALI Address" param,
+    /// then <b>clears</b> any bound fixture/device carrying a value it did not write this pass (including a
+    /// driver's tape fixtures, which no longer carry the address), so the model never accumulates orphan
+    /// labels. Idempotent, one transaction; invoked through the work queue so it runs on the Revit API thread.
     /// </summary>
     public interface IDaliAddressWriter
     {
-        /// <summary>Write each circuit's address to all its elements and clear stale ones. Returns a short
-        /// status (e.g. "Wrote 34 addresses on 41 elements; cleared 3").</summary>
-        string Write(IReadOnlyDictionary<string, string> addressByCircuit);
+        /// <summary>Write each unit's address to its resolved element and clear stale ones. Returns a short
+        /// status (e.g. "Wrote 34 addresses; cleared 3 stale.").</summary>
+        string Write(IReadOnlyDictionary<string, string> addressByUnit);
     }
 }

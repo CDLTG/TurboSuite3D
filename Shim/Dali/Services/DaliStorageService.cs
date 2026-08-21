@@ -71,7 +71,11 @@ namespace TurboSuite.Dali.Services
 
             try
             {
-                return JsonSerializer.Deserialize<DaliModuleState>(json, JsonOptions) ?? new DaliModuleState();
+                var state = JsonSerializer.Deserialize<DaliModuleState>(json, JsonOptions) ?? new DaliModuleState();
+                // A pre-v4 lock baseline anchors on circuit keys, a grain the reconciler can no longer pin —
+                // drop it (loops survive, the job reverts to Unlocked). See DaliPayload.
+                DaliPayload.DiscardStaleSnapshot(state);
+                return state;
             }
             catch (JsonException)
             {

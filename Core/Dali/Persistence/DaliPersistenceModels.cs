@@ -3,6 +3,24 @@ using System.Collections.Generic;
 
 namespace TurboSuite.Dali.Persistence
 {
+    /// <summary>Payload-version constants + the load-time normalization the storage service applies.</summary>
+    public static class DaliPayload
+    {
+        /// <summary>The current DALI payload shape. v4 = the addressing lock baseline anchored on the
+        /// addressable unit (see <see cref="DaliModuleState.PayloadVersion"/>).</summary>
+        public const int CurrentVersion = 4;
+
+        /// <summary>Drop a lock baseline written before the unit-grain re-anchor (v4): its keys are circuit
+        /// UniqueIds, which no longer name anything the reconciler can pin, so pinning against it would
+        /// mis-issue. The declared loops are grain-independent and survive; the job simply reverts to Unlocked
+        /// and the designer re-locks. Called once on load, after deserialize.</summary>
+        public static void DiscardStaleSnapshot(DaliModuleState? state)
+        {
+            if (state?.Snapshot != null && state.PayloadVersion < CurrentVersion)
+                state.Snapshot = null;
+        }
+    }
+
     // Pure, Revit-free DTOs for the TurboDALI document-side ExtensibleStorage payload — the designer's
     // declared DALI loops, layered above the read-only model + the native Control Zone parameter (the same
     // division TurboDMX uses; see Core/Dmx/Persistence/DmxPersistenceModels.cs).
@@ -29,7 +47,13 @@ namespace TurboSuite.Dali.Persistence
         /// baseline. A v2 payload deserializes it to null = Unlocked/unaddressed, the safe default (the job
         /// simply has no issued addresses yet). Tolerant read means an OLD v2 reader seeing a v3 payload just
         /// ignores the field it doesn't know — the loops it does need are untouched (guarded by a
-        /// v3→v2 characterization test).</para></summary>
+        /// v3→v2 characterization test).</para>
+        /// <para>v4: the lock baseline re-anchored from the electrical circuit to the <b>addressable unit</b>
+        /// (a driver device / self-driven downlight) — the same JSON field set, only the snapshot's inner key
+        /// grain changed. A pre-v4 snapshot keys on circuit UniqueIds, which no longer name anything the
+        /// reconciler can pin, so it is <b>discarded on load</b> (<see cref="DaliPayload.DiscardStaleSnapshot"/>):
+        /// the declared loops survive, the stale lock drops to Unlocked, and the designer re-locks. This is a
+        /// payload-shape change (PayloadVersion), NOT a schema-GUID change — the ES field set is unchanged.</para></summary>
         public int PayloadVersion { get; set; } = 2;
 
         /// <summary>Designer-declared DALI loops (Zone→Loop). Keyed by Control Zone VALUE, not ElementId.</summary>
@@ -41,10 +65,10 @@ namespace TurboSuite.Dali.Persistence
         public DaliSnapshotDto? Snapshot { get; set; }
     }
 
-    /// <summary>The frozen addressing baseline captured at Lock (v3). Empty <see cref="Circuits"/> +
+    /// <summary>The frozen addressing baseline captured at Lock (v4). Empty <see cref="Units"/> +
     /// <c>NumberingState="Unlocked"</c> while the job churns; a Lock freezes every issued
-    /// <c>L{loop}-{load##}</c> so a later re-walk never moves an already-issued number. Mirrors
-    /// <c>DmxSnapshotDto</c>, two-level (loop + load) because a DALI address is two numbers.</summary>
+    /// <c>L{loop}-{##}</c> so a later re-walk never moves an already-issued number. Mirrors
+    /// <c>DmxSnapshotDto</c>, two-level (loop + short address) because a DALI address is two numbers.</summary>
     public sealed class DaliSnapshotDto
     {
         /// <summary>Numbering lifecycle. Persisted values: "Unlocked" / "Locked" (a Re-lock re-captures the
@@ -54,10 +78,10 @@ namespace TurboSuite.Dali.Persistence
         /// <summary>Per-loop issued L# at lock (the level-1 anchor: <c>LoopId → L#</c>).</summary>
         public List<DaliSnapshotLoopDto> Loops { get; set; } = new List<DaliSnapshotLoopDto>();
 
-        /// <summary>Per-circuit issued slot at lock (the level-2 anchor: <c>circuit.UniqueId → (loop, L#,
-        /// load##)</c>), denormalized with the L# + zone so a retired-circuit REVIEW can name the exact
-        /// address that was issued without re-deriving it.</summary>
-        public List<DaliSnapshotCircuitDto> Circuits { get; set; } = new List<DaliSnapshotCircuitDto>();
+        /// <summary>Per-unit issued slot at lock (the level-2 anchor: <c>unitKey → (loop, L#, short##)</c>),
+        /// denormalized with the L# + zone so a retired-unit REVIEW can name the exact address that was issued
+        /// without re-deriving it.</summary>
+        public List<DaliSnapshotUnitDto> Units { get; set; } = new List<DaliSnapshotUnitDto>();
     }
 
     /// <summary>One loop's issued L# in the lock baseline, keyed by the durable <see cref="LoopId"/>.</summary>
@@ -67,12 +91,12 @@ namespace TurboSuite.Dali.Persistence
         public int LoopNumber { get; set; }
     }
 
-    /// <summary>One circuit's issued address in the lock baseline, keyed by <see cref="CircuitKey"/>
-    /// (<c>circuit.UniqueId</c>). Carries its lock-time loop + L# + zone so a moved/retired circuit can be
-    /// flagged and named precisely.</summary>
-    public sealed class DaliSnapshotCircuitDto
+    /// <summary>One unit's issued address in the lock baseline, keyed by <see cref="UnitKey"/> (driver:
+    /// <c>circuit.UniqueId#ordinal</c>; downlight: fixture UniqueId). Carries its lock-time loop + L# + zone
+    /// so a moved/retired unit can be flagged and named precisely.</summary>
+    public sealed class DaliSnapshotUnitDto
     {
-        public string CircuitKey { get; set; } = "";
+        public string UnitKey { get; set; } = "";
         public string LoopId { get; set; } = "";
         public int LoopNumber { get; set; }
         public int LoadNumber { get; set; }

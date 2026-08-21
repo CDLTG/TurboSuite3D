@@ -23,8 +23,10 @@ namespace TurboSuite.Dali.Services
         {
             var current = DaliStorageService.Load(_doc);
             current.Loops = state?.Loops ?? current.Loops;
-            // Snapshot is left as loaded — the tab never authors it. Version rides up to 3 once a lock exists.
-            current.PayloadVersion = current.Snapshot != null ? 3 : (state?.PayloadVersion ?? current.PayloadVersion);
+            // Snapshot is left as loaded — the tab never authors it. Version rides up to 4 once a lock exists.
+            current.PayloadVersion = current.Snapshot != null
+                ? DaliPayload.CurrentVersion
+                : (state?.PayloadVersion ?? current.PayloadVersion);
             DaliStorageService.Save(_doc, current);
         }
 
@@ -33,7 +35,7 @@ namespace TurboSuite.Dali.Services
         {
             var current = DaliStorageService.Load(_doc);
             current.Snapshot = snapshot;
-            current.PayloadVersion = 3;
+            current.PayloadVersion = DaliPayload.CurrentVersion;
             DaliStorageService.Save(_doc, current);
         }
     }

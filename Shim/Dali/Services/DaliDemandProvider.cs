@@ -35,8 +35,6 @@ namespace TurboSuite.Dali.Services
     /// </summary>
     public sealed class DaliDemandProvider : IControlSubsystemDemandProvider
     {
-        private const string DaliProtocol = "DALI";
-
         private readonly Document _doc;
 
         public DaliDemandProvider(Document doc) => _doc = doc;
@@ -47,7 +45,7 @@ namespace TurboSuite.Dali.Services
             try
             {
                 var state = DaliStorageService.Load(_doc);
-                var loadsByZone = CountDaliLoadsByZone(_doc, out int totalDaliFixtures);
+                var loadsByZone = CountDaliLoadsByZone(_doc, out int totalDaliUnits);
 
                 // Reconcile the declared loops against the zones that actually carry DALI fixtures (drops a
                 // renamed/deleted zone, single membership, skips an empty loop) — the same rules the tab's
@@ -65,11 +63,11 @@ namespace TurboSuite.Dali.Services
                     // DALI hardware is in the model but nothing is declared to control it — the modules
                     // would never be ordered and nothing would say why. Speak up (the unzoned-DMX principle:
                     // real uncounted hardware is never silent). A clean nothing only when there is no DALI.
-                    if (totalDaliFixtures > 0)
+                    if (totalDaliUnits > 0)
                         return ControlSubsystemDemand.Unsolvable(
                             DaliSolver.SubsystemName,
-                            $"{totalDaliFixtures} fixture"
-                            + (totalDaliFixtures == 1 ? "" : "s")
+                            $"{totalDaliUnits} DALI load"
+                            + (totalDaliUnits == 1 ? "" : "s")
                             + " present but no loops declared — declare loops in TurboDALI.");
                     return ControlSubsystemDemand.None(DaliSolver.SubsystemName);
                 }
@@ -83,67 +81,20 @@ namespace TurboSuite.Dali.Services
             }
         }
 
-        /// <summary>DALI loads per Control Zone value, where <b>a load is a DALI address = one circuit</b>,
-        /// not one fixture. Shared-driver tape (several runs on one unassigned circuit) collapses to one
-        /// load; a downlight on its own circuit stays one — the "one driver = one circuit = one address"
-        /// convention. The collapse arithmetic is the pure <see cref="DaliLoadCounter"/>; here we only read
-        /// the model into <see cref="DaliFixtureReading"/>s.
+        /// <summary>DALI loads per Control Zone value, where <b>a load is one addressable unit = one DALI
+        /// address</b> — a driver device or a self-driven downlight fixture, NOT one tape fixture and NOT one
+        /// circuit. A circuit carrying N drivers presents N addresses; a self-driven downlight is one. The
+        /// unit enumeration is the shared <see cref="DaliUnitEnumerator"/> (the same walk the addressing read
+        /// consumes, so the counted total and the issued-address count cannot disagree); the flat tally is the
+        /// pure <see cref="DaliLoadCounter"/>.
         ///
-        /// <paramref name="totalDaliFixtures"/> returns every DALI fixture seen (circuited or not, zoned or
-        /// not), so the caller can still tell "hardware present but undeclared" from "no DALI at all".
-        ///
-        /// The driver/decoder that shares a tape circuit is a lighting <i>device</i>, not a fixture, so it is
-        /// never collected — it neither adds nor removes a load.</summary>
-        internal static Dictionary<string, int> CountDaliLoadsByZone(Document doc, out int totalDaliFixtures)
+        /// <paramref name="totalDaliUnits"/> returns every addressable unit seen (circuited or not, zoned or
+        /// not), so the caller can still tell "hardware present but undeclared" from "no DALI at all".</summary>
+        internal static Dictionary<string, int> CountDaliLoadsByZone(Document doc, out int totalDaliUnits)
         {
-            var lightingCatId = new ElementId(BuiltInCategory.OST_LightingFixtures);
-            var readings = new List<DaliFixtureReading>();
-            var circuited = new HashSet<ElementId>();
-
-            // Pass 1 — circuit-first: each DALI circuit's fixtures carry that circuit's id, so they collapse
-            // to a single address in DaliLoadCounter. Reading circuit.Elements (not a fixture→system lookup)
-            // matches how ZonesCollectorService walks circuits and keeps the driver device out by category.
-            var circuits = new FilteredElementCollector(doc)
-                .OfClass(typeof(ElectricalSystem))
-                .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
-                .Cast<ElectricalSystem>();
-
-            foreach (var circuit in circuits)
-            {
-                string circuitKey = circuit.UniqueId;
-                foreach (Element el in circuit.Elements)
-                {
-                    if (el is FamilyInstance fi && fi.Category?.Id == lightingCatId && IsDali(fi))
-                    {
-                        circuited.Add(fi.Id);
-                        readings.Add(new DaliFixtureReading(circuitKey, ReadZone(fi)));
-                    }
-                }
-            }
-
-            // Pass 2 — uncircuited DALI fixtures: their own load (empty circuit key), until the designer wires
-            // them onto a circuit, at which point pass 1 collapses them.
-            var fixtures = new FilteredElementCollector(doc)
-                .OfCategory(BuiltInCategory.OST_LightingFixtures)
-                .WhereElementIsNotElementType()
-                .OfClass(typeof(FamilyInstance))
-                .Cast<FamilyInstance>();
-
-            foreach (var fi in fixtures)
-            {
-                if (circuited.Contains(fi.Id) || !IsDali(fi)) continue;
-                readings.Add(new DaliFixtureReading("", ReadZone(fi)));
-            }
-
-            totalDaliFixtures = readings.Count;
-            return DaliLoadCounter.CountByZone(readings);
+            var units = DaliUnitEnumerator.Enumerate(doc);
+            totalDaliUnits = units.Count;
+            return DaliLoadCounter.CountByZone(units);
         }
-
-        private static bool IsDali(FamilyInstance fi)
-            => ParameterHelper.GetDimmingProtocol(fi).Trim()
-                .Equals(DaliProtocol, StringComparison.OrdinalIgnoreCase);
-
-        private static string ReadZone(FamilyInstance fi)
-            => fi.LookupParameter(ParameterNames.ControlZone)?.AsString()?.Trim() ?? "";
     }
 }

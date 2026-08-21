@@ -130,18 +130,20 @@ namespace TurboSuite.Dali.ViewModels
                     var snapshot = _reader.Read();
                     // Lock-aware: unlocked ⇒ fresh (zone-block → NW-seeded walk); locked ⇒ pin to the baseline
                     // and only append past the loop high-water, flagging moved/retired issued addresses.
-                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Circuits, baseline, locked);
-                    string writeStatus = _writer.Write(addressing.TextByCircuit);
-                    return (object)new WriteResult(addressing, writeStatus, snapshot.UncircuitedDaliCount);
+                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, locked);
+                    string writeStatus = _writer.Write(addressing.TextByUnit);
+                    return (object)new WriteResult(addressing, writeStatus, snapshot.UncircuitedDaliCount,
+                                                   snapshot.Warnings);
                 },
                 result =>
                 {
                     var wr = (WriteResult)result;
 
                     ShowReviews(wr.Addressing);
+                    AppendWarnings(wr.Warnings);
 
-                    int circuits = wr.Addressing.TextByCircuit.Count;
-                    string msg = $"Wrote addresses for {circuits} DALI circuit{(circuits == 1 ? "" : "s")}.";
+                    int addressed = wr.Addressing.TextByUnit.Count;
+                    string msg = $"Wrote {addressed} DALI address{(addressed == 1 ? "" : "es")}.";
                     if (!string.IsNullOrEmpty(wr.WriteStatus)) msg = wr.WriteStatus;
                     if (wr.UncircuitedDaliCount > 0)
                         msg += $"  ({wr.UncircuitedDaliCount} uncircuited DALI fixture"
@@ -163,6 +165,15 @@ namespace TurboSuite.Dali.ViewModels
         {
             Reviews.Clear();
             foreach (var r in addressing.Reviews) Reviews.Add(r.Message);
+            OnPropertyChanged(nameof(HasReviews));
+        }
+
+        /// <summary>Append non-fatal read warnings (e.g. a circuit whose drivers share a Switch ID suffix) to
+        /// the same surface as the lock REVIEWs — run after <see cref="ShowReviews"/>, which clears the list.</summary>
+        private void AppendWarnings(IReadOnlyList<string> warnings)
+        {
+            if (warnings == null || warnings.Count == 0) return;
+            foreach (var w in warnings) Reviews.Add(w);
             OnPropertyChanged(nameof(HasReviews));
         }
 
@@ -196,11 +207,12 @@ namespace TurboSuite.Dali.ViewModels
                     var snapshot = _reader.Read();
                     // Reconcile against the current state (fresh on first lock, pinned on re-lock so numbers
                     // don't move), write it, then freeze exactly what was written as the new baseline.
-                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Circuits, baseline, wasLocked);
-                    string writeStatus = _writer.Write(addressing.TextByCircuit);
+                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, wasLocked);
+                    string writeStatus = _writer.Write(addressing.TextByUnit);
                     var captured = DaliSnapshotBuilder.Capture(addressing, "Locked");
                     _store.SaveSnapshot(captured);
-                    return (object)new LockResult(addressing, captured, writeStatus, snapshot.UncircuitedDaliCount);
+                    return (object)new LockResult(addressing, captured, writeStatus,
+                                                  snapshot.UncircuitedDaliCount, snapshot.Warnings);
                 },
                 result =>
                 {
@@ -208,9 +220,10 @@ namespace TurboSuite.Dali.ViewModels
                     _snapshot = lr.Snapshot;
                     OnLockChanged();
                     ShowReviews(lr.Addressing);   // a re-baseline clears them; a fresh lock has none
+                    AppendWarnings(lr.Warnings);
 
-                    int circuits = lr.Addressing.TextByCircuit.Count;
-                    StatusText = $"Numbering locked — {circuits} address{(circuits == 1 ? "" : "es")} frozen.";
+                    int addressed = lr.Addressing.TextByUnit.Count;
+                    StatusText = $"Numbering locked — {addressed} address{(addressed == 1 ? "" : "es")} frozen.";
                     SetBusy(false);
                 });
         }
@@ -317,33 +330,38 @@ namespace TurboSuite.Dali.ViewModels
 
         private sealed class WriteResult
         {
-            public WriteResult(DaliAddressing addressing, string writeStatus, int uncircuitedDaliCount)
+            public WriteResult(DaliAddressing addressing, string writeStatus, int uncircuitedDaliCount,
+                               IReadOnlyList<string> warnings)
             {
                 Addressing = addressing;
                 WriteStatus = writeStatus;
                 UncircuitedDaliCount = uncircuitedDaliCount;
+                Warnings = warnings;
             }
 
             public DaliAddressing Addressing { get; }
             public string WriteStatus { get; }
             public int UncircuitedDaliCount { get; }
+            public IReadOnlyList<string> Warnings { get; }
         }
 
         private sealed class LockResult
         {
             public LockResult(DaliAddressing addressing, DaliSnapshotDto snapshot, string writeStatus,
-                              int uncircuitedDaliCount)
+                              int uncircuitedDaliCount, IReadOnlyList<string> warnings)
             {
                 Addressing = addressing;
                 Snapshot = snapshot;
                 WriteStatus = writeStatus;
                 UncircuitedDaliCount = uncircuitedDaliCount;
+                Warnings = warnings;
             }
 
             public DaliAddressing Addressing { get; }
             public DaliSnapshotDto Snapshot { get; }
             public string WriteStatus { get; }
             public int UncircuitedDaliCount { get; }
+            public IReadOnlyList<string> Warnings { get; }
         }
     }
 }

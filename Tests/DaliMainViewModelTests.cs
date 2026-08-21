@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TurboSuite.Abstractions;
 using TurboSuite.Dali.Addressing;
+using TurboSuite.Dali.Input;
 using TurboSuite.Dali.Overlay;
 using TurboSuite.Dali.Persistence;
 using TurboSuite.Dali.Services;
@@ -35,9 +36,9 @@ namespace TurboSuite.Tests.Dali
 
         private sealed class FakeReader : IDaliModelReader
         {
-            public List<DaliCircuitReading> Circuits = new List<DaliCircuitReading>();
+            public List<DaliUnitReading> Units = new List<DaliUnitReading>();
             public int Reads;
-            public DaliModelSnapshot Read() { Reads++; return new DaliModelSnapshot(Circuits.ToList(), 0); }
+            public DaliModelSnapshot Read() { Reads++; return new DaliModelSnapshot(Units.ToList(), 0); }
         }
 
         private sealed class FakeWriter : IDaliAddressWriter
@@ -54,13 +55,14 @@ namespace TurboSuite.Tests.Dali
         }
 
         // ── Builders ──────────────────────────────────────────────────────────────────────────────────
-        private static DaliCircuitReading Circuit(string key, string zone, double x, double y) =>
-            new DaliCircuitReading(key, zone, new DaliPoint(x, y));
+        // A single-unit (downlight) circuit: unit key == circuit key, at (x,y).
+        private static DaliUnitReading Circuit(string key, string zone, double x, double y) =>
+            new DaliUnitReading(key, key, DaliUnitKind.Downlight, 0, zone, new DaliPoint(x, y));
 
         /// <summary>One loop "loopA" grouping Control Zone "Kitchen", plus a fresh main VM over the given
-        /// model circuits. <paramref name="savedSnapshot"/> seeds the persisted lock baseline (null = unlocked).</summary>
+        /// model units. <paramref name="savedSnapshot"/> seeds the persisted lock baseline (null = unlocked).</summary>
         private static DaliMainViewModel Build(
-            IEnumerable<DaliCircuitReading> circuits,
+            IEnumerable<DaliUnitReading> units,
             out FakeWriter writer,
             out CapturingStore store,
             DaliSnapshotDto? savedSnapshot = null,
@@ -71,7 +73,7 @@ namespace TurboSuite.Tests.Dali
 
             var saved = new DaliModuleState
             {
-                PayloadVersion = savedSnapshot != null ? 3 : 2,
+                PayloadVersion = savedSnapshot != null ? 4 : 2,
                 Snapshot = savedSnapshot,
                 Loops = new List<DaliLoopDto>
                 {
@@ -82,7 +84,7 @@ namespace TurboSuite.Tests.Dali
             var zones = new List<DaliZoneItemViewModel> { new DaliZoneItemViewModel("Kitchen", 2) };
             var tab = new DaliTabViewModel(zones, new List<int> { 1 }, saved, wq, store);
 
-            var reader = new FakeReader { Circuits = circuits.ToList() };
+            var reader = new FakeReader { Units = units.ToList() };
             writer = new FakeWriter();
             return new DaliMainViewModel(tab, wq, reader, writer, new FakeZoneColor(), store,
                                          inputProvider: null, saved: saved, confirm: confirm ?? (_ => true));
@@ -98,8 +100,8 @@ namespace TurboSuite.Tests.Dali
             vm.WriteAddressesCommand.Execute(null);
 
             Assert.Equal(1, writer.Writes);
-            Assert.Equal("L1-01", writer.LastWrite["c1"]);   // NW-first: higher Y seeds -01
-            Assert.Equal("L1-02", writer.LastWrite["c2"]);
+            Assert.Equal("L1-00", writer.LastWrite["c1"]);   // NW-first: higher Y seeds -00 (zero-based)
+            Assert.Equal("L1-01", writer.LastWrite["c2"]);
             Assert.False(vm.HasReviews);
             Assert.False(vm.IsLocked);
         }
@@ -118,9 +120,9 @@ namespace TurboSuite.Tests.Dali
             Assert.Equal(1, store.SnapshotSaveCount);
             Assert.NotNull(store.LastSnapshot);
             Assert.Equal("Locked", store.LastSnapshot!.NumberingState);
-            Assert.Equal(2, store.LastSnapshot.Circuits.Count);
-            Assert.Contains(store.LastSnapshot.Circuits, c => c.CircuitKey == "c1" && c.LoadNumber == 1);
-            Assert.Contains(store.LastSnapshot.Circuits, c => c.CircuitKey == "c2" && c.LoadNumber == 2);
+            Assert.Equal(2, store.LastSnapshot.Units.Count);
+            Assert.Contains(store.LastSnapshot.Units, c => c.UnitKey == "c1" && c.LoadNumber == 0);
+            Assert.Contains(store.LastSnapshot.Units, c => c.UnitKey == "c2" && c.LoadNumber == 1);
             Assert.Equal(1, writer.Writes);   // lock stamps the model so it matches the baseline
         }
 
@@ -132,10 +134,10 @@ namespace TurboSuite.Tests.Dali
             {
                 NumberingState = "Locked",
                 Loops = { new DaliSnapshotLoopDto { LoopId = "loopA", LoopNumber = 1 } },
-                Circuits =
+                Units =
                 {
-                    new DaliSnapshotCircuitDto { CircuitKey = "c1", LoopId = "loopA", LoopNumber = 1, LoadNumber = 1, Zone = "Kitchen" },
-                    new DaliSnapshotCircuitDto { CircuitKey = "c2", LoopId = "loopA", LoopNumber = 1, LoadNumber = 2, Zone = "Kitchen" },
+                    new DaliSnapshotUnitDto { UnitKey = "c1", LoopId = "loopA", LoopNumber = 1, LoadNumber = 0, Zone = "Kitchen" },
+                    new DaliSnapshotUnitDto { UnitKey = "c2", LoopId = "loopA", LoopNumber = 1, LoadNumber = 1, Zone = "Kitchen" },
                 },
             };
             // c2 is gone from the model.
@@ -145,10 +147,10 @@ namespace TurboSuite.Tests.Dali
             vm.WriteAddressesCommand.Execute(null);
 
             Assert.True(vm.IsLocked);
-            Assert.Equal("L1-01", writer.LastWrite["c1"]);   // kept in place
+            Assert.Equal("L1-00", writer.LastWrite["c1"]);   // kept in place
             Assert.False(writer.LastWrite.ContainsKey("c2"));
             Assert.True(vm.HasReviews);
-            Assert.Contains(vm.Reviews, r => r.Contains("L1-02") && r.Contains("retired"));
+            Assert.Contains(vm.Reviews, r => r.Contains("L1-01") && r.Contains("retired"));
         }
 
         // ── Locked write: a new circuit appends past the high-water (no reuse), silently ───────────────
@@ -159,13 +161,13 @@ namespace TurboSuite.Tests.Dali
             {
                 NumberingState = "Locked",
                 Loops = { new DaliSnapshotLoopDto { LoopId = "loopA", LoopNumber = 1 } },
-                Circuits =
+                Units =
                 {
-                    new DaliSnapshotCircuitDto { CircuitKey = "c1", LoopId = "loopA", LoopNumber = 1, LoadNumber = 1, Zone = "Kitchen" },
-                    new DaliSnapshotCircuitDto { CircuitKey = "c2", LoopId = "loopA", LoopNumber = 1, LoadNumber = 2, Zone = "Kitchen" },
+                    new DaliSnapshotUnitDto { UnitKey = "c1", LoopId = "loopA", LoopNumber = 1, LoadNumber = 0, Zone = "Kitchen" },
+                    new DaliSnapshotUnitDto { UnitKey = "c2", LoopId = "loopA", LoopNumber = 1, LoadNumber = 1, Zone = "Kitchen" },
                 },
             };
-            // c3 is new, and spatially the most-NW (highest Y) — a fresh walk would seed it -01, but locked it appends.
+            // c3 is new, and spatially the most-NW (highest Y) — a fresh walk would seed it -00, but locked it appends.
             var vm = Build(new[]
             {
                 Circuit("c1", "Kitchen", 0, 10),
@@ -175,9 +177,9 @@ namespace TurboSuite.Tests.Dali
 
             vm.WriteAddressesCommand.Execute(null);
 
-            Assert.Equal("L1-01", writer.LastWrite["c1"]);
-            Assert.Equal("L1-02", writer.LastWrite["c2"]);
-            Assert.Equal("L1-03", writer.LastWrite["c3"]);   // appended, not seeded to -01
+            Assert.Equal("L1-00", writer.LastWrite["c1"]);
+            Assert.Equal("L1-01", writer.LastWrite["c2"]);
+            Assert.Equal("L1-02", writer.LastWrite["c3"]);   // appended, not seeded to -00
             Assert.False(vm.HasReviews);
         }
 
@@ -189,7 +191,7 @@ namespace TurboSuite.Tests.Dali
             {
                 NumberingState = "Locked",
                 Loops = { new DaliSnapshotLoopDto { LoopId = "loopA", LoopNumber = 1 } },
-                Circuits = { new DaliSnapshotCircuitDto { CircuitKey = "c1", LoopId = "loopA", LoopNumber = 1, LoadNumber = 1, Zone = "Kitchen" } },
+                Units = { new DaliSnapshotUnitDto { UnitKey = "c1", LoopId = "loopA", LoopNumber = 1, LoadNumber = 0, Zone = "Kitchen" } },
             };
             var vm = Build(new[] { Circuit("c1", "Kitchen", 0, 0) }, out _, out var store,
                            savedSnapshot: baseline);

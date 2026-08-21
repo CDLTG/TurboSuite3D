@@ -102,14 +102,14 @@ namespace TurboSuite.Tests.Dali
             Assert.Empty(state.Loops);
         }
 
-        // ── v3: the addressing lock baseline (TurboDALI) ────────────────────────────────────────────────
+        // ── v4: the addressing lock baseline, unit-anchored (TurboDALI) ──────────────────────────────────
 
         [Fact]
-        public void V3Snapshot_RoundTripsIntact()
+        public void V4Snapshot_RoundTripsIntact()
         {
             var state = new DaliModuleState
             {
-                PayloadVersion = 3,
+                PayloadVersion = 4,
                 Loops = new List<DaliLoopDto>
                 {
                     new DaliLoopDto { LoopId = "l1", Name = "Kitchen", Order = 1, AssignedZone = 3,
@@ -122,26 +122,61 @@ namespace TurboSuite.Tests.Dali
                     {
                         new DaliSnapshotLoopDto { LoopId = "l1", LoopNumber = 1 },
                     },
-                    Circuits = new List<DaliSnapshotCircuitDto>
+                    Units = new List<DaliSnapshotUnitDto>
                     {
-                        new DaliSnapshotCircuitDto { CircuitKey = "u-1", LoopId = "l1",
-                                                     LoopNumber = 1, LoadNumber = 2, Zone = "Kitchen" },
+                        new DaliSnapshotUnitDto { UnitKey = "ckt-uid#1", LoopId = "l1",
+                                                  LoopNumber = 1, LoadNumber = 2, Zone = "Kitchen" },
                     },
                 },
             };
 
             var back = RoundTrip(state);
 
-            Assert.Equal(3, back.PayloadVersion);
+            Assert.Equal(4, back.PayloadVersion);
             Assert.NotNull(back.Snapshot);
             Assert.Equal("Locked", back.Snapshot!.NumberingState);
             var loop = Assert.Single(back.Snapshot.Loops);
             Assert.Equal("l1", loop.LoopId);
             Assert.Equal(1, loop.LoopNumber);
-            var ckt = Assert.Single(back.Snapshot.Circuits);
-            Assert.Equal("u-1", ckt.CircuitKey);
-            Assert.Equal(2, ckt.LoadNumber);
-            Assert.Equal("Kitchen", ckt.Zone);
+            var unit = Assert.Single(back.Snapshot.Units);
+            Assert.Equal("ckt-uid#1", unit.UnitKey);
+            Assert.Equal(2, unit.LoadNumber);
+            Assert.Equal("Kitchen", unit.Zone);
+        }
+
+        [Fact]
+        public void DiscardStaleSnapshot_DropsPreV4Baseline_ButKeepsLoops()
+        {
+            // A v3 (circuit-anchored) lock baseline can't be pinned under the unit grain, so it is dropped on
+            // load — the declared loops survive and the job reverts to Unlocked for a re-lock.
+            var state = new DaliModuleState
+            {
+                PayloadVersion = 3,
+                Loops = new List<DaliLoopDto>
+                {
+                    new DaliLoopDto { LoopId = "l1", Name = "Kitchen", ZoneValues = new List<string> { "Kitchen" } },
+                },
+                Snapshot = new DaliSnapshotDto { NumberingState = "Locked" },
+            };
+
+            DaliPayload.DiscardStaleSnapshot(state);
+
+            Assert.Null(state.Snapshot);                 // stale lock dropped
+            Assert.Single(state.Loops);                  // loops preserved
+        }
+
+        [Fact]
+        public void DiscardStaleSnapshot_KeepsCurrentVersionBaseline()
+        {
+            var state = new DaliModuleState
+            {
+                PayloadVersion = DaliPayload.CurrentVersion,
+                Snapshot = new DaliSnapshotDto { NumberingState = "Locked" },
+            };
+
+            DaliPayload.DiscardStaleSnapshot(state);
+
+            Assert.NotNull(state.Snapshot);              // current-grain baseline kept
         }
 
         [Fact]

@@ -5,9 +5,9 @@ using TurboSuite.Dali.Persistence;
 namespace TurboSuite.Dali.Addressing
 {
     /// <summary>Captures a resolved <see cref="DaliAddressing"/> as the frozen lock baseline (Lock / Re-lock
-    /// event) — the DALI analog of <c>DmxSnapshotBuilder.Capture</c>, two-level (loops + circuits). The live
+    /// event) — the DALI analog of <c>DmxSnapshotBuilder.Capture</c>, two-level (loops + units). The live
     /// spatial-walk order is deliberately NOT stored; only the issued numbers are, so a later re-walk can
-    /// churn freely while locked yet never move an already-issued <c>L{loop}-{load##}</c>.</summary>
+    /// churn freely while locked yet never move an already-issued <c>L{loop}-{##}</c>.</summary>
     public static class DaliSnapshotBuilder
     {
         public static DaliSnapshotDto Capture(DaliAddressing addressing, string state = "Locked")
@@ -19,10 +19,10 @@ namespace TurboSuite.Dali.Addressing
                     .Select(kv => new DaliSnapshotLoopDto { LoopId = kv.Key, LoopNumber = kv.Value })
                     .OrderBy(l => l.LoopNumber)
                     .ToList(),
-                Circuits = addressing.Addresses
-                    .Select(a => new DaliSnapshotCircuitDto
+                Units = addressing.Addresses
+                    .Select(a => new DaliSnapshotUnitDto
                     {
-                        CircuitKey = a.CircuitKey,
+                        UnitKey = a.UnitKey,
                         LoopId = a.LoopId,
                         LoopNumber = a.LoopNumber,
                         LoadNumber = a.LoadNumber,

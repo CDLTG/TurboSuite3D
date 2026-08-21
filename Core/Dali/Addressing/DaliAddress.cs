@@ -4,11 +4,10 @@ using System;
 namespace TurboSuite.Dali.Addressing
 {
     /// <summary>
-    /// A DALI design address — form <c>L{loop#}-{load##}</c> (e.g. <c>L2-01</c> = Loop 2, load 01). It is a
-    /// design/commissioning LABEL the installer references, <b>not</b> a hardware DALI short address (0–63)
-    /// that programs a ballast — a deliberate choice that makes it a string with no 0–63 bookkeeping.
-    /// The load is two digits because a bus holds up to 64 loads; a third digit is tolerated defensively but
-    /// never expected.
+    /// A DALI address — form <c>L{loop#}-{shortAddress##}</c> (e.g. <c>L2-00</c> = Loop 2, short address 00).
+    /// The <c>##</c> <b>is</b> the DALI hardware short address (0–63), <b>zero-based</b> (the first unit on a
+    /// bus is <c>-00</c>) — one per addressable unit (a driver device or a self-driven downlight). Two digits
+    /// because a bus holds up to 64 addresses; a third digit is tolerated defensively but never expected.
     /// </summary>
     public readonly struct DaliAddress : IEquatable<DaliAddress>
     {
