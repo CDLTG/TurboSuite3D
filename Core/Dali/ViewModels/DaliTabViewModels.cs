@@ -167,6 +167,13 @@ namespace TurboSuite.Dali.ViewModels
             OnPropertyChanged(nameof(IsUnassigned));
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(ZonesHeader));
+
+            // A drag-to-reorder is a Move: no load-count change, so the aggregate/persist path the Add/Remove
+            // callers drive explicitly would never fire. Persist it here — the zones' declared order IS the
+            // outer addressing key, so reordering must reach ExtensibleStorage (the owning tab's Changed handler
+            // recomputes + saves, and is _loaded-guarded so the load-time member fill stays silent).
+            if (e.Action == NotifyCollectionChangedAction.Move)
+                Changed?.Invoke();
         }
     }
 }

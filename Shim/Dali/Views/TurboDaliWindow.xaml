@@ -232,19 +232,32 @@
                                                               Visibility="{Binding IsZonesExpanded, Converter={StaticResource BoolToVisibility}}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Grid Margin="0,1">
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="Auto"/>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                </Grid.ColumnDefinitions>
-                                                                <Button Grid.Column="0" Content="←" Style="{StaticResource IconButton}"
-                                                                        Margin="0,0,6,0"
-                                                                        Command="{Binding DataContext.RemoveZoneCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        ToolTip="Return this zone to the pool."/>
-                                                                <TextBlock Grid.Column="1" Text="{Binding Display}" VerticalAlignment="Center"
-                                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
-                                                            </Grid>
+                                                            <!-- Whole row is a drag source + drop target (reorder within this loop).
+                                                                 Background=Transparent so the empty gap between glyph and text still
+                                                                 hit-tests. A top border, shown only while a drag hovers, marks the
+                                                                 insertion point. Handlers live on the window code-behind. -->
+                                                            <Border x:Name="ZoneRowBorder" BorderThickness="0,2,0,0" BorderBrush="Transparent">
+                                                                <Grid Margin="0,1" Background="Transparent" AllowDrop="True"
+                                                                      PreviewMouseLeftButtonDown="ZoneRow_PreviewMouseLeftButtonDown"
+                                                                      PreviewMouseMove="ZoneRow_PreviewMouseMove"
+                                                                      DragOver="ZoneRow_DragOver" DragLeave="ZoneRow_DragLeave"
+                                                                      Drop="ZoneRow_Drop"
+                                                                      ToolTip="Drag the zone name to reorder — this loop's zone order sets the addressing sequence.">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Button Grid.Column="0" Content="←" Style="{StaticResource IconButton}"
+                                                                            Margin="0,0,6,0"
+                                                                            Command="{Binding DataContext.RemoveZoneCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                                                            CommandParameter="{Binding}"
+                                                                            ToolTip="Return this zone to the pool."/>
+                                                                    <!-- The zone name is the grab handle (SizeAll cursor cues it); the whole row still
+                                                                         drags, but the ← button keeps its own click. -->
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Display}" VerticalAlignment="Center"
+                                                                               Cursor="SizeAll" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                                </Grid>
+                                                            </Border>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
