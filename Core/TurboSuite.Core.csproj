@@ -19,7 +19,7 @@
          as equivalent LET bindings (CountsWorkbookService.cs), which the parser
          accepts. All other Counts spill constructs (FILTER/VSTACK/BYROW/TOCOL/HSTACK/
          XLOOKUP) parse fine. See roadmap Dependencies-1. -->
-    <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="PDFsharp" Version="6.2.4" />
     <!-- Pin System.Memory to resolve a netstandard2.0 transitive downgrade in
          ClosedXML's graph (System.IO.Packaging wants 4.5.5; ClosedXML pulls 4.5.4).
