@@ -20,7 +20,7 @@ public class TurboSuiteApplication : IExternalApplication
     // unreachable until they're ready. `static readonly` (not `const`) so the compiler doesn't
     // flag the gated branch as unreachable (CS0162). TurboDALI owns DALI loop declaration outright now
     // (the transitional TurboZones DALI tab is gone) — DALI editing is dev-only until this gate ungates.
-    public static readonly bool ExperimentalCommandsEnabled = false;
+    public static readonly bool ExperimentalCommandsEnabled = true;
 
     private static bool _updateAccepted;
 
