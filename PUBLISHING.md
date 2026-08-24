@@ -13,6 +13,7 @@ TurboSuite ships a **separate DLL per Revit version** (net48 for Revit 2024, net
 │  ├─ TurboSuite.dll, *.dll, *.pdb
 │  ├─ TurboSuite.addin
 │  ├─ TurboSuiteUpdater.exe / .dll / .runtimeconfig.json
+│  ├─ retire.txt                  ← cumulative "delete these stale files on update" manifest
 │  ├─ version.txt
 │  └─ Archive\<prior-version>\…
 ├─ 2025\                          ← Revit 2025 channel (net8)
@@ -30,6 +31,8 @@ TurboSuite ships a **separate DLL per Revit version** (net48 for Revit 2024, net
 ```
 
 Each version channel carries its own `version.txt` and `Archive\`, so the versions are published, versioned, and rolled back **independently**. The auto-update channel for each Revit version scans only its own subfolder.
+
+**Retire manifest.** `publish.ps1` copies repo-root `retire.txt` into each channel every publish; on update the client's `TurboSuiteUpdater` deletes the files it lists from the addins folder (deployment is additive, so a dropped dependency would otherwise linger forever). It is **cumulative / append-only** — a client can jump several versions in one update and only sees the current release's copy, so every filename ever retired stays listed; never prune. When you drop a dependency, append its output filename(s) to `retire.txt` (see `Updater/README.md`). The manifest only cleans **clients** — after publishing, delete any newly-orphaned files from the share subfolders by hand (leave `Archive\` snapshots intact, as they're rollback points that still need their original DLLs).
 
 ## Publishing — run once per Revit version
 

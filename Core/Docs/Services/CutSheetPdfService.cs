@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 
 using TurboSuite.Docs.Models;
 
@@ -10,6 +10,10 @@ namespace TurboSuite.Docs.Services;
 
 public static class CutSheetPdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static CutSheetPdfService() => PdfFontResolver.EnsureRegistered();
+
     private const double HeaderHeight = 79;
     private const double FooterHeight = 28;
     private const double Margin = 36;
@@ -63,7 +67,7 @@ public static class CutSheetPdfService
                         DrawFooter(gfx, page, settings);
                     }
                 }
-                catch (PdfSharpCore.Pdf.IO.PdfReaderException)
+                catch (PdfSharp.Pdf.IO.PdfReaderException)
                 {
                     // Owner-password-protected PDF — render placeholder page
                     var page = output.AddPage();
@@ -95,8 +99,10 @@ public static class CutSheetPdfService
 
     /// <summary>
     /// Draws an XPdfForm at the specified rectangle using a coordinate transform.
-    /// PdfSharpCore's DrawImage ignores width/height for XPdfForm objects,
-    /// so we apply TranslateTransform + ScaleTransform to get correct sizing.
+    /// DrawImage is passed the form's NATURAL dimensions and the TranslateTransform +
+    /// ScaleTransform does all the sizing — so this is agnostic to whether the renderer
+    /// honors width/height on DrawImage(XPdfForm,...) (PdfSharpCore ignored them; PDFsharp
+    /// 6.x honors them, but here the args equal the natural size, so the result is identical).
     /// </summary>
     private static void DrawScaledForm(XGraphics gfx, XPdfForm form, double x, double y, double width, double height)
     {
@@ -133,7 +139,7 @@ public static class CutSheetPdfService
 
         // Center: project name + date
         double centerX = pageWidth / 2;
-        var fontBold = new XFont("Segoe UI", 11, XFontStyle.Bold);
+        var fontBold = new XFont("Segoe UI", 11, XFontStyleEx.Bold);
         var fontDate = new XFont("Segoe UI Light", 9);
         var dateBrush = new XSolidBrush(XColor.FromGrayScale(0.4));
 
@@ -144,7 +150,7 @@ public static class CutSheetPdfService
 
         // Right: type mark only (no label)
         double rightEdge = pageWidth - Margin;
-        var fontTypeMark = new XFont("Segoe UI", 28, XFontStyle.Bold);
+        var fontTypeMark = new XFont("Segoe UI", 28, XFontStyleEx.Bold);
         gfx.DrawString(typeMark, fontTypeMark, XBrushes.Black,
             new XPoint(rightEdge, 24), XStringFormats.TopRight);
 

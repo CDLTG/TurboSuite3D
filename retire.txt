@@ -1,0 +1,24 @@
+# TurboSuite retire manifest — files the updater deletes from a client's
+#   Addins\{year}\TurboSuite\  folder on update, if present.
+#
+# WHY THIS IS CUMULATIVE / APPEND-ONLY:
+#   The share hosts one current release per channel; a client can jump several
+#   versions in a single update and only ever stages THIS file, never the
+#   manifests of the releases it skipped. So every filename ever retired must
+#   stay listed here, or a slow-to-update client would never get cleaned.
+#   Each line is an idempotent "delete if present" — a client that removed a
+#   file two releases ago just no-ops on it. Never prune; the cost of a stale
+#   line is one harmless no-op per update.
+#
+# RULES (enforced by the updater, see Updater/Program.cs):
+#   - One bare filename per line. No paths, no wildcards, no "..".
+#   - '#' starts a comment; blank lines ignored.
+#   - Critical files (TurboSuite.dll, TurboSuite.addin, the updater, version.txt,
+#     config.json) are hard-denied there and cannot be retired via this file.
+#   - Do NOT list SixLabors.Fonts.dll — it is a live ClosedXML dependency, not stale.
+#
+# When you drop a dependency, append its output filename(s) below.
+
+# Dependencies-1 (v1.4.x → PDFsharp 6.2.4 migration): PdfSharpCore + its ImageSharp dep dropped.
+PdfSharpCore.dll
+SixLabors.ImageSharp.dll

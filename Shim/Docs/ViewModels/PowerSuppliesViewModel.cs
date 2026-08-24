@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Win32;
-using PdfSharpCore.Pdf;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 using TurboSuite.Docs.Services;
 using TurboSuite.Shared.ViewModels;

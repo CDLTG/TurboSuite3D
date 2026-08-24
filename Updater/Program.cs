@@ -75,7 +75,16 @@ try
         "TurboSuiteUpdater.exe", "TurboSuiteUpdater.dll", "TurboSuiteUpdater.runtimeconfig.json",
         "version.txt"
     };
-    var skipFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".complete" };
+    // retire.txt is a control file (processed below), never copied into the addins folder.
+    var skipFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".complete", "retire.txt" };
+
+    // Files the retire manifest may NEVER delete, even if listed (defense against a typo):
+    // the live add-in + update machinery, plus live third-party deps that are easy to confuse
+    // with a retired one (SixLabors.Fonts is a live ClosedXML dep, NOT the retired ImageSharp).
+    var retireDenyList = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "TurboSuite.dll", "TurboSuite.addin", "config.json", "SixLabors.Fonts.dll",
+    };
 
     var versionDir = Path.GetDirectoryName(versionFile);
     if (versionDir is not null && !Directory.Exists(versionDir))
@@ -111,6 +120,35 @@ try
         var addinsParent = Path.GetDirectoryName(dest);
         if (addinsParent is not null)
             File.Copy(stagedAddin, Path.Combine(addinsParent, "TurboSuite.addin"), overwrite: true);
+    }
+
+    // Process the retire manifest: delete stale files listed in retire.txt from the addins
+    // folder. Runs AFTER the copy above, so a file is only removed once its replacement (or the
+    // version that no longer needs it) is already in place. Cumulative + idempotent by design —
+    // see retire.txt. Best-effort: a cleanup miss must never fail the update.
+    var retireManifest = Path.Combine(source, "retire.txt");
+    if (File.Exists(retireManifest))
+    {
+        foreach (var rawLine in File.ReadAllLines(retireManifest))
+        {
+            var name = rawLine.Trim();
+            if (name.Length == 0 || name.StartsWith("#")) continue;
+            // Bare filename only — reject anything with path components or traversal.
+            if (name != Path.GetFileName(name) || name is "." or "..") continue;
+            if (retireDenyList.Contains(name) || localAppDataFiles.Contains(name)) continue;
+
+            var target = Path.Combine(dest, name);
+            if (!File.Exists(target)) continue;
+            try
+            {
+                File.Delete(target);
+                Console.WriteLine($"Retired stale file: {name}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Could not retire {name} (will retry next update): {ex.Message}");
+            }
+        }
     }
 
     // Clean up staging folder

@@ -3,8 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
@@ -13,6 +13,10 @@ namespace TurboSuite.Docs.Services;
 
 public static class PanelSchedulePdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static PanelSchedulePdfService() => PdfFontResolver.EnsureRegistered();
+
     #region Layout Constants
 
     // ── Page (letter portrait) ──
@@ -62,16 +66,16 @@ public static class PanelSchedulePdfService
         DocsSettings settings)
     {
         // Fonts
-        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
         var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
         var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
         var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
 
         var fontRow            = new XFont("Segoe UI", RowFontSize);
-        var fontRowBold        = new XFont("Segoe UI", RowFontSize, XFontStyle.Bold);
-        var fontColHeader      = new XFont("Segoe UI", HeaderFontSize, XFontStyle.Bold);
-        var fontPanelHeader    = new XFont("Segoe UI", 10, XFontStyle.Bold);
-        var fontModuleHeader   = new XFont("Segoe UI", 9, XFontStyle.Bold);
+        var fontRowBold        = new XFont("Segoe UI", RowFontSize, XFontStyleEx.Bold);
+        var fontColHeader      = new XFont("Segoe UI", HeaderFontSize, XFontStyleEx.Bold);
+        var fontPanelHeader    = new XFont("Segoe UI", 10, XFontStyleEx.Bold);
+        var fontModuleHeader   = new XFont("Segoe UI", 9, XFontStyleEx.Bold);
         var fontPageNum        = new XFont("Segoe UI Light", 7);
 
         // Column layout for load rows (5 columns)

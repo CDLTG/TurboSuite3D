@@ -259,6 +259,15 @@ foreach ($updaterFile in $updaterFiles) {
     }
 }
 
+# Copy the retire manifest (cumulative "delete these stale files on update" list). The client
+# stages it with everything else; TurboSuiteUpdater processes and removes it. Same file for all
+# three channels — the managed dependency set is identical across them.
+$retireFile = Join-Path $projectRoot "retire.txt"
+if (Test-Path $retireFile) {
+    Copy-Item $retireFile -Destination $versionShare -Force
+    Write-Host "  Copied retire.txt"
+}
+
 # Copy the combined installer to the share ROOT (shared across versions)
 if (Test-Path $installerPublishDir) {
     Get-ChildItem -Path $installerPublishDir -File | ForEach-Object {

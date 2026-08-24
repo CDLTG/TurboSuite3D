@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 using TurboSuite.Zones.Models;
 
@@ -10,6 +10,10 @@ namespace TurboSuite.Docs.Services;
 
 public static class BomPdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static BomPdfService() => PdfFontResolver.EnsureRegistered();
+
     #region Layout Constants
 
     // ── Page (always letter) ──
@@ -56,13 +60,13 @@ public static class BomPdfService
         DocsSettings settings)
     {
         // Fonts
-        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
         var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
         var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
         var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
 
         var fontRow        = new XFont("Segoe UI", RowFontSize);
-        var fontCategory   = new XFont("Segoe UI", CategoryFontSize, XFontStyle.Bold);
+        var fontCategory   = new XFont("Segoe UI", CategoryFontSize, XFontStyleEx.Bold);
         var fontPageNum    = new XFont("Segoe UI Light", 7);
 
         var categoryRulePen = new XPen(XColor.FromGrayScale(0.85), 0.5);
@@ -190,7 +194,7 @@ public static class BomPdfService
                     StartNewPage();
 
                 double centerY = y + CategoryHeight / 2;
-                gfx!.DrawString(item.Description, fontCategory, XBrushes.Black,
+                gfx!.DrawString(item.Description ?? string.Empty, fontCategory, XBrushes.Black,
                     new XPoint(MarginLeft + ColumnPadding, centerY), vertCenter);
 
                 y += CategoryHeight;

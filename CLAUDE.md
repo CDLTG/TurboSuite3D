@@ -196,5 +196,5 @@ In `TurboSuite.Tab`, `Autodesk.Revit.DB.Color` conflicts with `System.Windows.Me
 
 - `RevitAPI.dll`, `RevitAPIUI.dll`, `Xceed.Wpf.AvalonDock.dll` (from the matching Revit 2024/2025/2026 install, per shim)
 - `ACadSharp` (NuGet) — DWG/DXF reading for TurboName
-- `PdfSharpCore` (NuGet) — PDF operations for TurboDocs
+- `PDFsharp` 6.x (NuGet) — PDF operations for TurboDocs. Core targets `netstandard2.0` (so net48 rides that path); it has **no built-in system-font resolution**, so `Core/Docs/Services/PdfFontResolver.cs` supplies a Segoe UI / Segoe UI Light `IFontResolver`, registered idempotently via a static ctor in each PDF service. (Replaced `PdfSharpCore`, which dragged in the vulnerable `SixLabors.ImageSharp`.)
 - .NET Framework 4.8 (Revit 2024 shim) / .NET 8.0-windows (Revit 2025 shim) / .NET 10.0-windows (Revit 2026 shim) / Core multi-targets all three / WPF

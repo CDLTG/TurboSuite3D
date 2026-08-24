@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 using TurboSuite.Driver.Models;
 
@@ -21,6 +21,10 @@ namespace TurboSuite.Docs.Services;
 /// </summary>
 public static class RPSBreakdownPdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static RPSBreakdownPdfService() => PdfFontResolver.EnsureRegistered();
+
     // ── Page (letter portrait only) ──
     private const double PageWidth  = 8.5 * 72;   // 612 pt
     private const double PageHeight = 11.0 * 72;  // 792 pt
@@ -108,15 +112,15 @@ public static class RPSBreakdownPdfService
         double rightColX     = MarginLeft + leftColWidth;
         double rightColWidth = FixturesColumnWidth;
 
-        var fontHeader   = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeader   = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
         var fontSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
-        var fontCircuit  = new XFont("Segoe UI", CircuitFontSize, XFontStyle.Bold);
-        var fontType     = new XFont("Segoe UI", TypeFontSize, XFontStyle.Bold);
+        var fontCircuit  = new XFont("Segoe UI", CircuitFontSize, XFontStyleEx.Bold);
+        var fontType     = new XFont("Segoe UI", TypeFontSize, XFontStyleEx.Bold);
         var fontMeta     = new XFont("Segoe UI", MetaFontSize);
-        var fontSub      = new XFont("Segoe UI", SubFontSize, XFontStyle.Bold);
+        var fontSub      = new XFont("Segoe UI", SubFontSize, XFontStyleEx.Bold);
         var fontSegment  = new XFont("Segoe UI", SegmentFontSize);
-        var fontFixTitle = new XFont("Segoe UI", TypeFontSize, XFontStyle.Bold);
-        var fontFixHead  = new XFont("Segoe UI", FixtureFontSize, XFontStyle.Bold);
+        var fontFixTitle = new XFont("Segoe UI", TypeFontSize, XFontStyleEx.Bold);
+        var fontFixHead  = new XFont("Segoe UI", FixtureFontSize, XFontStyleEx.Bold);
         var fontFixCell  = new XFont("Segoe UI", FixtureFontSize);
         var fontPageNum  = new XFont("Segoe UI Light", 7);
 

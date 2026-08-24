@@ -205,4 +205,4 @@ Exports fixture quantities for quoting. Every lighting/electrical instance is co
 - A **"Data Sheet URL"** shared type parameter on fixture/device types for Cut Sheets (direct URL to a PDF spec sheet)
 
 ### Software
-- **PdfSharpCore** (NuGet, MIT license) — PDF generation, reading, page stamping, merging, and bookmarks
+- **PDFsharp** 6.x (NuGet, MIT license) — PDF generation, reading, page stamping, merging, and bookmarks. Its core has no built-in font resolution, so `Core/Docs/Services/PdfFontResolver.cs` supplies a Segoe UI / Segoe UI Light `IFontResolver` (registered via a static ctor in each PDF service). Fonts are resolved from `%WINDIR%\Fonts` — a safe assumption inside Revit on Windows.

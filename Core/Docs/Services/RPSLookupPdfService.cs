@@ -2,14 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 
 namespace TurboSuite.Docs.Services;
 
 public static class RPSLookupPdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static RPSLookupPdfService() => PdfFontResolver.EnsureRegistered();
+
     // ── Page (Large = construction strip, Small = 8.5x11 letter) ──
     // The strip's width is content-fit at generation time (see GeneratePages), so no
     // fixed large width constant — only its 28.5" height is pinned here.
@@ -110,10 +114,10 @@ public static class RPSLookupPdfService
         double marginTop    = useLargeFormat ? CompactMargin : MarginTop;
         double marginBottom = useLargeFormat ? CompactMargin : MarginBottom;
 
-        var fontHeader   = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeader   = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
         var fontSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
         var fontCompactTitle = new XFont("Segoe UI", CompactTitleFontSize);
-        var fontColHead  = new XFont("Segoe UI", cellFontSize, XFontStyle.Bold);
+        var fontColHead  = new XFont("Segoe UI", cellFontSize, XFontStyleEx.Bold);
         var fontCell     = new XFont("Segoe UI", cellFontSize);
         var fontPageNum  = new XFont("Segoe UI Light", 7);
 

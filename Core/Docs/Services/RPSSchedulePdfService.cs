@@ -2,14 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 
 namespace TurboSuite.Docs.Services;
 
 public static class RPSSchedulePdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static RPSSchedulePdfService() => PdfFontResolver.EnsureRegistered();
+
     #region Layout Constants
 
     // ── Page (Large = 8.5x28.5 construction strip, Small = 8.5x11 letter) ──
@@ -113,13 +117,13 @@ public static class RPSSchedulePdfService
         double contentWidth = pageWidth - MarginRight - contentLeft;
 
         // Fonts
-        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
         var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
         var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
         var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
 
-        var fontTypeMark     = new XFont("Segoe UI", TypeMarkFontSize, XFontStyle.Bold);
-        var fontCatalog      = new XFont("Segoe UI", CatalogFontSize, XFontStyle.Bold);
+        var fontTypeMark     = new XFont("Segoe UI", TypeMarkFontSize, XFontStyleEx.Bold);
+        var fontCatalog      = new XFont("Segoe UI", CatalogFontSize, XFontStyleEx.Bold);
         var fontManufacturer = new XFont("Segoe UI", ManufacturerFontSize);
         var fontDesc         = new XFont("Segoe UI", DescriptionFontSize);
         var fontSpecLabel    = new XFont("Segoe UI", SpecLabelFontSize);
@@ -132,7 +136,7 @@ public static class RPSSchedulePdfService
         var brushNote       = new XSolidBrush(NoteColor);
         var brushSpecLabel  = new XSolidBrush(SpecLabelColor);
         var brushSpecValue  = new XSolidBrush(SpecValueColor);
-        var fontClassHeader = new XFont("Segoe UI", ClassHeaderFontSize, XFontStyle.Regular);
+        var fontClassHeader = new XFont("Segoe UI", ClassHeaderFontSize, XFontStyleEx.Regular);
         var penClassRule    = new XPen(XColor.FromGrayScale(0.75), 0.25);
 
         // ── Measurement pass: dynamically position the 2 spec sections ──
@@ -421,7 +425,7 @@ public static class RPSSchedulePdfService
         if (measuredWidth > maxTextWidth)
         {
             double scale = maxTextWidth / measuredWidth;
-            tmFont = new XFont("Segoe UI", TypeMarkFontSize * scale, XFontStyle.Bold);
+            tmFont = new XFont("Segoe UI", TypeMarkFontSize * scale, XFontStyleEx.Bold);
         }
 
         var typeMarkRect = new XRect(MarginLeft, entryTop, TypeMarkBoxWidth, typeMarkBoxHeight);
@@ -444,7 +448,7 @@ public static class RPSSchedulePdfService
             if (catWidth > catalogMaxWidth)
             {
                 double scale = catalogMaxWidth / catWidth;
-                catFont = new XFont("Segoe UI", CatalogFontSize * scale, XFontStyle.Bold);
+                catFont = new XFont("Segoe UI", CatalogFontSize * scale, XFontStyleEx.Bold);
             }
             gfx.DrawString(item.CatalogNumber, catFont, XBrushes.Black,
                 new XPoint(contentLeft, lineY + BaselineOffset));

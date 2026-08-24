@@ -2,14 +2,18 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 
 namespace TurboSuite.Docs.Services;
 
 public static class NotesPdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static NotesPdfService() => PdfFontResolver.EnsureRegistered();
+
     #region Layout Constants
 
     // ── Page (letter portrait) ──
@@ -68,10 +72,10 @@ public static class NotesPdfService
         string projectNumber = "",
         bool isFixturePackage = true)
     {
-        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
         var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
         var fontNote           = new XFont("Segoe UI", NoteFontSize);
-        var fontNoteNumber     = new XFont("Segoe UI", NoteFontSize, XFontStyle.Bold);
+        var fontNoteNumber     = new XFont("Segoe UI", NoteFontSize, XFontStyleEx.Bold);
 
 
         // Load logo
@@ -309,9 +313,9 @@ public static class NotesPdfService
         }
 
         // ── Draw centered text block (slightly above vertical center) ──
-        var fontProjectName  = new XFont("Segoe UI", CoverProjectNameFontSize, XFontStyle.Bold);
+        var fontProjectName  = new XFont("Segoe UI", CoverProjectNameFontSize, XFontStyleEx.Bold);
         var fontLocation     = new XFont("Segoe UI", CoverLocationFontSize);
-        var fontSubtitle     = new XFont("Segoe UI", CoverSubtitleFontSize, XFontStyle.Bold);
+        var fontSubtitle     = new XFont("Segoe UI", CoverSubtitleFontSize, XFontStyleEx.Bold);
         var fontDate         = new XFont("Segoe UI", CoverDateFontSize);
         var fontProjectNum   = new XFont("Segoe UI", CoverProjectNumberFontSize);
 

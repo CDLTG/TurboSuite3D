@@ -2,14 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using TurboSuite.Docs.Models;
 
 namespace TurboSuite.Docs.Services;
 
 public static class LoadsPdfService
 {
+    // Install the PDFsharp font resolver before any XFont/XGraphics render (PDFsharp 6.x core
+    // has no built-in system-font resolution). Idempotent; runs once before any static entry.
+    static LoadsPdfService() => PdfFontResolver.EnsureRegistered();
+
     #region Layout Constants
 
     // ── Page (always letter) ──
@@ -51,13 +55,13 @@ public static class LoadsPdfService
         DocsSettings settings)
     {
         // Fonts
-        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyle.Bold);
+        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
         var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
         var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
         var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
 
         var fontRow       = new XFont("Segoe UI", RowFontSize);
-        var fontColHeader = new XFont("Segoe UI", HeaderFontSize, XFontStyle.Bold);
+        var fontColHeader = new XFont("Segoe UI", HeaderFontSize, XFontStyleEx.Bold);
         var fontPageNum   = new XFont("Segoe UI Light", 7);
 
         var gridPen = new XPen(XColor.FromGrayScale(0.85), 0.5);

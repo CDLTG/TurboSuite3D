@@ -128,7 +128,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2024, 2025, or 2026, depending on the channel)
 - Xceed.Wpf.AvalonDock.dll (ships with Revit) — used by TurboTab for document tab coloring
 - [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation
-- [PdfSharpCore](https://github.com/ststeiger/PdfSharpCore) (NuGet) — PDF generation, reading, stamping, and merging. Used by TurboDocs.
+- [PDFsharp](https://github.com/empira/PDFsharp) (NuGet) — PDF generation, reading, stamping, and merging. Used by TurboDocs.
 - .NET Framework 4.8 (Revit 2024) / .NET 8.0-windows (Revit 2025) / .NET 10.0-windows (Revit 2026) / WPF
 
 ## Building from Source
