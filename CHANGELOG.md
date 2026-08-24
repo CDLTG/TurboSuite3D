@@ -7,6 +7,28 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.4.3] — 2026-08-24
+
+### Added
+- TurboSnoop: selection-aware host report — select a hosted family to see what it is hosted to, with a churn/orphan risk tier.
+- TurboSchedule: remembers the last-selected Type Mark across reopens; adds a footer Close button.
+- TurboDocs: stamps the release date (yyyy.MM.dd) on footered deliverables.
+- TurboDALI (experimental, gated off in shipped builds): drag-to-reorder a loop's member zones; driver/decoder device coloring in the Control-Zone overlay.
+
+### Changed
+- TurboDocs: two-level Panel Schedule PDF bookmarks (Location > Panel).
+- TurboDocs: Load Schedule reads RELAY for switched loads.
+- TurboDocs: revised default Power Supplies spec notes.
+- TurboZones: shorter BOM subsystem warnings so they fit unscrolled; full-row highlight for the active circuit in Load/Shade Names.
+- TurboDALI (experimental, gated off): addresses per addressable unit rather than per circuit.
+- TurboDMX (experimental, gated off): one electrical circuit per Control Zone.
+
+### Fixed
+- TurboDMX (experimental, gated off): suppress the expected over-amp warning on zone circuits.
+
+### Security
+- TurboDocs: migrated PDF generation from PdfSharpCore to PDFsharp 6.2.4, dropping the transitive SixLabors.ImageSharp 1.0.4 dependency and its 7 GHSA advisories; the build's audit suppressions are removed. A new updater retire manifest sweeps the stale PdfSharpCore/ImageSharp DLLs from already-installed clients on their next update.
+
 ## [1.4.2] — 2026-08-18
 
 ### Added
@@ -210,6 +232,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.4.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.3
 [1.4.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.2
 [1.4.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.1
 [1.4.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.0
