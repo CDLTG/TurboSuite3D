@@ -4,3 +4,11 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    ignore:
+      # System.Text.Json is a net48-only PackageReference in Core, deliberately
+      # pinned to track the net8 in-box (shared-framework) version so both TFMs
+      # serialize identically (see Core/TurboSuite.Core.csproj). A major bump
+      # (9.x/10.x) would make the Revit 2024 net48 build diverge from the Revit
+      # 2025 net8 build. Allow 8.0.x servicing patches; block major bumps.
+      - dependency-name: "System.Text.Json"
+        update-types: ["version-update:semver-major"]

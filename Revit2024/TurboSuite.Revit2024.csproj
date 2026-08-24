@@ -28,10 +28,10 @@
     <Using Remove="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="ACadSharp" Version="3.6.35" />
+    <PackageReference Include="ACadSharp" Version="3.7.1" />
     <!-- ClosedXML — see note in Core/TurboSuite.Core.csproj (0.105.0's formula
          parser is satisfied by the LET-rewritten Counts formulas). -->
-    <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="PDFsharp" Version="6.2.4" />
     <!-- Pin System.Memory to the highest version required across the net48 graph
          (ACadSharp 3.6.35 wants >= 4.6.3; ClosedXML wants >= 4.5.4) to avoid an
