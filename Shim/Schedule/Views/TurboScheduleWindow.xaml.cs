@@ -25,12 +25,23 @@ namespace TurboSuite.Schedule.Views
             MinHeight = ActualHeight;
             SizeToContent = SizeToContent.Manual;
 
+            // A non-empty Sync report is surfaced in a dialog the View owns (Core stays dialog-free).
+            if (DataContext is ScheduleMainViewModel vm)
+                vm.ReportRequested += OnReportRequested;
+
             // WindowStartupLocation="CenterScreen" positions the window before SizeToContent="Height"
             // has resolved the final height, so it lands too high. Re-center against the work area now
             // that ActualWidth/Height are known.
             var area = SystemParameters.WorkArea;
             Left = area.Left + (area.Width - ActualWidth) / 2;
             Top = area.Top + (area.Height - ActualHeight) / 2;
+        }
+
+        // Sync report dialog — unmatched Type Marks, ignored columns, skipped/warned cells. Shown only
+        // when the report has content; the status line already carries the one-line summary.
+        private void OnReportRequested(string title, string body)
+        {
+            MessageBox.Show(this, body, title, MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         // Close-time guard: prompt when dirty. Yes saves (async) and keeps the window open so the

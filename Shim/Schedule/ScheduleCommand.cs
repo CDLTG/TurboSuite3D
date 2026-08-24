@@ -61,7 +61,8 @@ namespace TurboSuite.Schedule
 
                 var workQueue = new RevitWorkQueue("TurboSchedule Error", "TurboSchedule Work Queue");
                 var writer = new ScheduleWriterService(doc);
-                var viewModel = new ScheduleMainViewModel(pages, workQueue, writer,
+                var gateway = new ScheduleWorkbookGateway(doc, workQueue, writer);
+                var viewModel = new ScheduleMainViewModel(pages, workQueue, writer, gateway,
                     _lastTypeMark, _lastKind);
 
                 var window = new TurboScheduleWindow { DataContext = viewModel };

@@ -35,6 +35,43 @@ An in-app clipboard (not the OS clipboard) copies a whole type or a single secti
 
 ⟨varies⟩ and locked fields are excluded at copy time, so a paste never overwrites a target with a non-value.
 
+## Excel round-trip (Sync workbook)
+
+For designers who don't run Revit, TurboSchedule keeps a **per-project `.xlsx` workbook** that they edit and a Revit user reconciles. It's driven by the single **Sync workbook** footer button — the workbook is the **source of truth for spec fields**, so one press does both directions:
+
+1. **Pull** the designers' edited cells into the model (workbook → model), in one transaction.
+2. **Refresh** the workbook from the now-current model (model → workbook): append rows for newly-placed Type Marks, flag/purge removed ones.
+
+The **first** press (no workbook yet) prompts a Save-As beside the `.rvt`, creates the workbook, and seeds both sheets — nothing to pull. The chosen path is remembered per project (its own ExtensibleStorage schema), so later presses reuse it silently. The button is disabled while the form has unsaved in-form edits (Save or Discard first) — otherwise the pull/refresh would fight your unsaved changes.
+
+**Consequence to communicate:** once the workbook exists, spec fields edited *directly* in the form are overwritten by the workbook on the next Sync — last-writer-wins, no preview.
+
+### Workbook layout
+
+- Two sheets, **one row per Type Mark**: `Fixtures` and `Drivers` (sheet = Kind). A hidden `_meta` sheet records project path / Revit version / timestamp (drives the wrong-project warning).
+- Three-row header: colored **section band** / **field label** / **units**. Type Mark column and the header rows are frozen; the sheet is protected with only the editable cells unlocked.
+- Catalog #, Catalog Qty, and Notes are **collapsible column groups** (`[+]/[−]`). `Remote Power Supply` shows as **`RPS`** (a display alias normalized back on read). Dropdowns on Yes/No and Dimming Protocol.
+- Numbers are stored **bare** where the unit is a clean scalar (unit lives in the header row); length/compound units (Ceiling Thickness, Power/Length, Efficacy) stay verbatim.
+
+### Cell states (color-only)
+
+| Fill | Meaning |
+|------|---------|
+| dark grey | parameter **missing** (n/a) — locked |
+| light grey | parameter **locked** (read-only), and the Type Mark key column |
+| amber | **varies** across instances — edit to unify, blank to keep |
+| red | Type Mark **no longer placed** in the model |
+
+A **blank cell = skip** (no change). To deliberately empty a String field, type the `<clear>` sentinel.
+
+### Removed types — one-cycle grace
+
+A Type Mark deleted in Revit turns **red** on the next Sync (a warning). If it's *still* gone on the following Sync its row is **deleted**; if it returned, the red clears. This bounds accumulation — at the cost of losing that row's authored spec if a deletion isn't caught within the cycle.
+
+### The Sync report
+
+A dialog appears only when there's something worth seeing — a **blocking** duplicate Type Mark (aborts the whole sync), junk in a Yes/No cell, a bad Catalog #/Qty token (written anyway, warned), a value the writer couldn't apply, or a locked cell someone overrode. A clean sync just updates the status line (e.g. `Updated 4 types, 9 fields; workbook +2 new`). Unchanged/empty locked cells, unmatched rows, and unknown columns are handled silently.
+
 ## Dependencies
 
 | Requirement | Purpose |

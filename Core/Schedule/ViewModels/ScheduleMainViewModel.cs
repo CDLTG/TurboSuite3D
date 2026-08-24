@@ -1,7 +1,9 @@
 #nullable disable
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Windows.Input;
 using TurboSuite.Abstractions;
 using TurboSuite.Schedule.Models;
 using TurboSuite.Schedule.Services;
@@ -18,21 +20,28 @@ public class ScheduleMainViewModel : ViewModelBase
 {
     private readonly IRevitWorkQueue _workQueue;
     private readonly IScheduleWriter _writer;
+    private readonly IScheduleWorkbookGateway _gateway;
     private SpecClipboard _clipboard;
     private FixtureTypeSpec _currentPage;
     private bool _isBusy;
     private string _statusMessage = "";
 
+    /// <summary>Raised when a Sync produced a non-empty report; the View shows it in a dialog
+    /// (title, body). Core stays dialog-free.</summary>
+    public event Action<string, string> ReportRequested;
+
     public ScheduleMainViewModel(IReadOnlyList<FixtureTypeSpec> pages,
         IRevitWorkQueue workQueue, IScheduleWriter writer,
+        IScheduleWorkbookGateway gateway = null,
         string initialTypeMark = null, PageKind? initialKind = null)
     {
         _workQueue = workQueue;
         _writer = writer;
+        _gateway = gateway;
 
         Pages = new ObservableCollection<FixtureTypeSpec>(pages);
         foreach (var p in Pages)
-            p.DirtyChanged += _ => OnDirtyChanged();
+            p.DirtyChanged += PageDirtyChanged;
 
         // Restore the last-selected type within this Revit session, falling back to the
         // first page if it no longer exists (renamed/deleted type, different project).
@@ -44,6 +53,10 @@ public class ScheduleMainViewModel : ViewModelBase
         NextCommand = new RelayCommand(Next, () => CurrentIndex >= 0 && CurrentIndex < Pages.Count - 1);
         SaveCommand = new RelayCommand(Save, () => !IsBusy && HasUnsavedChanges);
         DiscardCommand = new RelayCommand(DiscardAll, () => !IsBusy && HasUnsavedChanges);
+
+        // One bidirectional reconcile. Dirty-guarded: it both pulls workbook edits into the model and
+        // refreshes the workbook from the model, so unsaved in-form edits must be resolved first.
+        SyncWorkbookCommand = new RelayCommand(SyncWorkbook, () => _gateway != null && !IsBusy && !HasUnsavedChanges);
 
         CopyTypeCommand = new RelayCommand(CopyType, () => _currentPage != null);
         CopySectionCommand = new RelayCommand<SpecSection>(CopySection, _ => _currentPage != null);
@@ -79,7 +92,14 @@ public class ScheduleMainViewModel : ViewModelBase
     public bool IsBusy
     {
         get => _isBusy;
-        set { if (SetProperty(ref _isBusy, value)) OnPropertyChanged(nameof(IsEnabled)); }
+        set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(IsEnabled));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
     }
     public bool IsEnabled => !_isBusy;
 
@@ -93,10 +113,13 @@ public class ScheduleMainViewModel : ViewModelBase
     public RelayCommand NextCommand { get; }
     public RelayCommand SaveCommand { get; }
     public RelayCommand DiscardCommand { get; }
+    public RelayCommand SyncWorkbookCommand { get; }
     public RelayCommand CopyTypeCommand { get; }
     public RelayCommand<SpecSection> CopySectionCommand { get; }
     public RelayCommand PasteCommand { get; }
     public RelayCommand<SpecSection> PasteSectionCommand { get; }
+
+    private void PageDirtyChanged(FixtureTypeSpec _) => OnDirtyChanged();
 
     private void OnDirtyChanged()
     {
@@ -104,6 +127,7 @@ public class ScheduleMainViewModel : ViewModelBase
         OnPropertyChanged(nameof(DirtyCount));
         OnPropertyChanged(nameof(SaveLabel));
         OnPropertyChanged(nameof(UnsavedBadge));
+        CommandManager.InvalidateRequerySuggested(); // Update/Sync are dirty-gated
     }
 
     private void Prev()
@@ -275,5 +299,50 @@ public class ScheduleMainViewModel : ViewModelBase
                     OnDirtyChanged();
                 }
             });
+    }
+
+    // ── Workbook reconcile (model ⇄ .xlsx, one button) ──
+
+    private void SyncWorkbook()
+    {
+        if (_gateway == null || IsBusy || HasUnsavedChanges) return;
+        IsBusy = true;
+        StatusMessage = "Syncing workbook…";
+        _gateway.ReconcileWorkbook(
+            result =>
+            {
+                IsBusy = false;
+                if (result == null) { StatusMessage = "Sync failed."; return; }
+                if (result.Refreshed != null) RebuildPages(result.Refreshed);
+                StatusMessage = result.StatusLine();
+                if (result.HasReport)
+                    ReportRequested?.Invoke("TurboSchedule — Sync report", result.DetailBody());
+            },
+            error => { IsBusy = false; StatusMessage = error; },
+            () => { IsBusy = false; StatusMessage = "Sync cancelled."; });
+    }
+
+    /// <summary>Swap in the freshly re-collected pages after a Sync, preserving the current selection by
+    /// (Type Mark, Kind). Old dirty-subscriptions are detached and new ones attached.</summary>
+    private void RebuildPages(IReadOnlyList<FixtureTypeSpec> refreshed)
+    {
+        var prevMark = _currentPage?.TypeMark;
+        var prevKind = _currentPage?.Kind;
+
+        foreach (var p in Pages) p.DirtyChanged -= PageDirtyChanged;
+        Pages.Clear();
+        foreach (var p in refreshed)
+        {
+            Pages.Add(p);
+            p.DirtyChanged += PageDirtyChanged;
+        }
+
+        CurrentPage =
+            Pages.FirstOrDefault(p => p.TypeMark == prevMark && p.Kind == prevKind)
+            ?? Pages.FirstOrDefault();
+
+        OnPropertyChanged(nameof(CurrentIndex));
+        OnPropertyChanged(nameof(PagePositionText));
+        OnDirtyChanged();
     }
 }

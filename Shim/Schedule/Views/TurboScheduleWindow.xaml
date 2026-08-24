@@ -406,10 +406,13 @@
         <Border Grid.Row="4" Height="1" Background="{StaticResource SeparatorBrush}" Margin="10,8,10,0"/>
 
         <!-- ── Action bar ── -->
-        <Grid Grid.Row="5" Margin="10,8,10,10">
-            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
-                       Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <DockPanel Grid.Row="5" Margin="10,8,10,10" LastChildFill="True">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <Button Content="Sync workbook" Width="132" Height="28"
+                        Style="{StaticResource RevitButtonStyle}" Command="{Binding SyncWorkbookCommand}"
+                        ToolTip="Reconcile with the project Excel workbook: pull the designers' edits into the model, then refresh the workbook from the model (add new Type Marks, flag/purge removed ones). First run creates the workbook. Disabled while there are unsaved edits."/>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Discard" Width="90" Height="28" Margin="0,0,8,0"
                         Style="{StaticResource RevitButtonStyle}" Click="DiscardButton_Click"
                         IsEnabled="{Binding HasUnsavedChanges}"/>
@@ -418,6 +421,8 @@
                 <Button Content="Close" Width="80" Height="28" Margin="8,0,0,0"
                         Style="{StaticResource RevitButtonStyle}" Click="CloseButton_Click"/>
             </StackPanel>
-        </Grid>
+            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center" Margin="12,0"
+                       Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
     </Grid>
 </Window>
