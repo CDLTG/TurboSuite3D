@@ -530,9 +530,11 @@ public class WireCommand : IExternalCommand
         // point from its connector to a chosen END when the fixture is linear, then let the SAME
         // routing decision below (off-axis corner/S-spline, else on-axis arc) draw the wire between
         // those points — so an end-to-end run picks its own shape instead of a forced arc. A
-        // non-linear fixture (square downlight) keeps its connector as the routing point; switches
-        // stay deferred, keeping their existing center-routed, nudged-vertex behavior. The real
-        // connectors are never touched — the chosen ends ride the endOffset -> SetVertex hook.
+        // non-linear fixture (square downlight) keeps its connector as the routing point. A switch is
+        // excluded from end-shifting (its per-fixture linX guard requires switchOffsetX == null), but
+        // its linear PARTNER still end-routes — the switch stays at its connector and keeps its usual
+        // nudge via the zero-shift fallback below. The real connectors are never touched — the chosen
+        // ends ride the endOffset -> SetVertex hook.
         View view = doc.ActiveView;
         bool lin1 = TryGetLongAxis(fixture1, view, out XYZ longDir1, out double half1) && switchOffset1 == null;
         bool lin2 = TryGetLongAxis(fixture2, view, out XYZ longDir2, out double half2) && switchOffset2 == null;
