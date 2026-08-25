@@ -21,6 +21,8 @@ namespace TurboSuite.Tests.Schedule
         [InlineData("24°", "24")]
         [InlineData("90", "90")]        // unitless integer (e.g. CRI)
         [InlineData("-5 W", "-5")]
+        [InlineData("12 W/ft", "12")]   // pure ratio unit (Power/Length)
+        [InlineData("110 lm/W", "110")] // pure ratio unit (Efficacy)
         public void TryBare_Scalar_Succeeds(string display, string expectedBare)
         {
             Assert.True(SpecNumericText.TryBare(display, out var bare));
@@ -31,8 +33,6 @@ namespace TurboSuite.Tests.Schedule
         [InlineData("3\"")]             // inch mark
         [InlineData("0' - 3\"")]        // feet-inches
         [InlineData("1 1/2\"")]         // fractional inches
-        [InlineData("12 W/ft")]         // compound (Power/Length)
-        [InlineData("110 lm/W")]        // compound (Efficacy)
         public void TryBare_LengthOrCompound_FallsBackToVerbatim(string display)
         {
             Assert.False(SpecNumericText.TryBare(display, out var bare));
@@ -54,6 +54,8 @@ namespace TurboSuite.Tests.Schedule
         [InlineData("32.0", "32 W")]
         [InlineData("1000", "1,000 lm")] // thousands separator noise
         [InlineData("277", "277 V")]
+        [InlineData("95", "95 lm/W")]   // bare ratio cell vs unit-ful model (Efficacy round-trip)
+        [InlineData("12", "12 W/ft")]   // bare ratio cell vs unit-ful model (Power/Length)
         public void CompareKey_UnchangedScalar_KeysEqual(string cell, string modelDisplay)
         {
             Assert.Equal(SpecNumericText.CompareKey(modelDisplay), SpecNumericText.CompareKey(cell));
@@ -83,6 +85,7 @@ namespace TurboSuite.Tests.Schedule
 
         [Theory]
         [InlineData("32 W", "32")]
+        [InlineData("0 lm/W", "0")]     // ratio unit seeds bare (Efficacy — no lm/W to type)
         [InlineData("3\"", "3\"")]      // length seeds verbatim
         [InlineData("", "")]
         public void SeedCell_BaresScalar_KeepsVerbatimLength(string display, string expected)

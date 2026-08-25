@@ -51,7 +51,7 @@ The **first** press (no workbook yet) prompts a Save-As beside the `.rvt`, creat
 - Two sheets, **one row per Type Mark**: `Fixtures` and `Drivers` (sheet = Kind). A hidden `_meta` sheet records project path / Revit version / timestamp (drives the wrong-project warning).
 - Three-row header: colored **section band** / **field label** / **units**. Type Mark column and the header rows are frozen; the sheet is protected with only the editable cells unlocked.
 - Catalog #, Catalog Qty, and Notes are **collapsible column groups** (`[+]/[−]`). `Remote Power Supply` shows as **`RPS`** (a display alias normalized back on read). Dropdowns on Yes/No and Dimming Protocol.
-- Numbers are stored **bare** where the unit is a clean scalar (unit lives in the header row); length/compound units (Ceiling Thickness, Power/Length, Efficacy) stay verbatim.
+- Numbers are stored **bare** where the unit is a clean scalar — including pure ratio units like Power/Length (`W/ft`) and Efficacy (`lm/W`), so the user types just the number (unit lives in the header row). Only lengths/fractions (Ceiling Thickness — `0' - 3"`, `1 1/2"`) stay verbatim, where the leading number isn't the whole magnitude.
 
 ### Cell states (color-only)
 

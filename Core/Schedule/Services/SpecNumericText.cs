@@ -11,12 +11,13 @@ namespace TurboSuite.Schedule.Services;
 /// workbook stores a <b>bare</b> value where it cleanly can (<c>"32"</c>). Both the export seed and both
 /// sides of the Sync diff route through here so an untouched numeric cell never spuriously re-writes.
 ///
-/// <para><b>Bare vs. verbatim.</b> <see cref="TryBare"/> succeeds only for a clean <i>scalar</i> display —
-/// one leading number followed by a simple unit token (letters / <c>%</c> / <c>°</c>). It deliberately
-/// fails for length and compound units — <c>3"</c>, <c>0' - 3"</c>, <c>1 1/2"</c>, <c>12 W/ft</c>,
-/// <c>110 lm/W</c> — which fall back to verbatim (compared as strings). That fallback removes the whole
-/// round-trip risk class for lengths/compounds; scalars get number-tolerant comparison via
-/// <see cref="CompareKey"/>.</para>
+/// <para><b>Bare vs. verbatim.</b> <see cref="TryBare"/> succeeds for a clean <i>scalar</i> display —
+/// one leading number followed by a simple unit token (letters / <c>%</c> / <c>°</c> / <c>/</c>), so a
+/// pure ratio unit (<c>12 W/ft</c>, <c>110 lm/W</c>) counts as a scalar and gets number-tolerant
+/// comparison via <see cref="CompareKey"/> — the user can type the bare number, no unit. It deliberately
+/// fails only for lengths/fractions — <c>3"</c>, <c>0' - 3"</c>, <c>1 1/2"</c> — where the leading number
+/// isn't the whole magnitude; those fall back to verbatim (compared as strings), removing that round-trip
+/// risk class.</para>
 ///
 /// <para>Only <c>ValueKind == Numeric</c> fields go through this helper; Text/Boolean have their own paths.
 /// Write-back always uses <c>SetValueString</c>, which tolerates bare <i>or</i> unit-ful input — so this
@@ -29,10 +30,11 @@ public static class SpecNumericText
         @"^\s*(?<num>-?\d[\d,]*(?:\.\d+)?)\s*(?<rest>.*?)\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    // A "simple" unit token: letters, percent, or degree only. Empty is allowed (bare integer, no unit).
-    // Anything with a slash (compound: W/ft, lm/W), a foot/inch mark, a digit, a space, or a hyphen fails.
+    // A "simple" unit token: letters, percent, degree, or slash. Empty is allowed (bare integer, no unit).
+    // A pure ratio unit (W/ft, lm/W) qualifies — one leading number, then a unit token. What still fails is
+    // the real risk class: a foot/inch mark, a second digit, a space, or a hyphen (0' - 3", 1 1/2", 3").
     private static readonly Regex SimpleUnit = new(
-        @"^[A-Za-z%°]*$",
+        @"^[A-Za-z%°/]*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
