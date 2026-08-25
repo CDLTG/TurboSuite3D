@@ -536,8 +536,8 @@ public class WireCommand : IExternalCommand
         // nudge via the zero-shift fallback below. The real connectors are never touched — the chosen
         // ends ride the endOffset -> SetVertex hook.
         View view = doc.ActiveView;
-        bool lin1 = TryGetLongAxis(fixture1, view, out XYZ longDir1, out double half1) && switchOffset1 == null;
-        bool lin2 = TryGetLongAxis(fixture2, view, out XYZ longDir2, out double half2) && switchOffset2 == null;
+        bool lin1 = GeometryHelper.TryGetLinearLongAxis(fixture1, view, out XYZ longDir1, out double half1) && switchOffset1 == null;
+        bool lin2 = GeometryHelper.TryGetLinearLongAxis(fixture2, view, out XYZ longDir2, out double half2) && switchOffset2 == null;
 
         XYZ r1 = c1.Origin, r2 = c2.Origin;
         if (lin1 || lin2)
@@ -601,9 +601,6 @@ public class WireCommand : IExternalCommand
         return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, endOff1, endOff2);
     }
 
-    // Linear end-to-end gate tuning. A fixture counts as "linear" when its long extent is at least
-    // this many times its short extent (a light bar is ~24x; a 2x4 troffer ~2x stays center-wired).
-    private const double LinearRatioThreshold = 3.0;
     // Two end-pairs whose lengths are within this of the shortest are treated as tied, and the bulge
     // (tag/centroid intent) breaks the tie. This is what decides top-vs-bottom in the symmetric
     // side-by-side case, where the two candidate pairs are exactly equal.
@@ -654,32 +651,6 @@ public class WireCommand : IExternalCommand
     {
         if (longDir == null) return new[] { c };
         return new[] { c + longDir * half, c - longDir * half };
-    }
-
-    /// <summary>
-    /// Resolves a fixture's long-axis unit direction (from the BasisX angle, per CLAUDE.md) and its
-    /// half-length. Returns false when the fixture's extents can't be measured or it isn't clearly
-    /// linear (long/short ratio below <see cref="LinearRatioThreshold"/>).
-    /// </summary>
-    private static bool TryGetLongAxis(FamilyInstance f, View view, out XYZ longDir, out double halfLen)
-    {
-        longDir = XYZ.BasisX;
-        halfLen = 0;
-
-        // GetSymbolExtents: length = local-Y extent, width = local-X extent.
-        (double length, double width) = GeometryHelper.GetSymbolExtents(f, view, 0);
-        if (length <= 0 || width <= 0) return false;
-
-        double maxExt = Math.Max(length, width);
-        double minExt = Math.Min(length, width);
-        if (maxExt / minExt < LinearRatioThreshold) return false; // square-ish → not linear
-
-        double angle = GeometryHelper.GetTransformAngle(f.GetTransform());
-        XYZ localX = new XYZ(Math.Cos(angle), Math.Sin(angle), 0);
-        XYZ localY = new XYZ(-Math.Sin(angle), Math.Cos(angle), 0);
-        longDir = width >= length ? localX : localY; // long axis is whichever extent is larger
-        halfLen = maxExt / 2.0;
-        return true;
     }
 
     private static XYZ GetSwitchOffset(FamilyInstance fixture)

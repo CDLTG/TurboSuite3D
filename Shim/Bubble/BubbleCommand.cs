@@ -559,11 +559,39 @@ public class BubbleCommand : IExternalCommand
                 WirePlacementService.CreateWireWithOffsetEnd(doc, view, placement, wireTypeId, fixtureConnector);
             else if (isWallSconce && wallNormal != null)
                 WirePlacementService.CreateWireWithWallSconceOffset(doc, view, placement, wireTypeId, fixtureConnector, wallNormal, fixture);
+            else if (TryGetLinearWireEnd(fixture, view, fixtureConnector, placement, out XYZ linearEnd))
+                WirePlacementService.CreateWireWithLinearEnd(doc, view, placement, wireTypeId, fixtureConnector, linearEnd);
             else
                 WirePlacementService.CreateWire(doc, view, placement, wireTypeId, fixtureConnector);
 
             trans.Commit();
         }
+    }
+
+    /// <summary>
+    /// For a linear (light-bar) point fixture, resolves the long-axis END the switchleg wire should
+    /// anchor to — the end on the side the wire heads (nearest Vertex2), matching how a drafter drags
+    /// v1 off the connector center to the bar end. Returns false for non-linear fixtures (square
+    /// downlights) or when the end coincides with the connector, leaving the plain center-anchored
+    /// wire. Uses the shared linear test from TurboWire (<see cref="GeometryHelper.TryGetLinearLongAxis"/>).
+    /// </summary>
+    private static bool TryGetLinearWireEnd(
+        FamilyInstance fixture, View view, Connector fixtureConnector,
+        IPlacementCalculator placement, out XYZ endPoint)
+    {
+        endPoint = XYZ.Zero;
+
+        if (!GeometryHelper.TryGetLinearLongAxis(fixture, view, out XYZ longDir, out double halfLen))
+            return false;
+        if (halfLen <= BubbleConstants.WireOffsetEndInitialFt)
+            return false; // connector already at (or past) the end — nothing to relocate
+
+        var origin = fixtureConnector.Origin;
+        // Pick the end toward the switchleg: the tag/wire (Vertex2) sits off one end, the same
+        // "nearest end" choice TurboWire makes. The user's tag-side click already placed Vertex2.
+        double sign = (placement.Vertex2 - origin).DotProduct(longDir) >= 0 ? 1.0 : -1.0;
+        endPoint = origin + longDir * (halfLen * sign);
+        return true;
     }
 
     private static void DeleteExistingSwitchlegTags(Document doc, FamilyInstance fixture, IndependentTag sourceTag)

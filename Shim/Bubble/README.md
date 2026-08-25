@@ -13,6 +13,8 @@ Places a switchleg tag and stub wire on a single lighting fixture or electrical 
 
 For fixtures with **Remote Power Supply** enabled, a directional remote switchleg tag (`Switchleg Left` / `Switchleg Right`) is used instead of the standard tag.
 
+For **linear** point fixtures (light bars — a LocationPoint family whose long plan extent is ≥ 3× its short one, the same test TurboWire uses via `GeometryHelper.TryGetLinearLongAxis`), the wire's connector-end vertex is anchored at the bar's **end** rather than its center, so the switchleg arc springs from the end the tag sits off — no manual v1 drag. The end is the long-axis end toward the wire (nearest `Vertex2`, i.e. the side the user clicked); the tag and the `Vertex2`/`Vertex3` arc are unchanged, and the electrical connection is untouched (a display-only vertex move). Non-linear fixtures (square downlights) keep the center anchor. This applies to the horizontal (ceiling/floor) path only — line-based, wall-sconce, chandelier, and electrical-fixture paths are unaffected.
+
 ### Electrical Fixtures
 1. Click an electrical fixture directly (exhaust fan, receptacle, etc.).
 2. Click a direction point.

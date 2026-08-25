@@ -25,6 +25,32 @@ internal static class WirePlacementService
     }
 
     /// <summary>
+    /// Creates the switchleg wire and anchors its connector-end vertex (v1) at the fixture's chosen
+    /// long-axis END rather than the connector center — the end-to-end anchor a drafter sets by hand
+    /// on a linear (light-bar) point fixture. Vertex2/Vertex3 are unchanged. Uses the same double-
+    /// SetVertex seat technique as <see cref="CreateWireWithOffsetEnd"/>; the electrical connection is
+    /// untouched (a display-only vertex move). Callers pass a non-degenerate <paramref name="endPoint"/>.
+    /// </summary>
+    public static void CreateWireWithLinearEnd(
+        Document doc,
+        View view,
+        IPlacementCalculator placement,
+        ElementId wireTypeId,
+        Connector fixtureConnector,
+        XYZ endPoint)
+    {
+        var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
+        var wire = ElectricalWire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
+
+        var connectorOrigin = fixtureConnector.Origin;
+        var endDirection = (endPoint - connectorOrigin).Normalize();
+
+        // Double SetVertex technique: seat with a small nudge toward the end, then the final end.
+        wire.SetVertex(0, connectorOrigin + endDirection * BubbleConstants.WireOffsetEndInitialFt);
+        wire.SetVertex(0, endPoint);
+    }
+
+    /// <summary>
     /// Creates a wire with adjusted offset end for line-based fixtures.
     /// </summary>
     public static void CreateWireWithOffsetEnd(

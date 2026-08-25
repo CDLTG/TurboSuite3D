@@ -218,6 +218,40 @@ public static class GeometryHelper
     }
 
     /// <summary>
+    /// A fixture counts as "linear" (a light bar) when its long plan extent is at least this many
+    /// times its short extent. A 2x4 troffer (~2x) stays non-linear; a light bar (~24x) qualifies.
+    /// Shared by TurboWire (end-to-end routing) and TurboBubble (switchleg wire end anchor).
+    /// </summary>
+    public const double LinearRatioThreshold = 3.0;
+
+    /// <summary>
+    /// Resolves a linear fixture's long-axis unit direction (from the BasisX angle, per CLAUDE.md)
+    /// and its half-length. Returns false when the fixture's plan extents can't be measured or it
+    /// isn't clearly linear (long/short ratio below <see cref="LinearRatioThreshold"/>). The ends of
+    /// a center-connectored bar are then <c>connector ± longDir * halfLen</c>.
+    /// </summary>
+    public static bool TryGetLinearLongAxis(FamilyInstance fixture, View view, out XYZ longDir, out double halfLen)
+    {
+        longDir = XYZ.BasisX;
+        halfLen = 0;
+
+        // GetSymbolExtents: length = local-Y extent, width = local-X extent.
+        (double length, double width) = GetSymbolExtents(fixture, view, 0);
+        if (length <= 0 || width <= 0) return false;
+
+        double maxExt = Math.Max(length, width);
+        double minExt = Math.Min(length, width);
+        if (maxExt / minExt < LinearRatioThreshold) return false; // square-ish → not linear
+
+        double angle = GetTransformAngle(fixture.GetTransform());
+        XYZ localX = new XYZ(Math.Cos(angle), Math.Sin(angle), 0);
+        XYZ localY = new XYZ(-Math.Sin(angle), Math.Cos(angle), 0);
+        longDir = width >= length ? localX : localY; // long axis is whichever extent is larger
+        halfLen = maxExt / 2.0;
+        return true;
+    }
+
+    /// <summary>
     /// Returns the distance from the fixture origin to the far edge of its annotation symbol
     /// in the given global direction. Projects actual annotation curve points (not AABB corners)
     /// onto the direction vector for accurate results at any rotation.
