@@ -526,10 +526,42 @@ public class WireCommand : IExternalCommand
             arcDirection = 1;
         }
 
+        // Linear end-to-end routing (Screenshot_518/526): relocate each fixture's effective wiring
+        // point from its connector to a chosen END when the fixture is linear, then let the SAME
+        // routing decision below (off-axis corner/S-spline, else on-axis arc) draw the wire between
+        // those points — so an end-to-end run picks its own shape instead of a forced arc. A
+        // non-linear fixture (square downlight) keeps its connector as the routing point; switches
+        // stay deferred, keeping their existing center-routed, nudged-vertex behavior. The real
+        // connectors are never touched — the chosen ends ride the endOffset -> SetVertex hook.
+        View view = doc.ActiveView;
+        bool lin1 = TryGetLongAxis(fixture1, view, out XYZ longDir1, out double half1) && switchOffset1 == null;
+        bool lin2 = TryGetLongAxis(fixture2, view, out XYZ longDir2, out double half2) && switchOffset2 == null;
+
+        XYZ r1 = c1.Origin, r2 = c2.Origin;
+        if (lin1 || lin2)
+        {
+            // Bulge = perpendicular to the connector chord, on the side the arc leans — the tiebreak
+            // when a fixture's two ends are equidistant (the symmetric side-by-side case).
+            XYZ chordDir = new XYZ(c2.Origin.X - c1.Origin.X, c2.Origin.Y - c1.Origin.Y, 0).Normalize();
+            XYZ bulge = XYZ.BasisZ.CrossProduct(chordDir).Normalize() * arcDirection;
+            (r1, r2) = ChooseEndpoints(
+                c1.Origin, lin1 ? longDir1 : null, half1,
+                c2.Origin, lin2 ? longDir2 : null, half2, bulge);
+            // Inline fixtures whose chosen ends collapse together → route the connectors instead.
+            if (r1.DistanceTo(r2) < MinEndGap) { r1 = c1.Origin; r2 = c2.Origin; }
+        }
+
+        // Each endpoint's vertex offset: the shift out to a relocated linear end, otherwise the switch
+        // nudge (null for a plain fixture). A zero shift falls back to the switch offset / null.
+        XYZ sh1 = r1 - c1.Origin;
+        XYZ sh2 = r2 - c2.Origin;
+        XYZ? endOff1 = sh1.IsZeroLength() ? switchOffset1 : sh1;
+        XYZ? endOff2 = sh2.IsZeroLength() ? switchOffset2 : sh2;
+
         // If fixtures share a non-axis-aligned rotation, evaluate off-axis in their local frame
         bool useLocalFrame = ArcCalculator.TryGetSharedRotation(fixture1, fixture2, out double sharedAngle);
-        XYZ p1 = useLocalFrame ? ArcCalculator.RotateXY(c1.Origin, -sharedAngle) : c1.Origin;
-        XYZ p2 = useLocalFrame ? ArcCalculator.RotateXY(c2.Origin, -sharedAngle) : c2.Origin;
+        XYZ p1 = useLocalFrame ? ArcCalculator.RotateXY(r1, -sharedAngle) : r1;
+        XYZ p2 = useLocalFrame ? ArcCalculator.RotateXY(r2, -sharedAngle) : r2;
 
         // Off-axis fixtures: corner arc (squared) or S-spline (elongated)
         if (ArcCalculator.IsOffAxis(p1, p2))
@@ -547,14 +579,105 @@ public class WireCommand : IExternalCommand
             wirePoints = useLocalFrame
                 ? localPoints.Select(pt => ArcCalculator.RotateXY(pt, sharedAngle)).ToList()
                 : localPoints;
+            // Terminals stay at the connectors in the Create input — Revit pins a wire's ends to its
+            // connectors, and handing it the relocated ends conflicts with that (it inserts a
+            // connector vertex, so the end nudge then collides and the end snaps back to center).
+            // The interior points already carry the shape; endOff1/endOff2 push the terminals out.
+            wirePoints[0] = c1.Origin;
+            wirePoints[wirePoints.Count - 1] = c2.Origin;
             wiringType = WiringType.Arc;
-            return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, switchOffset1, switchOffset2);
+            return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, endOff1, endOff2);
         }
 
-        // On-axis: standard 24° arc
-        wirePoints = ArcCalculator.CalculateArcWirePoints(c1.Origin, c2.Origin, WireConstants.ArcAngleDegrees, arcDirection);
+        // On-axis: standard 24° arc, shaped by the chosen routing points (the apex rides between/above
+        // them). Terminals stay at the connectors in the Create input; endOff1/endOff2 push them out
+        // to the ends afterward — see the note in the off-axis branch above.
+        wirePoints = ArcCalculator.CalculateArcWirePoints(r1, r2, WireConstants.ArcAngleDegrees, arcDirection);
+        wirePoints[0] = c1.Origin;
+        wirePoints[wirePoints.Count - 1] = c2.Origin;
         wiringType = WiringType.Arc;
-        return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, switchOffset1, switchOffset2);
+        return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, endOff1, endOff2);
+    }
+
+    // Linear end-to-end gate tuning. A fixture counts as "linear" when its long extent is at least
+    // this many times its short extent (a light bar is ~24x; a 2x4 troffer ~2x stays center-wired).
+    private const double LinearRatioThreshold = 3.0;
+    // Two end-pairs whose lengths are within this of the shortest are treated as tied, and the bulge
+    // (tag/centroid intent) breaks the tie. This is what decides top-vs-bottom in the symmetric
+    // side-by-side case, where the two candidate pairs are exactly equal.
+    private const double EndTieEpsilon = 0.5; // ft
+    // Below this, the two chosen ends are treated as coincident (inline fixtures that meet/overlap)
+    // and the pair routes between the connectors instead, rather than draw a degenerate stub.
+    private const double MinEndGap = 0.25; // ft (3")
+
+    /// <summary>
+    /// Picks each fixture's routing point: for a linear fixture, one of its two ends; for a non-linear
+    /// one (<paramref name="longDir1"/>/<paramref name="longDir2"/> null), its connector. Chooses the
+    /// end-pair that minimizes the distance between the two points (the nearest ends — what a drafter
+    /// wires by hand), breaking a tie toward the <paramref name="bulge"/> side so the symmetric
+    /// side-by-side case follows the tag/centroid intent. The chosen points are then handed to the
+    /// existing off-axis/on-axis routing, which decides the wire's shape.
+    /// </summary>
+    private static (XYZ r1, XYZ r2) ChooseEndpoints(
+        XYZ c1, XYZ? longDir1, double half1,
+        XYZ c2, XYZ? longDir2, double half2, XYZ bulge)
+    {
+        IReadOnlyList<XYZ> cand1 = EndCandidates(c1, longDir1, half1);
+        IReadOnlyList<XYZ> cand2 = EndCandidates(c2, longDir2, half2);
+
+        double bestDist = double.MaxValue;
+        foreach (XYZ p in cand1)
+            foreach (XYZ q in cand2)
+                bestDist = Math.Min(bestDist, p.DistanceTo(q));
+
+        // Among the closest pairs (within the tie window), prefer the one whose ends sit farthest
+        // along the bulge — a no-op when there is a single clear nearest pair.
+        double bestScore = double.NegativeInfinity;
+        XYZ r1 = c1, r2 = c2;
+        foreach (XYZ p in cand1)
+            foreach (XYZ q in cand2)
+            {
+                if (p.DistanceTo(q) > bestDist + EndTieEpsilon) continue;
+                double score = (p - c1).DotProduct(bulge) + (q - c2).DotProduct(bulge);
+                if (score > bestScore) { bestScore = score; r1 = p; r2 = q; }
+            }
+        return (r1, r2);
+    }
+
+    /// <summary>
+    /// A fixture's candidate routing points: its two long-axis ends when linear, otherwise just its
+    /// connector origin.
+    /// </summary>
+    private static IReadOnlyList<XYZ> EndCandidates(XYZ c, XYZ? longDir, double half)
+    {
+        if (longDir == null) return new[] { c };
+        return new[] { c + longDir * half, c - longDir * half };
+    }
+
+    /// <summary>
+    /// Resolves a fixture's long-axis unit direction (from the BasisX angle, per CLAUDE.md) and its
+    /// half-length. Returns false when the fixture's extents can't be measured or it isn't clearly
+    /// linear (long/short ratio below <see cref="LinearRatioThreshold"/>).
+    /// </summary>
+    private static bool TryGetLongAxis(FamilyInstance f, View view, out XYZ longDir, out double halfLen)
+    {
+        longDir = XYZ.BasisX;
+        halfLen = 0;
+
+        // GetSymbolExtents: length = local-Y extent, width = local-X extent.
+        (double length, double width) = GeometryHelper.GetSymbolExtents(f, view, 0);
+        if (length <= 0 || width <= 0) return false;
+
+        double maxExt = Math.Max(length, width);
+        double minExt = Math.Min(length, width);
+        if (maxExt / minExt < LinearRatioThreshold) return false; // square-ish → not linear
+
+        double angle = GeometryHelper.GetTransformAngle(f.GetTransform());
+        XYZ localX = new XYZ(Math.Cos(angle), Math.Sin(angle), 0);
+        XYZ localY = new XYZ(-Math.Sin(angle), Math.Cos(angle), 0);
+        longDir = width >= length ? localX : localY; // long axis is whichever extent is larger
+        halfLen = maxExt / 2.0;
+        return true;
     }
 
     private static XYZ GetSwitchOffset(FamilyInstance fixture)

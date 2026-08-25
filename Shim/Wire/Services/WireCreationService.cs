@@ -54,7 +54,21 @@ internal static class WireCreationService
         {
             t.Start();
 
-            ElectricalWire wire = ElectricalWire.Create(doc, wireType.Id, doc.ActiveView.Id, wiringType, points, c1, c2);
+            // Routing points can land within Revit's vertex tolerance of one another (e.g. a linear
+            // end-to-end pair whose chosen ends sit close, collapsing the arc apex onto an endpoint).
+            // Revit throws ArgumentException("vertexPoint") rather than de-duplicating, so guard both
+            // the create and every vertex nudge: on a collision fall back to a straight connector
+            // wire, and skip any nudge that would coincide — the connection is unaffected either way.
+            ElectricalWire wire;
+            try
+            {
+                wire = ElectricalWire.Create(doc, wireType.Id, doc.ActiveView.Id, wiringType, points, c1, c2);
+            }
+            catch (Autodesk.Revit.Exceptions.ArgumentException)
+            {
+                var straight = new List<XYZ> { c1.Origin, c2.Origin };
+                wire = ElectricalWire.Create(doc, wireType.Id, doc.ActiveView.Id, wiringType, straight, c1, c2);
+            }
 
             int vertexCount = wire.NumberOfVertices;
 
@@ -63,23 +77,40 @@ internal static class WireCreationService
                 double baseOffset = connectorOffset;
                 double initialOffset = 0.5 / 12.0;
 
-                wire.SetVertex(0, c1.Origin + wallNormal1 * initialOffset);
-                wire.SetVertex(0, c1.Origin + wallNormal1 * baseOffset);
+                SafeSetVertex(wire, 0, c1.Origin + wallNormal1 * initialOffset);
+                SafeSetVertex(wire, 0, c1.Origin + wallNormal1 * baseOffset);
 
                 XYZ endNormal = facingSameDirection ? wallNormal1 : (wallNormal2 ?? wallNormal1);
-                wire.SetVertex(vertexCount - 1, c2.Origin + endNormal * initialOffset);
-                wire.SetVertex(vertexCount - 1, c2.Origin + endNormal * baseOffset);
+                SafeSetVertex(wire, vertexCount - 1, c2.Origin + endNormal * initialOffset);
+                SafeSetVertex(wire, vertexCount - 1, c2.Origin + endNormal * baseOffset);
             }
 
             if (endOffset1 != null)
-                wire.SetVertex(0, c1.Origin + endOffset1);
+                SafeSetVertex(wire, 0, c1.Origin + endOffset1);
             if (endOffset2 != null)
-                wire.SetVertex(vertexCount - 1, c2.Origin + endOffset2);
+                SafeSetVertex(wire, vertexCount - 1, c2.Origin + endOffset2);
 
             t.Commit();
         }
 
         return Result.Succeeded;
+    }
+
+    /// <summary>
+    /// Moves a wire vertex, swallowing Revit's ArgumentException("vertexPoint") when the target
+    /// coincides with another vertex (within tolerance). Leaving the vertex at its prior position is
+    /// harmless — a display-only nudge — and never breaks the electrical connection.
+    /// </summary>
+    private static void SafeSetVertex(ElectricalWire wire, int index, XYZ point)
+    {
+        try
+        {
+            wire.SetVertex(index, point);
+        }
+        catch (Autodesk.Revit.Exceptions.ArgumentException)
+        {
+            // Coincident with an existing vertex — keep the current position.
+        }
     }
 
     public static void DeleteWiresBetweenFixtures(Document doc, Connector c1, Connector c2)

@@ -60,6 +60,12 @@ When both fixtures share a non-axis-aligned rotation (e.g., fixtures on a rotate
 
 For multi-fixture runs, arc direction is determined by: (1) existing tag positions, then (2) outward from the group centroid, then (3) default. Existing wires between two fixtures are deleted before placing new ones.
 
+### Linear fixtures (end-to-end)
+
+A **linear** fixture — one whose long extent is at least `LinearRatioThreshold` (3×) its short extent, e.g. a light bar — wires **end-to-end** rather than center-to-center. Each fixture's effective wiring point is relocated from its connector to a chosen **end**, then the *same* routing table above draws the wire between those points — so an end-to-end run picks its own shape (slight offset → arc, more → S-spline, corner offset → corner arc) exactly like the regular path. The connectors are never moved; the chosen ends ride a display-only vertex offset (`SetVertex`), so the electrical connection is untouched.
+
+End selection is **nearest ends**: the one-end-per-fixture pair that minimizes the gap between them (what a drafter wires by hand), with the arc **bulge** (tag → centroid → default) breaking the tie in the symmetric side-by-side case where both candidate pairs are equal. A non-linear partner (square downlight) keeps its connector as the routing point, so a linear→regular pair wires the bar from its end to the fixture's center. Two ends that collapse together (inline fixtures meeting/overlapping, within `MinEndGap`) fall back to center-to-center. **Switches are deferred** — a linear↔switch pair keeps the existing center-routed, nudged-vertex behavior (the model is built to fold switches in later).
+
 ### Switch Handling
 
 Switches are wired with an endpoint offset to prevent visual overlap. Wall-hosted switches offset 9" along the wall normal; unhosted switches offset 0.01" along their local Y axis. Switch selections create a single circuit across all fixture categories with the comment "switched" (no comments dialog).
