@@ -102,6 +102,26 @@ public static class BubbleConstants
     public const double ChandelierWireV2PerpKickFt = 3.50 * InchesToFeet;       // V2 perpendicular kick (creates arc curvature)
     public const double ChandelierWireElbowOffsetFt = 3.56 * InchesToFeet;      // V3 inset from bubble along diagonal (elbow)
 
+    // Picture lights — linear wall fixtures whose plan symbol is symmetric along the wall but
+    // extends ENTIRELY away from the wall (asymmetric perpendicular; origin sits on the wall-side
+    // edge). Both the 2D and 3D families are geometrically identical in wall-normal terms, so one
+    // wall-aware placement path serves both. Routed here (ahead of the shared vertical-face path)
+    // so sconces/mirrors are untouched. The switchleg tag/wire clear the symbol's true room-side
+    // depth (measured, not assumed) and stand off AWAY from the wall.
+    public static readonly HashSet<string> PictureLightFamilies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Z_Picture Light",
+        "AL_Decorative_Picture Light (Hosted)"
+    };
+    // Switchleg geometry, in the wall frame (X along wall, Y = wall normal away from wall). Derived
+    // from a hand-drawn ideal (TurboSpike read-back): the bubble stands off past the MEASURED
+    // room-side depth so it clears the bar and sits in open room (the 2D look), and the wire exits the
+    // bar end near the room side then arcs down to the bubble.
+    public const double PictureLightTagAlongWallGapFt = 8.75 * InchesToFeet; // bubble past the bar end
+    public const double PictureLightTagClearanceFt = 4.25 * InchesToFeet;    // bubble/elbow past the room-side edge (added to roomDepth)
+    public const double PictureLightWireEndOffWallFt = 3.7 * InchesToFeet;   // v1 exit depth from the wall
+    public const double PictureLightWireMidOffWallFt = 2.9 * InchesToFeet;   // v2 arc-control depth from the wall
+
     // Tag placement offsets (in feet)
     public const double TagOffsetVerticalFt = 5.25 * InchesToFeet;
     public const double TagOffsetHorizontalFt = 8.75 * InchesToFeet;

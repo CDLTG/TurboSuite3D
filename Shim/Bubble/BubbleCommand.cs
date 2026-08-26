@@ -95,14 +95,20 @@ public class BubbleCommand : IExternalCommand
         }
 
         var isLineBased = GeometryHelper.IsLineBasedFixture(fixture);
-        var isWallSconce = !isLineBased && GeometryHelper.IsWallSconce(fixture);
-        var isVerticalFace = !isLineBased && (GeometryHelper.IsOnVerticalFace(fixture) || isWallSconce);
-        var isChandelier = !isLineBased && !isVerticalFace && IsChandelierFamily(fixture);
+        // Picture lights take priority over the vertical-face path so the hosted 3D family isn't
+        // grabbed by VerticalFacePlacementCalculator (and the 2D one doesn't fall through to
+        // Horizontal). Both route to the shared wall-aware picture-light calculator.
+        var isPictureLight = !isLineBased && IsPictureLightFamily(fixture);
+        var isWallSconce = !isLineBased && !isPictureLight && GeometryHelper.IsWallSconce(fixture);
+        var isVerticalFace = !isLineBased && !isPictureLight && (GeometryHelper.IsOnVerticalFace(fixture) || isWallSconce);
+        var isChandelier = !isLineBased && !isPictureLight && !isVerticalFace && IsChandelierFamily(fixture);
         var hasRemotePowerSupply = ParameterHelper.HasRemotePowerSupply(fixture);
 
         IPlacementCalculator placement;
         if (isLineBased)
             placement = new LineBasedPlacementCalculator(doc, activeView, fixture, selectedTag);
+        else if (isPictureLight)
+            placement = new PictureLightPlacementCalculator(doc, activeView, fixture, selectedTag);
         else if (isVerticalFace)
             placement = new VerticalFacePlacementCalculator(doc, activeView, fixture, selectedTag);
         else if (isChandelier)
@@ -156,6 +162,10 @@ public class BubbleCommand : IExternalCommand
                 effectiveFlip = placement.IsFlipped;
             }
             else if (isChandelier)
+            {
+                effectiveFlip = placement.IsFlipped;
+            }
+            else if (isPictureLight)
             {
                 effectiveFlip = placement.IsFlipped;
             }
@@ -414,6 +424,17 @@ public class BubbleCommand : IExternalCommand
     }
 
     /// <summary>
+    /// Checks if the lighting fixture belongs to a picture-light family (2D or 3D). These route to
+    /// the wall-aware <see cref="PictureLightPlacementCalculator"/> instead of the vertical-face or
+    /// horizontal paths.
+    /// </summary>
+    private static bool IsPictureLightFamily(FamilyInstance fixture)
+    {
+        var familyName = fixture.Symbol?.FamilyName;
+        return familyName != null && BubbleConstants.PictureLightFamilies.Contains(familyName);
+    }
+
+    /// <summary>
     /// Checks if the electrical fixture belongs to a family that uses vertical (up/down) switchleg placement.
     /// </summary>
     private static bool IsElectricalVerticalFamily(FamilyInstance fixture)
@@ -559,6 +580,8 @@ public class BubbleCommand : IExternalCommand
                 WirePlacementService.CreateWireWithOffsetEnd(doc, view, placement, wireTypeId, fixtureConnector);
             else if (isWallSconce && wallNormal != null)
                 WirePlacementService.CreateWireWithWallSconceOffset(doc, view, placement, wireTypeId, fixtureConnector, wallNormal, fixture);
+            else if (placement is PictureLightPlacementCalculator pictureLight)
+                WirePlacementService.CreateWireWithLinearEnd(doc, view, placement, wireTypeId, fixtureConnector, pictureLight.WireEndPoint);
             else if (TryGetLinearWireEnd(fixture, view, fixtureConnector, placement, out XYZ linearEnd))
                 WirePlacementService.CreateWireWithLinearEnd(doc, view, placement, wireTypeId, fixtureConnector, linearEnd);
             else

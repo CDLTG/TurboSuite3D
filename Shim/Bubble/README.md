@@ -54,6 +54,12 @@ These lighting fixture families use diagonal-corner switchleg placement (one of 
 - `AL_Decorative_Pendant`
 - `Z_Chandelier`
 
+### Picture Lights
+
+`PictureLightFamilies` (`Z_Picture Light` 2D, `AL_Decorative_Picture Light (Hosted)` 3D) route to a dedicated `PictureLightPlacementCalculator` **ahead of** the vertical-face/horizontal branches, so both families place identically and sconces/mirrors on `VerticalFacePlacementCalculator` are untouched. A picture light's plan symbol is **symmetric along the wall** but extends **entirely away from the wall** (the origin/connector sits on the wall-side edge) — a spike confirmed the 2D and 3D families are identical in wall-normal terms, and both yield a usable wall normal (3D via Hand×Facing, 2D via the facing fallback).
+
+The calculator works in the wall frame (X along wall, Y = wall normal into the room) and measures the **actual** room-side depth via `GeometryHelper.GetSymbolExtentInDirection`, so the bubble stands off past the bar into open room (the "2D look") rather than assuming a centered symbol. v1 anchors at the bar end (scales with bar length); the wire arcs down to a bubble cleared past the measured depth. Offsets are in `BubbleConstants.PictureLight*`, tuned from a hand-drawn ideal. **Known limitation:** the perpendicular standoff is tuned for our families' fixed room-side depth — a picture light that extended *further* into the room would need the standoff re-derived (see `Specs/ROADMAP.md`).
+
 ### Other Requirements
 
 - At least one **WireType** in the project
