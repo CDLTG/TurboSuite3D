@@ -2,16 +2,11 @@
 
 A page-per-Type-Mark, form-view spec editor for lighting fixtures (`OST_LightingFixtures`) and drivers (`OST_LightingDevices`) — one screen that unifies the two native Revit spec schedules.
 
-Instead of scrolling a wide schedule grid, TurboSchedule shows **one Type Mark per page** with its fields laid out in labeled sections (Identity Data, Electrical, Mechanical, Photometric, Schedule Notes). Every value you edit is written back to **all symbols sharing that Type Mark**, and the whole save lands in a single undo step.
+Instead of scrolling a wide schedule grid, it shows **one Type Mark per page** with fields in labeled sections (Identity Data, Electrical, Mechanical, Photometric, Schedule Notes). An edit writes back to **all symbols sharing that Type Mark**, and the whole save is one undo step. Entry `ScheduleCommand.cs`; the field roster is the data-driven `FieldDef` set, cross-symbol reconciliation in `ScheduleTypeCollector`. Modeless — requires no open transaction at launch.
 
-## Usage
+## Behavior
 
-1. Run TurboSchedule (must be in a project with no open transaction).
-2. Pick a Type Mark from the **Type** dropdown, or step through with the ◀ ▶ arrows.
-3. Edit fields in place. A blue dot marks a field (and its page) with unsaved edits.
-4. Click **Save** to flush every dirty page in one transaction, or **Discard** to drop all unsaved edits.
-
-The window is modeless — leave it open while you work in Revit. **Close** (footer), the ✕, or **Esc** all close it (you'll be prompted if there are unsaved changes). Reopening within the same Revit session returns you to the type you were last on; a since-removed type falls back to the first page.
+Pick a Type Mark from the **Type** dropdown or step with ◀ ▶; edit in place. A blue dot marks a field (and its page) with unsaved edits. **Save** flushes every dirty page in one transaction; **Discard** drops all unsaved edits. Close (footer / ✕ / Esc) prompts if edits are pending. Reopening within the same Revit session returns to the last type; a since-removed type falls back to the first page.
 
 ## Field states
 

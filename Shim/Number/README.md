@@ -1,6 +1,6 @@
 # TurboNumber
 
-Three-tab utility for managing circuit numbers, keypad Switch IDs, and power supply Switch IDs.
+Modeless three-tab MVVM utility for circuit numbers, keypad Switch IDs, and power-supply Switch IDs. Entry `NumberCommand.cs`; Revit-free tab VMs + models in `Core/Number/` (`CircuitNumberTabViewModel` / `KeypadTabViewModel` / `PowerSupplyTabViewModel` over `TabViewModelBase`), Revit ops in `Shim/Number/Services/` behind `INumberRevitOperations` / `ICircuitNumberOperations`. All tabs write via **Apply** through the external event.
 
 ## Tab 1 — Circuit Numbers
 
@@ -30,8 +30,6 @@ Lists all Lighting Devices with a `Sub-Driver Power` type parameter.
 - **Auto-number** assigns IDs in format `{prefix}{number}{suffix}`
 - Devices sharing a circuit are sub-lettered top-to-bottom by plan position (model Y), so the suffix matches the column TurboDriver stacks — e.g., X01a, X01b — regardless of grid sort order
 - **Select in Project** selects and reveals the highlighted power supply in the active view
-
-All tabs support **Apply** to write changes to Revit.
 
 ## Dependencies
 

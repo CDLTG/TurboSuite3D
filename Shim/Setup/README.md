@@ -5,19 +5,20 @@ Running TurboSetup opens a **landing menu** with two actions:
 - **Project Setup** — new-project setup automation for the 3D (RVT-linked) lighting workflow (below).
 - **Name Spaces from Rooms** — seed Space names from the architect's linked Rooms ([Space naming](#space-naming)).
 
+Entry `SetupCommand.cs`; work split across `Services/` (`LevelCopyService`, `ViewGenerationService`, `ViewRangeService`, `ToposolidVisibilityService`, `SpaceNamingService`), firm standards in `SetupConstants.cs`, per-version link-graphics seam in `Revit{year}/Setup/LinkGraphicsSeam.cs` (see CLAUDE.md "per-shim split file").
+
 ## Project Setup
 
 Copy levels from the linked architectural model, generate the firm's Floor Plan and RCP views per level, assign the firm view templates, and wire each view's link graphics to a chosen architectural view.
 
 Starting a lighting project from the firm template otherwise means recreating every level the architect defined, spinning up a Floor + RCP view for each, applying the right template, and hand-configuring RVT Links display on all of them. TurboSetup does that in one pass, driven off the loaded architectural link.
 
-### Usage
+### Two-stage flow
 
-1. Open a new project from the firm template with the architectural model linked and **loaded**.
-2. Run TurboSetup and pick **Project Setup**.
-3. **Stage 1 — link + levels:** Pick the architectural link and check the levels to build views for; mark which is the main level (drives the level-index strings, e.g. `01`, `02`).
-4. **Stage 2 — view mapping** *(Revit 2025 only)*: For each planned view, choose the linked architectural view whose display and view range it should base from. Every row defaults to `(none)` — the source view is a conscious per-row choice, never auto-guessed.
-5. TurboSetup copies the levels, creates the views, applies templates, deletes the host template's original placeholder levels, and (2025) applies the link-graphics hybrid. A summary dialog reports what was copied, created, skipped, and applied.
+- **Stage 1 — link + levels:** pick the architectural link and the levels to build views for; mark the main level (drives the level-index strings, e.g. `01`, `02`).
+- **Stage 2 — view mapping** *(Revit 2025+ only)*: per planned view, choose the linked architectural view it bases display + view range from. Every row defaults to `(none)` — a conscious per-row choice, never auto-guessed.
+
+A summary dialog reports what was copied, created, skipped, and applied.
 
 ### What it does
 

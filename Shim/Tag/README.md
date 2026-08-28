@@ -1,50 +1,34 @@
 # TurboTag
 
-Batch-places lighting fixture type tags on selected fixtures with configurable direction.
+Batch-places type/length tags on the current selection, one family + direction per fixture kind. Entry `TagCommand.cs`; placement math in `Services/TagPlacementService.cs` (see CLAUDE.md "Fixture Transform and Direction Offsets" — BasisX-angle only, no RCP X-flip), linear-run grouping in `Services/LinearRunService.cs`, family/type resolution in `Services/TagTypeService.cs`. Floor plan or RCP. Re-run deletes existing same-family tags per fixture before placing.
 
-**Suggested shortcut:** `TT`
+## Fixture kind → tag family
 
-## Fixture Types
-
-| Fixture Type | Tag Family | Direction |
+| Fixture kind | Tag family | Direction |
 |---|---|---|
-| Point-based (ceiling/floor) | `AL_Tag_Lighting Fixture (Type)` | Up, Down, Left, or Right (user choice) |
-| Line-based (linear) | `AL_Tag_Lighting Fixture (Linear Length)` | Up or Down (user choice) |
-| Line-based (linear, Combined) | `AL_Tag_Lighting Fixture (Run Length)` | One tag per continuous run (end-to-end adjacency), placed on the middle fixture, displaying the summed run length |
-| Line-based (linear, Combined Forced) | `AL_Tag_Lighting Fixture (Run Length)` | Treats all selected linear fixtures as a single run regardless of adjacency — use when curved end-caps or other geometry break end-to-end detection |
-| Face-based (wall sconce) | `AL_Tag_Lighting Fixture (Type)` | Automatic — offset along wall normal |
+| Point-based (ceiling/floor) | `AL_Tag_Lighting Fixture (Type)` | Up/Down/Left/Right (prompted) |
+| Line-based (linear) | `AL_Tag_Lighting Fixture (Linear Length)` | Up/Down (prompted) |
+| Line-based, **Combined** | `AL_Tag_Lighting Fixture (Run Length)` | One tag per continuous run (end-to-end adjacency), on the middle fixture, summed run length |
+| Line-based, **Combined Forced** | `AL_Tag_Lighting Fixture (Run Length)` | All selected linears as one run regardless of adjacency — for curved end-caps / geometry that breaks adjacency detection |
+| Face-based (wall sconce) | `AL_Tag_Lighting Fixture (Type)` | Auto — offset along wall normal |
 
-## Usage
+Point/face offsets are computed from each fixture's `Symbol Length`, `Symbol Width`, and the type-mark text width.
 
-1. Select lighting fixtures in a floor plan or ceiling plan view.
-2. Run TurboTag. Direction dialogs appear based on which fixture types are selected.
-3. Tags are placed with offsets computed from each fixture's `Symbol Length`, `Symbol Width`, and type mark text width.
+## Required families / parameters
 
-Existing tags of the same family are deleted per-fixture before placing new ones. Works in both floor plan and RCP views.
+| Tag family | Note |
+|---|---|
+| `AL_Tag_Lighting Fixture (Type)` | Point + face-based |
+| `AL_Tag_Lighting Fixture (Linear Length)` | Linear — needs types `Tag_Top` / `Tag_Bottom` |
+| `AL_Tag_Lighting Fixture (Run Length)` | Combined — needs `Tag_Top` / `Tag_Bottom`, label bound to `Run Length` |
+| `AL_Tag_Lighting Device (SwitchID)` | Power-supply devices |
+| `AL_Tag_Lighting Device (Keypad)` | Keypads — needs type `2. Two Gang` for two-gang |
 
-## Dependencies
+| Parameter | On | Purpose |
+|---|---|---|
+| `Sub-Driver Power` | Lighting Device type | Presence ⇒ power supply (vs. keypad) |
+| `Two Gang` | Keypad instance | Selects two-gang tag type |
+| `Run Length` | Linear fixture instance | Summed run length on the lead fixture, cleared on others (Combined) |
+| `Linear Length` | Linear fixture instance | Per-fixture length, summed for Combined |
 
-### Required Tag Families
-
-| Family Name | Category | Used For |
-|-------------|----------|----------|
-| `AL_Tag_Lighting Fixture (Type)` | Lighting Fixture Tags | Point-based and face-based (wall sconce) fixtures |
-| `AL_Tag_Lighting Fixture (Linear Length)` | Lighting Fixture Tags | Line-based (linear) fixtures — requires types `Tag_Top` and `Tag_Bottom` |
-| `AL_Tag_Lighting Fixture (Run Length)` | Lighting Fixture Tags | Combined linear tagging — requires types `Tag_Top` and `Tag_Bottom`, label bound to `Run Length` |
-| `AL_Tag_Lighting Device (SwitchID)` | Lighting Device Tags | Power supply devices |
-| `AL_Tag_Lighting Device (Keypad)` | Lighting Device Tags | Keypad devices — requires type `2. Two Gang` for two-gang keypads |
-
-### Required Custom Parameters
-
-| Parameter | On | Type | Purpose |
-|-----------|----|------|---------|
-| `Sub-Driver Power` | Lighting Device types | Double | Identifies power supplies (vs. keypads) |
-| `Two Gang` | Keypad instances | Yes/No (Integer) | Selects two-gang tag type variant |
-| `Run Length` | Linear lighting fixture instances | Length (Double) | Holds the summed length of a continuous run on the lead fixture; cleared on other run members. Required when using Combined |
-| `Linear Length` | Linear lighting fixture instances | Length (Double) | Per-fixture length, summed across run members for Combined |
-
-### Other Requirements
-
-- Active **floor plan or RCP view**
-- Keypads identified by family name containing "Keypad" (case-insensitive)
-- Power supplies identified by presence of `Sub-Driver Power` type parameter
+Keypads are identified by family name containing "Keypad" (case-insensitive); power supplies by presence of the `Sub-Driver Power` type param.

@@ -5,8 +5,6 @@ Read-only reporter for the two "what is this connected to?" questions Revit hide
 - **Nothing selected → pick a linked family → VG report** — "which Visibility/Graphics checkbox do I uncheck?"
 - **Your own element selected → host report** — "what is this element hosted to?"
 
-**Suggested shortcut:** `TS` (replaces the unused Revit default for Toposolid → Smooth Shading)
-
 ## Host report — "what am I hosted to?"
 
 Revit's Properties shows a link-hosted element only as *hosted to `<the link>`* — never *which* element in that link. That gap bites: a keypad can land face-hosted to a linked **casework** family (authored square, geometry on one side, sitting flush on the real wall) with no visual tell, which both misroutes wall-normalization and leaves the keypad **orphaned** the moment that volatile casework is deleted or reworked.
@@ -19,16 +17,12 @@ The resolver is `Core/Host/` (pure result + classifier, unit-tested) plus `Shim/
 
 ## VG report — "which checkbox do I uncheck?"
 
-Clearance, path, and egress lines (and other content) often ride inside deeply nested families in a linked model, and finding the right **Category → Subcategory** to uncheck in **VG → RVT Links → Custom** by hand is slow trial-and-error. TurboSnoop picks one linked family and lists every VG checkbox its geometry draws under, so you know exactly which box to clear.
+Clearance, path, and egress lines (and other content) often ride inside deeply nested families in a linked model, and finding the right **Category → Subcategory** to uncheck in **VG → RVT Links → Custom** by hand is slow trial-and-error. Run with nothing selected, pick one linked family, and a modeless window lists every VG checkbox its geometry draws under, split into two sections:
 
-### Usage
+- **Model geometry** — always drawn, collected in one pass.
+- **View-dependent / annotation** — detail items, masking, and symbolic lines that are visibility-filtered per view (collected by sweeping every `ViewPlan` and unioning the result).
 
-1. Run TurboSnoop with **nothing selected**.
-2. Pick a linked architectural family in the view (press **Escape** to cancel before anything opens).
-3. A modeless window lists the **Category → Subcategory** Visibility/Graphics checkboxes the family's geometry draws under, split into two sections:
-   - **Model geometry** — always drawn, collected in one pass.
-   - **View-dependent / annotation** — detail items, masking, and symbolic lines that are visibility-filtered per view (collected by sweeping every plan view and unioning the result).
-4. Find the bulleted leaf checkbox in your **VG → RVT Links → Custom** dialog and uncheck it. The window stays open and non-activating, so Revit's VG/VV keybind keeps working while you do.
+Each bulleted leaf is a checkbox in the user's **VG → RVT Links → Custom** dialog. The window stays open and non-activating, so Revit's VG/VV keybind keeps working alongside it.
 
 ## Deliberately read-only — no Apply
 
@@ -37,17 +31,10 @@ TurboSnoop **names** the checkbox; it does not flip it. There is no Revit API pa
 - `RevitLinkGraphicsSettings` exposes only whole-link knobs (no per-category setter), and its `Custom` mode isn't even settable in the Revit 2024 API.
 - Host-view `View.SetCategoryHidden` can only drive categories that exist in the **host** document — the link-defined subcategories this tool exists to surface aren't reachable.
 
-So the single uncheck is left to you, by design. See the design/rejected-alternatives rationale in the `SnoopCommand.cs` and `LinkedGeometryTreeBuilder.cs` headers.
+So the single uncheck is left to the user, by design. Design + rejected-alternatives rationale lives in the `SnoopCommand.cs` and `LinkedGeometryTreeBuilder.cs` headers.
 
-## Dependencies
+## Constraints
 
-| Requirement | Purpose |
-|-------------|---------|
-| A **loaded** RVT link with a pickable family | Source of the geometry being reported |
-| An active **plan view** | The annotation sweep iterates the document's `ViewPlan`s |
-
-## Notes
-
-- The picked element must resolve to a `RevitLinkInstance` with its linked document loaded; otherwise the command reports and exits.
-- Nested **non-shared annotation** (e.g. a Detail Item nested in a sink family) has no element or reference identity, so it can only be reached by reading the graphics style off rendered geometry — which is exactly how this builder works.
+- The picked element must resolve to a `RevitLinkInstance` with its linked document **loaded** (else it reports and exits). VG branch needs an active plan view (the annotation sweep iterates `ViewPlan`s).
+- Nested **non-shared annotation** (e.g. a Detail Item nested in a sink family) has no element or reference identity, so it's reachable only by reading the graphics style off rendered geometry — which is how the builder works.
 - Picking a fresh family replaces the previous report; only one TurboSnoop window is open at a time.

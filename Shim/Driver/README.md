@@ -1,6 +1,6 @@
-# Driver Module
+# TurboDriver / TurboRPS
 
-Contains two commands that share the same services, models, and driver selection algorithm.
+Two commands sharing the same services, models, and driver-selection algorithm (First-Fit Decreasing bin-packing over loaded driver types). Entries `DriverCommand.cs` / `RPSCommand.cs`.
 
 ## TurboDriver (DriverCommand)
 
@@ -9,13 +9,13 @@ Near-headless command for deploying power supplies on a per-circuit basis.
 ### Workflow
 
 1. Pre-select lighting fixtures with `Remote Power Supply` type parameter enabled.
-2. Run TurboDriver (suggested shortcut: TD).
+2. Run TurboDriver.
 3. Command creates an electrical circuit if one doesn't exist, or uses the existing one. New circuits inherit the remembered panel default and **honor a deliberate `<None>`** (DMX/DALI etc.) exactly like TurboWire — via the shared `CircuitService`.
 4. Evaluates the circuit and determines the recommended power supply type and quantity. If the fixtures can't be sized (no wattage, or no matching supply), it stops here — **before** any dialog or destructive change.
 5. **Circuit-info dialog** — the shared comment / room-override / zone dialog (`CircuitInfoService`, same as TurboWire, gated by `General > Show circuit info dialog`; the dropdown is labelled **Zone** because that is what the choice declares — see [TurboWire](../Wire/README.md#circuit-info-dialog)). Appears every run when the setting is on, prefilled so the happy path is a glance and Enter; skipped entirely when off (fully headless). This is where you add a missing comment or correct an unreliable 3D room — auto-resolution supplies the defaults, the dialog is the fallback. Nothing destructive has happened yet, so **Cancel discards a freshly created circuit cleanly**.
 6. Deletes any existing power supplies on the circuit (preserving Switch ID).
 7. Prompts: select an existing power supply to stack below, or press Esc to pick a bare point.
-8. Places power supplies in a column (9" apart), connects to circuit, sets suffixed Switch IDs (e.g., X01a, X01b), and tags each with SwitchID and Switchleg tags. New supplies are **hosted on the active plan's level** and their **Elevation from Level is set explicitly** (to the view's display plane — RCP top / floor-plan bottom) so they land visible and in-range. This is authoritative: `NewFamilyInstance` does not reliably honor the placement Z for these level-based families (it inherits the family's sticky elevation default), and `Level.ProjectElevation` — not `Level.Elevation`, which a survey/relocated elevation base can inflate — is the frame the elevation is computed in.
+8. Places power supplies in a column (9" apart), connects to circuit, sets suffixed Switch IDs (e.g., X01a, X01b), and tags each with SwitchID and Switchleg tags. New supplies are **hosted on the active plan's level** with **Elevation from Level set explicitly** to the view's display plane (RCP top / floor-plan bottom) so they land visible and in-range — see CLAUDE.md "`NewFamilyInstance` ignores the placement Z" for why the explicit set (computed off `Level.ProjectElevation`, not `Level.Elevation`) is required.
 9. Re-selects the circuit's lighting fixtures on exit so the user can immediately assign them to switches without re-picking.
 
 ## TurboRPS (RPSCommand)
@@ -117,11 +117,7 @@ Requires at least one loaded Lighting Device family type with valid `Power` and 
 | `Voltage` | Double/Text/Integer | For voltage-match scoring |
 | `Catalog Number1` | Text | Display in recommendation UI |
 
-**On Lighting Device instances:**
-
-| Parameter | Type | Purpose |
-|-----------|------|---------|
-| `Switch ID` | Text | Written by TurboDriver (e.g., X01a, X01b) |
+Device instances carry `Switch ID` (Text), written by TurboDriver (e.g. `X01a`, `X01b`; see step 8).
 
 ### Other Requirements
 

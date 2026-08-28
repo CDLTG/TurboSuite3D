@@ -2,6 +2,8 @@
 
 Tabbed document generation utility. Eight output tabs: **Cover** (cover page and general/control notes PDF), **Schedule** (fixture schedule PDF), **Power Supplies** (RPS schedule, switch ID lookup table, and driver breakdown PDF), **Cut Sheets** (spec sheet PDF merging), **Control BOM** (control system bill of materials PDF), **Load Schedule** (electrical circuit load schedule PDF), **Panel Schedule** (dimmer panel breakdown PDF), and **Counts** (fixture-quantity export for quoting). A **Settings** tab configures shared company info and page options.
 
+Entry `DocsCommand.cs`; PDF/render services in `Shim/Docs/`, pure builders/resolvers and workbook IO in `Core/Docs/Services/` (unit-tested). Font resolution via `Core/Docs/Services/PdfFontResolver.cs` (see Dependencies).
+
 ## Schedule Tab
 
 Generates a fixture schedule PDF from lighting fixture type parameters.
@@ -18,7 +20,7 @@ Each fixture entry is a card-style block:
   - **Photometric**: Lumens, CCT, CRI
 - **Schedule Notes** below (en-dash bulleted, with word wrapping)
 
-Spec sections are dynamically positioned — column gaps adapt to the widest content across all entries while maintaining vertical alignment. Overflow handling: Type Mark and Catalog Numbers auto-shrink font size; Manufacturer and Descriptions shrink to stay within capped width so spec columns fit on the page.
+Spec columns are positioned globally — gaps adapt to the widest content across **all** entries so columns stay vertically aligned; Type Mark, Catalog Numbers, Manufacturer, and Descriptions auto-shrink to fit.
 
 Entries are grouped by **Classification** (alphabetically, empty classification at bottom) with a header and rule line per group.
 
@@ -65,15 +67,7 @@ Generates a load schedule PDF from electrical circuit parameters in a flat table
 
 ### Layout
 
-Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**
-
-- Column headers repeat on each page with a rule line underneath
-- Subtle horizontal gridlines between rows
-- Circuit column is centered; all others left-aligned
-- Load column gets remaining page width after other columns are measured to fit content
-- Load names truncated with ellipsis if they exceed available width
-- Circuits named `<unnamed>` display as `<...>`
-- Circuits named `Feed Through Lugs` are excluded
+Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded.
 
 **Fixtures column** — smart Type Mark combining:
 - All same Type Mark → show as-is

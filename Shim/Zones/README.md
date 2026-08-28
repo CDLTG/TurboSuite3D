@@ -1,6 +1,6 @@
 # TurboZones
 
-Modeless utility: circuit load names, shade load names, and dimmer-panel allocation. The window stays open while you work in Revit — pan, zoom, select, and run other commands without closing it. All Revit writes go through an `IExternalEventHandler` (see CLAUDE.md "Modeless pattern"). DALI loop *declaration* used to be a third tab here; it now lives in the standalone **TurboDALI** command, and TurboZones is a pure consumer of the persisted DALI state (placement + demand only). A **Shade Names** tab appears between Load Names and Panel Breakdown **only on jobs that have shade circuits**, so non-shade jobs keep the two-tab layout.
+Modeless utility: circuit load names, shade load names, and dimmer-panel allocation. Entry `ZonesCommand.cs`; the allocation engine and BOM/link math are the Revit-free `Core/Zones/Services/` (`PanelAllocationService`, `ControlBomBuilder`, `ControlLinkPacker`, `ShadeSolver`, `DimmingModuleResolver`), all unit-tested. The window stays open during Revit work; all writes go through an `IExternalEventHandler` (see CLAUDE.md "Modeless pattern"). DALI loop *declaration* used to be a third tab here; it now lives in the standalone **TurboDALI** command, and TurboZones is a pure consumer of the persisted DALI state (placement + demand only). A **Shade Names** tab appears between Load Names and Panel Breakdown **only on jobs that have shade circuits**, so non-shade jobs keep the two-tab layout.
 
 ## Tab — Load Names
 
@@ -10,7 +10,7 @@ Scans every circuit connected to Lighting or Electrical Fixtures and resolves a 
 2. Fixture Comments (joined, deduplicated)
 3. Load Classification full name (fallback)
 
-The resolved label is combined with the room name of the first fixture: `ROOM NAME - label`. A per-circuit **Room Override** column lets you substitute a different room name for a single circuit; overrides are persisted in ExtensibleStorage (keyed by circuit) so they survive reopening the window, and apply only to the circuit they were set on. Review the proposed updates in the table, then click **Apply Load Names** to write all changes in a single transaction. Click any row to mark it active (the whole row highlights, with a blue left-edge accent), then click **Select in Project** to highlight and zoom to that circuit in Revit's active view without closing the window.
+The resolved label is combined with the room name of the first fixture: `ROOM NAME - label`. A per-circuit **Room Override** column lets you substitute a different room name for a single circuit; overrides are persisted in ExtensibleStorage (keyed by circuit) so they survive reopening the window, and apply only to the circuit they were set on. **Apply Load Names** writes all changes in a single transaction; **Select in Project** zooms to the active row's circuit in Revit's view without closing the window.
 
 ## Tab — Shade Names
 

@@ -1,8 +1,6 @@
 # TurboWire
 
-Creates electrical circuits and wire connections between lighting fixtures and electrical fixtures.
-
-**Suggested shortcut:** `WW`
+Creates electrical circuits and routes wires between lighting/electrical fixtures. Entry `WireCommand.cs` (namespace collision — `using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;`, see CLAUDE.md); the shared circuit-info dialog + room-override live in `Shim/Shared` (`CircuitInfoService` / `CircuitInfoDialog`, decision logic in the unit-tested `Core/Circuits/CircuitRoomOverride`). Commit each wire in its own transaction (see CLAUDE.md "Wire end display").
 
 ## Entry Modes
 
