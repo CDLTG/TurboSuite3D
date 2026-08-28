@@ -78,15 +78,17 @@ internal class PictureLightPlacementCalculator : IPlacementCalculator
         // v3: elbow, inset from the bubble back along the wall at the same depth.
         Vertex3 = NewTagPosition - _wallParallel * (side * BubbleConstants.WireElbowOffsetFt);
 
-        // v2 (arc control): at the elbow column, held shallow so the wire arcs down from the bar end.
+        // v2 (arc control): at the elbow column, inset from the room-side edge so the wire arcs down
+        // from the bar end. Anchored to the measured depth (like v1/v3/bubble) so the arc is rigid.
         double elbowAlong = _halfAlongWall + BubbleConstants.PictureLightTagAlongWallGapFt - BubbleConstants.WireElbowOffsetFt;
         Vertex2 = FixturePoint
             + _wallParallel * (side * elbowAlong)
-            + _wallNormal * BubbleConstants.PictureLightWireMidOffWallFt;
+            + _wallNormal * (_roomDepth - BubbleConstants.PictureLightWireMidInsetFt);
 
-        // v1: the bar end (origin is centered along the wall), exiting near the room-side edge.
+        // v1: the bar end (origin is centered along the wall), exiting just inside the room-side edge.
+        // Inset from the MEASURED depth so a deeper symbol pushes the exit out with it, not into the body.
         WireEndPoint = FixturePoint
             + _wallParallel * (side * _halfAlongWall)
-            + _wallNormal * BubbleConstants.PictureLightWireEndOffWallFt;
+            + _wallNormal * (_roomDepth - BubbleConstants.PictureLightWireEndInsetFt);
     }
 }

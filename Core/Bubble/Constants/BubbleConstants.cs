@@ -119,8 +119,12 @@ public static class BubbleConstants
     // bar end near the room side then arcs down to the bubble.
     public const double PictureLightTagAlongWallGapFt = 8.75 * InchesToFeet; // bubble past the bar end
     public const double PictureLightTagClearanceFt = 4.25 * InchesToFeet;    // bubble/elbow past the room-side edge (added to roomDepth)
-    public const double PictureLightWireEndOffWallFt = 3.7 * InchesToFeet;   // v1 exit depth from the wall
-    public const double PictureLightWireMidOffWallFt = 2.9 * InchesToFeet;   // v2 arc-control depth from the wall
+    // v1/v2 wire depths are anchored to the MEASURED room-side edge (roomDepth), inset back toward the
+    // wall — so the whole arc keeps its shape and simply translates outward for a deeper symbol, rather
+    // than staying pinned near the wall while the bubble marches out. Insets derived from the reference
+    // family (spiked roomDepth 4.487") to reproduce the tuned look byte-for-byte: 4.487-3.7 and 4.487-2.9.
+    public const double PictureLightWireEndInsetFt = 0.787 * InchesToFeet;   // v1 inset from the room-side edge
+    public const double PictureLightWireMidInsetFt = 1.587 * InchesToFeet;   // v2 inset (deeper => bows the arc)
 
     // Tag placement offsets (in feet)
     public const double TagOffsetVerticalFt = 5.25 * InchesToFeet;
