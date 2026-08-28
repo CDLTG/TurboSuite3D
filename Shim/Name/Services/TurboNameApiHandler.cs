@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Threading;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Shared.Models;
@@ -25,6 +26,14 @@ public class TurboNameApiHandler : IExternalEventHandler
     private readonly string _textNoteTypeName;
     private readonly string _descTextNoteTypeName;
 
+    // The UI-thread dispatcher, captured at construction. The command builds this handler on Revit's API/UI
+    // thread (spike-confirmed thread id 1, same thread the modeless window lives on), so CurrentDispatcher here
+    // is the window's dispatcher. Do NOT dispatch via System.Windows.Application.Current — on Revit 2024 there
+    // is no WPF Application, so Application.Current is null and Application.Current?.Dispatcher?.BeginInvoke is a
+    // silent no-op. That dropped every completion callback, so the _eventBusy latch never reset and the window
+    // locked (couldn't act, couldn't close). Spike-confirmed null on 2024; present on 2025/2026.
+    private readonly Dispatcher _dispatcher;
+
     /// <summary>Transient red role-preview overlay, owned here so its snapshots survive across requests and can
     /// be reverted in one place on close.</summary>
     public LayerRolePreviewService RolePreview { get; } = new();
@@ -40,6 +49,7 @@ public class TurboNameApiHandler : IExternalEventHandler
         _settingsProvider = settingsProvider;
         _textNoteTypeName = textNoteTypeName;
         _descTextNoteTypeName = descTextNoteTypeName;
+        _dispatcher = Dispatcher.CurrentDispatcher;
     }
 
     public void Execute(UIApplication app)
@@ -814,14 +824,20 @@ public class TurboNameApiHandler : IExternalEventHandler
         catch { /* cosmetic only */ }
     }
 
-    private static void Finish(TurboNameRequest request)
+    private void Finish(TurboNameRequest request)
     {
         Dispatch(() => request.OnFinished?.Invoke());
     }
 
-    private static void Dispatch(Action action)
+    // Marshal a completion callback onto the UI thread via the dispatcher captured at construction — NOT via
+    // Application.Current, which is null on Revit 2024 (see the _dispatcher field note). Falls back to a direct
+    // invoke if the dispatcher is ever gone, so a callback can never be silently swallowed.
+    private void Dispatch(Action action)
     {
-        Application.Current?.Dispatcher?.BeginInvoke(action);
+        if (_dispatcher != null && !_dispatcher.HasShutdownStarted)
+            _dispatcher.BeginInvoke(action);
+        else
+            action();
     }
 
     public string GetName() => "TurboName API Handler";

@@ -1,7 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
-using System.Windows;
+using System.Windows.Threading;
 using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 
@@ -28,10 +28,19 @@ namespace TurboSuite.Shared.Services
         private readonly string _name;
         private ExternalEvent _externalEvent;
 
+        // UI-thread dispatcher captured at construction (the command builds this on Revit's API/UI thread — the
+        // same thread the modeless window lives on). Completion callbacks marshal through this, NOT through
+        // System.Windows.Application.Current: on Revit 2024 there is no WPF Application, so Application.Current is
+        // null and dispatching through it silently drops the callback (spike-confirmed null on 2024, present on
+        // 2025/2026). Unlike TurboName's single-shot latch this queue can't hard-lock from a dropped callback,
+        // but the UI would still miss its post-op refresh — same root cause, fixed the same way.
+        private readonly Dispatcher _dispatcher;
+
         public RevitWorkQueue(string errorTitle, string name = "TurboSuite Work Queue")
         {
             _errorTitle = errorTitle;
             _name = name;
+            _dispatcher = Dispatcher.CurrentDispatcher;
             _externalEvent = ExternalEvent.Create(this);
         }
 
@@ -70,7 +79,12 @@ namespace TurboSuite.Shared.Services
                 {
                     var callback = item.OnComplete;
                     var captured = result;
-                    Application.Current?.Dispatcher?.Invoke(() => callback(captured));
+                    // Invoke (not BeginInvoke) to keep the documented synchronous-inline drain: Execute runs on
+                    // the dispatcher's own thread, so this runs the callback right here before the next item.
+                    if (_dispatcher != null && !_dispatcher.HasShutdownStarted)
+                        _dispatcher.Invoke(() => callback(captured));
+                    else
+                        callback(captured);
                 }
             }
         }
