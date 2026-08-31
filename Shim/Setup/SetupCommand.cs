@@ -34,24 +34,23 @@ public class SetupCommand : IExternalCommand
             return Result.Failed;
         }
 
-        // ── Landing menu: route to the setup wizard or the space-naming action ──
-        var home = new TaskDialog("TurboSetup")
-        {
-            MainInstruction = "TurboSetup",
-            MainContent = "Choose a setup action.",
-            AllowCancellation = true
-        };
-        home.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Project Setup",
-            "Copy levels from the architectural link, create Floor Plan + RCP views with firm templates, and configure link graphics.");
-        home.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Name Spaces from Rooms",
-            "Pull architect Room names onto Spaces — blank-only by default, or a force re-pull.");
+        // ── Landing menu: a suite-styled launcher window routes to the setup wizard or the
+        //    space-naming action (replacing the old native TaskDialog command-link menus). ──
+        var landing = new TurboSetupLandingWindow();
+        new WindowInteropHelper(landing) { Owner = commandData.Application.MainWindowHandle };
+        landing.ShowDialog();
 
-        TaskDialogResult choice = home.Show();
-        if (choice == TaskDialogResult.CommandLink1)
-            return RunProjectSetup(commandData, ref message, elements);
-        if (choice == TaskDialogResult.CommandLink2)
-            return RunNameSpaces(doc0);
-        return Result.Cancelled;
+        switch (landing.Choice)
+        {
+            case TurboSetupLandingWindow.SetupChoice.ProjectSetup:
+                return RunProjectSetup(commandData, ref message, elements);
+            case TurboSetupLandingWindow.SetupChoice.NameSpacesBlankOnly:
+                return RunNameSpaces(doc0, force: false);
+            case TurboSetupLandingWindow.SetupChoice.NameSpacesForce:
+                return RunNameSpaces(doc0, force: true);
+            default:
+                return Result.Cancelled;
+        }
     }
 
     private Result RunProjectSetup(ExternalCommandData commandData, ref string message, ElementSet elements)
@@ -247,30 +246,12 @@ public class SetupCommand : IExternalCommand
     }
 
     /// <summary>
-    /// Seed Space names from the architect Rooms. Blank-only by default so manual disambiguation
-    /// (LOWER POWDER / MAIN POWDER) survives; a force pass re-pulls all. Writes commit inside the service,
-    /// so this returns Succeeded.
+    /// Seed Space names from the architect Rooms. Blank-only (force=false) keeps manual disambiguation
+    /// (LOWER POWDER / MAIN POWDER); a force pass re-pulls all. The blank-only/force choice is now made
+    /// on the landing window's second page. Writes commit inside the service, so this returns Succeeded.
     /// </summary>
-    private static Result RunNameSpaces(Document doc)
+    private static Result RunNameSpaces(Document doc, bool force)
     {
-        var dlg = new TaskDialog("Name Spaces from Architect Rooms")
-        {
-            MainInstruction = "Pull architect Room names onto Spaces?",
-            MainContent = "Each Space is named from the architect Room it sits in — trimmed, '#' removed, " +
-                          "and UPPERCASED to match TurboName. Spaces with no architect Room are left as-is.",
-            AllowCancellation = true
-        };
-        dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Name only blank Spaces",
-            "Recommended. Leaves Spaces you already named — including manual splits like LOWER POWDER — untouched.");
-        dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Force re-pull ALL Spaces",
-            "Overwrites every Space name from the architect, including names you edited by hand.");
-
-        TaskDialogResult choice = dlg.Show();
-        bool force;
-        if (choice == TaskDialogResult.CommandLink1) force = false;
-        else if (choice == TaskDialogResult.CommandLink2) force = true;
-        else return Result.Cancelled;
-
         SpaceNamingResult r = SpaceNamingService.NameSpacesFromRooms(doc, force);
 
         string summary =

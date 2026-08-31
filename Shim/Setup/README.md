@@ -1,6 +1,6 @@
 # TurboSetup
 
-Running TurboSetup opens a **landing menu** with two actions:
+Running TurboSetup opens a **launcher window** (a fixed-size, suite-styled WPF window whose content swaps as you click, `Views/TurboSetupLandingWindow`) with two actions:
 
 - **Project Setup** — new-project setup automation for the 3D (RVT-linked) lighting workflow (below).
 - **Name Spaces from Rooms** — seed Space names from the architect's linked Rooms ([Space naming](#space-naming)).
@@ -51,7 +51,7 @@ The whole run is wrapped in a `TransactionGroup` — any failure rolls back clea
 
 Runtime room detection reads project-owned **Spaces** (`SpaceRoomFinderService`), not the architect's linked Rooms — so a Space needs a name for its fixtures to resolve. **Name Spaces from Rooms** seeds those names in one pass: for each placed Space, it finds the architect Room at the Space's plan location (via the BAND_ROOM finder, `LinkedRoomFinderService` — the one place architect Rooms are still consulted) and writes that Room's name onto the Space, normalized identically to TurboName (trimmed, `#` removed, UPPERCASED).
 
-Two modes, picked from a second dialog:
+Two modes, picked from the launcher window's second page:
 
 - **Name only blank Spaces** *(default)* — leaves any Space you already named untouched, so manual disambiguation splits (e.g. `LOWER POWDER` / `MAIN POWDER` where the architect drew two rooms both named `POWDER`) survive. This is the safe re-run.
 - **Force re-pull ALL Spaces** — overwrites every Space name from the architect, including hand-edited ones. Use only when the architect renamed rooms and you want to re-seed from scratch.

@@ -1,0 +1,104 @@
+<Window
+    x:Class="TurboSuite.Setup.Views.TurboSetupLandingWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="TurboSetup"
+    Width="540" SizeToContent="Height"
+    WindowStartupLocation="CenterScreen"
+    FontFamily="Segoe UI" FontSize="11"
+    ResizeMode="NoResize">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Command-link button: a big, left-reading choice tile (bold blue title + gray blurb),
+                 the WPF stand-in for a TaskDialog command link. Chrome inherits RevitButtonStyle
+                 (squared, Aero hover), just left-aligned and roomier. -->
+            <Style x:Key="CommandLinkStyle" TargetType="Button" BasedOn="{StaticResource RevitButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="Padding" Value="16,12"/>
+                <Setter Property="Margin" Value="0,0,0,12"/>
+            </Style>
+            <Style x:Key="CommandLinkTitle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Foreground" Value="{StaticResource HeaderBlueBrush}"/>
+            </Style>
+            <Style x:Key="CommandLinkBlurb" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                <Setter Property="TextWrapping" Value="Wrap"/>
+                <Setter Property="Margin" Value="0,3,0,0"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource ContentBgBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Blue header bar (matches TurboNumber/TurboZones) -->
+        <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
+            <StackPanel>
+                <TextBlock Text="TurboSetup" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                <TextBlock x:Name="HeaderSubtitle" Text="Choose a setup action."
+                           Foreground="#D6E2F4" FontSize="11" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ── Page 1: landing menu ── -->
+        <StackPanel x:Name="PanelLanding" Grid.Row="1" Margin="18,16,18,0">
+            <Button Style="{StaticResource CommandLinkStyle}" Click="ProjectSetup_Click">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CommandLinkTitle}" Text="Project Setup"/>
+                    <TextBlock Style="{StaticResource CommandLinkBlurb}"
+                               Text="Copy levels from the architectural link, create Floor Plan + RCP views with firm templates, and configure link graphics."/>
+                </StackPanel>
+            </Button>
+            <Button Style="{StaticResource CommandLinkStyle}" Click="NameSpaces_Click">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CommandLinkTitle}" Text="Name Spaces from Rooms"/>
+                    <TextBlock Style="{StaticResource CommandLinkBlurb}"
+                               Text="Pull architect Room names onto Spaces — blank-only by default, or a force re-pull."/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+        <!-- ── Page 2: Name Spaces choice ── -->
+        <StackPanel x:Name="PanelNameSpaces" Grid.Row="1" Margin="18,16,18,0" Visibility="Collapsed">
+            <Button Style="{StaticResource CommandLinkStyle}" Click="NameBlankOnly_Click">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CommandLinkTitle}" Text="Name only blank Spaces"/>
+                    <TextBlock Style="{StaticResource CommandLinkBlurb}"
+                               Text="Recommended. Leaves Spaces you already named — including manual splits like LOWER POWDER — untouched."/>
+                </StackPanel>
+            </Button>
+            <Button Style="{StaticResource CommandLinkStyle}" Click="NameForce_Click">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CommandLinkTitle}" Text="Force re-pull ALL Spaces"/>
+                    <TextBlock Style="{StaticResource CommandLinkBlurb}"
+                               Text="Overwrites every Space name from the architect, including names you edited by hand."/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+        <!-- Footer: Back (page 2 only) + Cancel -->
+        <Border Grid.Row="2" Background="{StaticResource FooterBgBrush}" BorderBrush="{StaticResource SeparatorBrush}"
+                BorderThickness="0,1,0,0" Padding="15,10">
+            <Grid>
+                <Button x:Name="BackButton" Content="‹ Back" Width="80" HorizontalAlignment="Left"
+                        Style="{StaticResource RevitButtonStyle}" Visibility="Collapsed"
+                        Click="Back_Click"/>
+                <Button Content="Cancel" Width="80" HorizontalAlignment="Right"
+                        Style="{StaticResource RevitButtonStyle}"
+                        Click="Cancel_Click" IsCancel="True"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
