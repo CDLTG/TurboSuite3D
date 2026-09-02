@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024, 2025, and 2026**, built for electrical/lighting designers working on luxury architectural lighting projects. Fifteen commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET Framework 4.8 for Revit 2024, .NET 8.0-windows for Revit 2025, .NET 10.0-windows for Revit 2026), x64.
+A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024, 2025, and 2026**, built for electrical/lighting designers working on luxury architectural lighting projects. Sixteen commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET Framework 4.8 for Revit 2024, .NET 8.0-windows for Revit 2025, .NET 10.0-windows for Revit 2026), x64.
 
 ## Installation
 
@@ -29,7 +29,7 @@ Run `TurboSuiteInstaller.exe` again and click **Uninstall** to remove all TurboS
 
 ## Ribbon Tab
 
-The "TurboSuite" ribbon tab has three panels:
+The "TurboSuite" ribbon tab has four panels:
 
 ### Settings Panel
 
@@ -37,6 +37,14 @@ The "TurboSuite" ribbon tab has three panels:
 |--------|-------------|
 | [Settings](Shim/App/README.md) | Configure family name settings stored in ExtensibleStorage |
 | [TurboTab](Shim/Tab/README.md) | Toggle document tab coloring — colors each open tab by project for visual identification |
+
+### Tools Panel
+
+A **Scripts** pulldown holding small single-shot scripts. Each entry is a full command, so you can assign it its own keyboard shortcut in Revit's Keyboard Shortcuts — the dropdown is discovery/fallback.
+
+| Script | Description |
+|--------|-------------|
+| [TurboNudge](Shim/Nudge/README.md) | Slide a selected keypad along its wall to exactly 5" from a picked door corner — replaces the manual place-then-dimension flow (3D and 2D) |
 
 ### Commands Panel
 
@@ -81,7 +89,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 | Category | Used By |
 |----------|---------|
 | Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs, TurboMask |
-| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs, TurboMask |
+| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs, TurboMask, TurboNudge |
 | Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones, TurboMask |
 | Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones, TurboMask |
 
