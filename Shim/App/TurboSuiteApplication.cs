@@ -11,8 +11,8 @@ using TurboSuite.Tab;
 namespace TurboSuite.App;
 
 /// <summary>
-/// External Application that registers the TurboSuite ribbon panels — Settings, Commands, Utilities, and
-/// (gated on <see cref="ExperimentalCommandsEnabled"/>) Controls and Debug, in that ribbon order.
+/// External Application that registers the TurboSuite ribbon panels — Settings, Tools, Commands, Utilities,
+/// and (gated on <see cref="ExperimentalCommandsEnabled"/>) Controls and Debug, in that ribbon order.
 /// </summary>
 public class TurboSuiteApplication : IExternalApplication
 {
@@ -38,7 +38,10 @@ public class TurboSuiteApplication : IExternalApplication
             ModelessWindowGuard.Hook(application.ControlledApplication);
 
             application.CreateRibbonTab("TurboSuite");
+            // Panels render in creation order: Settings, Tools, Commands, Utilities, then the
+            // experimental Controls/Debug panels below.
             RibbonPanel settingsPanel = application.CreateRibbonPanel("TurboSuite", "Settings");
+            RibbonPanel toolsPanel = application.CreateRibbonPanel("TurboSuite", "Tools");
             RibbonPanel commandsPanel = application.CreateRibbonPanel("TurboSuite", "Commands");
             RibbonPanel utilitiesPanel = application.CreateRibbonPanel("TurboSuite", "Utilities");
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
@@ -65,6 +68,26 @@ public class TurboSuiteApplication : IExternalApplication
             {
                 application.Idling += OnIdlingStartTabColoring;
             }
+
+            // ── Tools panel ──
+            // The Scripts pulldown: a dropdown home for small single-shot scripts, on its own panel
+            // between Settings and Commands. Each entry is a full IExternalCommand, so it gets its own stable id and is
+            // individually keybindable in Revit's Keyboard Shortcuts — the dropdown is discovery/fallback;
+            // these are meant to be driven by user-assigned shortcuts. One pulldown stays one ribbon slot
+            // no matter how many tools land in it. Revit pulldowns are a single flat list (no nested
+            // submenus); AddSeparator groups entries.
+            PulldownButton scriptsPulldown = (PulldownButton)toolsPanel.AddItem(
+                new PulldownButtonData("TurboScripts", "   Scripts   "));
+            scriptsPulldown.ToolTip = "Small single-shot scripts. Assign each its own keyboard shortcut in Revit's Keyboard Shortcuts.";
+            SetButtonIcons(scriptsPulldown, "Blank");
+
+            CreatePulldownItem(scriptsPulldown, assemblyPath,
+                "TurboNudge",
+                "Nudge to Corner",
+                "TurboSuite.Nudge.NudgeCommand",
+                "Slide a keypad to 5\" from a picked corner",
+                "Select a keypad (or run with one already selected), then snap to a door corner. The keypad slides along its wall to exactly 5\" from the corner, on the side it's already on. Works for hosted (3D) and unhosted (2D) families.",
+                "Blank");
 
             // ── Commands panel ──
             CreateButton(commandsPanel, assemblyPath,
@@ -364,7 +387,25 @@ public class TurboSuiteApplication : IExternalApplication
         PushButton button = (PushButton)panel.AddItem(buttonData);
         button.ToolTip = tooltip;
         button.LongDescription = longDescription;
+        SetButtonIcons(button, iconBaseName);
+    }
 
+    // Adds one command to a Tools-style pulldown. Each is a real PushButton (its own command id,
+    // individually keybindable) — see the Tools pulldown block in OnStartup.
+    private static void CreatePulldownItem(PulldownButton parent, string assemblyPath,
+        string name, string text, string className, string tooltip, string longDescription,
+        string iconBaseName)
+    {
+        PushButtonData buttonData = new PushButtonData(name, text, assemblyPath, className);
+        PushButton button = parent.AddPushButton(buttonData);
+        button.ToolTip = tooltip;
+        button.LongDescription = longDescription;
+        SetButtonIcons(button, iconBaseName);
+    }
+
+    // Both PushButton and PulldownButton derive from RibbonButton, so one setter serves both.
+    private static void SetButtonIcons(RibbonButton button, string iconBaseName)
+    {
         string assembly = Assembly.GetExecutingAssembly().GetName().Name!;
         string largeUri = $"pack://application:,,,/{assembly};component/Icons/{iconBaseName}_32.png";
         string smallUri = $"pack://application:,,,/{assembly};component/Icons/{iconBaseName}_16.png";
