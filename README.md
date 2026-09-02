@@ -40,11 +40,9 @@ The "TurboSuite" ribbon tab has four panels:
 
 ### Tools Panel
 
-A **Scripts** pulldown holding small single-shot scripts. Each entry is a full command, so you can assign it its own keyboard shortcut in Revit's Keyboard Shortcuts — the dropdown is discovery/fallback.
-
-| Script | Description |
-|--------|-------------|
-| [TurboNudge](Shim/Nudge/README.md) | Slide a selected keypad along its wall to exactly 5" from a picked door corner — replaces the manual place-then-dimension flow (3D and 2D) |
+| Script | Shortcut | Description |
+|--------|----------|-------------|
+| [TurboNudge](Shim/Nudge/README.md) | `TN` | Slide a selected keypad along its wall to exactly 5" from a picked door corner — replaces the manual place-then-dimension flow (3D and 2D) |
 
 ### Commands Panel
 

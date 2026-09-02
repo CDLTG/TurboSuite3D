@@ -85,7 +85,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboNudge",
                 "Nudge to Corner",
                 "TurboSuite.Nudge.NudgeCommand",
-                "Slide a keypad to 5\" from a picked corner",
+                "Suggested shortcut: TN\nSlide a keypad to 5\" from a picked corner",
                 "Select a keypad (or run with one already selected), then snap to a door corner. The keypad slides along its wall to exactly 5\" from the corner, on the side it's already on. Works for hosted (3D) and unhosted (2D) families.",
                 "Blank");
 
