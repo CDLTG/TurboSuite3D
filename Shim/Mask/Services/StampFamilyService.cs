@@ -10,6 +10,16 @@ namespace TurboSuite.Mask.Services;
 /// Stamps are loaded into the project as Stamp_&lt;FixtureFamilyName&gt; so they can be placed at the
 /// view level on top of a masking region, preserving the visible fixture graphics.
 ///
+/// Resolution is **per fixture type**, not per family: a multi-type fixture family (e.g. a receptacle
+/// with duplex / duplex-hot / quadruplex / quadruplex-hot) type-swaps its nested annotation graphic
+/// via a &lt;Family Type&gt;-valued family parameter, so each fixture type must land its own stamp
+/// symbol type. The authoritative fixtureType → stampType map is read straight from the family
+/// (FamilyManager.Types + FamilyType.AsElementId on the parameter whose per-type values resolve into
+/// the nested annotation's own symbol set — never matched by parameter name, which is not stable).
+/// LoadFamily already brings every nested symbol type into Stamp_&lt;Family&gt;, so the graphics are
+/// present; this class only picks the right one for each placed type. Single-graphic families (one
+/// nested symbol type) skip the mapping read entirely and stay as fast as before.
+///
 /// EditFamily must NOT be called inside a Transaction. Call ResolveStamp before opening the
 /// placement transaction.
 /// </summary>
@@ -18,7 +28,8 @@ internal sealed class StampFamilyService
     private const string StampPrefix = "Stamp_";
 
     private readonly Document _project;
-    private readonly Dictionary<string, FamilySymbol?> _cache = new();
+    private readonly Dictionary<string, StampFamilyResolution?> _cache = new();
+    private readonly HashSet<string> _reportedMisses = new();
 
     public StampFamilyService(Document project)
     {
@@ -26,54 +37,111 @@ internal sealed class StampFamilyService
     }
 
     /// <summary>
-    /// Returns the FamilySymbol of the stamp family for the given fixture family, extracting it
-    /// from the source family on first encounter and loading it into the project. Returns null if
-    /// the fixture family has no nested Generic Annotation. Failure reasons are appended to
-    /// <paramref name="failures"/>.
+    /// Returns the stamp FamilySymbol to place for the given fixture <paramref name="fixtureType"/>,
+    /// extracting/loading the stamp family from the fixture's nested Generic Annotation on first
+    /// encounter. Returns null if the fixture family has no nested Generic Annotation. Failure and
+    /// fallback reasons are appended to <paramref name="failures"/>.
     /// </summary>
-    public FamilySymbol? ResolveStamp(Family fixtureFamily, List<string> failures)
+    public FamilySymbol? ResolveStamp(FamilySymbol fixtureType, List<string> failures)
+    {
+        var family = fixtureType.Family;
+        if (family == null) return null;
+
+        var res = GetOrBuildResolution(family, failures);
+        if (res == null) return null;
+
+        if (res.FixtureTypeToStampType.TryGetValue(fixtureType.Name, out var stampTypeName)
+            && res.StampSymbolsByTypeName.TryGetValue(stampTypeName, out var mapped))
+            return mapped;
+
+        // More than one stamp graphic but this fixture type isn't mapped — surface it once and fall
+        // back to the first symbol (the pre-fix behavior) so a mask still gets *a* footprint.
+        if (res.StampSymbolsByTypeName.Count > 1)
+        {
+            string key = family.Name + "|" + fixtureType.Name;
+            if (_reportedMisses.Add(key))
+                failures.Add($"{family.Name} / type '{fixtureType.Name}': no stamp mapping found; used '{res.Fallback?.Name}'.");
+        }
+        return res.Fallback;
+    }
+
+    private StampFamilyResolution? GetOrBuildResolution(Family fixtureFamily, List<string> failures)
     {
         string stampName = StampPrefix + fixtureFamily.Name;
         if (_cache.TryGetValue(stampName, out var cached))
             return cached;
 
-        FamilySymbol? symbol = FindExistingStamp(stampName);
-        if (symbol != null)
-        {
-            _cache[stampName] = symbol;
-            return symbol;
-        }
-
+        StampFamilyResolution? res;
         try
         {
-            symbol = ExtractAndLoadStamp(fixtureFamily, stampName, failures);
+            res = BuildResolution(fixtureFamily, stampName, failures);
         }
         catch (Exception ex)
         {
             failures.Add($"{fixtureFamily.Name}: threw: {ex.Message}");
-            symbol = null;
+            res = null;
         }
 
-        _cache[stampName] = symbol;
-        return symbol;
+        _cache[stampName] = res;
+        return res;
     }
 
-    private FamilySymbol? FindExistingStamp(string stampName)
+    private StampFamilyResolution? BuildResolution(Family fixtureFamily, string stampName, List<string> failures)
     {
-        var family = new FilteredElementCollector(_project)
+        Dictionary<string, string>? mapFromExtraction = null;
+
+        Family? stampFamily = FindExistingStampFamily(stampName);
+        if (stampFamily == null)
+        {
+            stampFamily = ExtractAndLoadStamp(fixtureFamily, stampName, failures, out mapFromExtraction);
+            if (stampFamily == null) return null;
+        }
+
+        var symbolsByName = new Dictionary<string, FamilySymbol>();
+        FamilySymbol? fallback = null;
+        foreach (var symId in stampFamily.GetFamilySymbolIds())
+        {
+            if (_project.GetElement(symId) is FamilySymbol fs)
+            {
+                symbolsByName[fs.Name] = fs;
+                fallback ??= fs;
+            }
+        }
+
+        if (fallback == null)
+        {
+            failures.Add($"{fixtureFamily.Name}: loaded '{stampName}' has no FamilySymbol");
+            return null;
+        }
+
+        // One graphic ⇒ nothing to disambiguate; every type gets the sole symbol. This is the common
+        // single-graphic family, and it skips the EditFamily-for-map read entirely.
+        Dictionary<string, string> map;
+        if (symbolsByName.Count <= 1)
+            map = new Dictionary<string, string>();
+        else
+            map = mapFromExtraction ?? BuildMapViaEditFamily(fixtureFamily, failures);
+
+        return new StampFamilyResolution
+        {
+            StampSymbolsByTypeName = symbolsByName,
+            FixtureTypeToStampType = map,
+            Fallback = fallback,
+        };
+    }
+
+    private Family? FindExistingStampFamily(string stampName)
+    {
+        return new FilteredElementCollector(_project)
             .OfClass(typeof(Family))
             .Cast<Family>()
             .FirstOrDefault(f => f.Name == stampName);
-        if (family == null) return null;
-
-        var symbolId = family.GetFamilySymbolIds().FirstOrDefault();
-        if (symbolId == null || symbolId == ElementId.InvalidElementId) return null;
-
-        return _project.GetElement(symbolId) as FamilySymbol;
     }
 
-    private FamilySymbol? ExtractAndLoadStamp(Family fixtureFamily, string stampName, List<string> failures)
+    private Family? ExtractAndLoadStamp(Family fixtureFamily, string stampName, List<string> failures,
+        out Dictionary<string, string>? map)
     {
+        map = null;
         Document? fixtureDoc = null;
         Document? annotationDoc = null;
 
@@ -131,19 +199,108 @@ internal sealed class StampFamilyService
                 failures.Add($"{fixtureFamily.Name}: rename to '{stampName}' threw: {ex.Message}");
             }
 
-            var symbolId = loadedFamily.GetFamilySymbolIds().FirstOrDefault();
-            if (symbolId == null || symbolId == ElementId.InvalidElementId)
-            {
-                failures.Add($"{fixtureFamily.Name}: loaded '{stampName}' has no FamilySymbol");
-                return null;
-            }
+            // Read the fixtureType → nested-symbol-type map while the fixture family is still open —
+            // free here, versus a second EditFamily on the reuse path. Nested symbol type names carry
+            // over to the loaded stamp family unchanged (only the Family element was renamed), so the
+            // map's values key straight into the stamp's symbols.
+            map = BuildFixtureTypeMap(fixtureDoc, nestedFamily);
 
-            return _project.GetElement(symbolId) as FamilySymbol;
+            return loadedFamily;
         }
         finally
         {
             try { annotationDoc?.Close(false); } catch { }
             try { fixtureDoc?.Close(false); } catch { }
         }
+    }
+
+    private Dictionary<string, string> BuildMapViaEditFamily(Family fixtureFamily, List<string> failures)
+    {
+        Document? fixtureDoc = null;
+        try
+        {
+            fixtureDoc = _project.EditFamily(fixtureFamily);
+            if (fixtureDoc == null)
+            {
+                failures.Add($"{fixtureFamily.Name}: EditFamily returned null (stamp mapping)");
+                return new Dictionary<string, string>();
+            }
+
+            var annotationGenericCategoryId = new ElementId(BuiltInCategory.OST_GenericAnnotation);
+            var nestedFamily = new FilteredElementCollector(fixtureDoc)
+                .OfClass(typeof(Family))
+                .Cast<Family>()
+                .FirstOrDefault(f => f.FamilyCategory?.Id == annotationGenericCategoryId);
+
+            return nestedFamily == null
+                ? new Dictionary<string, string>()
+                : BuildFixtureTypeMap(fixtureDoc, nestedFamily);
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"{fixtureFamily.Name}: stamp mapping threw: {ex.Message}");
+            return new Dictionary<string, string>();
+        }
+        finally
+        {
+            try { fixtureDoc?.Close(false); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Builds fixtureTypeName → nestedAnnotationSymbolTypeName for a family open in
+    /// <paramref name="familyDoc"/>. The driving parameter is discovered structurally, not by name:
+    /// it is the ElementId-valued family parameter whose per-type value resolves to a symbol type of
+    /// the nested annotation family — the only ElementId param that lands inside that set (a Type
+    /// Image param, for instance, resolves to an image and is skipped). First qualifying param per
+    /// type wins.
+    /// </summary>
+    private static Dictionary<string, string> BuildFixtureTypeMap(Document familyDoc, Family nestedFamily)
+    {
+        var map = new Dictionary<string, string>();
+
+        var nestedSymbolNames = new Dictionary<ElementId, string>();
+        foreach (var symId in nestedFamily.GetFamilySymbolIds())
+        {
+            if (familyDoc.GetElement(symId) is FamilySymbol fs)
+                nestedSymbolNames[symId] = fs.Name;
+        }
+        if (nestedSymbolNames.Count == 0) return map;
+
+        var manager = familyDoc.FamilyManager;
+        var idParams = manager.Parameters
+            .Cast<FamilyParameter>()
+            .Where(p => p.StorageType == StorageType.ElementId)
+            .ToList();
+        if (idParams.Count == 0) return map;
+
+        foreach (FamilyType ft in manager.Types)
+        {
+            if (string.IsNullOrEmpty(ft.Name)) continue;
+            foreach (var p in idParams)
+            {
+                if (!ft.HasValue(p)) continue;
+                var eid = ft.AsElementId(p);
+                if (eid != null && nestedSymbolNames.TryGetValue(eid, out var symName))
+                {
+                    map[ft.Name] = symName;
+                    break;
+                }
+            }
+        }
+
+        return map;
+    }
+
+    private sealed class StampFamilyResolution
+    {
+        /// <summary>Stamp symbol type name → the loaded FamilySymbol in the project.</summary>
+        public Dictionary<string, FamilySymbol> StampSymbolsByTypeName = new();
+
+        /// <summary>Fixture type name → stamp symbol type name. Empty for single-graphic families.</summary>
+        public Dictionary<string, string> FixtureTypeToStampType = new();
+
+        /// <summary>First loaded stamp symbol — used for single-graphic families and unmapped types.</summary>
+        public FamilySymbol? Fallback;
     }
 }

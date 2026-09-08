@@ -4,6 +4,8 @@ Draws a white masking region over the selection's combined bounds, overlays a vi
 
 Existing TurboMask stamps/regions covering the same fixtures are cleaned up before new ones are placed. Tags on the masked fixtures are raised above the stamps so they stay visible. Detail lines in the selection are likewise raised — and kept **outside** the `TurboMask N` group, so refreshing or ungrouping never deletes the user's own linework. The stamp for each fixture family is extracted once from the family's nested **Generic Annotation** and loaded as `Stamp_<FixtureFamilyName>`; later runs reuse it.
 
+The stamp is resolved **per fixture type**, not per family. A multi-type family whose types show different footprints (e.g. a receptacle with duplex / duplex-hot / quadruplex / quadruplex-hot) type-swaps its nested annotation via a `<Family Type>` family parameter; `LoadFamily` brings *all* the nested symbol types into `Stamp_<Family>`, and `StampFamilyService` reads the family's `fixtureType → nested-symbol-type` map (`FamilyManager.Types` + `FamilyType.AsElementId`, discovering the driving parameter structurally — the `ElementId` param whose per-type values resolve into the nested annotation's own symbols — never by name) to place the right one for each type. Single-graphic families skip that read. An unmapped type falls back to the first symbol and is reported.
+
 ## Dependencies
 
 | Category | Role |

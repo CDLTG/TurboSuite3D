@@ -70,10 +70,10 @@ public class MaskCommand : IExternalCommand
 
             foreach (var fixture in fixtures)
             {
-                var family = fixture.Symbol?.Family;
-                if (family == null) continue;
+                var fixtureType = fixture.Symbol;
+                if (fixtureType == null) continue;
 
-                var symbol = stampService.ResolveStamp(family, failures);
+                var symbol = stampService.ResolveStamp(fixtureType, failures);
                 if (symbol != null)
                     fixtureToSymbol[fixture.Id] = symbol;
             }
