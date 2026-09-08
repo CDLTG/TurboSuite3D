@@ -205,8 +205,11 @@ namespace TurboSuite.Driver.Services
         }
 
         /// <summary>
-        /// Compare two candidate evaluations. Returns true if eval is better than current.
-        /// Priority: fewest drivers, fewest total subs, manufacturer match, fewer subs per unit
+        /// Compare two candidate evaluations. Returns true if eval is strictly better than
+        /// current. Priority: real-over-TBD, manufacturer match, fewest drivers, fewest total
+        /// subs, fewer subs per unit, then least overkill (smallest-rated unit that still fits).
+        /// Every criterion is a strict inequality, so a full tie keeps <paramref name="current"/>
+        /// (the earlier-encountered candidate) — the comparison stays order-stable.
         /// </summary>
         private bool IsBetterCandidate(CandidateEvaluation eval, CandidateEvaluation current)
         {
@@ -227,8 +230,28 @@ namespace TurboSuite.Driver.Services
             if (eval.TotalSubsProvided != current.TotalSubsProvided)
                 return eval.TotalSubsProvided < current.TotalSubsProvided;
 
-            // 4. Fewer sub-drivers per unit (less waste)
-            return eval.Candidate.SubDriverCount < current.Candidate.SubDriverCount;
+            // 4. Fewer sub-drivers per unit (less waste). Note: once DriversNeeded and
+            // TotalSubsProvided both tie this is necessarily equal too (TotalSubs =
+            // DriversNeeded × SubDriverCount), so it decides nothing on its own — it stays
+            // as a guard in case an earlier criterion is ever relaxed.
+            if (eval.Candidate.SubDriverCount != current.Candidate.SubDriverCount)
+                return eval.Candidate.SubDriverCount < current.Candidate.SubDriverCount;
+
+            // 5. Least overkill: among units that pack the load equally well (same physical
+            // count, same total sub-drivers), prefer the smallest-rated one. This is what makes
+            // a 30 W circuit land on the 100 W transformer instead of the 1000 W — without it,
+            // every single-unit type ties on the criteria above and the winner is decided by
+            // candidate order (which is lexical by type name, and "1000W" sorts before "100W").
+            // Derating needs no special handling here: a unit too small for the load AT its
+            // derated ceiling can't hold it in one sub-driver, so it splits and loses on
+            // DriversNeeded (criterion 2) long before reaching this tie-breaker — e.g. a 225 W
+            // load at 80 % rejects the 250 W unit (250×0.8 = 200 < 225 ⇒ 2 subs) and lands on
+            // the 300 W (300×0.8 = 240 ≥ 225 ⇒ 1 sub).
+            const double powerTolerance = 0.01;
+            if (Math.Abs(eval.Candidate.SubDriverPower - current.Candidate.SubDriverPower) > powerTolerance)
+                return eval.Candidate.SubDriverPower < current.Candidate.SubDriverPower;
+
+            return false;
         }
 
         /// <summary>

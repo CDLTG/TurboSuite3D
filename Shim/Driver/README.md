@@ -2,6 +2,8 @@
 
 Two commands sharing the same services, models, and driver-selection algorithm (First-Fit Decreasing bin-packing over loaded driver types). Entries `DriverCommand.cs` / `RPSCommand.cs`.
 
+Candidates are ranked in `DriverSelectionService.IsBetterCandidate` by, in order: real-over-TBD, manufacturer match, fewest physical drivers, fewest total sub-drivers, then **least overkill** — the smallest-rated unit that still packs the load. That last tie-breaker is what makes a small load land on the smallest transformer that fits (e.g. 4×7.5 W → 100 W, not 1000 W) instead of whichever type sorts first in the candidate list. It never fights the Derating Factor: a unit too small at its *derated* ceiling splits into extra sub-drivers and loses on driver count before the tie-breaker is consulted (225 W @ 80 % → 300 W, not 250 W).
+
 ## TurboDriver (DriverCommand)
 
 Near-headless command for deploying power supplies on a per-circuit basis.
