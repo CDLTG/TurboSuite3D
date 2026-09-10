@@ -5,6 +5,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
 using TurboSuite.Zones.Services;
 
@@ -17,11 +18,10 @@ namespace TurboSuite.Zones.Services
     /// shade panels: like the lighting panels, the panel count is a recommendation off the circuits.
     ///
     /// <b>Identity — the shade motor, not the panel.</b> A circuit is a shade circuit when a connected
-    /// fixture is a shade motor, matched by family name containing <see cref="ShadeMotorFamilyToken"/>
-    /// ("Shade Motor" — catches both the 3D <c>AL_Electrical Fixture_Shade Motor</c> and the 2D
-    /// <c>Shade Motor</c>). That is the same signal <c>ZonesCollectorService</c> uses (via
-    /// <see cref="IsShadeCircuit"/>) to keep shade circuits out of the lighting zones — a shade motor is
-    /// an Electrical Fixture, which that collector would otherwise treat as a lighting load.
+    /// fixture is a shade motor (see <see cref="ShadeCircuitClassifier"/>, the shared identity). That is
+    /// the same signal <c>ZonesCollectorService</c> uses to keep shade circuits out of the lighting
+    /// zones — a shade motor is an Electrical Fixture, which that collector would otherwise treat as a
+    /// lighting load.
     ///
     /// <b>Location — the circuit's panel name.</b> The shade panel follows the "{Location}-{Panel ID}"
     /// convention (e.g. "2-D") and groups by that name, exactly as lighting groups by its panel; the
@@ -37,11 +37,6 @@ namespace TurboSuite.Zones.Services
     /// </summary>
     public sealed class ShadeDemandProvider : IControlSubsystemDemandProvider
     {
-        /// <summary>Family-name token identifying a shade motor. A substring, case-insensitive, so it
-        /// catches both authored families (<c>AL_Electrical Fixture_Shade Motor</c> and <c>Shade
-        /// Motor</c>) and future variants that keep the words.</summary>
-        public const string ShadeMotorFamilyToken = "Shade Motor";
-
         private readonly Document _doc;
 
         public ShadeDemandProvider(Document doc) => _doc = doc;
@@ -73,7 +68,7 @@ namespace TurboSuite.Zones.Services
 
             foreach (var circuit in circuits)
             {
-                int shades = CountShadeMotors(circuit);
+                int shades = ShadeCircuitClassifier.CountShadeMotors(circuit);
                 if (shades == 0) continue;
 
                 string location = LocationOf(circuit);
@@ -86,26 +81,6 @@ namespace TurboSuite.Zones.Services
             }
 
             return order.Select(loc => new ShadeLocationTally(loc, byLocation[loc])).ToList();
-        }
-
-        /// <summary>A circuit carrying shade motors — the hook <c>ZonesCollectorService</c> uses to drop
-        /// shade circuits before their motors become a spurious lighting zone.</summary>
-        internal static bool IsShadeCircuit(ElectricalSystem circuit) => CountShadeMotors(circuit) > 0;
-
-        private static int CountShadeMotors(ElectricalSystem circuit)
-        {
-            if (circuit?.Elements == null) return 0;
-            int count = 0;
-            foreach (Element el in circuit.Elements)
-                if (el is FamilyInstance fi && IsShadeMotor(fi))
-                    count++;
-            return count;
-        }
-
-        internal static bool IsShadeMotor(FamilyInstance fi)
-        {
-            string family = fi?.Symbol?.Family?.Name ?? string.Empty;
-            return family.IndexOf(ShadeMotorFamilyToken, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string LocationOf(ElectricalSystem circuit)

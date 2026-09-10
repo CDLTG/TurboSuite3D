@@ -53,7 +53,7 @@ namespace TurboSuite.Zones.Services
                     try
                     {
                         // Only shade circuits — the mirror of the lighting collector's drop.
-                        if (!ShadeDemandProvider.IsShadeCircuit(circuit))
+                        if (!ShadeCircuitClassifier.IsShadeCircuit(circuit))
                             continue;
 
                         string circuitNumber = ParameterHelper.GetCircuitNumber(circuit);
@@ -65,7 +65,7 @@ namespace TurboSuite.Zones.Services
                         var motors = circuit.Elements
                             .Cast<Element>()
                             .OfType<FamilyInstance>()
-                            .Where(ShadeDemandProvider.IsShadeMotor)
+                            .Where(ShadeCircuitClassifier.IsShadeMotor)
                             .ToList();
                         if (motors.Count == 0)
                             continue;

@@ -67,7 +67,7 @@ Generates a load schedule PDF from electrical circuit parameters in a flat table
 
 ### Layout
 
-Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded.
+Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded; **shade circuits are excluded** (`ShadeCircuitClassifier.IsShadeCircuit` — the same drop TurboZones' lighting collector makes) — a shade is modeled only to carry a control circuit + BOM, not as a designed electrical load, so it has no accurate wattage and stays off the load schedule. Shade breakers still appear on the **Panel Schedule**.
 
 **Fixtures column** — smart Type Mark combining:
 - All same Type Mark → show as-is

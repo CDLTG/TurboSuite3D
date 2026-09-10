@@ -5,6 +5,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Docs.Models;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Docs.Services;
 
@@ -26,6 +27,12 @@ public static class LoadsCollectorService
                 string circuitNumber = ParameterHelper.GetCircuitNumber(circuit);
                 if (string.IsNullOrWhiteSpace(circuitNumber)) continue;
                 if (circuitNumber.Contains("Feed Through Lugs", StringComparison.OrdinalIgnoreCase)) continue;
+
+                // Shade circuits are modeled only to carry a control circuit + BOM — they are not a
+                // designed electrical load and have no accurate wattage, so they don't belong on the
+                // Load Schedule. They remain on the Panel Schedule, where every breaker is listed.
+                // Same drop TurboZones' lighting collector makes (ZonesCollectorService).
+                if (ShadeCircuitClassifier.IsShadeCircuit(circuit)) continue;
 
                 var fixtureGroups = new List<LoadsFixtureGroup>();
                 var driverSwitchIds = new List<string>();

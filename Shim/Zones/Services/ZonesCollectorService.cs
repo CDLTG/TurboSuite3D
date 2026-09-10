@@ -46,7 +46,7 @@ namespace TurboSuite.Zones.Services
                         // filter below would otherwise pull in as a lighting zone. The shade subsystem
                         // (ShadeDemandProvider) accounts for these separately, so drop them here. A no-op
                         // on any job without shade motors.
-                        if (ShadeDemandProvider.IsShadeCircuit(circuit))
+                        if (ShadeCircuitClassifier.IsShadeCircuit(circuit))
                             continue;
 
                         // Get fixtures directly from the circuit's connected elements

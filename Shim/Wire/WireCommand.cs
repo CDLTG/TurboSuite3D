@@ -58,7 +58,7 @@ public class WireCommand : IExternalCommand
                 // Circuit-info dialog for every pre-selected circuit that was wired (switched
                 // circuits are filtered out inside the service). Setting-gated. When the whole
                 // batch is shade circuits, the picker offers shade (35 V) locations instead.
-                bool shadeCircuits = preSelectedCircuits.All(ShadeDemandProvider.IsShadeCircuit);
+                bool shadeCircuits = preSelectedCircuits.All(ShadeCircuitClassifier.IsShadeCircuit);
                 if (CircuitInfoService.PromptAndApply(doc, preSelectedCircuits, "TurboWire", shadeCircuits)
                     == CircuitInfoResult.Cancelled)
                 {
@@ -76,7 +76,7 @@ public class WireCommand : IExternalCommand
             // location. It fires only for a single shade with nothing else selected — a shade
             // mixed with any other fixture, or multiple shades, is rejected (shades wire one at
             // a time, so each keeps its own comment/circuit).
-            int shadeCount = preSelectedFixtures.Count(ShadeDemandProvider.IsShadeMotor);
+            int shadeCount = preSelectedFixtures.Count(ShadeCircuitClassifier.IsShadeMotor);
             if (shadeCount > 0)
             {
                 if (preSelectedFixtures.Count != 1)
