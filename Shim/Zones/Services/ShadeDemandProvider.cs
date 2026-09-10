@@ -23,9 +23,14 @@ namespace TurboSuite.Zones.Services
     /// <see cref="IsShadeCircuit"/>) to keep shade circuits out of the lighting zones — a shade motor is
     /// an Electrical Fixture, which that collector would otherwise treat as a lighting load.
     ///
-    /// <b>Location — the circuit's panel name.</b> Shades wired to a panel named "SHADE 1" group under
-    /// "SHADE 1", exactly as lighting groups by its zone panel; the solver ceils each location's shades
-    /// to whole QSPS-10PNL and sums.
+    /// <b>Location — the circuit's panel name.</b> The shade panel follows the "{Location}-{Panel ID}"
+    /// convention (e.g. "2-D") and groups by that name, exactly as lighting groups by its panel; the
+    /// parsed location number (<see cref="PanelAllocationService.ParseLocationNumber"/>, dash path)
+    /// merges it into the matching lighting location. The older "SHADE N" form still resolves the same.
+    /// The solver ceils each location's shades to whole QSPS-10PNL and sums. This assumes one
+    /// shade-panel name per location (all its shade circuits on the one real panel — the extras are
+    /// circuitless dummies): grouping by name then equals grouping by location, so the per-location
+    /// ceil is exact.
     ///
     /// <b>Must not throw</b> (see the interface): every read is wrapped, and a failure becomes an
     /// Unsolvable demand so a half-wired shade job never breaks the BOM.

@@ -576,16 +576,18 @@ namespace TurboSuite.Zones.Services
         }
 
         /// <summary>
-        /// Parses location number from zone panel name.
-        /// Supports "ZONE N" format (case-insensitive) and legacy "{number}-{letter}" format.
-        /// Returns 0 if the panel name doesn't match any expected format.
+        /// Parses the location number from a circuit's panel name.
+        /// The convention is "{Location}-{Panel ID}" (e.g. "1-A", "2-D") — the number before the
+        /// first dash is the location, so every panel in a location (real or dummy, lighting or shade)
+        /// resolves to it. The older "ZONE N" / "SHADE N" forms (case-insensitive) are still accepted.
+        /// Returns 0 if the panel name matches none of these.
         /// </summary>
         internal static int ParseLocationNumber(string panelName)
         {
             if (string.IsNullOrEmpty(panelName))
                 return 0;
 
-            // "ZONE N" format (case-insensitive)
+            // Older "ZONE N" form (case-insensitive), still accepted.
             if (panelName.StartsWith("ZONE ", StringComparison.OrdinalIgnoreCase))
             {
                 string numPart = panelName.Substring(5).Trim();
@@ -593,8 +595,10 @@ namespace TurboSuite.Zones.Services
                     return zoneNum;
             }
 
-            // "SHADE N" format — shade locations share the ZONE N number space (SHADE 1 = ZONE 1 =
-            // Location 1), so a shade panel merges into the matching lighting location.
+            // Older "SHADE N" form — shade locations share the location number space (SHADE 1 =
+            // Location 1), so a shade panel merges into the matching lighting location. Under the
+            // "{Location}-{Panel ID}" convention a shade panel is just the trailing letter (e.g. "2-D")
+            // and resolves via the dash path below like any other panel.
             if (panelName.StartsWith("SHADE ", StringComparison.OrdinalIgnoreCase))
             {
                 string numPart = panelName.Substring(6).Trim();
@@ -602,7 +606,7 @@ namespace TurboSuite.Zones.Services
                     return shadeNum;
             }
 
-            // Legacy "{number}-{letter}" format
+            // "{Location}-{Panel ID}" format (e.g. "1-A", "2-D") — the current naming convention.
             int dashIndex = panelName.IndexOf('-');
             if (dashIndex > 0 && int.TryParse(panelName.Substring(0, dashIndex), out int locNum))
                 return locNum;
