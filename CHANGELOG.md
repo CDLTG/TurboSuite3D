@@ -7,6 +7,29 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-09-11
+
+### Added
+- TurboNudge: new command — slides a point-based keypad family to exactly 5" from a picked corner; first entry in the Tools panel Scripts pulldown, with a TN shortcut.
+- TurboSchedule: per-project Excel round-trip (one Sync workbook button) so non-Revit designers can author fixture/driver specs in `.xlsx`; the workbook is source-of-truth for spec fields.
+- TurboWire: end-to-end wire routing for linear fixtures.
+
+### Changed
+- Family classification is now driven by a `TurboSuite Role` type parameter authored into each family, replacing all name-matching — families can be renamed and reorganized without breaking classification. **Requires the updated families (carrying the Role parameter) to be reloaded into each project; a family without a Role is no longer recognized.**
+- TurboBubble: dedicated wall-aware switchleg placement for picture lights, with the wire anchored to the measured room depth; switchleg wire also anchored at the linear-fixture end.
+- TurboSetup: landing menus replaced with a suite-styled launcher window.
+- TurboDriver: prefers the smallest-rated driver on a packing tie.
+- TurboDocs: shade circuits dropped from the Load Schedule (shared shade-circuit classifier).
+- Dependencies: bumped ClosedXML, ACadSharp, and the test SDK; pinned System.Text.Json to the net8 line.
+
+### Fixed
+- TurboName: fixed a modeless-window lock on Revit 2024 (a null `Application.Current` dropped completion callbacks).
+- TurboMask: places a per-type stamp for multi-type fixture families.
+- TurboSchedule: treats ratio units (lm/W, W/ft) as bare scalars in the Excel round-trip.
+
+### Removed
+- Settings dialog: removed the family-name classification section — classification now lives in the families via the `TurboSuite Role` parameter. The `FamilyNameSettings` subsystem (model, cache, storage service) is gone.
+
 ## [1.4.3] — 2026-08-24
 
 ### Added
@@ -232,6 +255,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.5.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.0
 [1.4.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.3
 [1.4.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.2
 [1.4.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.1
