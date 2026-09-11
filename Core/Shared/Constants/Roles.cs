@@ -56,6 +56,38 @@ public static class Roles
     public const string DmxTerminatorDetail = "DmxTerminatorDetail";
     public const string DmxWireMarkAnnotation = "DmxWireMarkAnnotation";
 
+    /// <summary>
+    /// A human-facing phrase for a finder role, used in "not found" messages — deliberately decoupled
+    /// from the family name (which may be renamed freely under the LOD scheme). Falls back to the role
+    /// token for any value without a label (all classify roles, and unknowns), which never surfaces in
+    /// a message because classify roles have no "not found" path.
+    /// </summary>
+    public static string Label(string? role)
+        => role != null && FinderLabels.TryGetValue(role, out string? label) ? label : (role ?? string.Empty);
+
+    private static readonly IReadOnlyDictionary<string, string> FinderLabels =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [FixtureTypeTag] = "Lighting Fixture (Type) tag",
+            [LinearTag] = "Lighting Fixture (Linear Length) tag",
+            [RunLengthTag] = "Lighting Fixture (Run Length) tag",
+            [SwitchIdTag] = "Lighting Device (Switch ID) tag",
+            [KeypadTag] = "Lighting Device (Keypad) tag",
+            [DeviceTypeTag] = "Lighting Device (Type) tag",
+            [FixtureSwitchlegTag] = "Lighting Fixture (Switchleg) tag",
+            [RemoteSwitchlegTag] = "Lighting Fixture (Remote Switchleg) tag",
+            [ElectricalSwitchlegTag] = "Electrical Fixture (Switchleg) tag",
+            [DeviceSwitchlegTag] = "Lighting Device (Switchleg) tag",
+            [LinearFeedTag] = "Linear Feed tag",
+            [LinearFeedDetail] = "LV Leader (Switch) detail",
+            [DmxDecoderDetail] = "DMX Decoder detail",
+            [DmxDriverDetail] = "DMX Driver detail",
+            [DmxInterfaceDetail] = "DMX Interface detail",
+            [DmxProcessorDetail] = "DMX Processor detail",
+            [DmxTerminatorDetail] = "DMX Terminator detail",
+            [DmxWireMarkAnnotation] = "DMX Wire Mark annotation",
+        };
+
     /// <summary>Every recognized role, keyed case-insensitively to its canonical spelling.</summary>
     private static readonly IReadOnlyDictionary<string, string> Canonical =
         BuildCanonicalMap(new[]

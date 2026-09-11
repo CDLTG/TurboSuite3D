@@ -171,6 +171,43 @@ namespace TurboSuite.Shared.Helpers
         }
 
         /// <summary>
+        /// Get the canonical <see cref="Roles"/> value from a FamilySymbol's "TurboSuite Role" type
+        /// parameter — the stable machine key that replaced name-matching. Returns
+        /// <see cref="string.Empty"/> for blank, absent, or unrecognized (Canonicalize's contract),
+        /// which every classify/find site reads as "no special behavior". Read-only: nothing writes Role.
+        /// </summary>
+        public static string GetRole(FamilySymbol symbol)
+        {
+            if (symbol == null) return string.Empty;
+            return Roles.Canonicalize(symbol.LookupParameter(ParameterNames.TurboSuiteRole)?.AsString());
+        }
+
+        /// <summary>
+        /// Get the TurboSuite Role from a FamilyInstance (delegates to symbol overload).
+        /// </summary>
+        public static string GetRole(FamilyInstance instance)
+        {
+            if (instance?.Symbol == null) return string.Empty;
+            return GetRole(instance.Symbol);
+        }
+
+        /// <summary>
+        /// Find THE family symbol in a category carrying a given finder <see cref="Roles"/> value — the
+        /// Role-keyed replacement for name-based tag/detail/annotation lookup. Returns the first match
+        /// (the authoring convention is one family per finder-role per category, enforced by the audit
+        /// spike, so "first" is deterministic) or null if none is loaded — callers surface the same
+        /// "not found" error as before. Any type of the family matches, since Role is authored per type.
+        /// </summary>
+        public static FamilySymbol FindByRole(Document doc, BuiltInCategory category, string role)
+        {
+            return new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilySymbol))
+                .OfCategory(category)
+                .Cast<FamilySymbol>()
+                .FirstOrDefault(fs => GetRole(fs) == role);
+        }
+
+        /// <summary>
         /// Get Voltage from a FamilySymbol (type parameter)
         /// </summary>
         public static string GetVoltage(FamilySymbol symbol)

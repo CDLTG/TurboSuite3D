@@ -45,5 +45,18 @@ namespace TurboSuite.Tests.Shared
         [InlineData("gibberish")]
         public void UnrecognizedValue_ReturnsEmpty(string raw)
             => Assert.Equal(string.Empty, Roles.Canonicalize(raw));
+
+        /// <summary>A finder role gets its human phrase for "not found" messages; anything without a
+        /// label (classify roles, unknowns, null) falls back to the token itself, never throwing.</summary>
+        [Theory]
+        [InlineData(Roles.FixtureTypeTag, "Lighting Fixture (Type) tag")]
+        [InlineData(Roles.ElectricalSwitchlegTag, "Electrical Fixture (Switchleg) tag")]
+        [InlineData(Roles.Sconce, Roles.Sconce)]     // classify role: no label, falls back to token
+        [InlineData("gibberish", "gibberish")]
+        public void Label_ReturnsFinderPhraseOrTokenFallback(string role, string expected)
+            => Assert.Equal(expected, Roles.Label(role));
+
+        [Fact]
+        public void Label_NullIsEmpty() => Assert.Equal(string.Empty, Roles.Label(null));
     }
 }

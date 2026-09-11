@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using TurboSuite.Shared.Constants;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Tag.Constants;
 
 namespace TurboSuite.Tag.Services;
@@ -37,11 +39,8 @@ internal static class TagTypeService
                 return cached;
         }
 
-        var tagType = new FilteredElementCollector(doc)
-            .OfClass(typeof(FamilySymbol))
-            .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
-            .Cast<FamilySymbol>()
-            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.TagFamilyName, StringComparison.OrdinalIgnoreCase));
+        var tagType = ParameterHelper.FindByRole(
+            doc, BuiltInCategory.OST_LightingFixtureTags, Roles.FixtureTypeTag);
 
         if (tagType != null)
             _cachedTagTypeId = tagType.Id;

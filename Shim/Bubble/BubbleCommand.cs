@@ -11,6 +11,7 @@ using TurboSuite.Bubble.Constants;
 using TurboSuite.Bubble.Filters;
 using TurboSuite.Bubble.Placement;
 using TurboSuite.Bubble.Services;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Filters;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
@@ -435,14 +436,13 @@ public class BubbleCommand : IExternalCommand
     }
 
     /// <summary>
-    /// Checks if the electrical fixture belongs to a family that uses vertical (up/down) switchleg placement.
+    /// Checks if the electrical fixture belongs to a family that uses vertical (up/down) switchleg
+    /// placement. The one intentional many-to-one: exhaust fans and fireplace igniters share this
+    /// electrical-vertical behavior, so both roles map to the same predicate (was a shared name list).
     /// </summary>
     private static bool IsElectricalVerticalFamily(FamilyInstance fixture)
     {
-        var familyName = fixture.Symbol?.FamilyName;
-        return familyName != null &&
-               FamilyNameSettingsCache.Get(fixture.Document)
-                   .ElectricalVerticalFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) is Roles.ExhaustFan or Roles.FireplaceIgniter;
     }
 
     /// <summary>

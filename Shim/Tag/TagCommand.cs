@@ -57,7 +57,7 @@ public class TagCommand : IExternalCommand
                 FamilySymbol? tagType = TagTypeService.GetTagType(doc);
                 if (tagType == null)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.TagFamilyName}' not found.\nLoad this tag family into the project.");
+                    TaskDialog.Show("TurboTag", $"No {Roles.Label(Roles.FixtureTypeTag)} found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.FixtureTypeTag}'.");
                     return Result.Cancelled;
                 }
 
@@ -98,7 +98,7 @@ public class TagCommand : IExternalCommand
                 FamilySymbol? tagType = TagTypeService.GetTagType(doc);
                 if (tagType == null)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.TagFamilyName}' not found.\nLoad this tag family into the project.");
+                    TaskDialog.Show("TurboTag", $"No {Roles.Label(Roles.FixtureTypeTag)} found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.FixtureTypeTag}'.");
                     return Result.Cancelled;
                 }
 

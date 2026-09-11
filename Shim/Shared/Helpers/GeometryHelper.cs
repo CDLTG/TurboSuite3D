@@ -2,6 +2,7 @@ using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Bubble.Constants;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Shared.Helpers;
@@ -105,13 +106,12 @@ public static class GeometryHelper
     }
 
     /// <summary>
-    /// Determines if a fixture is a wall sconce family (3D hosted or 2D unhosted).
+    /// Determines if a fixture is a wall sconce family (3D hosted or 2D unhosted) — now keyed on the
+    /// family's <see cref="Roles.Sconce"/> role, not its name.
     /// </summary>
     public static bool IsWallSconce(FamilyInstance fixture)
     {
-        string familyName = fixture.Symbol?.Family?.Name ?? "";
-        var settings = FamilyNameSettingsCache.Get(fixture.Document);
-        return settings.WallSconceFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) == Roles.Sconce;
     }
 
     /// <summary>
