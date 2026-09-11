@@ -48,10 +48,10 @@ namespace TurboSuite.Driver.Models
         public double DerateFactor { get; set; } = 1.0;
 
         /// <summary>
-        /// True when this type belongs to the TBD placeholder family (family name contains
-        /// "TBD" — e.g. AL_RPS_TBD). TBD is the only wildcard: it bypasses the Voltage /
-        /// Dimming Protocol hard filters and is always ranked strictly last, so it surfaces
-        /// only when no real driver matches.
+        /// True when this type is the TBD placeholder (classified by its TurboSuite Role =
+        /// DriverPlaceholder; shipped as the AL_RPS_TBD family). TBD is the only wildcard: it
+        /// bypasses the Voltage / Dimming Protocol hard filters and is always ranked strictly
+        /// last, so it surfaces only when no real driver matches.
         /// </summary>
         public bool IsTbd { get; set; }
     }

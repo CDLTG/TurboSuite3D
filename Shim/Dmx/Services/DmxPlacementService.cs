@@ -46,9 +46,9 @@ namespace TurboSuite.Dmx.Services
     public sealed class DmxPlacementService : IDmxPlacementService
     {
         // Decoder Switch-ID tag is the same family TurboDriver uses (decoders are OST_LightingDevices too);
-        // the driver Type-Mark tag is the firm's "(Type)" tag family (both confirmed against loaded families).
-        private const string DecoderTagFamily = "AL_Tag_Lighting Device (SwitchID)";
-        private const string DriverTagFamily = "AL_Tag_Lighting Device (Type)";
+        // the driver Type-Mark tag is the firm's "(Type)" device tag. Both found by TurboSuite Role.
+        private const string DecoderTagRole = Roles.SwitchIdTag;
+        private const string DriverTagRole = Roles.DeviceTypeTag;
 
         private const double RowSpacingFt = 9.5 / 12.0;   // 9.5" between devices, like TurboDriver's column
         // Layout per device: Driver ← 2'-0" → Decoder. The picked point anchors the DECODER (the tagged
@@ -180,8 +180,8 @@ namespace TurboSuite.Dmx.Services
                     if (SetSwitchId(decoder, dev.SwitchId)) result.SwitchIdsSet++;
                     else result.Warnings.Add($"{dev.SwitchId}: placed decoder but could not write Switch ID.");
 
-                    if (TagDevice(decoder, view, DecoderTagFamily)) result.TagsPlaced++;
-                    else result.Warnings.Add($"{dev.SwitchId}: decoder placed but tag family \"{DecoderTagFamily}\" not found.");
+                    if (TagDevice(decoder, view, DecoderTagRole)) result.TagsPlaced++;
+                    else result.Warnings.Add($"{dev.SwitchId}: decoder placed but no {Roles.Label(DecoderTagRole)} found.");
                 }
 
                 // Driver: place → tag (Type Mark, NOT written — the family carries it).
@@ -196,8 +196,8 @@ namespace TurboSuite.Dmx.Services
                     result.DriversPlaced++;
                     placedIds.Add(driver.Id);
 
-                    if (TagDevice(driver, view, DriverTagFamily)) result.TagsPlaced++;
-                    else result.Warnings.Add($"{dev.SwitchId}: driver placed but tag family \"{DriverTagFamily}\" not found.");
+                    if (TagDevice(driver, view, DriverTagRole)) result.TagsPlaced++;
+                    else result.Warnings.Add($"{dev.SwitchId}: driver placed but no {Roles.Label(DriverTagRole)} found.");
                 }
 
                 // Register the placed pair (DEC # → decoder/driver ids) so a later re-Place can remove it as
@@ -612,10 +612,10 @@ namespace TurboSuite.Dmx.Services
             return true;
         }
 
-        private bool TagDevice(FamilyInstance instance, View view, string tagFamily)
+        private bool TagDevice(FamilyInstance instance, View view, string tagRole)
         {
             if (_tagTypes == null) _tagTypes = ResolveTagTypes();
-            if (!_tagTypes.TryGetValue(tagFamily, out var tagTypeId)) return false;
+            if (!_tagTypes.TryGetValue(tagRole, out var tagTypeId)) return false;
 
             var location = GeometryHelper.GetFixtureLocation(instance);
             if (location == null) return false;
@@ -629,17 +629,20 @@ namespace TurboSuite.Dmx.Services
 
         private Dictionary<string, ElementId> ResolveTagTypes()
         {
-            var byFamily = new Dictionary<string, ElementId>(StringComparer.OrdinalIgnoreCase);
+            var byRole = new Dictionary<string, ElementId>(StringComparer.Ordinal);
             var tagTypes = new FilteredElementCollector(_doc)
                 .OfClass(typeof(FamilySymbol))
                 .OfCategory(BuiltInCategory.OST_LightingDeviceTags)
                 .Cast<FamilySymbol>();
 
             foreach (var fs in tagTypes)
-                if (!byFamily.ContainsKey(fs.FamilyName))
-                    byFamily[fs.FamilyName] = fs.Id;
+            {
+                string role = ParameterHelper.GetRole(fs);
+                if (role.Length > 0 && !byRole.ContainsKey(role))
+                    byRole[role] = fs.Id;
+            }
 
-            return byFamily;
+            return byRole;
         }
 
         // ── View-range elevation snap (decoders/drivers have no 3D geometry, so a point off the display

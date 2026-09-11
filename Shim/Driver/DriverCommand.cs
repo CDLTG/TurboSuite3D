@@ -8,6 +8,7 @@ using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.UI;
 using TurboSuite.Driver.Models;
 using TurboSuite.Driver.Services;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
 
@@ -273,7 +274,6 @@ namespace TurboSuite.Driver
         /// </summary>
         private static void TagSplitFixtures(Document doc, FixtureSplitService.SplitResult splitResult)
         {
-            const string linearTagFamilyName = "AL_Tag_Lighting Fixture (Linear Length)";
             const double linearOffsetFeet = 5.0 / 12.0;
 
             View activeView = doc.ActiveView;
@@ -302,8 +302,7 @@ namespace TurboSuite.Driver
                             if (!tag.GetTaggedLocalElementIds().Contains(fixtureId))
                                 return false;
                             if (doc.GetElement(tag.GetTypeId()) is FamilySymbol sym
-                                && string.Equals(sym.FamilyName, linearTagFamilyName,
-                                    StringComparison.OrdinalIgnoreCase))
+                                && ParameterHelper.GetRole(sym) == Roles.LinearTag)
                                 return true;
                             return false;
                         })

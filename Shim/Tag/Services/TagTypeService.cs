@@ -1,10 +1,7 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using Autodesk.Revit.DB;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
-using TurboSuite.Tag.Constants;
 
 namespace TurboSuite.Tag.Services;
 
@@ -59,11 +56,8 @@ internal static class TagTypeService
                 return cached;
         }
 
-        var tagType = new FilteredElementCollector(doc)
-            .OfClass(typeof(FamilySymbol))
-            .OfCategory(BuiltInCategory.OST_LightingDeviceTags)
-            .Cast<FamilySymbol>()
-            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.SwitchIdTagFamilyName, StringComparison.OrdinalIgnoreCase));
+        var tagType = ParameterHelper.FindByRole(
+            doc, BuiltInCategory.OST_LightingDeviceTags, Roles.SwitchIdTag);
 
         if (tagType != null)
             _cachedKeypadTagTypeIds[cacheKey] = tagType.Id;
@@ -82,12 +76,8 @@ internal static class TagTypeService
                 return cached;
         }
 
-        var tagType = new FilteredElementCollector(doc)
-            .OfClass(typeof(FamilySymbol))
-            .OfCategory(BuiltInCategory.OST_LightingDeviceTags)
-            .Cast<FamilySymbol>()
-            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.KeypadTagFamilyName, StringComparison.OrdinalIgnoreCase)
-                               && (typeName == null || string.Equals(fs.Name, typeName, StringComparison.OrdinalIgnoreCase)));
+        var tagType = ParameterHelper.FindByRole(
+            doc, BuiltInCategory.OST_LightingDeviceTags, Roles.KeypadTag, typeName);
 
         if (tagType != null)
             _cachedKeypadTagTypeIds[cacheKey] = tagType.Id;
@@ -104,12 +94,8 @@ internal static class TagTypeService
                 return cached;
         }
 
-        var tagType = new FilteredElementCollector(doc)
-            .OfClass(typeof(FamilySymbol))
-            .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
-            .Cast<FamilySymbol>()
-            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.CombinedLinearTagFamilyName, StringComparison.OrdinalIgnoreCase)
-                               && string.Equals(fs.Name, typeName, StringComparison.OrdinalIgnoreCase));
+        var tagType = ParameterHelper.FindByRole(
+            doc, BuiltInCategory.OST_LightingFixtureTags, Roles.RunLengthTag, typeName);
 
         if (tagType != null)
             _cachedCombinedLinearTagTypeIds[typeName] = tagType.Id;
@@ -126,12 +112,8 @@ internal static class TagTypeService
                 return cached;
         }
 
-        var tagType = new FilteredElementCollector(doc)
-            .OfClass(typeof(FamilySymbol))
-            .OfCategory(BuiltInCategory.OST_LightingFixtureTags)
-            .Cast<FamilySymbol>()
-            .FirstOrDefault(fs => string.Equals(fs.FamilyName, TagConstants.LinearTagFamilyName, StringComparison.OrdinalIgnoreCase)
-                               && string.Equals(fs.Name, typeName, StringComparison.OrdinalIgnoreCase));
+        var tagType = ParameterHelper.FindByRole(
+            doc, BuiltInCategory.OST_LightingFixtureTags, Roles.LinearTag, typeName);
 
         if (tagType != null)
             _cachedLinearTagTypeIds[typeName] = tagType.Id;

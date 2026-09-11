@@ -96,7 +96,7 @@ Every push updates the **public** GitHub repo (see "Release Status"), so a commi
 4. Only proceed to implementation after confirming feasibility.
 
 ### ExtensibleStorage Schema Changes
-When adding or removing fields in any storage service (`FamilyNameSettingsStorageService`, `CadRoomSourceStorageService`, etc.), create a **new schema GUID**. Old schemas are cached in Revit's memory and cannot be updated at runtime. After changing a GUID, the user must:
+When adding or removing fields in any storage service (`GeneralSettingsStorageService`, `CadRoomSourceStorageService`, etc.), create a **new schema GUID**. Old schemas are cached in Revit's memory and cannot be updated at runtime. After changing a GUID, the user must:
 1. Close Revit
 2. Build with the new code
 3. Open Revit
@@ -118,7 +118,7 @@ Versioned spec `.txt` files are in `Specs/`. Historical reference only — do NO
 
 ### Entry Point
 
-`TurboSuite.App.TurboSuiteApplication` (IExternalApplication) registers ribbon panels under a "TurboSuite" tab. `SettingsCommand` opens a WPF dialog for family name settings stored in ExtensibleStorage.
+`TurboSuite.App.TurboSuiteApplication` (IExternalApplication) registers ribbon panels under a "TurboSuite" tab. `SettingsCommand` opens a WPF dialog for general settings stored in ExtensibleStorage. (Family classification is no longer configured here — families carry a `TurboSuite Role` type parameter; see `Core/Shared/Constants/Roles.cs`.)
 
 ### Namespace / Folder Structure
 
@@ -131,7 +131,7 @@ Each shipped module keeps its own `Shim/<Module>/README.md` — workflow, design
 | `TurboSuite.Shared.Converters` | WPF value converters shared across windowed commands |
 | `TurboSuite.Shared.Filters` | `FixtureSelectionFilter`, `LightingFixtureTagFilter` |
 | `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `NaturalStringComparer`, `FileLockHelper` |
-| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `FamilyNameSettings`, `CadRoomSourceSettings`, `GeneralSettings` |
+| `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `CadRoomSourceSettings`, `GeneralSettings` |
 | `TurboSuite.Shared.Services` | `DataStorageHelper`, `SpaceRoomFinderService` (runtime room detection — reads project-owned Spaces, not architect Rooms), `LinkedRoomFinderService` (BAND_ROOM over architect Rooms — now only seeds Space *names*), `UpdateService`, settings storage/cache services |
 | `TurboSuite.Shared.Styles` | Shared WPF ResourceDictionary styles |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` |

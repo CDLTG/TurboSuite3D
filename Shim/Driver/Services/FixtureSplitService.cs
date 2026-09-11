@@ -5,6 +5,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using TurboSuite.Driver.Models;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Driver.Services;
@@ -156,8 +157,6 @@ public class FixtureSplitService
         return allCopies.Select(c => c.instance.Id).ToList();
     }
 
-    private const string LinearTagFamilyName = "AL_Tag_Lighting Fixture (Linear Length)";
-
     /// <summary>
     /// Finds the tag type ID of the linear length tag on the given fixture in the active view.
     /// Returns InvalidElementId if no matching tag is found.
@@ -177,7 +176,7 @@ public class FixtureSplitService
             if (typeId == ElementId.InvalidElementId) continue;
 
             if (_doc.GetElement(typeId) is FamilySymbol tagSymbol
-                && string.Equals(tagSymbol.FamilyName, LinearTagFamilyName, StringComparison.OrdinalIgnoreCase))
+                && ParameterHelper.GetRole(tagSymbol) == Roles.LinearTag)
             {
                 return typeId;
             }

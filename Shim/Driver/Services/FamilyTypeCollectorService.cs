@@ -15,10 +15,6 @@ namespace TurboSuite.Driver.Services
     /// </summary>
     public class FamilyTypeCollectorService
     {
-        // A driver type is the TBD placeholder if its FAMILY name (never the type name)
-        // contains this token. Shipped as the "AL_RPS_TBD" family in the Revit template.
-        private const string TbdFamilyMarker = "TBD";
-
         /// <summary>
         /// Get all Lighting Device family types in the project
         /// </summary>
@@ -54,8 +50,9 @@ namespace TurboSuite.Driver.Services
                 string voltage = ParameterHelper.GetVoltage(symbol);
                 double derateFactor = ParameterHelper.GetDeratingFactor(symbol);
                 string catalogNumber = symbol.LookupParameter(ParameterNames.CatalogNumber1)?.AsString() ?? "";
-                bool isTbd = symbol.FamilyName != null
-                    && symbol.FamilyName.IndexOf(TbdFamilyMarker, StringComparison.OrdinalIgnoreCase) >= 0;
+                // The TBD placeholder driver — the one wildcard that bypasses Voltage/Wattage validity.
+                // Classified by TurboSuite Role (was the "TBD" substring in the AL_RPS_TBD family name).
+                bool isTbd = ParameterHelper.GetRole(symbol) == Roles.DriverPlaceholder;
 
                 // A DMX decoder (DMX Channels > 0) is a parallel class of power supply, NOT a
                 // wattage-sized driver — same rule TurboDMX's model reader uses to split decoders from

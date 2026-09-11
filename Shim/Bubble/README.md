@@ -17,17 +17,20 @@ For **linear** point fixtures (a LocationPoint family whose long plan extent is 
 
 ### Picture lights
 
-`PictureLightFamilies` (`Z_Picture Light` 2D, `AL_Decorative_Picture Light (Hosted)` 3D) route to a dedicated `PictureLightPlacementCalculator` **ahead of** the vertical-face/horizontal branches, so both families place identically and sconces/mirrors on `VerticalFacePlacementCalculator` are untouched. A picture light's plan symbol is **symmetric along the wall** but extends **entirely away from the wall** (the origin/connector sits on the wall-side edge) — a spike confirmed the 2D and 3D families are identical in wall-normal terms, and both yield a usable wall normal (3D via Hand×Facing, 2D via the facing fallback).
+Fixtures whose `TurboSuite Role` is `PictureLight` route to a dedicated `PictureLightPlacementCalculator` **ahead of** the vertical-face/horizontal branches, so both the 2D and 3D picture-light families place identically and sconces/mirrors on `VerticalFacePlacementCalculator` are untouched. A picture light's plan symbol is **symmetric along the wall** but extends **entirely away from the wall** (the origin/connector sits on the wall-side edge) — a spike confirmed the 2D and 3D families are identical in wall-normal terms, and both yield a usable wall normal (3D via Hand×Facing, 2D via the facing fallback).
 
 The calculator works in the wall frame (X along wall, Y = wall normal into the room) and measures the **actual** room-side depth via `GeometryHelper.GetSymbolExtentInDirection`, so the bubble stands off past the bar into open room (the "2D look") rather than assuming a centered symbol. v1 anchors at the bar end (scales with bar length); the wire arcs down to a bubble cleared past the measured depth. Offsets are in `BubbleConstants.PictureLight*`, tuned from a hand-drawn ideal. **Every perpendicular vertex is anchored to the measured room-side edge** — the bubble/elbow via `PictureLightTagClearanceFt` (`roomDepth + clearance`), and the two wire vertices via `PictureLightWireEndInsetFt`/`PictureLightWireMidInsetFt` (`roomDepth - inset`). So the whole switchleg figure is a rigid shape that simply **translates outward for a deeper symbol**: a picture light that extends further into the room keeps the same arc, now springing from its own room-side edge. The insets were derived from the reference family's spiked depth (4.487″) to reproduce the tuned look byte-for-byte.
 
 ## Required families / parameters
 
-| Tag family | Types required |
+Tag/detail families are found by their `TurboSuite Role` type parameter, not by name (see `Core/Shared/Constants/Roles.cs`):
+
+| Tag/detail Role | Types required |
 |-------------|----------------|
-| `AL_Tag_Lighting Fixture (Switchleg)` | default type |
-| `AL_Tag_Lighting Fixture (Remote Switchleg)` | `Switchleg Left`, `Switchleg Right` |
-| `AL_Tag_Electrical Fixture (Switchleg)` | default type |
+| `FixtureSwitchlegTag` | default type |
+| `RemoteSwitchlegTag` | `Switchleg Left`, `Switchleg Right` |
+| `ElectricalSwitchlegTag` | default type |
+| `LinearFeedTag` / `LinearFeedDetail` | tag: `SwitchID` type (static driver-tag path) |
 
 | Parameter | On | Purpose |
 |-----------|----|---------|
@@ -36,4 +39,4 @@ The calculator works in the wall frame (X along wall, Y = wall normal into the r
 
 ## Recognized electrical fixture families
 
-Trigger vertical / ceiling-fan / sconce offsets: `AL_Electrical Fixture_Exhaust (Hosted)` / `Exhaust`, `AL_Electrical Fixture_Fireplace Igniter` / `Fireplace Igniter`, `AL_Electrical Fixture_Ceiling Fan (Hosted)` / `Ceiling Fan`, `AL_Decorative_Wall Sconce (Hosted)` (special wire offset).
+Special vertical / ceiling-fan / sconce offsets are triggered by the fixture's `TurboSuite Role` (see `Core/Shared/Constants/Roles.cs`): `ExhaustFan` and `FireplaceIgniter` (electrical-vertical switchleg — the one intentional many-to-one), `CeilingFan` (fixed vertical, no flip prompt), and `Sconce` (special wire offset). Chandeliers use Role `Chandelier`.

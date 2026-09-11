@@ -208,6 +208,23 @@ namespace TurboSuite.Shared.Helpers
         }
 
         /// <summary>
+        /// Find the family symbol in a category carrying a given finder <see cref="Roles"/> value whose
+        /// type name matches <paramref name="typeName"/> (exact, case-insensitive). Used by the tag
+        /// finders that target a specific type within the role-matched family (e.g. "Tag_Top").
+        /// A null <paramref name="typeName"/> matches any type, identical to the role-only overload.
+        /// Returns null if none is loaded.
+        /// </summary>
+        public static FamilySymbol FindByRole(Document doc, BuiltInCategory category, string role, string typeName)
+        {
+            return new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilySymbol))
+                .OfCategory(category)
+                .Cast<FamilySymbol>()
+                .FirstOrDefault(fs => GetRole(fs) == role
+                                   && (typeName == null || string.Equals(fs.Name, typeName, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        /// <summary>
         /// Get Voltage from a FamilySymbol (type parameter)
         /// </summary>
         public static string GetVoltage(FamilySymbol symbol)

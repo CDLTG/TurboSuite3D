@@ -35,7 +35,7 @@ The "TurboSuite" ribbon tab has four panels:
 
 | Button | Description |
 |--------|-------------|
-| [Settings](Shim/App/README.md) | Configure family name settings stored in ExtensibleStorage |
+| [Settings](Shim/App/README.md) | Configure general options stored in ExtensibleStorage |
 | [TurboTab](Shim/Tab/README.md) | Toggle document tab coloring — colors each open tab by project for visual identification |
 
 ### Tools Panel

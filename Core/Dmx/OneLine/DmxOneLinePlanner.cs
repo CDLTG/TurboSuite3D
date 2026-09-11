@@ -192,11 +192,9 @@ namespace TurboSuite.Dmx.OneLine
             var termCenter = new XY(decX, lastChainY - DmxOneLineGeometry.Layout.TerminatorDrop);
 
             // ── Top boxes: interface (+ # param) and processor, joined by the ⑦ comm leader ──────────────
-            symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Interface,
-                DmxOneLineGeometry.Interface.Family, DmxOneLineGeometry.Interface.Type, ifaceCenter,
+            symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Interface, ifaceCenter,
                 new Dictionary<string, string> { [DmxOneLineGeometry.Interface.NumberParam] = interfaceNumber.ToString() }));
-            symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Processor,
-                DmxOneLineGeometry.Processor.Family, DmxOneLineGeometry.Processor.Type, procCenter,
+            symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Processor, procCenter,
                 new Dictionary<string, string>()));
             Wire(ifaceCenter.Plus(DmxOneLineGeometry.Interface.CommIn),
                  procCenter.Plus(DmxOneLineGeometry.Processor.Comm), dashed: true, DmxWireType.Comm);
@@ -214,11 +212,9 @@ namespace TurboSuite.Dmx.OneLine
                 var decCenter = new XY(decX, rowY[r]);
                 var drvCenter = new XY(drvX, rowY[r]);
 
-                symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Driver,
-                    DmxOneLineGeometry.Driver.Family, DmxOneLineGeometry.Driver.Type, drvCenter,
+                symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Driver, drvCenter,
                     new Dictionary<string, string> { [DmxOneLineGeometry.Driver.TypeMarkParam] = row.DriverMark }));
-                symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Decoder,
-                    DmxOneLineGeometry.Decoder.Family, DmxOneLineGeometry.Decoder.Type, decCenter,
+                symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Decoder, decCenter,
                     new Dictionary<string, string>
                     {
                         [DmxOneLineGeometry.Decoder.DecNumberParam] = $"DEC {row.Dec}",
@@ -308,8 +304,7 @@ namespace TurboSuite.Dmx.OneLine
                 Wire(chainOut[chainOut.Count - 1],
                      new XY(chainX, termCenter.Y).Plus(DmxOneLineGeometry.Terminator.DmxIn), dashed: true, DmxWireType.Cat6);
 
-                symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Terminator,
-                    DmxOneLineGeometry.Terminator.Family, DmxOneLineGeometry.Terminator.Type, termCenter,
+                symbols.Add(new DmxSymbolInstance(DmxSymbolKind.Terminator, termCenter,
                     new Dictionary<string, string>()));
             }
 

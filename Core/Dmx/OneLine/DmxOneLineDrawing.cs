@@ -181,23 +181,20 @@ namespace TurboSuite.Dmx.OneLine
         }
     }
 
-    /// <summary>One placed box symbol: its kind/family/type, center position (model feet), and the instance
-    /// label params the renderer writes (e.g. <c>DecNumber</c>→"DEC 20").</summary>
+    /// <summary>One placed box symbol: its kind, center position (model feet), and the instance
+    /// label params the renderer writes (e.g. <c>DecNumber</c>→"DEC 20"). The renderer resolves the
+    /// actual family by the kind's TurboSuite Role (see Core Roles), so no family/type name is carried.</summary>
     public sealed class DmxSymbolInstance
     {
-        public DmxSymbolInstance(DmxSymbolKind kind, string family, string type, XY position,
+        public DmxSymbolInstance(DmxSymbolKind kind, XY position,
                                  IReadOnlyDictionary<string, string> @params)
         {
             Kind = kind;
-            Family = family;
-            Type = type;
             Position = position;
             Params = @params;
         }
 
         public DmxSymbolKind Kind { get; }
-        public string Family { get; }
-        public string Type { get; }
         public XY Position { get; }
         public IReadOnlyDictionary<string, string> Params { get; }
     }

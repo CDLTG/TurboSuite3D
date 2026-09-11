@@ -31,4 +31,4 @@ Point/face offsets are computed from each fixture's `Symbol Length`, `Symbol Wid
 | `Run Length` | Linear fixture instance | Summed run length on the lead fixture, cleared on others (Combined) |
 | `Linear Length` | Linear fixture instance | Per-fixture length, summed for Combined |
 
-Keypads are identified by family name containing "Keypad" (case-insensitive); power supplies by presence of the `Sub-Driver Power` type param.
+Keypads are identified by their `TurboSuite Role` type parameter (`Keypad`; see `Core/Shared/Constants/Roles.cs`); power supplies by presence of the `Sub-Driver Power` type param. Tag/detail families are likewise found by Role (`FixtureTypeTag`, `LinearTag`, `RunLengthTag`, `KeypadTag`, `SwitchIdTag`), not by family name.

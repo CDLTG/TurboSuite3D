@@ -2,9 +2,6 @@ namespace TurboSuite.Tag.Constants;
 
 internal static class TagConstants
 {
-    public const string TagFamilyName = "AL_Tag_Lighting Fixture (Type)";
-    public const string LinearTagFamilyName = "AL_Tag_Lighting Fixture (Linear Length)";
-    public const string CombinedLinearTagFamilyName = "AL_Tag_Lighting Fixture (Run Length)";
     public const string RunLengthParamName = "Run Length";
     // 1/32" expressed in feet — tolerance for endpoint adjacency when grouping continuous linear runs.
     public const double LinearContinuityToleranceFeet = (1.0 / 32.0) / 12.0;
@@ -18,9 +15,6 @@ internal static class TagConstants
     public const int ShortTextThreshold = 2;
     public const int MediumTextThreshold = 3;
 
-    public const string SwitchIdTagFamilyName = "AL_Tag_Lighting Device (SwitchID)";
-
-    public const string KeypadTagFamilyName = "AL_Tag_Lighting Device (Keypad)";
     public const double KeypadOffsetFeet = 9.0 / 12.0;
     public const string KeypadTwoGangTypeName = "2. Two Gang";
     public const string KeypadTwoGangParamName = "Two Gang";

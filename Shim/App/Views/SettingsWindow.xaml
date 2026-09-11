@@ -70,59 +70,8 @@
                 <!-- CAD Room Source Settings -->
                 <!-- CAD Room Source + Region Generation Layers moved to the TurboName window. -->
 
-
-                <TextBlock Text="Configure which family names receive special routing behavior."
-                           Foreground="#555555" Margin="0,0,0,12" TextWrapping="Wrap"/>
-
-                <GroupBox Header="Wall Sconce Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="Families matched for wall sconce spline routing (one per line):"
-                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                        <TextBox Text="{Binding WallSconceFamiliesText, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="95"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Header="Receptacle Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="Families matched for receptacle spline routing (one per line):"
-                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                        <TextBox Text="{Binding ReceptacleFamiliesText, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="95"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Header="Wall-Mounted Lighting Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="Lighting fixture families treated as wall-mounted for tag placement (one per line):"
-                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                        <TextBox Text="{Binding VerticalFamiliesText, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="95"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Header="Switch Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="Families matched for switch wire endpoint offset (one per line):"
-                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                        <TextBox Text="{Binding SwitchFamiliesText, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="95"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Header="Equipment Box Families" Margin="0,0,0,10" Style="{StaticResource BoldHeaderGroupBox}">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="Families matched for up/down switchleg placement (one per line):"
-                                   Foreground="#555555" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                        <TextBox Text="{Binding ElectricalVerticalFamiliesText, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" Height="95"/>
-                    </StackPanel>
-                </GroupBox>
+                <!-- Family-name classification settings removed: families now carry a "TurboSuite Role"
+                     type parameter, so routing/classification lives in the families, not this dialog. -->
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

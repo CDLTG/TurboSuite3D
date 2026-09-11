@@ -111,7 +111,7 @@ public static class Roles
         if (string.IsNullOrWhiteSpace(raw))
             return string.Empty;
 
-        Canonical.TryGetValue(raw.Trim(), out string? canon);
+        Canonical.TryGetValue(raw!.Trim(), out string? canon);
         return canon ?? string.Empty;
     }
 

@@ -8,6 +8,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 using TurboSuite.Dmx.OneLine;
 using TurboSuite.Dmx.Services;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Dmx.Services
@@ -56,8 +57,8 @@ namespace TurboSuite.Dmx.Services
                 try
                 {
                     var symbols = ResolveSymbols(result);
-                    var marker = ResolveSymbol(DmxOneLineGeometry.Marker.Family, DmxOneLineGeometry.Marker.Type);
-                    if (marker == null) result.Warnings.Add($"Wire-mark family \"{DmxOneLineGeometry.Marker.Family}\" not loaded — markers skipped.");
+                    var marker = ResolveSymbol(Roles.DmxWireMarkAnnotation);
+                    if (marker == null) result.Warnings.Add($"No {Roles.Label(Roles.DmxWireMarkAnnotation)} loaded — markers skipped.");
                     // Template line styles: the control wires (DMX chain + comm) draw "Wiring (CAT6)", the
                     // power wires "Lighting Fixture". Fall back to generic dash/solid styles if the template lacks them.
                     var dashed = ResolveLineStyle(new[] { "Wiring (CAT6)", "Dash", "Dashed", "Hidden", "<Hidden>" });
@@ -111,8 +112,8 @@ namespace TurboSuite.Dmx.Services
                 tx.Start();
                 try
                 {
-                    var marker = ResolveSymbol(DmxOneLineGeometry.Marker.Family, DmxOneLineGeometry.Marker.Type);
-                    if (marker == null) result.Warnings.Add($"Wire-mark family \"{DmxOneLineGeometry.Marker.Family}\" not loaded — numbers skipped.");
+                    var marker = ResolveSymbol(Roles.DmxWireMarkAnnotation);
+                    if (marker == null) result.Warnings.Add($"No {Roles.Label(Roles.DmxWireMarkAnnotation)} loaded — numbers skipped.");
                     var textType = ResolveTextType();
                     var borderStyle = ResolveLineStyle(new[] { "Lighting Fixture" });
 
@@ -368,24 +369,23 @@ namespace TurboSuite.Dmx.Services
         private IReadOnlyDictionary<DmxSymbolKind, FamilySymbol> ResolveSymbols(DmxOneLineResult result)
         {
             var map = new Dictionary<DmxSymbolKind, FamilySymbol>();
-            void Add(DmxSymbolKind kind, string family, string type)
+            void Add(DmxSymbolKind kind, string role)
             {
-                var s = ResolveSymbol(family, type);
-                if (s == null) result.Warnings.Add($"{kind} family \"{family}\" not loaded — skipped.");
+                var s = ResolveSymbol(role);
+                if (s == null) result.Warnings.Add($"No {Roles.Label(role)} loaded — {kind} skipped.");
                 else map[kind] = s;
             }
-            Add(DmxSymbolKind.Decoder, DmxOneLineGeometry.Decoder.Family, DmxOneLineGeometry.Decoder.Type);
-            Add(DmxSymbolKind.Driver, DmxOneLineGeometry.Driver.Family, DmxOneLineGeometry.Driver.Type);
-            Add(DmxSymbolKind.Interface, DmxOneLineGeometry.Interface.Family, DmxOneLineGeometry.Interface.Type);
-            Add(DmxSymbolKind.Processor, DmxOneLineGeometry.Processor.Family, DmxOneLineGeometry.Processor.Type);
-            Add(DmxSymbolKind.Terminator, DmxOneLineGeometry.Terminator.Family, DmxOneLineGeometry.Terminator.Type);
+            Add(DmxSymbolKind.Decoder, Roles.DmxDecoderDetail);
+            Add(DmxSymbolKind.Driver, Roles.DmxDriverDetail);
+            Add(DmxSymbolKind.Interface, Roles.DmxInterfaceDetail);
+            Add(DmxSymbolKind.Processor, Roles.DmxProcessorDetail);
+            Add(DmxSymbolKind.Terminator, Roles.DmxTerminatorDetail);
             return map;
         }
 
-        private FamilySymbol ResolveSymbol(string family, string type) =>
+        private FamilySymbol ResolveSymbol(string role) =>
             new FilteredElementCollector(_doc).OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>()
-                .FirstOrDefault(s => string.Equals(s.FamilyName, family, StringComparison.Ordinal)
-                                     && string.Equals(s.Name, type, StringComparison.Ordinal));
+                .FirstOrDefault(s => ParameterHelper.GetRole(s) == role);
 
         private GraphicsStyle ResolveLineStyle(string[] names)
         {

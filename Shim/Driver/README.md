@@ -81,11 +81,15 @@ Requires at least one loaded Lighting Device family type with valid `Power` and 
 
 ### Required Tag Families
 
-| Family Name | Category | Purpose |
-|-------------|----------|---------|
-| `AL_Tag_Lighting Device (SwitchID)` | Lighting Device Tags | Tags Switch ID on placed power supplies |
-| `AL_Tag_Lighting Device (Switchleg)` | Lighting Device Tags | Switchleg tag on first power supply per circuit |
-| `AL_Tag_Lighting Fixture (Linear Length)` | Lighting Fixture Tags | Re-tags linear fixtures after splitting (types: `Tag_Top`, `Tag_Bottom`) |
+Found by their `TurboSuite Role` type parameter, not by family name (see `Core/Shared/Constants/Roles.cs`):
+
+| Role | Category | Purpose |
+|------|----------|---------|
+| `SwitchIdTag` | Lighting Device Tags | Tags Switch ID on placed power supplies |
+| `DeviceSwitchlegTag` | Lighting Device Tags | Switchleg tag on first power supply per circuit |
+| `LinearTag` | Lighting Fixture Tags | Re-tags linear fixtures after splitting (types: `Tag_Top`, `Tag_Bottom`) |
+
+The TBD placeholder driver is likewise identified by Role `DriverPlaceholder` (was the `AL_RPS_TBD` family-name substring).
 
 ### Required Custom Parameters
 

@@ -85,7 +85,7 @@ public class TagCommand : IExternalCommand
                     FamilySymbol? linearTagType = TagTypeService.GetLinearTagType(doc, linearTypeName);
                     if (linearTagType == null)
                     {
-                        TaskDialog.Show("TurboTag", $"Tag type '{linearTypeName}' in family '{TagConstants.LinearTagFamilyName}' not found.\nLoad this tag family into the project.");
+                        TaskDialog.Show("TurboTag", $"No {Roles.Label(Roles.LinearTag)} (type '{linearTypeName}') found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.LinearTag}'.");
                         return Result.Cancelled;
                     }
 
@@ -116,7 +116,7 @@ public class TagCommand : IExternalCommand
                 FamilySymbol? switchIdTagType = TagTypeService.GetSwitchIdTagType(doc);
                 if (switchIdTagType == null)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.SwitchIdTagFamilyName}' not found.\nLoad this tag family into the project.");
+                    TaskDialog.Show("TurboTag", $"No {Roles.Label(Roles.SwitchIdTag)} found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.SwitchIdTag}'.");
                     return Result.Cancelled;
                 }
 
@@ -128,7 +128,7 @@ public class TagCommand : IExternalCommand
                 FamilySymbol? keypadTagType = TagTypeService.GetKeypadTagType(doc);
                 if (keypadTagType == null)
                 {
-                    TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.KeypadTagFamilyName}' not found.\nLoad this tag family into the project.");
+                    TaskDialog.Show("TurboTag", $"No {Roles.Label(Roles.KeypadTag)} found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.KeypadTag}'.");
                     return Result.Cancelled;
                 }
 
@@ -171,7 +171,7 @@ public class TagCommand : IExternalCommand
         return dialog.ShowDialog() == true ? dialog.SelectedDirection : TagDirection.None;
     }
 
-    private void DeleteExistingTags(Document doc, ElementId fixtureId, ElementId viewId, string tagFamilyName)
+    private void DeleteExistingTags(Document doc, ElementId fixtureId, ElementId viewId, string tagRole)
     {
         var tagsToDelete = new FilteredElementCollector(doc, viewId)
             .OfClass(typeof(IndependentTag))
@@ -187,7 +187,7 @@ public class TagCommand : IExternalCommand
 
                 FamilySymbol? tagSymbol = doc.GetElement(typeId) as FamilySymbol;
                 return tagSymbol != null &&
-                       string.Equals(tagSymbol.FamilyName, tagFamilyName, StringComparison.OrdinalIgnoreCase);
+                       ParameterHelper.GetRole(tagSymbol) == tagRole;
             })
             .Select(tag => tag.Id)
             .ToList();
@@ -204,7 +204,7 @@ public class TagCommand : IExternalCommand
         View activeView = doc.ActiveView;
         ElementId tagTypeId = tagType.Id;
         ElementId viewId = activeView.Id;
-        string tagFamilyName = tagType.FamilyName;
+        string tagRole = ParameterHelper.GetRole(tagType);
 
         using (var trans = new Transaction(doc, "TurboTag - Place Tags"))
         {
@@ -216,7 +216,7 @@ public class TagCommand : IExternalCommand
 
             foreach (FamilyInstance fixture in fixtures)
             {
-                DeleteExistingTags(doc, fixture.Id, viewId, tagFamilyName);
+                DeleteExistingTags(doc, fixture.Id, viewId, tagRole);
 
                 if (TryPlaceTag(doc, fixture, tagTypeId, viewId, direction, isLineBased))
                 {
@@ -236,7 +236,7 @@ public class TagCommand : IExternalCommand
         View activeView = doc.ActiveView;
         ElementId tagTypeId = tagType.Id;
         ElementId viewId = activeView.Id;
-        string tagFamilyName = tagType.FamilyName;
+        string tagRole = ParameterHelper.GetRole(tagType);
 
         using (var trans = new Transaction(doc, "TurboTag - Place Power Supply Tags"))
         {
@@ -248,7 +248,7 @@ public class TagCommand : IExternalCommand
 
             foreach (FamilyInstance device in powerSupplies)
             {
-                DeleteExistingTags(doc, device.Id, viewId, tagFamilyName);
+                DeleteExistingTags(doc, device.Id, viewId, tagRole);
 
                 if (TryPlacePowerSupplyTag(doc, device, tagTypeId, viewId))
                 {
@@ -297,7 +297,7 @@ public class TagCommand : IExternalCommand
         ElementId defaultTagTypeId = tagType.Id;
         ElementId twoGangTagTypeId = twoGangTagType?.Id ?? ElementId.InvalidElementId;
         ElementId viewId = activeView.Id;
-        string tagFamilyName = tagType.FamilyName;
+        string tagRole = ParameterHelper.GetRole(tagType);
 
         using (var trans = new Transaction(doc, "TurboTag - Place Keypad Tags"))
         {
@@ -309,7 +309,7 @@ public class TagCommand : IExternalCommand
 
             foreach (FamilyInstance keypad in keypads)
             {
-                DeleteExistingTags(doc, keypad.Id, viewId, tagFamilyName);
+                DeleteExistingTags(doc, keypad.Id, viewId, tagRole);
 
                 bool isTwoGang = keypad.LookupParameter(TagConstants.KeypadTwoGangParamName)?.AsInteger() == 1;
                 ElementId tagTypeId = isTwoGang && twoGangTagTypeId != ElementId.InvalidElementId
@@ -420,7 +420,7 @@ public class TagCommand : IExternalCommand
         View activeView = doc.ActiveView;
         ElementId tagTypeId = tagType.Id;
         ElementId viewId = activeView.Id;
-        string tagFamilyName = tagType.FamilyName;
+        string tagRole = ParameterHelper.GetRole(tagType);
 
         using (var trans = new Transaction(doc, "TurboTag - Place Tags"))
         {
@@ -432,7 +432,7 @@ public class TagCommand : IExternalCommand
 
             foreach (FamilyInstance fixture in fixtures)
             {
-                DeleteExistingTags(doc, fixture.Id, viewId, tagFamilyName);
+                DeleteExistingTags(doc, fixture.Id, viewId, tagRole);
 
                 if (TryPlaceTagFaceBased(doc, fixture, tagTypeId, viewId))
                 {
@@ -536,7 +536,7 @@ public class TagCommand : IExternalCommand
         FamilySymbol? combinedBottom = TagTypeService.GetCombinedLinearTagType(doc, "Tag_Bottom");
         if (combinedTop == null || combinedBottom == null)
         {
-            TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.CombinedLinearTagFamilyName}' (types 'Tag_Top' and 'Tag_Bottom') not found.\nLoad this tag family into the project.");
+            TaskDialog.Show("TurboTag", $"No {Roles.Label(Roles.RunLengthTag)} (types 'Tag_Top' and 'Tag_Bottom') found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.RunLengthTag}'.");
             return Result.Cancelled;
         }
 
@@ -549,7 +549,7 @@ public class TagCommand : IExternalCommand
             linearBottom = TagTypeService.GetLinearTagType(doc, "Tag_Bottom");
             if (linearTop == null || linearBottom == null)
             {
-                TaskDialog.Show("TurboTag", $"Tag family '{TagConstants.LinearTagFamilyName}' (types 'Tag_Top' and 'Tag_Bottom') not found.\nLoad this tag family into the project (required for run-of-one fallback).");
+                TaskDialog.Show("TurboTag", $"No {Roles.Label(Roles.LinearTag)} (types 'Tag_Top' and 'Tag_Bottom') found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.LinearTag}' (required for run-of-one fallback).");
                 return Result.Cancelled;
             }
         }
@@ -620,8 +620,8 @@ public class TagCommand : IExternalCommand
                 // Remove existing linear/combined tags from every member in this view.
                 foreach (var member in run.Members)
                 {
-                    DeleteExistingTags(doc, member.Id, viewId, TagConstants.LinearTagFamilyName);
-                    DeleteExistingTags(doc, member.Id, viewId, TagConstants.CombinedLinearTagFamilyName);
+                    DeleteExistingTags(doc, member.Id, viewId, Roles.LinearTag);
+                    DeleteExistingTags(doc, member.Id, viewId, Roles.RunLengthTag);
                 }
 
                 TryPlaceTag(doc, run.Lead, combinedTagType.Id, viewId, direction, isLineBased: true);
@@ -633,8 +633,8 @@ public class TagCommand : IExternalCommand
                 foreach (var run in singleRuns)
                 {
                     var fixture = run.Members[0];
-                    DeleteExistingTags(doc, fixture.Id, viewId, TagConstants.LinearTagFamilyName);
-                    DeleteExistingTags(doc, fixture.Id, viewId, TagConstants.CombinedLinearTagFamilyName);
+                    DeleteExistingTags(doc, fixture.Id, viewId, Roles.LinearTag);
+                    DeleteExistingTags(doc, fixture.Id, viewId, Roles.RunLengthTag);
 
                     TryPlaceTag(doc, fixture, singleTagType.Id, viewId, direction, isLineBased: true);
                 }

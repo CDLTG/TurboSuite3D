@@ -1,7 +1,5 @@
 #nullable disable
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Windows.Input;
 using TurboSuite.Shared.Models;
@@ -13,12 +11,8 @@ public class SettingsViewModel : ViewModelBase
 {
     // CAD Room Source + Region Generation Layers config moved to the TurboName window
     // (TurboSuite.Name.ViewModels.CadRoomSourceConfigViewModel) — consumed only by TurboName.
-
-    private string _wallSconceFamiliesText;
-    private string _receptacleFamiliesText;
-    private string _electricalVerticalFamiliesText;
-    private string _verticalFamiliesText;
-    private string _switchFamiliesText;
+    // Family-name classification settings are gone — families now carry a "TurboSuite Role" type
+    // parameter (see Core Roles), so classification lives in the families, not this dialog.
 
     // General
     private bool _showCircuitCommentsDialog = true;
@@ -30,36 +24,6 @@ public class SettingsViewModel : ViewModelBase
     // build box every time the version bumps; the loaded assembly is always the truth of what's running.
     public string VersionText { get; } =
         $"v{(Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0)).ToString(3)}";
-
-    public string WallSconceFamiliesText
-    {
-        get => _wallSconceFamiliesText;
-        set => SetProperty(ref _wallSconceFamiliesText, value);
-    }
-
-    public string ReceptacleFamiliesText
-    {
-        get => _receptacleFamiliesText;
-        set => SetProperty(ref _receptacleFamiliesText, value);
-    }
-
-    public string ElectricalVerticalFamiliesText
-    {
-        get => _electricalVerticalFamiliesText;
-        set => SetProperty(ref _electricalVerticalFamiliesText, value);
-    }
-
-    public string VerticalFamiliesText
-    {
-        get => _verticalFamiliesText;
-        set => SetProperty(ref _verticalFamiliesText, value);
-    }
-
-    public string SwitchFamiliesText
-    {
-        get => _switchFamiliesText;
-        set => SetProperty(ref _switchFamiliesText, value);
-    }
 
     public bool ShowCircuitCommentsDialog
     {
@@ -84,9 +48,8 @@ public class SettingsViewModel : ViewModelBase
 
     public Action<bool?> CloseAction { get; set; }
 
-    public SettingsViewModel(FamilyNameSettings familySettings, GeneralSettings generalSettings)
+    public SettingsViewModel(GeneralSettings generalSettings)
     {
-        LoadFrom(familySettings);
         LoadGeneralSettings(generalSettings);
         SaveCommand = new RelayCommand(OnSave);
         ResetDefaultsCommand = new RelayCommand(OnResetDefaults);
@@ -99,17 +62,7 @@ public class SettingsViewModel : ViewModelBase
 
     private void OnResetDefaults()
     {
-        LoadFrom(FamilyNameSettings.CreateDefaults());
         LoadGeneralSettings(GeneralSettings.CreateDefaults());
-    }
-
-    private void LoadFrom(FamilyNameSettings settings)
-    {
-        WallSconceFamiliesText = string.Join(Environment.NewLine, settings.WallSconceFamilies);
-        ReceptacleFamiliesText = string.Join(Environment.NewLine, settings.ReceptacleFamilies);
-        ElectricalVerticalFamiliesText = string.Join(Environment.NewLine, settings.ElectricalVerticalFamilies);
-        VerticalFamiliesText = string.Join(Environment.NewLine, settings.VerticalFamilies);
-        SwitchFamiliesText = string.Join(Environment.NewLine, settings.SwitchFamilies);
     }
 
     private void LoadGeneralSettings(GeneralSettings settings)
@@ -119,31 +72,10 @@ public class SettingsViewModel : ViewModelBase
         EnableDynamicDriverTags = settings.EnableDynamicDriverTags;
     }
 
-    public FamilyNameSettings ToFamilyModel() => new()
-    {
-        WallSconceFamilies = ParseLines(WallSconceFamiliesText),
-        ReceptacleFamilies = ParseLines(ReceptacleFamiliesText),
-        ElectricalVerticalFamilies = ParseLines(ElectricalVerticalFamiliesText),
-        VerticalFamilies = ParseLines(VerticalFamiliesText),
-        SwitchFamilies = ParseLines(SwitchFamiliesText)
-    };
-
     public GeneralSettings ToGeneralModel() => new()
     {
         ShowCircuitCommentsDialog = ShowCircuitCommentsDialog,
         AutoSplitFixtures = AutoSplitFixtures,
         EnableDynamicDriverTags = EnableDynamicDriverTags
     };
-
-    private static HashSet<string> ParseLines(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        return new HashSet<string>(
-            text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Where(s => s.Length > 0),
-            StringComparer.OrdinalIgnoreCase);
-    }
 }

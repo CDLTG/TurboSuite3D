@@ -128,19 +128,20 @@ public class BubbleCommand : IExternalCommand
             var lineBasedPlacement = (LineBasedPlacementCalculator)placement;
             var isUp = lineBasedPlacement.IsUp;
 
-            var linearFeedTagId = FixtureAnalysisService.FindTagType(
-                doc, BubbleConstants.LinearFeedTagFamily, BubbleConstants.LinearFeedTagDefaultType);
+            var linearFeedTagId = ParameterHelper.FindByRole(
+                doc, BuiltInCategory.OST_LightingFixtureTags, Roles.LinearFeedTag,
+                BubbleConstants.LinearFeedTagDefaultType)?.Id;
             if (linearFeedTagId == null)
             {
-                ShowError($"Load tag type '{BubbleConstants.LinearFeedTagFamily}' - '{BubbleConstants.LinearFeedTagDefaultType}' before using TurboBubble.");
+                ShowError($"No {Roles.Label(Roles.LinearFeedTag)} (type '{BubbleConstants.LinearFeedTagDefaultType}') found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.LinearFeedTag}'.");
                 return Result.Cancelled;
             }
 
-            var detailSymbol = FixtureAnalysisService.FindDetailComponentSymbol(
-                doc, BubbleConstants.LinearFeedDetailFamily);
+            var detailSymbol = ParameterHelper.FindByRole(
+                doc, BuiltInCategory.OST_DetailComponents, Roles.LinearFeedDetail);
             if (detailSymbol == null)
             {
-                ShowError($"Load detail family '{BubbleConstants.LinearFeedDetailFamily}' before using TurboBubble.");
+                ShowError($"No {Roles.Label(Roles.LinearFeedDetail)} found.\nLoad a detail family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.LinearFeedDetail}'.");
                 return Result.Cancelled;
             }
 
@@ -177,19 +178,21 @@ public class BubbleCommand : IExternalCommand
             }
 
             var typeName = effectiveFlip ? BubbleConstants.RemoteSwitchlegTypeRight : BubbleConstants.RemoteSwitchlegTypeLeft;
-            tagTypeId = FixtureAnalysisService.FindTagType(doc, BubbleConstants.RemoteSwitchlegTagFamily, typeName);
+            tagTypeId = ParameterHelper.FindByRole(
+                doc, BuiltInCategory.OST_LightingFixtureTags, Roles.RemoteSwitchlegTag, typeName)?.Id;
             if (tagTypeId == null)
             {
-                ShowError($"Load tag type '{BubbleConstants.RemoteSwitchlegTagFamily}' - '{typeName}' before using TurboBubble.");
+                ShowError($"No {Roles.Label(Roles.RemoteSwitchlegTag)} (type '{typeName}') found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.RemoteSwitchlegTag}'.");
                 return Result.Cancelled;
             }
         }
         else
         {
-            tagTypeId = FixtureAnalysisService.FindTagType(doc, BubbleConstants.SwitchlegTagFamily);
+            tagTypeId = ParameterHelper.FindByRole(
+                doc, BuiltInCategory.OST_LightingFixtureTags, Roles.FixtureSwitchlegTag)?.Id;
             if (tagTypeId == null)
             {
-                ShowError($"Load tag '{BubbleConstants.SwitchlegTagFamily}' before using TurboBubble.");
+                ShowError($"No {Roles.Label(Roles.FixtureSwitchlegTag)} found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.FixtureSwitchlegTag}'.");
                 return Result.Cancelled;
             }
         }
@@ -223,12 +226,11 @@ public class BubbleCommand : IExternalCommand
             return Result.Failed;
         }
 
-        var tagTypeId = FixtureAnalysisService.FindTagType(
-            doc, BuiltInCategory.OST_ElectricalFixtureTags,
-            BubbleConstants.ElectricalSwitchlegTagFamily);
+        var tagTypeId = ParameterHelper.FindByRole(
+            doc, BuiltInCategory.OST_ElectricalFixtureTags, Roles.ElectricalSwitchlegTag)?.Id;
         if (tagTypeId == null)
         {
-            ShowError($"Load tag '{BubbleConstants.ElectricalSwitchlegTagFamily}' before using TurboBubble.");
+            ShowError($"No {Roles.Label(Roles.ElectricalSwitchlegTag)} found.\nLoad a tag family whose '{ParameterNames.TurboSuiteRole}' is '{Roles.ElectricalSwitchlegTag}'.");
             return Result.Cancelled;
         }
 
@@ -474,7 +476,7 @@ public class BubbleCommand : IExternalCommand
     private static void DeleteExistingElectricalSwitchlegTags(Document doc, FamilyInstance fixture)
     {
         DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_ElectricalFixtureTags,
-            name => name == BubbleConstants.ElectricalSwitchlegTagFamily);
+            role => role == Roles.ElectricalSwitchlegTag);
     }
 
     #endregion
@@ -618,12 +620,12 @@ public class BubbleCommand : IExternalCommand
     private static void DeleteExistingSwitchlegTags(Document doc, FamilyInstance fixture, IndependentTag sourceTag)
     {
         DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_LightingFixtureTags,
-            name => name == BubbleConstants.SwitchlegTagFamily || name == BubbleConstants.RemoteSwitchlegTagFamily,
+            role => role == Roles.FixtureSwitchlegTag || role == Roles.RemoteSwitchlegTag,
             excludeTagId: sourceTag.Id);
     }
 
     private static void DeleteSwitchlegTagsByCategory(Document doc, FamilyInstance fixture,
-        BuiltInCategory tagCategory, Func<string, bool> familyNameMatch, ElementId? excludeTagId = null)
+        BuiltInCategory tagCategory, Func<string, bool> roleMatch, ElementId? excludeTagId = null)
     {
         var tagsToDelete = new List<ElementId>();
 
@@ -643,7 +645,7 @@ public class BubbleCommand : IExternalCommand
                     continue;
 
                 var tagSymbol = doc.GetElement(tag.GetTypeId()) as FamilySymbol;
-                if (tagSymbol != null && familyNameMatch(tagSymbol.FamilyName))
+                if (tagSymbol != null && roleMatch(ParameterHelper.GetRole(tagSymbol)))
                     tagsToDelete.Add(tag.Id);
             }
         }

@@ -109,12 +109,11 @@ namespace TurboSuite.Driver.Services
             return true;
         }
 
-        private const string SwitchlegTagFamily = "AL_Tag_Lighting Device (Switchleg)";
-
-        private static readonly string[] TagFamilyNames =
+        // Finder roles for the device tags this deployer stamps (keyed into _tagTypeCache).
+        private static readonly string[] TagRoles =
         {
-            "AL_Tag_Lighting Device (SwitchID)",
-            SwitchlegTagFamily
+            Roles.SwitchIdTag,
+            Roles.DeviceSwitchlegTag
         };
 
         private Dictionary<string, ElementId> _tagTypeCache;
@@ -137,12 +136,12 @@ namespace TurboSuite.Driver.Services
             int placed = 0;
             var reference = new Reference(instance);
 
-            foreach (string familyName in TagFamilyNames)
+            foreach (string role in TagRoles)
             {
-                if (!includeSwitchleg && familyName == SwitchlegTagFamily)
+                if (!includeSwitchleg && role == Roles.DeviceSwitchlegTag)
                     continue;
 
-                if (!_tagTypeCache.TryGetValue(familyName, out var tagTypeId))
+                if (!_tagTypeCache.TryGetValue(role, out var tagTypeId))
                     continue;
 
                 var tag = IndependentTag.Create(
@@ -230,12 +229,11 @@ namespace TurboSuite.Driver.Services
                 .Cast<FamilySymbol>()
                 .ToList();
 
-            foreach (string familyName in TagFamilyNames)
+            foreach (string role in TagRoles)
             {
-                var match = allTagTypes.FirstOrDefault(fs =>
-                    string.Equals(fs.FamilyName, familyName, StringComparison.OrdinalIgnoreCase));
+                var match = allTagTypes.FirstOrDefault(fs => ParameterHelper.GetRole(fs) == role);
                 if (match != null)
-                    result[familyName] = match.Id;
+                    result[role] = match.Id;
             }
 
             return result;

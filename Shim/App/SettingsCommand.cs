@@ -10,8 +10,8 @@ using TurboSuite.Shared.Services;
 namespace TurboSuite.App;
 
 /// <summary>
-/// Opens the TurboSuite Settings dialog. Edits family-name/CAD-source/general settings stored
-/// in project ExtensibleStorage. No model elements are modified directly.
+/// Opens the TurboSuite Settings dialog. Edits general settings stored in project
+/// ExtensibleStorage. No model elements are modified directly.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class SettingsCommand : IExternalCommand
@@ -28,9 +28,8 @@ public class SettingsCommand : IExternalCommand
                 return Result.Failed;
             }
 
-            var familySettings = FamilyNameSettingsCache.Get(doc);
             var generalSettings = GeneralSettingsCache.Get(doc);
-            var viewModel = new SettingsViewModel(familySettings, generalSettings);
+            var viewModel = new SettingsViewModel(generalSettings);
 
             var window = new SettingsWindow { DataContext = viewModel };
             new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
@@ -38,17 +37,7 @@ public class SettingsCommand : IExternalCommand
 
             if (result == true)
             {
-                // Both saves open their own transaction; group them so one "Save" is atomic
-                // (no half-persisted state) and collapses to a single Ctrl+Z undo entry.
-                using (var group = new TransactionGroup(doc, "TurboSuite - Save Settings"))
-                {
-                    group.Start();
-                    FamilyNameSettingsStorageService.Save(doc, viewModel.ToFamilyModel());
-                    GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel());
-                    group.Assimilate();
-                }
-
-                FamilyNameSettingsCache.Invalidate();
+                GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel());
                 GeneralSettingsCache.Invalidate();
             }
 

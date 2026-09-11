@@ -15,7 +15,7 @@ Panel schedule slot management for the selected panel.
 
 ## Tab 2 — Keypads
 
-Lists all Lighting Devices whose family name contains "keypad".
+Lists all Lighting Devices whose `TurboSuite Role` type parameter is `Keypad` (see `Core/Shared/Constants/Roles.cs`).
 
 - Editable **Switch ID** column
 - **Drag-drop room ordering** sidebar (persisted per-document) controls sort order; while in **Reorder** mode a live name filter narrows the list (filters the view only — click-order and Apply still use the full room list)

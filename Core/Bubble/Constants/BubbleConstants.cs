@@ -1,21 +1,17 @@
-using System;
-using System.Collections.Generic;
-
 namespace TurboSuite.Bubble.Constants;
 
 /// <summary>
 /// All geometry constants used by TurboBubble. Public (not internal) because it lives in
 /// TurboSuite.Core — the Revit-free slice ahead of the Bubble module's own migration — and
-/// the Bubble shim plus FamilyNameSettings consume it across the assembly boundary.
+/// the Bubble shim consumes it across the assembly boundary. Tag/detail families are found by
+/// TurboSuite Role (see Core Roles), not by the name constants that used to live here.
 /// </summary>
 public static class BubbleConstants
 {
     // Unit conversion
     public const double InchesToFeet = 1.0 / 12.0;
 
-    // Required families
-    public const string SwitchlegTagFamily = "AL_Tag_Lighting Fixture (Switchleg)";
-    public const string RemoteSwitchlegTagFamily = "AL_Tag_Lighting Fixture (Remote Switchleg)";
+    // Remote-switchleg tag type names (the RemoteSwitchlegTag family carries both).
     public const string RemoteSwitchlegTypeRight = "Switchleg Right";
     public const string RemoteSwitchlegTypeLeft = "Switchleg Left";
 
@@ -41,18 +37,6 @@ public static class BubbleConstants
     public const double WireOffsetEndFinalFt = 1.0 * InchesToFeet;
     public const double WireOffsetEndWallSconceFt = 2.5 * InchesToFeet;
 
-    // Electrical Fixture switchleg
-    public const string ElectricalSwitchlegTagFamily = "AL_Tag_Electrical Fixture (Switchleg)";
-
-    // Electrical Fixture families with vertical (up/down) switchleg placement
-    public static readonly HashSet<string> ElectricalVerticalFamilies = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "AL_Electrical Fixture_Exhaust (Hosted)",
-        "AL_Electrical Fixture_Exhaust",
-        "AL_Electrical Fixture_Fireplace Igniter",
-        "Exhaust",
-        "Fireplace Igniter"
-    };
     public const double ElectricalVerticalTagOffsetFt = 10.0 * InchesToFeet;  // 10" tag offset along localY
 
     // Vertical wire arc parameters (in inches, converted to feet)
@@ -72,12 +56,7 @@ public static class BubbleConstants
     public const double ElectricalV3YOffsetFt = 3.09 * InchesToFeet;      // V3 perpendicular
     public const double ElectricalWireStartOffsetFt = 3.0 * InchesToFeet; // wire start perpendicular offset (SetVertex)
 
-    // Ceiling Fan families with fixed switchleg placement (no user flip prompt)
-    public static readonly HashSet<string> CeilingFanFamilies = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "AL_Electrical Fixture_Ceiling Fan (Hosted)",
-        "Ceiling Fan"
-    };
+    // Ceiling Fan fixed switchleg placement (no user flip prompt) — classified by TurboSuite Role.
     public const double CeilingFanTagXOffsetFt = 15.0 * InchesToFeet;     // 1'-3" along localX
     public const double CeilingFanTagYOffsetFt = 7.625 * InchesToFeet;    // 0'-7 5/8" along localY
     public const double CeilingFanV1XOffsetFt = 4.1875 * InchesToFeet;    // 4 3/16" along localX
@@ -85,16 +64,7 @@ public static class BubbleConstants
     public const double CeilingFanV2XOffsetFt = 9.0625 * InchesToFeet;   // 9 1/16" along localX
     public const double CeilingFanV2YOffsetFt = 1.75 * InchesToFeet;     // 1 3/4" along localY
 
-    // Special family names
-    public const string WallSconceFamily = "AL_Decorative_Wall Sconce (Hosted)";
-
-    // Chandelier (decorative pendant) families — diagonal-corner switchleg placement
-    public static readonly HashSet<string> ChandelierFamilies = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "AL_Decorative_Pendant (Hosted)",
-        "AL_Decorative_Pendant",
-        "Z_Chandelier"
-    };
+    // Chandelier (decorative pendant) — diagonal-corner switchleg placement, classified by TurboSuite Role.
     public const double ChandelierBubbleAngleDegrees = 33.0;
     public const double ChandelierBubbleOffsetExtensionFt = 8.0 * InchesToFeet; // push bubble outward past crosshair tip along the diagonal
     public const double ChandelierBubbleHorizontalNudgeFt = 0.75 * InchesToFeet; // extra horizontal-only push away from fixture (added along the corner's X sign)
@@ -107,12 +77,7 @@ public static class BubbleConstants
     // edge). Both the 2D and 3D families are geometrically identical in wall-normal terms, so one
     // wall-aware placement path serves both. Routed here (ahead of the shared vertical-face path)
     // so sconces/mirrors are untouched. The switchleg tag/wire clear the symbol's true room-side
-    // depth (measured, not assumed) and stand off AWAY from the wall.
-    public static readonly HashSet<string> PictureLightFamilies = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Z_Picture Light",
-        "AL_Decorative_Picture Light (Hosted)"
-    };
+    // depth (measured, not assumed) and stand off AWAY from the wall. Classified by TurboSuite Role.
     // Switchleg geometry, in the wall frame (X along wall, Y = wall normal away from wall). Derived
     // from a hand-drawn ideal (TurboSpike read-back): the bubble stands off past the MEASURED
     // room-side depth so it clears the bar and sits in open room (the 2D look), and the wire exits the
@@ -133,9 +98,8 @@ public static class BubbleConstants
     public const double RemoteSwitchlegExtraXOffsetFt = 5.15625 * InchesToFeet;
 
     // Linear Feed (static driver tag) — used when "Enable dynamic driver tags" is OFF
-    // and the fixture is line-based with a remote power supply.
-    public const string LinearFeedDetailFamily = "AL_Detail_LV Leader (Switch)";
-    public const string LinearFeedTagFamily = "AL_Tag_Linear Feed";
+    // and the fixture is line-based with a remote power supply. The tag/detail families are found
+    // by TurboSuite Role (LinearFeedTag / LinearFeedDetail); this is the tag's default type name.
     public const string LinearFeedTagDefaultType = "SwitchID";
     // Detail leader: placement line offset 1" perpendicular from connector (default "down" side),
     // running along the fixture for a placeholder length to be dialed in.

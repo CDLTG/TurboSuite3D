@@ -19,7 +19,7 @@ namespace TurboSuite.Dmx.OneLine
 
     /// <summary>
     /// The authored one-line symbol library's geometry — the SOURCE OF TRUTH for the
-    /// firm's authored families: family/type names, the instance label parameter
+    /// firm's authored families: the instance label parameter
     /// names the renderer writes, box sizes, and the connection-point offsets (from each box's <b>center</b>
     /// origin) the line-drawing targets. All lengths are <b>model feet</b>; the families are Detail Items
     /// drawn at architectural size and read at the pinned view scale (1/4" = 1'-0"). The <see cref="Layout"/>
@@ -37,8 +37,6 @@ namespace TurboSuite.Dmx.OneLine
         /// <summary>Decoder box — DEC # + DMX address; power in (L), DMX daisy in (top) / out (bottom), single homerun (R).</summary>
         public static class Decoder
         {
-            public const string Family = "AL_Detail_Decoder";
-            public const string Type = "AL_Detail_Decoder";
             public const string DecNumberParam = "DecNumber";   // instance, Text — generator writes "DEC 20"
             public const string AddressParam = "Address";       // instance, Text — generator writes "001" (label adds [ ])
 
@@ -54,8 +52,6 @@ namespace TurboSuite.Dmx.OneLine
         /// <summary>Driver box — Type Mark; power in (L) from the feed, out (R) to the decoder, 120 V daisy up/down.</summary>
         public static class Driver
         {
-            public const string Family = "AL_Detail_Driver";
-            public const string Type = "AL_Detail_Driver";
             public const string TypeMarkParam = "TypeMark";   // instance, Text — generator writes "CV"/"MD"/"ME"
 
             public const double Width = 16.0 / 12.0;   // 1'-4"
@@ -70,8 +66,6 @@ namespace TurboSuite.Dmx.OneLine
         /// <summary>DMX Interface box — interface #; DMX chain out (bottom), comm in (R) from the processor.</summary>
         public static class Interface
         {
-            public const string Family = "AL_Detail_DMX Interface";
-            public const string Type = "AL_Detail_DMX Interface";
             public const string NumberParam = "DMXInterface";   // instance, Text — generator writes the interface #
 
             public const double Width = 24.0 / 12.0;   // 2'-0"
@@ -84,9 +78,6 @@ namespace TurboSuite.Dmx.OneLine
         /// <summary>Lutron Processor box — static text; comm point (L) to the interface.</summary>
         public static class Processor
         {
-            public const string Family = "AL_Detail_Processor";
-            public const string Type = "AL_Detail_Processor";
-
             public const double Width = 24.0 / 12.0;   // 2'-0" (authored box)
             public const double Height = 15.0 / 12.0;  // 1'-3"
 
@@ -96,9 +87,6 @@ namespace TurboSuite.Dmx.OneLine
         /// <summary>DMX Terminator box — static text; DMX in (top) from the last decoder.</summary>
         public static class Terminator
         {
-            public const string Family = "AL_Detail_Terminator";
-            public const string Type = "AL_Detail_Terminator";
-
             public const double Width = 26.0 / 12.0;   // 2'-2"
             public const double Height = 15.0 / 12.0;  // 1'-3"
 
@@ -109,8 +97,6 @@ namespace TurboSuite.Dmx.OneLine
         /// legend # (dense, 1..N — the fixed 1–7 range is gone now that #16-N is uncapped).</summary>
         public static class Marker
         {
-            public const string Family = "AL_Annotation_Wire Mark";
-            public const string Type = "AL_Annotation_Wire Mark";
             public const string NumberParam = "WireMark";   // instance, Text — generator writes the legend #
         }
 

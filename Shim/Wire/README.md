@@ -79,10 +79,11 @@ Switches are wired with an endpoint offset to prevent visual overlap. Wall-hoste
 
 ### Recognized Fixture Families
 
-These family names trigger special wire routing (spline instead of arc):
+These families trigger special wire routing (spline instead of arc), identified by their
+`TurboSuite Role` type parameter (not by family name — see `Core/Shared/Constants/Roles.cs`):
 
-- `AL_Decorative_Wall Sconce (Hosted)` — wall-normal spline offsets
-- `AL_Electrical Fixture_Receptacle (Hosted)` / `Receptacle` — wall-normal spline offsets
+- Role `Sconce` — wall-normal spline offsets
+- Role `Receptacle` — wall-normal spline offsets (shifted 0.5" further from the wall than sconces)
 
 ### Other Requirements
 
