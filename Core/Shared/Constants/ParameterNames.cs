@@ -50,6 +50,17 @@ public static class ParameterNames
     public const string DaliAddress = "DALI Address";
 
     // Lighting Device / Fixture type parameters
+    /// <summary>
+    /// The stable machine key TurboSuite classifies and finds families by — a shared <b>type</b>
+    /// String param authored into the family, read off the <c>FamilySymbol</c>. It replaces every
+    /// name-keyed classifier (hardcoded lists, editable ES sets, substring/keyword checks): a family
+    /// can be renamed and LOD-reorganized forever without touching code, because nothing keys off the
+    /// name. Values are the <see cref="Roles"/> vocabulary — a classify role on a placed family
+    /// (Sconce, Keypad, …), or a finder role on a tag/detail/annotation family (FixtureTypeTag, …).
+    /// Blank/absent/unrecognized all mean "no special behavior" (see <see cref="Roles.Canonicalize"/>).
+    /// <b>Read-only to add-in code</b> — the sole writer is the family author.
+    /// </summary>
+    public const string TurboSuiteRole = "TurboSuite Role";
     public const string TypeMark = "Type Mark";
     public const string DimmingProtocol = "Dimming Protocol";
     public const string DimmingRange = "Dimming Range";
