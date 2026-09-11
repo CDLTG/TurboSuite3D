@@ -1,9 +1,7 @@
 using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
-using TurboSuite.Bubble.Constants;
 using TurboSuite.Shared.Constants;
-using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Shared.Helpers;
 
@@ -115,37 +113,34 @@ public static class GeometryHelper
     }
 
     /// <summary>
-    /// Determines if a fixture is a vertical/wall-mounted family (2D unhosted families
-    /// that should receive face-based tag placement).
+    /// Determines if a fixture is a vertical/wall-mounted family that should receive face-based tag
+    /// placement. Keyed on role: the generic <see cref="Roles.WallVertical"/> plus
+    /// <see cref="Roles.PictureLight"/> — picture lights rode the old vertical name list too (same
+    /// face-based placement), so both map here. This is only the tag/geometry question; Bubble's
+    /// switchleg dispatch routes picture-light to its own room-side path first ("wins over vertical").
     /// </summary>
     public static bool IsVerticalFamily(FamilyInstance fixture)
     {
-        string familyName = fixture.Symbol?.Family?.Name ?? "";
-        var settings = FamilyNameSettingsCache.Get(fixture.Document);
-        return settings.VerticalFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) is Roles.WallVertical or Roles.PictureLight;
     }
 
     /// <summary>
-    /// Determines if a fixture is a receptacle family (3D hosted or 2D unhosted).
+    /// Determines if a fixture is a receptacle family (3D hosted or 2D unhosted) — keyed on
+    /// <see cref="Roles.Receptacle"/>.
     /// </summary>
     public static bool IsReceptacle(FamilyInstance fixture)
     {
-        string familyName = fixture.Symbol?.Family?.Name ?? "";
-        var settings = FamilyNameSettingsCache.Get(fixture.Document);
-        return settings.ReceptacleFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) == Roles.Receptacle;
     }
 
     public static bool IsCeilingFan(FamilyInstance fixture)
     {
-        string familyName = fixture.Symbol?.FamilyName ?? "";
-        return BubbleConstants.CeilingFanFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) == Roles.CeilingFan;
     }
 
     public static bool IsSwitch(FamilyInstance fixture)
     {
-        string familyName = fixture.Symbol?.Family?.Name ?? "";
-        var settings = FamilyNameSettingsCache.Get(fixture.Document);
-        return settings.SwitchFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) == Roles.Switch;
     }
 
     /// <summary>

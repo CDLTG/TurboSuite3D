@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using TurboSuite.Shared.Constants;
+using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Tag.Services;
 
@@ -60,7 +61,7 @@ internal static class FixtureSelectionService
         {
             if (doc.GetElement(id) is FamilyInstance fi &&
                 fi.Category?.Id == lightingDeviceCategoryId &&
-                fi.Symbol.FamilyName.IndexOf("Keypad", StringComparison.OrdinalIgnoreCase) >= 0)
+                ParameterHelper.GetRole(fi) == Roles.Keypad)
             {
                 keypads.Add(fi);
             }

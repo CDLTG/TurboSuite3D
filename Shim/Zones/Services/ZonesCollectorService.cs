@@ -63,8 +63,7 @@ namespace TurboSuite.Zones.Services
                                     fixtures.Add(fi);
                                     if (fi.Category.Id == electricalCatId)
                                     {
-                                        string familyName = fi.Symbol?.Family?.Name ?? "";
-                                        if (familyName.IndexOf("switch", StringComparison.OrdinalIgnoreCase) >= 0)
+                                        if (ParameterHelper.GetRole(fi) == Roles.Switch)
                                             hasSwitchElement = true;
                                     }
                                 }
@@ -159,11 +158,7 @@ namespace TurboSuite.Zones.Services
                 .OfCategory(BuiltInCategory.OST_LightingDevices)
                 .OfClass(typeof(FamilyInstance))
                 .Cast<FamilyInstance>()
-                .Where(fi =>
-                {
-                    string familyName = fi.Symbol?.Family?.Name ?? "";
-                    return familyName.IndexOf("keypad", StringComparison.OrdinalIgnoreCase) >= 0;
-                })
+                .Where(fi => ParameterHelper.GetRole(fi) == Roles.Keypad)
                 .ToList();
 
             counts.Tallies = TallyCatalogSlots(keypads);
@@ -214,8 +209,7 @@ namespace TurboSuite.Zones.Services
                 .OfCategory(BuiltInCategory.OST_ElectricalFixtures)
                 .OfClass(typeof(FamilyInstance))
                 .Cast<FamilyInstance>()
-                .Where(fi => string.Equals(fi.Symbol?.Family?.Name,
-                    "AL_Electrical Fixture_Hybrid Repeater", StringComparison.OrdinalIgnoreCase))
+                .Where(fi => ParameterHelper.GetRole(fi) == Roles.HybridRepeater)
                 .ToList();
 
             return new ControlDeviceGroup

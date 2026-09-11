@@ -40,11 +40,7 @@ namespace TurboSuite.Number.Services
                 .OfCategory(BuiltInCategory.OST_LightingDevices)
                 .OfClass(typeof(FamilyInstance))
                 .Cast<FamilyInstance>()
-                .Where(fi =>
-                {
-                    string familyName = fi.Symbol?.Family?.Name ?? "";
-                    return familyName.ToLowerInvariant().Contains("keypad");
-                })
+                .Where(fi => ParameterHelper.GetRole(fi) == Roles.Keypad)
                 .Select(fi =>
                 {
                     Space space = roomCache.FindSpace(fi);

@@ -420,8 +420,7 @@ public class BubbleCommand : IExternalCommand
     /// </summary>
     private static bool IsChandelierFamily(FamilyInstance fixture)
     {
-        var familyName = fixture.Symbol?.FamilyName;
-        return familyName != null && BubbleConstants.ChandelierFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) == Roles.Chandelier;
     }
 
     /// <summary>
@@ -431,8 +430,7 @@ public class BubbleCommand : IExternalCommand
     /// </summary>
     private static bool IsPictureLightFamily(FamilyInstance fixture)
     {
-        var familyName = fixture.Symbol?.FamilyName;
-        return familyName != null && BubbleConstants.PictureLightFamilies.Contains(familyName);
+        return ParameterHelper.GetRole(fixture) == Roles.PictureLight;
     }
 
     /// <summary>
