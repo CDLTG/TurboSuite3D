@@ -310,7 +310,7 @@
                         <TextBlock Text="Catalog # / Qty" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
                         <TextBlock HorizontalAlignment="Right"
                                    Visibility="{Binding IsFixture, Converter={StaticResource BoolToVisibility}}">
-                            <Hyperlink NavigateUri="https://cdltg.github.io/TurboSuite3D/" RequestNavigate="Hyperlink_RequestNavigate"
+                            <Hyperlink NavigateUri="https://cdltg.github.io/TurboSuite3D/counts.html" RequestNavigate="Hyperlink_RequestNavigate"
                                        Foreground="{StaticResource LinkBlueBrush}">
                                 Counts syntax ↗
                             </Hyperlink>
