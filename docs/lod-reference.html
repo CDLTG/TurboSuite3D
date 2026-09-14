@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lighting Family LOD — Authoring Ladder</title>
+<meta name="description" content="Authoring reference mapping CDLTG's AL.### lighting-family tiers to the BIMForum 2024 LOD Specification.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#F3F2EE; --surface:#FAF9F6; --raised:#FFFFFF;
+    --ink:#1C1B17; --ink-soft:#5A574E; --ink-faint:#8C887C;
+    --line:#DEDBD2; --line-strong:#CBC7BB;
+    --accent:#B26B12; --accent-strong:#8E5309; --accent-wash:#F2E8D6;
+    --spec:#43596B; --spec-soft:#6B8092; --spec-wash:#E5EAEE;
+    --shadow:0 1px 2px rgba(28,27,23,.05), 0 8px 24px -16px rgba(28,27,23,.22);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#18160F; --surface:#211E17; --raised:#28241C;
+      --ink:#ECEAE1; --ink-soft:#ABA697; --ink-faint:#7C776A;
+      --line:#332F26; --line-strong:#433E32;
+      --accent:#E1A24A; --accent-strong:#F0B968; --accent-wash:#332918;
+      --spec:#93AABC; --spec-soft:#788E9F; --spec-wash:#1E2830;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 30px -18px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#18160F; --surface:#211E17; --raised:#28241C;
+    --ink:#ECEAE1; --ink-soft:#ABA697; --ink-faint:#7C776A;
+    --line:#332F26; --line-strong:#433E32;
+    --accent:#E1A24A; --accent-strong:#F0B968; --accent-wash:#332918;
+    --spec:#93AABC; --spec-soft:#788E9F; --spec-wash:#1E2830;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 30px -18px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0; background:var(--ground); color:var(--ink);
+    font-family:"Archivo",system-ui,sans-serif; line-height:1.55;
+    -webkit-font-smoothing:antialiased;}
+  img{max-width:100%;}
+  .wrap{max-width:1040px; margin:0 auto; padding:clamp(1.5rem,4vw,4rem) clamp(1.1rem,4vw,2.5rem) 5rem;}
+
+  /* hub back-link */
+  .hubnav{max-width:1040px; margin:0 auto; padding:1.1rem clamp(1.1rem,4vw,2.5rem) 0;}
+  .hubnav a{color:var(--spec-soft); text-decoration:none; font-size:.85rem; font-weight:600; letter-spacing:.02em;}
+  .hubnav a:hover{color:var(--accent-strong);}
+
+  /* type */
+  h1,h2,h3{text-wrap:balance; margin:0; line-height:1.1;}
+  .num{font-family:"Fraunces",Georgia,serif; font-variant-numeric:tabular-nums;}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;}
+  .eyebrow{font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--ink-faint); font-weight:600;}
+
+  /* header */
+  header{border-bottom:1px solid var(--line); padding-bottom:2.2rem; margin-bottom:2.6rem;}
+  h1{font-family:"Fraunces",Georgia,serif; font-weight:500;
+    font-size:clamp(2.4rem,6vw,4rem); letter-spacing:-.015em; margin:.5rem 0 .1rem;}
+  h1 em{font-style:italic; color:var(--accent);}
+  .lede{color:var(--ink-soft); font-size:clamp(1rem,1.6vw,1.15rem); max-width:60ch; margin-top:.9rem;}
+  .meta{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.4rem;}
+  .chip{font-size:.72rem; letter-spacing:.02em; padding:.32rem .6rem; border-radius:2px;
+    border:1px solid var(--line-strong); color:var(--ink-soft); background:var(--surface);}
+  .chip.mono{letter-spacing:0;}
+
+  section{margin-top:3.2rem;}
+  .sec-head{display:flex; align-items:baseline; gap:.9rem; margin-bottom:1.3rem; flex-wrap:wrap;}
+  .sec-head h2{font-family:"Fraunces",Georgia,serif; font-weight:500; font-size:1.6rem;}
+  .sec-head p{color:var(--ink-soft); font-size:.92rem; margin:0; flex:1; min-width:16ch;}
+
+  /* insight / two-axis panel */
+  .insight{display:grid; grid-template-columns:1.05fr .95fr; gap:clamp(1.2rem,3vw,2.6rem);
+    align-items:center; background:var(--surface); border:1px solid var(--line);
+    border-radius:4px; padding:clamp(1.3rem,3vw,2rem); box-shadow:var(--shadow);}
+  .insight p{color:var(--ink-soft); font-size:.95rem;}
+  .insight p + p{margin-top:.8rem;}
+  .insight strong{color:var(--ink); font-weight:600;}
+  .insight .key{color:var(--accent-strong); font-weight:600;}
+  .diagram{width:100%; height:auto; display:block;}
+  .ax{stroke:var(--line-strong); stroke-width:1.4;}
+  .grid{stroke:var(--line); stroke-width:1; stroke-dasharray:2 4;}
+  .tk{fill:var(--ink-faint); font:500 12px "IBM Plex Mono",monospace;}
+  .axlbl{fill:var(--ink-soft); font:600 11px "Archivo",sans-serif; letter-spacing:.08em; text-transform:uppercase;}
+  .pt{fill:var(--accent);}
+  .ptline{stroke:var(--accent); stroke-width:1.6; fill:none; stroke-dasharray:3 3; opacity:.55;}
+  .ptlbl{fill:var(--ink); font:600 12px "IBM Plex Mono",monospace;}
+  .floatarrow{stroke:var(--spec); stroke-width:1.6; fill:none;}
+  .floatlbl{fill:var(--spec-soft); font:500 11px "Archivo",sans-serif;}
+  .ptspec{fill:var(--spec);}
+  .bandlbl{fill:var(--ink-soft); font:600 11px "Archivo",sans-serif; letter-spacing:.06em; text-transform:uppercase;}
+  .bracket{stroke:var(--accent); stroke-width:1.4; fill:none;}
+
+  /* legend */
+  .legend{display:flex; gap:1.4rem; flex-wrap:wrap; margin:1.4rem 0 .4rem; font-size:.85rem; color:var(--ink-soft);}
+  .legend span{display:inline-flex; align-items:center; gap:.5rem;}
+  .swatch{width:.85rem; height:.85rem; border-radius:2px; flex:none;}
+  .swatch.s-spec{background:var(--spec);}
+  .swatch.s-acc{background:var(--accent);}
+
+  /* tier ladder */
+  .ladder{display:flex; flex-direction:column; gap:1.1rem;}
+  .tier{display:grid; grid-template-columns:172px 1fr; gap:0;
+    background:var(--surface); border:1px solid var(--line); border-radius:4px;
+    overflow:hidden; box-shadow:var(--shadow);}
+  .tier.dim{opacity:.72;}
+  .rail{padding:1.35rem 1.25rem; border-right:1px solid var(--line);
+    background:linear-gradient(180deg,var(--raised),var(--surface));
+    position:relative;}
+  .rail::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent);}
+  .tier.dim .rail::before{background:var(--line-strong);}
+  .rail .lodn{font-family:"Fraunces",Georgia,serif; font-weight:500; font-size:2.9rem;
+    line-height:.95; letter-spacing:-.02em; font-variant-numeric:tabular-nums;}
+  .rail .alc{font-family:"IBM Plex Mono",monospace; font-size:.9rem; color:var(--accent-strong);
+    margin-top:.35rem; font-weight:500;}
+  .tier.dim .rail .alc{color:var(--ink-faint);}
+  .rail .phase{font-size:.78rem; letter-spacing:.02em; color:var(--ink-soft); margin-top:.5rem; line-height:1.35;}
+
+  .body{padding:1.25rem 1.35rem; display:flex; flex-direction:column; gap:.95rem;}
+  .row-lbl{font-size:.68rem; letter-spacing:.14em; text-transform:uppercase; font-weight:600;
+    margin-bottom:.28rem; display:flex; align-items:center; gap:.5rem;}
+  .row-lbl.spec{color:var(--spec-soft);}
+  .row-lbl.house{color:var(--accent-strong);}
+  .bimf{border-left:2px solid var(--spec); background:var(--spec-wash);
+    padding:.7rem .85rem; border-radius:0 3px 3px 0; font-size:.9rem;}
+  .bimf .q{color:var(--ink); }
+  .bimf .defer{color:var(--ink-soft); font-style:italic;}
+  .split{display:grid; grid-template-columns:1fr 1fr; gap:.9rem 1.4rem;}
+  .split .cell .row-lbl{color:var(--ink-faint);}
+  .split .cell p{margin:0; font-size:.9rem; color:var(--ink);}
+  .split .cell .tag{font-weight:600; color:var(--accent-strong);}
+  .note{font-size:.85rem; color:var(--ink-soft); border-top:1px dashed var(--line-strong); padding-top:.7rem;}
+  .note b{color:var(--ink); font-weight:600;}
+
+  /* adapt callout */
+  .adapt{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem;}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:1.15rem 1.2rem;}
+  .card h3{font-size:.95rem; font-weight:700; margin-bottom:.5rem; color:var(--ink);}
+  .card .mono{color:var(--accent-strong); font-size:.8rem;}
+  .card p{font-size:.87rem; color:var(--ink-soft); margin:.4rem 0 0;}
+
+  footer{margin-top:3.4rem; padding-top:1.5rem; border-top:1px solid var(--line);
+    font-size:.78rem; color:var(--ink-faint); line-height:1.7;}
+  footer a{color:var(--spec-soft);}
+  footer .cite{color:var(--ink-soft);}
+
+  @media (max-width:720px){
+    .insight{grid-template-columns:1fr;}
+    .tier{grid-template-columns:1fr;}
+    .rail{border-right:none; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:.9rem; flex-wrap:wrap;}
+    .rail::before{width:100%; height:4px; bottom:auto;}
+    .rail .lodn{font-size:2.4rem;} .rail .phase{width:100%;}
+    .split{grid-template-columns:1fr;}
+  }
+  @media (prefers-reduced-motion:no-preference){ a,.chip{transition:color .15s;} }
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+</style>
+</head>
+<body>
+
+<nav class="hubnav"><a href="./">&larr; TurboSuite Reference</a></nav>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">CDLTG · Family Authoring Reference</div>
+    <h1>Lighting Family <em>LOD</em></h1>
+    <p class="lede">How our <span class="mono">AL.###</span> library tiers map to the BIMForum Level of Development Specification — so every family is authored to a known, deliberate maturity.</p>
+    <div class="meta">
+      <span class="chip mono">D5040.50 · Lighting Fixtures</span>
+      <span class="chip">BIMForum LOD Spec · 2024</span>
+      <span class="chip mono">21-04 50 40 50</span>
+      <span class="chip">Level of <em>Development</em>, not Detail</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="axes">
+    <div class="sec-head">
+      <h2 id="axes">Two axes, one number</h2>
+      <p>The finding that reframes the whole scheme — read this before the ladder.</p>
+    </div>
+    <div class="insight">
+      <div>
+        <p><strong>BIMForum defines lighting LOD on geometry and coordination only.</strong> Every grade is size, shape, spacing, location — plus the supports, seismic control, and code clearances that make an assembly coordination-ready. Read the D5040.50 rows and you will not find a single word about manufacturer, catalog number, photometrics, wattage, or dimming.</p>
+        <p><span class="key">Our spec data — the real deliverable — rides a second axis the standard tracks elsewhere</span> (AIA G202 model-element information). So <span class="mono">AL.###</span> commits to <strong>geometry only</strong>; spec <strong>floats above the tier, filled per project, and never sets it</strong>. A blank <span class="mono">AL.100</span> symbol can end a 2D job carrying full spec data, and an accurate model with no spec is still its full geometric tier.</p>
+        <p>On the geometry axis our library tops out at an accurately-modeled <span class="mono">AL.300</span> — our workhorse. <span class="mono">AL.350</span> adds the field-installed coordination layer (supports, seismic restraint, clearance volumes), which is the electrical engineer's scope, not ours — so we hold it as a <strong>reserved ceiling</strong>, not an authoring target.</p>
+      </div>
+      <svg class="diagram" viewBox="0 0 460 320" role="img" aria-label="Two stacked axes. Top: the geometric LOD ladder — 100, 200 and 300 are our authored range with 300 the workhorse; 350 and 400 sit beyond it, coordination and fabrication tiers authored only by exception. Bottom: spec-data as an independent axis that slides from blank to full, set per project and never setting the tier.">
+        <!-- Band A: geometry / LOD -->
+        <text class="bandlbl" x="40" y="30">Geometry — the LOD axis</text>
+        <line class="ax" x1="52" y1="86" x2="432" y2="86"/>
+        <!-- workhorse bracket under 100–300 -->
+        <path class="bracket" d="M84,102 v8 h168 v-8"/>
+        <text class="floatlbl" x="168" y="128" text-anchor="middle" style="fill:var(--accent-strong);font-weight:600;">authored range · workhorse at 300</text>
+        <!-- nodes -->
+        <circle class="pt" cx="84" cy="86" r="6"/>
+        <text class="ptlbl" x="84" y="72" text-anchor="middle">100</text>
+        <circle class="pt" cx="168" cy="86" r="6"/>
+        <text class="ptlbl" x="168" y="72" text-anchor="middle">200</text>
+        <circle class="pt" cx="252" cy="86" r="7"/>
+        <text class="ptlbl" x="252" y="72" text-anchor="middle">300</text>
+        <circle class="pt" cx="340" cy="86" r="5"/>
+        <text class="ptlbl" x="340" y="72" text-anchor="middle">350</text>
+        <circle class="pt" cx="410" cy="86" r="5"/>
+        <text class="ptlbl" x="410" y="72" text-anchor="middle">400</text>
+        <!-- coordination / fabrication group: 350 + 400, authored only by exception -->
+        <path class="bracket" d="M340,102 v8 h70 v-8" style="stroke:var(--ink-faint)"/>
+        <text class="floatlbl" x="375" y="128" text-anchor="middle">authored</text>
+        <text class="floatlbl" x="375" y="142" text-anchor="middle">by exception</text>
+
+        <!-- Band B: spec / data floats independently -->
+        <text class="bandlbl" x="40" y="226">Spec / data — floats independently</text>
+        <line class="ax" x1="52" y1="266" x2="432" y2="266"/>
+        <text class="tk" x="52" y="288" text-anchor="start">blank</text>
+        <text class="tk" x="432" y="288" text-anchor="end">full</text>
+        <!-- slide arrows + centered marker -->
+        <line class="floatarrow" x1="100" y1="266" x2="384" y2="266"/>
+        <path class="floatarrow" d="M100,266 l10,-6 M100,266 l10,6"/>
+        <path class="floatarrow" d="M384,266 l-10,-6 M384,266 l-10,6"/>
+        <circle class="ptspec" cx="242" cy="266" r="5.5"/>
+        <text class="floatlbl" x="242" y="252" text-anchor="middle">any tier · set per project · never sets the LOD</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><span class="swatch s-acc"></span> Geometry — the <span class="mono">AL.###</span> / LOD axis</span>
+      <span><span class="swatch s-spec"></span> Spec / data — floats, set per project</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="ladder">
+    <div class="sec-head">
+      <h2 id="ladder">The tier ladder</h2>
+      <p>Author to the tier's geometry; spec floats independently and never sets the tier.</p>
+    </div>
+    <div class="ladder">
+
+      <!-- 100 -->
+      <article class="tier">
+        <div class="rail">
+          <div class="lodn num">100</div>
+          <div class="alc">AL.100</div>
+          <div class="phase">Conceptual Design</div>
+        </div>
+        <div class="body">
+          <div>
+            <div class="row-lbl spec">BIMForum D5040.50 · LOD 100</div>
+            <div class="bimf"><span class="defer">“See D50.”</span> <span class="q">Fixtures aren't defined individually — the luminaire is only implied within the electrical system's generic representation.</span></div>
+          </div>
+          <div class="split">
+            <div class="cell"><div class="row-lbl">Our geometry</div><p>A <span class="tag">2D symbol</span> — nested generic annotation plus an electrical connector, if it carries one. No modeled body.</p></div>
+            <div class="cell"><div class="row-lbl">Our data / spec</div><p>Blank. Ships with no specification filled in.</p></div>
+          </div>
+          <p class="note"><b>Finer than the standard.</b> BIMForum doesn't bother defining a fixture at 100; our per-fixture symbol is a deliberate library floor for 2D deliverables.</p>
+        </div>
+      </article>
+
+      <!-- 200 -->
+      <article class="tier">
+        <div class="rail">
+          <div class="lodn num">200</div>
+          <div class="alc">AL.200</div>
+          <div class="phase">Schematic Design</div>
+        </div>
+        <div class="body">
+          <div>
+            <div class="row-lbl spec">BIMForum D5040.50 · LOD 200</div>
+            <div class="bimf"><span class="defer">“See D5040”</span> → <span class="q">“Schematic layout with approximate size, shape, and location of equipment.”</span></div>
+          </div>
+          <div class="split">
+            <div class="cell"><div class="row-lbl">Our geometry</div><p>“2.5D” — <span class="tag">generic</span> modeled, hosted geometry. All round downlights share one housing/trim; distinct from the square family.</p></div>
+            <div class="cell"><div class="row-lbl">Our data / spec</div><p>Minimal. Generic type only, no manufacturer.</p></div>
+          </div>
+          <p class="note"><b>Clean match.</b> “Approximate, generic equipment” is exactly BIMForum 200 — the round-vs-square split is textbook generic geometry.</p>
+        </div>
+      </article>
+
+      <!-- 300 -->
+      <article class="tier">
+        <div class="rail">
+          <div class="lodn num">300</div>
+          <div class="alc">AL.300</div>
+          <div class="phase">Design Development · workhorse</div>
+        </div>
+        <div class="body">
+          <div>
+            <div class="row-lbl spec">BIMForum D5040.50 · LOD 300</div>
+            <div class="bimf"><span class="q">“<b>Design-specified</b> size, shape, and location of lighting fixtures; approximate allowances for spacing and clearances required for all specified hangers, supports and seismic control; access/code clearance requirements modeled.”</span></div>
+          </div>
+          <div class="split">
+            <div class="cell"><div class="row-lbl">Our geometry</div><p><span class="tag">Accurately modeled</span> to the specified luminaire at real product dimensions. No coordination geometry.</p></div>
+            <div class="cell"><div class="row-lbl">Our data / spec</div><p>Anything from blank to fully specified — spec floats and does <b>not</b> change the tier.</p></div>
+          </div>
+          <p class="note"><b>Our completed-family tier.</b> Geometry aligns with “design-specified size, shape, and location”; we omit the hanger/seismic/clearance coordination BIMForum layers on here and completes at 350.</p>
+        </div>
+      </article>
+
+      <!-- 350 -->
+      <article class="tier">
+        <div class="rail">
+          <div class="lodn num">350</div>
+          <div class="alc">AL.350</div>
+          <div class="phase">Construction Documents · reserved ceiling</div>
+        </div>
+        <div class="body">
+          <div>
+            <div class="row-lbl spec">BIMForum D5040.50 · LOD 350</div>
+            <div class="bimf"><span class="q">“<b>Actual</b> size, shape, spacing, and location of lighting fixtures. <b>Actual</b> size, shape, spacing, and location for supports and seismic control. <b>Actual</b> access/code clearance requirements modeled.”</span></div>
+          </div>
+          <div class="split">
+            <div class="cell"><div class="row-lbl">Our geometry</div><p>Everything at AL.300 <span class="tag">plus the coordination layer</span> — supports/hangers, seismic restraint, clearance volumes — modeled as real geometry.</p></div>
+            <div class="cell"><div class="row-lbl">Our data / spec</div><p>As at AL.300 — spec is independent of the tier.</p></div>
+          </div>
+          <p class="note"><b>Reserved ceiling — we don't author this.</b> The 300 → 350 gate is coordination-readiness, and that geometry is the electrical engineer's / contractor's scope. A family reaches AL.350 only if we ever produce that layer — rare, and by exception.</p>
+        </div>
+      </article>
+
+      <!-- 400 -->
+      <article class="tier">
+        <div class="rail">
+          <div class="lodn num">400</div>
+          <div class="alc">AL.400</div>
+          <div class="phase">Fabrication &amp; Construction</div>
+        </div>
+        <div class="body">
+          <div>
+            <div class="row-lbl spec">BIMForum D5040.50 · LOD 400</div>
+            <div class="bimf"><span class="q">“Supplementary components added to the model required for fabrication and field installation.”</span></div>
+          </div>
+          <div class="split">
+            <div class="cell"><div class="row-lbl">Our geometry</div><p><span class="tag">Shop-drawing accurate.</span> Custom or complex fixtures modeled as-fabricated.</p></div>
+            <div class="cell"><div class="row-lbl">Our data / spec</div><p>Full spec plus fabrication detail.</p></div>
+          </div>
+          <p class="note"><b>Rare, and correctly so.</b> Catalog fixtures top out at 300 — you buy them, you don't fabricate them. Only bespoke/architectural fixtures reach 400, matching BIMForum's “fabrication” intent.</p>
+        </div>
+      </article>
+
+      <!-- 500 -->
+      <article class="tier dim">
+        <div class="rail">
+          <div class="lodn num">500</div>
+          <div class="alc">AL.500</div>
+          <div class="phase">As-Built · Facility Mgmt</div>
+        </div>
+        <div class="body">
+          <div>
+            <div class="row-lbl spec">BIMForum D5040.50 · LOD 500</div>
+            <div class="bimf"><span class="defer">Not defined in the element tables.</span> <span class="q">BIMForum excludes 500 — it's a field-verified condition, about verification, not model development.</span></div>
+          </div>
+          <div class="split">
+            <div class="cell"><div class="row-lbl">Our geometry</div><p>Field-verified actuals.</p></div>
+            <div class="cell"><div class="row-lbl">Our data / spec</div><p>As-installed record.</p></div>
+          </div>
+          <p class="note"><b>Not a library tier.</b> If a family ever reaches as-built and differs from its library tier, it stays in the <b>project only</b> — never saved back to the shared template directory. This matches the spec's own treatment of 500.</p>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section aria-labelledby="adapt">
+    <div class="sec-head">
+      <h2 id="adapt">Where we adapt the standard</h2>
+      <p>Deliberate deviations — document them so the divergence stays intentional.</p>
+    </div>
+    <div class="adapt">
+      <div class="card">
+        <h3>We stop at AL.300</h3>
+        <span class="mono">supports · seismic · clearances · penetrations</span>
+        <p>The 300 → 350 gate is coordination geometry — hangers, seismic bracing, code-access clearances — the electrical engineer's and GC's scope. As a lighting design firm we don't model it, so our families top out at an accurately-modeled 300 and AL.350 is a reserved ceiling.</p>
+      </div>
+      <div class="card">
+        <h3>Spec rides a separate axis</h3>
+        <span class="mono">manufacturer · catalog · photometrics · dimming</span>
+        <p>Our real deliverable is the spec, and BIMForum keeps it on a separate track. It's filled in per project and <b>never sets the tier</b> — an accurate model with no spec is still its full geometric tier. Keep the parameter schema constant across tiers; only fill it in further.</p>
+      </div>
+      <div class="card">
+        <h3>LOD is the authored geometric tier</h3>
+        <span class="mono">AL.### = library maturity</span>
+        <p>The name commits only to the family's baked-in geometry — the axis a project can't change. Spec data floats above it per project, so a 2D CD set full of AL.100 symbols is coherent, not wrong.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p class="cite">Definitions quoted for internal reference from the <b>BIMForum Level of Development (LOD) Specification, Part I &amp; Commentary, 2024</b> — section D5040.50 “Lighting Fixtures” (OmniClass 21-04 50 40 50). © 2024 BIMForum, licensed <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a>.</p>
+    <p>Source: <a href="https://bimforum.org/resource/lod-level-of-development-lod-specification/">bimforum.org/lod</a>. This sheet is a CDLTG authoring aid comparing our house conventions to that standard; it is not a BIMForum publication and does not modify the specification.</p>
+  </footer>
+</div>
+</body>
+</html>

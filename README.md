@@ -76,7 +76,10 @@ All commands work in both:
 
 ## Documentation
 
-- **[Counts Cheat Sheet](https://cdltg.github.io/TurboSuite3D/)** — quick reference for authoring TurboDocs **Counts** parameters: Catalog Number length tokens (`max=` / `sizes=` / `pool=` / `min=`) and Catalog Qty modes (`N`, `1/N`, `N @type`, and the stock-cut `N @ft` / `N @in`). Served via GitHub Pages from `docs/index.html`.
+Companion references are published via GitHub Pages from `docs/`, indexed at **[cdltg.github.io/TurboSuite3D](https://cdltg.github.io/TurboSuite3D/)** (`docs/index.html` is the hub):
+
+- **[Counts Cheat Sheet](https://cdltg.github.io/TurboSuite3D/counts.html)** (`docs/counts.html`) — quick reference for authoring TurboDocs **Counts** parameters: Catalog Number length tokens (`max=` / `sizes=` / `pool=` / `min=`) and Catalog Qty modes (`N`, `1/N`, `N @type`, and the stock-cut `N @ft` / `N @in`).
+- **[Lighting Family LOD](https://cdltg.github.io/TurboSuite3D/lod-reference.html)** (`docs/lod-reference.html`) — the `AL.###` authoring ladder mapping our lighting-family tiers to the BIMForum 2024 LOD Specification (D5040.50), with geometry and spec tracked on separate axes.
 
 ## Revit Project Dependencies
 
