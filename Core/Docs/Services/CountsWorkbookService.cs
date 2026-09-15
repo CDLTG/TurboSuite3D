@@ -3948,8 +3948,21 @@ public static class CountsWorkbookService
                 // Skipped for length-token rows: the prior fixture's total LinearLength/Count
                 // doesn't represent a single cut. Brand-new length-rows leave PrevQty blank
                 // (Δ stays blank too — correct behavior).
-                var prevQtyRule = CatalogQtyParser.Parse(prevFixture.CatalogQtys[slot]);
-                ws.Cell(row, WsColPrevQty).Value = prevQtyRule.Evaluate(prevFixture.Count, prevFixture.LinearLength);
+                //
+                // Match by catalog *number*, not slot position: the current `slot` indexes the
+                // NEW fixture, and a replaced/added/reordered slot would otherwise inherit the
+                // qty of whatever part occupied that index last pass (or the blank→Default=Count
+                // value of an empty slot). Find the prior slot that actually held THIS catalog;
+                // if it's absent, this catalog is genuinely new for the Type this pass, so leave
+                // PrevQty blank (Δ stays blank; the new catalog is flagged yellow below).
+                int prevSlot = Array.FindIndex(prevFixture.CatalogNumbers,
+                    cn => !string.IsNullOrWhiteSpace(cn)
+                          && string.Equals(cn, catalog, StringComparison.OrdinalIgnoreCase));
+                if (prevSlot >= 0)
+                {
+                    var prevQtyRule = CatalogQtyParser.Parse(prevFixture.CatalogQtys[prevSlot]);
+                    ws.Cell(row, WsColPrevQty).Value = prevQtyRule.Evaluate(prevFixture.Count, prevFixture.LinearLength);
+                }
             }
 
             int typeCanonical = typeCanonicalSheetRow[type];
