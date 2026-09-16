@@ -62,6 +62,38 @@ namespace TurboSuite.Tests
         }
 
         [Fact]
+        public void FormatCount_ForcesLinearTypesToOne()
+        {
+            // A linear Type with many instances: the length token is the whole buy, so count → 1.
+            var linearMany = new CountsFixtureModel { TypeMark = "FA", Count = 14, LinearLength = 140.0 + 4.0 / 12.0 };
+            // Non-linear Type keeps its real instance count.
+            var plain = new CountsFixtureModel { TypeMark = "A2", Count = 24, LinearLength = 0.0 };
+            // A length that rounds away to a bare Type Mark keeps its real count too.
+            var subInch = new CountsFixtureModel { TypeMark = "A3", Count = 5, LinearLength = 0.02 };
+
+            Assert.Equal(1, LegacyCountsCsvService.FormatCount(linearMany));
+            Assert.Equal(24, LegacyCountsCsvService.FormatCount(plain));
+            Assert.Equal(5, LegacyCountsCsvService.FormatCount(subInch));
+        }
+
+        [Fact]
+        public void BuildCsv_ForcesLinearCountToOne()
+        {
+            var fixtures = new[]
+            {
+                new CountsFixtureModel { TypeMark = "A2", Count = 24, LinearLength = 0.0 },
+                new CountsFixtureModel { TypeMark = "FA", Count = 14, LinearLength = 140.0 + 4.0 / 12.0 },
+            };
+
+            string csv = LegacyCountsCsvService.BuildCsv(fixtures);
+
+            Assert.Equal(
+                "A2,24\r\n" +
+                "FA-140ft4in,1\r\n",
+                csv);
+        }
+
+        [Fact]
         public void BuildCsv_QuotesFieldsWithCommas()
         {
             var fixtures = new[]

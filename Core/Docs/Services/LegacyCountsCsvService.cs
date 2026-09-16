@@ -14,11 +14,14 @@ namespace TurboSuite.Docs.Services;
 /// Reproduces the old native-Revit + Excel ritual: a schedule of Type Mark / Count / Linear Length,
 /// itemize-off (so Count is per-Type and Linear Length is the summed total), Linear Length rendered as
 /// feet-and-fractional-inches rounded to the nearest 1", then hand-concatenated onto the Type Mark with
-/// the <c>'-</c>/<c>"</c> marks swapped for <c>ft</c>/<c>in</c> and zero-length rows left bare:
+/// the <c>'-</c>/<c>"</c> marks swapped for <c>ft</c>/<c>in</c> and zero-length rows left bare. A linear
+/// Type's count is forced to <c>1</c> — the length token already carries the total run to purchase, so the
+/// instance count is dropped to stop the reader multiplying length × instances:
 /// <code>
-///   TL, 1, 443'-4"  →  TL-443ft4in, 1
-///   TF, 1, 32'-0"   →  TF-32ft0in,  1
-///   A2, 24, (none)  →  A2,          24
+///   TL, 1,  443'-4"  →  TL-443ft4in, 1
+///   TF, 1,  32'-0"   →  TF-32ft0in,  1
+///   FA, 14, 140'-4"  →  FA-140ft4in, 1   (not 14 — token is the whole buy)
+///   A2, 24, (none)   →  A2,          24
 /// </code>
 /// Formatting only — no math, no Catalog Number logic. Consumes the same
 /// <see cref="CountsFixtureModel"/> list the workbook export uses (already sorted by Type Mark), so
@@ -53,6 +56,19 @@ public static class LegacyCountsCsvService
     }
 
     /// <summary>
+    /// The Count column value for the legacy CSV. For a linear Type the appended <c>{ft}ft{in}in</c> token
+    /// already carries the summed run to purchase (e.g. <c>FA-140ft4in</c> means "buy enough reels for
+    /// 140'-4""), so the count is forced to <c>1</c> — emitting the instance count instead would make the
+    /// reader multiply length × instances (14 × 140'-4"). Non-linear Types keep their real instance count.
+    /// Keyed off the same rendered length as <see cref="FormatTypeMark"/>, so a length that rounds away to a
+    /// bare Type Mark also keeps its real count.
+    /// </summary>
+    public static int FormatCount(CountsFixtureModel fixture)
+    {
+        return FormatLength(fixture.LinearLength).Length == 0 ? fixture.Count : 1;
+    }
+
+    /// <summary>
     /// Builds the full CSV text: one row per Type, in the order supplied (the collector hands back its
     /// list already sorted by Type Mark). No header row — the first line is data. CRLF line endings,
     /// RFC-4180 quoting.
@@ -64,7 +80,7 @@ public static class LegacyCountsCsvService
         {
             sb.Append(Escape(FormatTypeMark(f)));
             sb.Append(',');
-            sb.Append(f.Count.ToString(CultureInfo.InvariantCulture));
+            sb.Append(FormatCount(f).ToString(CultureInfo.InvariantCulture));
             sb.Append("\r\n");
         }
         return sb.ToString();
