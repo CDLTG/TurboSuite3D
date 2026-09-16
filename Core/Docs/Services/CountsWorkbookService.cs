@@ -515,9 +515,13 @@ public static class CountsWorkbookService
     private const string DashLutronCell = "B7";
     private const string DashFreightBuyCell = "B8";
     private const string DashFreightSellCell = "B9";
-    private const string DashBidDateCell = "B12";
-    private const string DashNotesFirstRow = "34";
-    private const string DashNotesLastRow = "48";
+    private const string DashClientMarkupCell = "B10";
+    // Rows 11+ sit one below their pre-Client-Markup positions: row 10 is now the Client Markup
+    // field and row 11 the preserved inter-section spacer, so REFERENCE COUNTS / INTERNAL NOTES /
+    // QUOTE FOOTER NOTES and their anchors all shifted +1.
+    private const string DashBidDateCell = "B13";
+    private const string DashNotesFirstRow = "35";
+    private const string DashNotesLastRow = "49";
 
     // Default quote-footer notes seeded into a freshly built Dashboard. Order is grouped
     // by theme: pricing & validity → billing → tax → fulfillment → contractor/exclusions.
@@ -616,6 +620,13 @@ public static class CountsWorkbookService
         ws.Cell("B9").Style.NumberFormat.Format = "$#,##0.00";
         StyleEditableCell(ws.Cell("B9"));
 
+        // Global client markup — applied to the whole Sell column on the Quote (Client Ea./Ext.).
+        // Blank by default: 1 + blank coerces to 1, so Client == Sell until a pricer enters a %.
+        // Row 11 below stays the blank inter-section spacer, so no dark-bar border drop is needed.
+        ws.Cell("A10").Value = "Client Markup";
+        ws.Cell("B10").Style.NumberFormat.Format = "0.00%";
+        StyleEditableCell(ws.Cell("B10"));
+
         // --- REFERENCE COUNTS ---
         // Live pointer to a historical Counts snapshot, read via ReadBidDate. This baseline is
         // consumed by the Bid Compare sheet only (see ResolveBaselineSheet + BuildBidCompareSheet,
@@ -623,39 +634,39 @@ public static class CountsWorkbookService
         // is a separate "compare against latest prior run" diff computed from the previous export
         // pass's cached values (existing.PrevQty / prevFixture in UpdateWorksheetSheet), with no
         // INDIRECT/SUMIFS against this snapshot.
-        WriteSectionBar(ws, 11, "REFERENCE COUNTS");
-        ws.Cell("A12").Value = "Compare to";
-        ws.Cell("B12").Style.NumberFormat.Format = "yyyy-mm-dd";
-        StyleEditableCell(ws.Cell("B12"));
+        WriteSectionBar(ws, 12, "REFERENCE COUNTS");
+        ws.Cell("A13").Value = "Compare to";
+        ws.Cell("B13").Style.NumberFormat.Format = "yyyy-mm-dd";
+        StyleEditableCell(ws.Cell("B13"));
         // Same dark-bar abutment fix as B6 — see comment above.
-        ws.Cell("B12").Style.Border.TopBorder = XLBorderStyleValues.None;
+        ws.Cell("B13").Style.Border.TopBorder = XLBorderStyleValues.None;
         // Data-validation dropdown is wired up in RefreshReferenceCountsDropdown — that
         // helper also runs on every GenerateUpdate so the list stays in sync as new
         // Counts sheets accumulate.
 
         // Bold all column-A labels so they read as field captions against the input cells.
-        foreach (string addr in new[] { "A3", "A6", "A7", "A8", "A9", "A12" })
+        foreach (string addr in new[] { "A3", "A6", "A7", "A8", "A9", "A10", "A13" })
             ws.Cell(addr).Style.Font.Bold = true;
 
         // --- INTERNAL NOTES ---
-        WriteSectionBar(ws, 14, "INTERNAL NOTES");
-        ws.Cell("A15").Value = "Date";
-        ws.Cell("B15").Value = "Author";
-        ws.Cell("C15").Value = "Status";
-        ws.Cell("D15").Value = "Notes";
-        StyleSubHeaderRow(ws.Range("A15:D15"));
-        StyleInputBlock(ws.Range("A16:D30"), headerRow: ws.Range("A15:D15"));
+        WriteSectionBar(ws, 15, "INTERNAL NOTES");
+        ws.Cell("A16").Value = "Date";
+        ws.Cell("B16").Value = "Author";
+        ws.Cell("C16").Value = "Status";
+        ws.Cell("D16").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A16:D16"));
+        StyleInputBlock(ws.Range("A17:D31"), headerRow: ws.Range("A16:D16"));
 
         // --- QUOTE FOOTER NOTES ---
-        WriteSectionBar(ws, 32, "QUOTE FOOTER NOTES");
-        ws.Cell("A33").Value = "BOLD";
-        ws.Cell("A33").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        ws.Cell("B33").Value = "Notes";
-        StyleSubHeaderRow(ws.Range("A33:D33"));
+        WriteSectionBar(ws, 33, "QUOTE FOOTER NOTES");
+        ws.Cell("A34").Value = "BOLD";
+        ws.Cell("A34").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Cell("B34").Value = "Notes";
+        StyleSubHeaderRow(ws.Range("A34:D34"));
 
         for (int i = 0; i < 15; i++)
         {
-            int r = 34 + i;
+            int r = 35 + i;
             // Seed the first N rows from DefaultQuoteNotes; remaining rows stay blank for the user.
             bool boldDefault = i < DefaultQuoteNotes.Length && DefaultQuoteNotes[i].Bold;
             ws.Cell(r, 1).Value = boldDefault; // boolean literal — pass 3 upgrades to native checkbox
@@ -667,7 +678,7 @@ public static class CountsWorkbookService
             if (i < DefaultQuoteNotes.Length)
                 ws.Cell(r, 2).Value = DefaultQuoteNotes[i].Text;
         }
-        StyleInputBlock(ws.Range("A34:D48"), headerRow: ws.Range("A33:D33"));
+        StyleInputBlock(ws.Range("A35:D49"), headerRow: ws.Range("A34:D34"));
 
         // Constrain the BOLD column to TRUE/FALSE so the print-sheet CF
         // (which compares against the boolean TRUE) always matches what the user picks.
@@ -687,14 +698,15 @@ public static class CountsWorkbookService
         wb.DefinedNames.Add("LutronSubtotal", ws.Range("B7:B7"));
         wb.DefinedNames.Add("FreightBuy", ws.Range("B8:B8"));
         wb.DefinedNames.Add("FreightSell", ws.Range("B9:B9"));
-        wb.DefinedNames.Add("BidDate", ws.Range("B12:B12"));
+        wb.DefinedNames.Add("ClientMarkup", ws.Range("B10:B10"));
+        wb.DefinedNames.Add("BidDate", ws.Range("B13:B13"));
         wb.DefinedNames.Add("QuoteNotes", ws.Range($"B{DashNotesFirstRow}:B{DashNotesLastRow}"));
         wb.DefinedNames.Add("QuoteNotesBold", ws.Range($"A{DashNotesFirstRow}:A{DashNotesLastRow}"));
 
         // Protection: unlock editable cells, lock the rest
-        foreach (string addr in new[] { "B3", "B6", "B7", "B8", "B9", "B12" })
+        foreach (string addr in new[] { "B3", "B6", "B7", "B8", "B9", "B10", "B13" })
             ws.Cell(addr).Style.Protection.SetLocked(false);
-        ws.Range("A16:D30").Style.Protection.SetLocked(false);
+        ws.Range("A17:D31").Style.Protection.SetLocked(false);
         ws.Range($"A{DashNotesFirstRow}:B{DashNotesLastRow}").Style.Protection.SetLocked(false);
         ws.Protect().AllowElement(XLSheetProtectionElements.FormatColumns);
 
@@ -2581,17 +2593,20 @@ public static class CountsWorkbookService
 
         ApplyPrintSheetDefaults(ws);
 
-        WritePrintSheetTitle(ws, 9, $"\"PRODUCT PRICING \"&Cover!{CoverDateCell}");
+        // Merge the title/subtitle/substitutions banner across all 11 visible columns (was 9,
+        // before the two Client columns were added).
+        WritePrintSheetTitle(ws, 11, $"\"PRODUCT PRICING \"&Cover!{CoverDateCell}");
         ws.TabColor = XLColor.FromHtml("#FF8ED973");
 
         int headerRow = 6;
-        string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Δ", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext." };
+        string[] headers = { " Type", "Mfr", "Catalog Number", "Qty", "Δ", "Buy Ea.", "Buy Ext.", "Sell Ea.", "Sell Ext.", "Client Ea.", "Client Ext." };
         WritePrintSheetHeaders(ws, headerRow, headers);
 
-        // Spill row shifted to 8 (row 7 is a blank spacer). QuoteHelperCols has 10 entries —
-        // the last is the InDataBlock flag, spilled into hidden column J.
+        // Spill row shifted to 8 (row 7 is a blank spacer). Data columns 1–9 mirror the
+        // Worksheet helper block (QuoteHelperCols[0..8]); the InDataBlock flag (QuoteHelperCols[9])
+        // moves to hidden col 12 (L) to make room for the two Client columns at 10/11.
         int spillRow = 8;
-        for (int i = 0; i < QuoteHelperCols.Length; i++)
+        for (int i = 0; i < 9; i++)
         {
             string anchor = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteHelperCols[i]}2)";
             string formula = i switch
@@ -2602,11 +2617,31 @@ public static class CountsWorkbookService
             };
             ws.Cell(spillRow, i + 1).FormulaA1 = formula;
         }
-        ws.Column(10).Hide(); // InDataBlock flag — drives border CF only
+
+        // Client Ea. (col 10) / Client Ext. (col 11): Sell × (1 + ClientMarkup) over the whole
+        // Sell spill — line items, tariff row, and the footer through the Grand Total all scale
+        // (this is the "mark up everything, including Lutron & Freight" behavior). The ISNUMBER
+        // guard lets blank gap rows and the "NO BID" sentinel pass through unscaled instead of
+        // erroring to #VALUE!. Derives from the Worksheet Sell Ea./Ext. helper cols
+        // (QuoteHelperCols[7]/[8]) via the same ANCHORARRAY-of-Worksheet idiom the columns above
+        // use — deliberately not a same-sheet spill reference. On a pre-feature workbook that has
+        // no ClientMarkup named range these two cells show a cosmetic #NAME? and nothing else is
+        // affected (the Client columns are leaf cells).
+        string ClientScale(string sellHelperCol)
+        {
+            string a = $"_xlfn.ANCHORARRAY(Worksheet!{sellHelperCol}2)";
+            return $"IF(ISNUMBER({a}),{a}*(1+ClientMarkup),{a})";
+        }
+        ws.Cell(spillRow, 10).FormulaA1 = ClientScale(QuoteHelperCols[7]); // Client Ea.  ← Sell Ea.
+        ws.Cell(spillRow, 11).FormulaA1 = ClientScale(QuoteHelperCols[8]); // Client Ext. ← Sell Ext.
+
+        // InDataBlock flag — moved from col 10 to hidden col 12 (behind the Client columns).
+        ws.Cell(spillRow, 12).FormulaA1 = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteHelperCols[9]}2)";
+        ws.Column(12).Hide(); // InDataBlock flag — drives border CF only
 
         ApplyNotesBoldConditionalFormat(ws, spillRow);
-        ApplyDataBorderConditionalFormat(ws, spillRow, lastVisibleCol: 9, flagColLetter: "J");
-        ApplyFooterStyling(ws, spillRow, qtyCol: 4, buyExtCol: 7, sellExtCol: 9);
+        ApplyDataBorderConditionalFormat(ws, spillRow, lastVisibleCol: 11, flagColLetter: "L");
+        ApplyFooterStyling(ws, spillRow, qtyCol: 4, buyExtCol: 7, sellExtCol: 9, clientExtCol: 11);
         ws.Rows(spillRow, 1000).Height = 15.5;
 
         // Currency + delta formats
@@ -2615,12 +2650,14 @@ public static class CountsWorkbookService
         ws.Column(7).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(8).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(9).Style.NumberFormat.Format = "$#,##0.00";
+        ws.Column(10).Style.NumberFormat.Format = "$#,##0.00"; // Client Ea.
+        ws.Column(11).Style.NumberFormat.Format = "$#,##0.00"; // Client Ext.
         ws.Column(2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         // Right-align Qty — numbers and footer labels both; labels overflow left into the
         // (empty) Catalog column on footer rows, which is intentional.
         ws.Column(4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
         ws.Column(5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-        for (int c = 6; c <= 9; c++)
+        for (int c = 6; c <= 11; c++)
             ws.Column(c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
         // Qty and Δ header cells centered (column-level right-align applies to data rows only)
         ws.Cell(headerRow, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -2638,6 +2675,8 @@ public static class CountsWorkbookService
         ws.Column(7).Width = 12;
         ws.Column(8).Width = 12;
         ws.Column(9).Width = 12;
+        ws.Column(10).Width = 12; // Client Ea.
+        ws.Column(11).Width = 12; // Client Ext.
 
         // Print setup
         ApplyStandardPageSetup(ws);
@@ -3354,12 +3393,18 @@ public static class CountsWorkbookService
     }
 
     /// <summary>Applies footer styling: bold right-aligned labels on the Qty column, Medium
-    /// #808080 top border on Subtotal and Grand Total amount cells (Buy Ext + Sell Ext), and
-    /// bold Grand Total amount cells. Spans rows {spillRow}..1000.</summary>
+    /// #808080 top border on Subtotal and Grand Total amount cells (Buy Ext + Sell Ext, plus
+    /// Client Ext when <paramref name="clientExtCol"/> is supplied), and bold Grand Total amount
+    /// cells. Spans rows {spillRow}..1000.</summary>
     private static void ApplyFooterStyling(
-        IXLWorksheet ws, int spillRow, int qtyCol, int buyExtCol, int sellExtCol)
+        IXLWorksheet ws, int spillRow, int qtyCol, int buyExtCol, int sellExtCol, int? clientExtCol = null)
     {
         string qtyLetter = XLHelper.GetColumnLetterFromNumber(qtyCol);
+        // Extension amount columns that carry Subtotal/Grand-Total borders (Client Ext. only when
+        // the caller opts in — the Quote does, the Phase sheets don't).
+        int[] extCols = clientExtCol.HasValue
+            ? new[] { buyExtCol, sellExtCol, clientExtCol.Value }
+            : new[] { buyExtCol, sellExtCol };
         string[] labels =
         {
             "Fixture Package Sub-Total:",
@@ -3376,16 +3421,16 @@ public static class CountsWorkbookService
         var qtyCf = qtyRange.AddConditionalFormat().WhenIsTrue($"OR({labelPredicate})");
         qtyCf.Font.SetBold();
 
-        // Subtotal row — top border on Buy Ext and Sell Ext cells only (skip Sell Ea. between them)
-        foreach (int col in new[] { buyExtCol, sellExtCol })
+        // Subtotal row — top border on the extension amount cells only (skip the Ea. cols between them)
+        foreach (int col in extCols)
         {
             var subCf = ws.Range(spillRow, col, 1000, col).AddConditionalFormat()
                 .WhenIsTrue($"${qtyLetter}{spillRow}=\"Fixture Package Sub-Total:\"");
             subCf.Border.SetTopBorder(PrintBorderStyle).Border.SetTopBorderColor(PrintBorderColor);
         }
 
-        // Grand Total row — top border + bold on Buy Ext and Sell Ext cells only
-        foreach (int col in new[] { buyExtCol, sellExtCol })
+        // Grand Total row — top border + bold on the extension amount cells only
+        foreach (int col in extCols)
         {
             var grandCf = ws.Range(spillRow, col, 1000, col).AddConditionalFormat()
                 .WhenIsTrue($"${qtyLetter}{spillRow}=\"LIGHTING PACKAGE TOTAL:\"");
