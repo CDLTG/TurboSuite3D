@@ -7,6 +7,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-09-15
+
+### Added
+- Guide: Lighting Family LOD reference page; Pages restructured into a documentation hub.
+
+### Changed
+- TurboSchedule: Counts syntax help link points at `counts.html` after the Pages hub move.
+
+### Fixed
+- TurboDocs: Legacy Counts export forces the qty to `1` for linear Type Marks — the `{ft}ft{in}in` length token is the whole run to purchase, so the instance count no longer multiplies it (e.g. 14 × 140'-4").
+- TurboDocs: Counts Worksheet matches previous qty by catalog number instead of slot.
+
 ## [1.5.0] — 2026-09-11
 
 ### Added
@@ -255,6 +267,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.5.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.1
 [1.5.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.0
 [1.4.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.3
 [1.4.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.2
