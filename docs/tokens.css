@@ -1,0 +1,54 @@
+/* ============================================================
+   TurboSuite docs — shared design tokens
+   Palette + typeface + base for the reference hub and every
+   cheat sheet. Each page links this, then adds only its own
+   component styles. Change the colorway or type here and all
+   pages follow — this is the single source of truth.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root{
+  /* base — warm paper (light) */
+  --ground:#F3F2EE; --surface:#FAF9F6; --raised:#FFFFFF;
+  --ink:#1C1B17; --ink-soft:#5A574E; --ink-faint:#8C887C;
+  --line:#DEDBD2; --line-strong:#CBC7BB;
+  --accent:#B26B12; --accent-strong:#8E5309; --accent-wash:#F2E8D6;
+  --spec:#43596B; --spec-soft:#6B8092; --spec-wash:#E5EAEE;
+  --code-bg:#ECE9E0;
+  --shadow:0 1px 2px rgba(28,27,23,.05), 0 8px 24px -16px rgba(28,27,23,.22);
+  /* type */
+  --font-display:"Fraunces",Georgia,serif;
+  --font-body:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#18160F; --surface:#211E17; --raised:#28241C;
+    --ink:#ECEAE1; --ink-soft:#ABA697; --ink-faint:#7C776A;
+    --line:#332F26; --line-strong:#433E32;
+    --accent:#E1A24A; --accent-strong:#F0B968; --accent-wash:#332918;
+    --spec:#93AABC; --spec-soft:#788E9F; --spec-wash:#1E2830;
+    --code-bg:#2A2620;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 30px -18px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#18160F; --surface:#211E17; --raised:#28241C;
+  --ink:#ECEAE1; --ink-soft:#ABA697; --ink-faint:#7C776A;
+  --line:#332F26; --line-strong:#433E32;
+  --accent:#E1A24A; --accent-strong:#F0B968; --accent-wash:#332918;
+  --spec:#93AABC; --spec-soft:#788E9F; --spec-wash:#1E2830;
+  --code-bg:#2A2620;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 30px -18px rgba(0,0,0,.6);
+}
+
+/* base */
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--font-body); line-height:1.55; -webkit-font-smoothing:antialiased;}
+img{max-width:100%;}
+h1,h2,h3{font-family:var(--font-display); text-wrap:balance;}
+code,.mono{font-family:var(--font-mono);}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}

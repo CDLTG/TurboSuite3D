@@ -2,44 +2,49 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Counts Cheat Sheet — Length Tokens &amp; Catalog Qty</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="tokens.css">
   <style>
+    /* Palette, typeface + base come from tokens.css (shared with the
+       reference hub and the LOD sheet). Only the Counts-specific
+       semantic mode colors live here — they're a Counts-only concept.
+       per-fixture reuses the shared --spec slate-blue directly. */
     :root {
-      --bg: #0d1117;
-      --surface: #161b22;
-      --surface-2: #1a2029;
-      --border: #30363d;
-      --border-strong: #3d444d;
-      --text: #e6edf3;
-      --text-muted: #9198a1;
-      --accent: #4493f8;
-      --code-bg: #1c2128;
       /* length-token cut modes */
-      --max: #d2a8ff;
-      --max-soft: #2a1f3d;
-      --sizes: #e8b339;
-      --sizes-soft: #332817;
-      --pool: #3fb950;
-      --pool-soft: #16291d;
+      --max: #6E4CA8;        --max-soft: #EDE7F5;   /* made-to-length · plum   */
+      --sizes: #9B7A0A;      --sizes-soft: #F4ECCF; /* discrete stock · gold   */
+      --pool: #3E7D3A;       --pool-soft: #E4EEDE;  /* pooled stock   · green  */
       /* catalog-qty modes */
-      --q-default: #9198a1;
-      --q-default-soft: #1c2128;
-      --q-mult: #4493f8;
-      --q-mult-soft: #122036;
-      --q-ratio: #39c5cf;
-      --q-ratio-soft: #0d2b2d;
-      --q-type: #f778ba;
-      --q-type-soft: #2d1424;
-      --q-length: #e3833c;
-      --q-length-soft: #2b1c10;
+      --q-default: #8C887C;  --q-default-soft: #EAE7DE;      /* inherit    · neutral    */
+      --q-mult: var(--spec); --q-mult-soft: var(--spec-wash); /* per-fixture · slate-blue */
+      --q-ratio: #2C7A7B;    --q-ratio-soft: #DCEBEA;        /* ratio      · teal       */
+      --q-type: #A8497A;     --q-type-soft: #F3E3EB;         /* per-type   · rose       */
+      --q-length: #B85C2B;   --q-length-soft: #F6E6DB;       /* length     · terracotta */
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --max: #C9A6F0;        --max-soft: #2E2540;
+        --sizes: #E0B457;      --sizes-soft: #362B14;
+        --pool: #6FBF6A;       --pool-soft: #1E2E1B;
+        --q-default: #ABA697;  --q-default-soft: #2A2620;
+        --q-ratio: #5FC3C6;    --q-ratio-soft: #123230;
+        --q-type: #E58BB6;     --q-type-soft: #3A2130;
+        --q-length: #E38A5A;   --q-length-soft: #3A2114;
+      }
     }
+    :root[data-theme="dark"] {
+      --max: #C9A6F0;        --max-soft: #2E2540;
+      --sizes: #E0B457;      --sizes-soft: #362B14;
+      --pool: #6FBF6A;       --pool-soft: #1E2E1B;
+      --q-default: #ABA697;  --q-default-soft: #2A2620;
+      --q-ratio: #5FC3C6;    --q-ratio-soft: #123230;
+      --q-type: #E58BB6;     --q-type-soft: #3A2130;
+      --q-length: #E38A5A;   --q-length-soft: #3A2114;
+    }
+    body { font-size: 15px; }
     .page {
       max-width: 1280px;
       margin: 0 auto;
@@ -51,18 +56,18 @@
       letter-spacing: -0.02em;
     }
     .subtitle {
-      color: var(--text-muted);
+      color: var(--ink-soft);
       margin: 0 0 28px;
       font-size: 15px;
     }
     .section-label {
       display: inline-block;
-      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
       font-size: 12px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--accent);
-      border: 1px solid var(--border-strong);
+      color: var(--accent-strong);
+      border: 1px solid var(--line-strong);
       background: var(--surface);
       border-radius: 999px;
       padding: 3px 12px;
@@ -76,22 +81,22 @@
     h3 {
       font-size: 16px;
       margin: 28px 0 12px;
-      color: var(--text);
+      color: var(--ink);
     }
     .lead {
-      color: var(--text-muted);
+      color: var(--ink-soft);
       margin: 0 0 20px;
       font-size: 14.5px;
     }
     code, .mono {
-      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
       font-size: 0.92em;
     }
     code {
       background: var(--code-bg);
       padding: 1px 6px;
       border-radius: 4px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--line);
       white-space: nowrap;
     }
 
@@ -109,14 +114,14 @@
     }
     .hero-card {
       background: var(--surface);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--line-strong);
       border-radius: 10px;
       padding: 18px 22px;
     }
     .hero-card .what {
-      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
       font-size: 13px;
-      color: var(--accent);
+      color: var(--accent-strong);
       margin-bottom: 4px;
     }
     .hero-card .title {
@@ -124,7 +129,7 @@
       font-weight: 600;
       margin-bottom: 6px;
     }
-    .hero-card p { margin: 4px 0; font-size: 13.5px; color: var(--text-muted); }
+    .hero-card p { margin: 4px 0; font-size: 13.5px; color: var(--ink-soft); }
     .hero .vs {
       display: flex;
       flex-direction: column;
@@ -137,13 +142,13 @@
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: var(--text-muted);
+      color: var(--ink-soft);
       text-align: center;
       max-width: 90px;
     }
     .hero .vs .glyph {
       font-size: 22px;
-      color: var(--border-strong);
+      color: var(--line-strong);
       line-height: 1;
     }
 
@@ -158,7 +163,7 @@
     }
     .mode-card {
       background: var(--surface);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--line-strong);
       border-radius: 8px;
       padding: 18px 20px;
       border-top: 4px solid;
@@ -175,7 +180,7 @@
       flex-wrap: wrap;
     }
     .mode-tag {
-      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
       font-size: 14px;
       font-weight: 600;
       padding: 2px 8px;
@@ -187,7 +192,7 @@
     .mode-card.length .mode-tag { background: var(--q-length-soft); color: var(--q-length); }
     .mode-subtitle {
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--ink-soft);
     }
     .mode-card p {
       margin: 8px 0;
@@ -196,12 +201,12 @@
     .mode-card .use-when {
       margin-top: 10px;
       padding-top: 10px;
-      border-top: 1px dashed var(--border);
+      border-top: 1px dashed var(--line);
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--ink-soft);
     }
     .mode-card .use-when strong {
-      color: var(--text);
+      color: var(--ink);
       display: block;
       margin-bottom: 2px;
     }
@@ -219,7 +224,7 @@
       width: 100%;
       border-collapse: collapse;
       background: var(--surface);
-      border: 1px solid var(--border);
+      border: 1px solid var(--line);
       border-radius: 6px;
       overflow: hidden;
       font-size: 14px;
@@ -227,7 +232,7 @@
     th, td {
       text-align: left;
       padding: 9px 14px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--line);
       vertical-align: top;
     }
     tr:last-child td { border-bottom: none; }
@@ -235,17 +240,17 @@
       background: var(--code-bg);
       font-weight: 600;
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--ink-soft);
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
-    td.token, td.example, td.formula { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; }
-    td.formula { color: var(--text-muted); }
-    td.result { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; color: var(--pool); }
+    td.token, td.example, td.formula { font-family: var(--font-mono); font-size: 13.5px; }
+    td.formula { color: var(--ink-soft); }
+    td.result { font-family: var(--font-mono); font-size: 13.5px; color: var(--pool); }
 
     .mode-pill {
       display: inline-block;
-      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
       font-size: 11px;
       padding: 1px 7px;
       border-radius: 10px;
@@ -256,7 +261,7 @@
     .mode-pill.max { background: var(--max-soft); color: var(--max); }
     .mode-pill.sizes { background: var(--sizes-soft); color: var(--sizes); }
     .mode-pill.pool { background: var(--pool-soft); color: var(--pool); }
-    .mode-pill.plain { background: var(--code-bg); color: var(--text-muted); }
+    .mode-pill.plain { background: var(--code-bg); color: var(--ink-soft); }
     .mode-pill.q-default { background: var(--q-default-soft); color: var(--q-default); }
     .mode-pill.q-mult { background: var(--q-mult-soft); color: var(--q-mult); }
     .mode-pill.q-ratio { background: var(--q-ratio-soft); color: var(--q-ratio); }
@@ -265,7 +270,7 @@
 
     .rules {
       background: var(--surface);
-      border: 1px solid var(--border);
+      border: 1px solid var(--line);
       border-radius: 6px;
       padding: 12px 24px;
       margin: 0;
@@ -273,14 +278,14 @@
     .rules li { margin: 6px 0; font-size: 14px; }
     .note {
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--ink-soft);
       margin-top: 8px;
     }
 
     /* ---- callout / deep dive ---- */
     .callout {
       background: var(--surface);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--line-strong);
       border-left: 4px solid var(--q-length);
       border-radius: 8px;
       padding: 18px 22px;
@@ -290,8 +295,8 @@
       margin: 0 0 6px;
       font-size: 15px;
     }
-    .callout p { margin: 6px 0; font-size: 14px; color: var(--text-muted); }
-    .callout p strong { color: var(--text); }
+    .callout p { margin: 6px 0; font-size: 14px; color: var(--ink-soft); }
+    .callout p strong { color: var(--ink); }
 
     /* ---- length-mode pipeline ---- */
     .pipeline {
@@ -303,17 +308,17 @@
     }
     .pipe-step {
       background: var(--code-bg);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--line-strong);
       border-radius: 6px;
       padding: 7px 12px;
       text-align: center;
       min-width: 78px;
     }
-    .pipe-step .pl { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .pipe-step .pv { display: block; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 14px; color: var(--text); margin-top: 2px; }
+    .pipe-step .pl { display: block; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pipe-step .pv { display: block; font-family: var(--font-mono); font-size: 14px; color: var(--ink); margin-top: 2px; }
     .pipe-step.final { border-color: var(--q-length); }
     .pipe-step.final .pv { color: var(--q-length); font-weight: 600; }
-    .pipe-arrow { color: var(--border-strong); font-size: 18px; }
+    .pipe-arrow { color: var(--line-strong); font-size: 18px; }
 
     .col-comp {
       display: grid;
@@ -323,22 +328,22 @@
     @media (max-width: 760px) { .col-comp { grid-template-columns: 1fr; } }
     .comp-card {
       background: var(--surface);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--line-strong);
       border-radius: 8px;
       padding: 18px 20px;
     }
     .comp-card .where {
-      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
       font-size: 12px;
-      color: var(--accent);
+      color: var(--accent-strong);
       margin-bottom: 4px;
     }
     .comp-card .head { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
     .comp-card p { font-size: 14px; margin: 6px 0; }
-    .comp-card .when { font-size: 13px; color: var(--text-muted); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .comp-card .when { font-size: 13px; color: var(--ink-soft); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
     .hubnav { margin: 0 0 20px; }
-    .hubnav a { color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 600; }
-    .hubnav a:hover { color: var(--accent); }
+    .hubnav a { color: var(--ink-soft); text-decoration: none; font-size: 14px; font-weight: 600; }
+    .hubnav a:hover { color: var(--accent-strong); }
   </style>
 </head>
 <body>
