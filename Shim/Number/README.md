@@ -16,7 +16,7 @@ Panel schedule slot management for the selected panel.
 - **Assign Spare / Assign Space / Remove** for empty slots
 - **Open Schedule** to navigate Revit to the panel schedule view
 - **Apply** to write panel naming settings (format, prefix, separator)
-- Duplicate circuit number detection across all panels
+- Duplicate circuit number detection across all panels (the right-side summary). The summary excludes circuits that are unpaneled or artifacts *by design* — **Feed Through Lugs**, TurboWire **switched** legs (`"switched"` circuit comment), and **DMX/DALI** zone circuits (member fixture running that `Dimming Protocol`) — so a leftover `<unnamed>` there still means a genuinely overlooked circuit. Filter lives in `NumberCollectorService.GetCircuits` / `IsExcludedCircuit`.
 
 ## Tab 2 — Keypads
 

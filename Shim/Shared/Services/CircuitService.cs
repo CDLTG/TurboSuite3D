@@ -251,7 +251,10 @@ public static class CircuitService
     private static bool MatchesPanelKind(ElectricalSystem circuit, bool shadePanels) =>
         circuit.BaseEquipment is not FamilyInstance panel || IsShadePanel(panel) == shadePanels;
 
-    private static bool IsSwitchedCircuit(ElectricalSystem circuit) =>
+    /// <summary>Whether this is a TurboWire "switched" circuit — a local switch leg that stays
+    /// unpaneled (&lt;unnamed&gt;) by design, stamped with the "switched" circuit comment at
+    /// creation. Deliberately unpaneled, so consumers that surface forgotten circuits skip it.</summary>
+    public static bool IsSwitchedCircuit(ElectricalSystem circuit) =>
         string.Equals(ParameterHelper.GetCircuitComments(circuit), "switched",
             StringComparison.OrdinalIgnoreCase);
 
