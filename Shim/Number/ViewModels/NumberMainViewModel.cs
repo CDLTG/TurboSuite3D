@@ -6,6 +6,7 @@ using TurboSuite.Abstractions;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.Services;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Number.ViewModels
@@ -16,10 +17,15 @@ namespace TurboSuite.Number.ViewModels
         public KeypadTabViewModel KeypadTab { get; }
         public PowerSupplyTabViewModel PowerSupplyTab { get; }
 
+        /// <summary>Window-level, tab-independent room-order editor bound by the permanent
+        /// sidebar and consumed by the keypad grid + the CircuitNumber "Sort".</summary>
+        public RoomOrderViewModel RoomOrder { get; }
+
         public NumberMainViewModel(Document doc,
             List<CircuitNumberRow> circuits,
             List<DeviceNumberRow> keypads,
             List<DeviceNumberRow> powerSupplies,
+            List<string> allRoomNames,
             IRevitWorkQueue workQueue,
             ISwitchIdWriter switchIdWriter,
             IPrefixSuffixStore prefixSuffixStore,
@@ -27,12 +33,21 @@ namespace TurboSuite.Number.ViewModels
             ICircuitNumberOperations circuitOps,
             IDeviceSelector deviceSelector)
         {
-            // All three tabs are Revit-free Core VMs driven by IRevitWorkQueue + the op
+            // All tabs are Revit-free Core VMs driven by IRevitWorkQueue + the op
             // interfaces. This shim VM does the one-time Revit collection/projection and
             // hands each tab only abstractions.
+
+            // Project-wide room order is built first (from every Space/region), so both the
+            // keypad grid and the CircuitNumber tab bind the same shared editor.
+            var savedRoomOrder = RoomOrderStorageService.Load(doc);
+            // Sort by Room is the keypad default: on unless this project has explicitly
+            // turned it off (a stored false); a never-saved project (null) starts sorted.
+            var keypadRoomSorted = CircuitNamingStorageService.LoadKeypadRoomSorted(doc) ?? true;
+            RoomOrder = new RoomOrderViewModel(allRoomNames, savedRoomOrder, workQueue, roomOrderStore);
+
             var panelSettings = BuildPanelSettings(doc, circuits);
             CircuitTab = new CircuitNumberTabViewModel(circuits, panelSettings,
-                ParameterHelper.CircuitNamingOptions, workQueue, circuitOps);
+                ParameterHelper.CircuitNamingOptions, workQueue, circuitOps, RoomOrder);
 
             var keypadRows = keypads.Select(d => new NumberableRowViewModel(
                 d.ElementId.ToRef(),
@@ -42,9 +57,7 @@ namespace TurboSuite.Number.ViewModels
                 d.RoomNumber,
                 typeName: d.TypeName,
                 mark: d.Mark)).ToList();
-            var savedRoomOrder = RoomOrderStorageService.Load(doc);
-            var sidebarWasOpen = RoomOrderStorageService.LoadSidebarVisible(doc);
-            KeypadTab = new KeypadTabViewModel(keypadRows, savedRoomOrder, sidebarWasOpen,
+            KeypadTab = new KeypadTabViewModel(keypadRows, RoomOrder, keypadRoomSorted,
                 workQueue, switchIdWriter, roomOrderStore, deviceSelector);
 
             var psRows = powerSupplies.Select(d => new NumberableRowViewModel(
@@ -57,7 +70,7 @@ namespace TurboSuite.Number.ViewModels
                 typeName: d.TypeName,
                 mark: d.Mark,
                 positionY: d.PositionY)).ToList();
-            var (savedPrefix, savedSuffix) = RoomOrderStorageService.LoadPrefixSuffix(doc);
+            var (savedPrefix, savedSuffix) = CircuitNamingStorageService.LoadPrefixSuffix(doc);
             PowerSupplyTab = new PowerSupplyTabViewModel(psRows, savedPrefix, savedSuffix,
                 workQueue, switchIdWriter, prefixSuffixStore, deviceSelector);
         }

@@ -43,19 +43,19 @@ namespace TurboSuite.Number.Views
         private void RoomOrderListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             var vm = DataContext as NumberMainViewModel;
-            if (vm?.KeypadTab == null) return;
+            if (vm?.RoomOrder == null) return;
 
             // Let scrollbar clicks pass through
             if (FindAncestor<System.Windows.Controls.Primitives.ScrollBar>((DependencyObject)e.OriginalSource) != null)
                 return;
 
             // In reorder mode, handle click-to-order instead of drag
-            if (vm.KeypadTab.IsReordering)
+            if (vm.RoomOrder.IsReordering)
             {
                 _dragFromIndex = -1;
                 var listBoxItem = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);
                 if (listBoxItem?.DataContext is RoomOrderItem roomItem)
-                    vm.KeypadTab.ToggleRoomClick(roomItem);
+                    vm.RoomOrder.ToggleRoomClick(roomItem);
                 e.Handled = true;
                 return;
             }
@@ -137,7 +137,7 @@ namespace TurboSuite.Number.Views
                 return;
 
             var vm = (NumberMainViewModel)DataContext;
-            vm.KeypadTab.MoveRoom(fromIndex, toIndex);
+            vm.RoomOrder.MoveRoom(fromIndex, toIndex);
         }
 
         private void ClearHighlight()

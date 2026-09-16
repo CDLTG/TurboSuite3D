@@ -132,7 +132,7 @@ Each shipped module keeps its own `Shim/<Module>/README.md` — workflow, design
 | `TurboSuite.Shared.Filters` | `FixtureSelectionFilter`, `LightingFixtureTagFilter` |
 | `TurboSuite.Shared.Helpers` | `GeometryHelper`, `ParameterHelper`, `NaturalStringComparer`, `FileLockHelper` |
 | `TurboSuite.Shared.Models` | `WallLocalCoordinateSystem`, `CadRoomSourceSettings`, `GeneralSettings` |
-| `TurboSuite.Shared.Services` | `DataStorageHelper`, `SpaceRoomFinderService` (runtime room detection — reads project-owned Spaces, not architect Rooms), `LinkedRoomFinderService` (BAND_ROOM over architect Rooms — now only seeds Space *names*), `UpdateService`, settings storage/cache services |
+| `TurboSuite.Shared.Services` | `DataStorageHelper`, `SpaceRoomFinderService` (runtime room detection — reads project-owned Spaces, not architect Rooms), `LinkedRoomFinderService` (BAND_ROOM over architect Rooms — now only seeds Space *names*), `RoomOrderStorageService` (project-wide room order, consumed by TurboNumber), `UpdateService`, settings storage/cache services |
 | `TurboSuite.Shared.Styles` | Shared WPF ResourceDictionary styles |
 | `TurboSuite.Shared.ViewModels` | `ViewModelBase`, `RelayCommand` |
 | `TurboSuite.Name` | TurboName — **modeless** 2D job-setup window: linked-CAD layer list (visibility, line graphics, hide-by-picking), click-to-tag layer roles, region generation, room-name/ceiling-height assignment. Scoping matcher is `Core/Name/CadLinkScope` (unit-tested). **Both shims enable `UseWindowsForms` (native `ColorDialog`) with the `View`/`Color` WinForms global usings suppressed to avoid collisions.** |
@@ -142,7 +142,7 @@ Each shipped module keeps its own `Shim/<Module>/README.md` — workflow, design
 | `TurboSuite.Tag` | TurboTag — auto-places lighting fixture type tags |
 | `TurboSuite.Wire` | TurboWire — circuit creation and wire routing |
 | `TurboSuite.Zones` | TurboZones — load names and panel breakdown (MVVM, modeless). The panel breakdown is a **recommendation surface**: the designer picks panel sizes and sites processors/IO/interfaces, and everything else — including link assignment — is derived, deliberately with no manual override. `Core/Zones/Services/ControlLinkPacker.cs` is the single link computation, asked two questions (how many processors; how full are the links that exist), so the capacity bars and the BOM's recommendation cannot disagree |
-| `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless) |
+| `TurboSuite.Number` | TurboNumber — circuit numbers, keypads, power supply Switch IDs (MVVM, modeless). A **project-wide room order** (shared primitive in `Shared/Services/RoomOrderStorageService.cs`, edited via a permanent window-level sidebar over `Core/Number/ViewModels/RoomOrderViewModel`, seeded from every Space/region) feeds both the keypad grid sort and a Circuit Numbers **Sort by Room** that reorders a switchboard panel's slots (`Core/Number/Services/RoomOrderPanelSorter.cs` pure sorter + `PanelScheduleService.ApplyRoomSort` one-undo clear→regen→swap). Keypad sort-toggle + prefix/suffix persist in the Number-local `CircuitNamingStorageService` |
 | `TurboSuite.Compact` | TurboCompact — family document cleanup |
 | `TurboSuite.Docs` | TurboDocs — tabbed document generation: fixture schedule PDF, cut sheet PDF merging, control BOM PDF, load schedule PDF, panel schedule PDF, and cover/notes PDF (MVVM) |
 | `TurboSuite.Tab` | TurboTab — document tab coloring (AvalonDock visual tree manipulation) |

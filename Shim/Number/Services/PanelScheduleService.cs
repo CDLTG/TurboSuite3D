@@ -288,6 +288,69 @@ namespace TurboSuite.Number.Services
                 }
             }
         }
+
+        /// <summary>
+        /// Applies a room-order sort in one transaction (one undo step): clears every
+        /// Spare/Space cell to Empty, regenerates so they read Empty, then runs the
+        /// position swaps produced by <see cref="RoomOrderPanelSorter"/>. Each swap's
+        /// position index maps to the matching <paramref name="slotInfos"/> entry's
+        /// Row/Col — the original, positionally stable anchor cells — referenced throughout
+        /// with no re-read between swaps (spike-validated). Any refused move rolls the whole
+        /// transaction back and reports, so the panel is never left half-sorted.
+        ///
+        /// The raw <c>psv.RemoveSpare/RemoveSpace/MoveSlotTo</c> calls are used directly, not
+        /// the transaction-wrapping service methods above, so the clear + swaps compose into
+        /// a single atomic operation.
+        /// </summary>
+        public bool ApplyRoomSort(Document doc, PanelScheduleView psv,
+            List<(int Row, int Col)> spareSpaceCells,
+            List<(int A, int B)> swaps,
+            List<SlotInfo> slotInfos)
+        {
+            using (Transaction tx = new Transaction(doc, "TurboNumber - Sort Panel by Room"))
+            {
+                tx.Start();
+                try
+                {
+                    // (1) Retire Spare/Space placeholders to Empty (circuit<->Spare/Space
+                    // swaps are refused by the API; circuit<->Empty are not).
+                    foreach (var (row, col) in spareSpaceCells)
+                    {
+                        if (psv.IsSpare(row, col))
+                            psv.RemoveSpare(row, col);
+                        else if (psv.IsSpace(row, col))
+                            psv.RemoveSpace(row, col);
+                    }
+
+                    // (2) Regenerate so the cleared cells read Empty before the swaps.
+                    doc.Regenerate();
+
+                    // (3) Compact + reorder via circuit<->circuit / circuit<->Empty swaps.
+                    foreach (var (a, b) in swaps)
+                    {
+                        var from = slotInfos[a];
+                        var to = slotInfos[b];
+                        if (!psv.CanMoveSlotTo(from.Row, from.Col, to.Row, to.Col))
+                        {
+                            tx.RollBack();
+                            TaskDialog.Show("TurboNumber",
+                                $"Sort aborted: slot {from.SlotNumber} cannot move to slot {to.SlotNumber}. No changes were made.");
+                            return false;
+                        }
+                        psv.MoveSlotTo(from.Row, from.Col, to.Row, to.Col);
+                    }
+
+                    tx.Commit();
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    tx.RollBack();
+                    TaskDialog.Show("TurboNumber", $"Sort failed: {ex.Message}");
+                    return false;
+                }
+            }
+        }
     }
 
     public class SlotInfo

@@ -16,6 +16,7 @@ namespace TurboSuite.Number.ViewModels
     {
         private readonly IRevitWorkQueue _workQueue;
         private readonly ICircuitNumberOperations _ops;
+        private readonly RoomOrderViewModel _roomOrder;
         private readonly IReadOnlyList<string> _circuitNamingOptions;
 
         private string _selectedPanel;
@@ -39,6 +40,7 @@ namespace TurboSuite.Number.ViewModels
         public ICommand ApplyCommand { get; }
         public ICommand MoveUpCommand { get; }
         public ICommand MoveDownCommand { get; }
+        public ICommand SortCommand { get; }
         public ICommand AssignSpareCommand { get; }
         public ICommand AssignSpaceCommand { get; }
         public ICommand RemoveSpareSpaceCommand { get; }
@@ -93,15 +95,18 @@ namespace TurboSuite.Number.ViewModels
             List<PanelSettingsModel> panelSettings,
             IReadOnlyList<string> circuitNamingOptions,
             IRevitWorkQueue workQueue,
-            ICircuitNumberOperations ops)
+            ICircuitNumberOperations ops,
+            RoomOrderViewModel roomOrder)
         {
             _workQueue = workQueue;
             _ops = ops;
+            _roomOrder = roomOrder;
             _circuitNamingOptions = circuitNamingOptions;
 
             ApplyCommand = new RelayCommand(Apply, () => !IsBusy);
             MoveUpCommand = new RelayCommand(ExecuteMoveUp, CanMoveUp);
             MoveDownCommand = new RelayCommand(ExecuteMoveDown, CanMoveDown);
+            SortCommand = new RelayCommand(ExecuteSort, CanSort);
             AssignSpareCommand = new RelayCommand(ExecuteAssignSpare, CanAssignSpareOrSpace);
             AssignSpaceCommand = new RelayCommand(ExecuteAssignSpace, CanAssignSpareOrSpace);
             RemoveSpareSpaceCommand = new RelayCommand(ExecuteRemoveSpareSpace, CanRemoveSpareSpace);
@@ -197,6 +202,33 @@ namespace TurboSuite.Number.ViewModels
                     PopulateFromSlots(result as IReadOnlyList<CircuitSlotData>);
                     if (onComplete != null)
                         onComplete();
+                    else
+                    {
+                        IsBusy = false;
+                        // Re-query gated buttons (e.g. Sort) once the panel finishes loading —
+                        // nothing else raises RequerySuggested here (CLAUDE.md stale-button pattern).
+                        CommandManager.InvalidateRequerySuggested();
+                    }
+                });
+        }
+
+        private bool CanSort() => !_isBusy && _currentScheduleView != null;
+
+        private void ExecuteSort()
+        {
+            if (!CanSort()) return;
+
+            IsBusy = true;
+            var scheduleView = _currentScheduleView;
+            // Snapshot the order on the UI thread — the work item runs on the Revit API
+            // thread and must not enumerate the WPF-owned collection.
+            var roomOrder = _roomOrder.OrderedRoomNames;
+            _workQueue.Enqueue(
+                () => _ops.SortPanelByRoomOrder(scheduleView, roomOrder),
+                result =>
+                {
+                    if (result is true)
+                        RequestSlotLayoutThenRefresh();
                     else
                         IsBusy = false;
                 });

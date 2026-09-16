@@ -28,6 +28,14 @@ namespace TurboSuite.Number.Services
         IReadOnlyList<CircuitSlotData> GetSlotLayout(object scheduleView);
 
         bool MoveCircuit(object scheduleView, int fromRow, int fromCol, int toRow, int toCol);
+
+        /// <summary>Reorders the panel's circuits into <paramref name="roomOrder"/> —
+        /// compacting real circuits contiguous at the top (stable within a room), clearing
+        /// any Spare/Space placeholders to Empty, and sinking empties below — behind a
+        /// preview/confirm dialog. Returns true only when the user confirmed and the sort
+        /// was applied; false on "already sorted", cancel, or a refused swap (which rolls
+        /// back so nothing changes).</summary>
+        bool SortPanelByRoomOrder(object scheduleView, IReadOnlyList<string> roomOrder);
         bool AssignSpare(object scheduleView, IReadOnlyList<(int Row, int Col)> slots);
         bool AssignSpace(object scheduleView, IReadOnlyList<(int Row, int Col)> slots);
         bool RemoveSpareSpace(object scheduleView, IReadOnlyList<(int Row, int Col, string SlotType)> slots);

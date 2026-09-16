@@ -92,6 +92,34 @@ namespace TurboSuite.Number.Services
                 .ToList();
         }
 
+        /// <summary>
+        /// Every distinct room name in the project — the union of all MEP Space names (3D)
+        /// and Room Region names (2D) — for seeding the project-wide room-order list, so
+        /// keypad-less and circuit-less rooms are orderable too. Space names come from
+        /// <see cref="SpaceRoomFinderService.ReadSpaceName"/> and circuit rooms resolve via
+        /// <c>FindRoomName</c> (which also returns <c>ReadSpaceName</c>), so the order-list
+        /// keys and the sort keys are identical strings — no drift.
+        /// </summary>
+        public List<string> GetAllRoomNames(Document doc)
+        {
+            var spaceNames = new FilteredElementCollector(doc)
+                .OfCategory(BuiltInCategory.OST_MEPSpaces)
+                .WhereElementIsNotElementType()
+                .Cast<Space>()
+                .Where(s => s.Area > 0)
+                .Select(SpaceRoomFinderService.ReadSpaceName);
+
+            var regionNames = new RegionRoomLookupService(doc).RoomNames;
+
+            return spaceNames
+                .Concat(regionNames)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, NaturalStringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         private static string TrimTypePrefix(string typeName)
         {
             int index = typeName.LastIndexOf(". ");

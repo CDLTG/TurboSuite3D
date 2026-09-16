@@ -5,7 +5,7 @@ namespace TurboSuite.Number.Services
 {
     /// <summary>
     /// Shim-side <see cref="IPrefixSuffixStore"/> — binds the Revit-free contract to the
-    /// active document and the static <see cref="RoomOrderStorageService"/>
+    /// active document and the static <see cref="CircuitNamingStorageService"/>
     /// ExtensibleStorage helper. Must be invoked on the Revit API thread (via
     /// <see cref="RevitWorkQueue"/>).
     /// </summary>
@@ -19,6 +19,6 @@ namespace TurboSuite.Number.Services
         }
 
         public void Save(string prefix, string suffix)
-            => RoomOrderStorageService.SavePrefixSuffix(_doc, prefix, suffix);
+            => CircuitNamingStorageService.SavePrefixSuffix(_doc, prefix, suffix);
     }
 }

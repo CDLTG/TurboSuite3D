@@ -7,6 +7,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 using TurboSuite.Number.Models;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Number.Services
 {
@@ -89,6 +90,98 @@ namespace TurboSuite.Number.Services
 
         public bool MoveCircuit(object scheduleView, int fromRow, int fromCol, int toRow, int toCol)
             => _panelScheduleService.MoveCircuit(_doc, (PanelScheduleView)scheduleView, fromRow, fromCol, toRow, toCol);
+
+        public bool SortPanelByRoomOrder(object scheduleView, IReadOnlyList<string> roomOrder)
+        {
+            var psv = (PanelScheduleView)scheduleView;
+
+            // Resolve each circuit's room the same way TurboZones does — persisted override
+            // wins, else the first fixture's Space/region — so the two agree on room names.
+            var roomCache = new SpaceRoomFinderService.SpaceLookupCache(_doc, new RegionRoomLookupService(_doc));
+            var overrides = RoomOverrideStorageService.Load(_doc);
+
+            // Full layout (all slot kinds — the Core GetSlotLayout omits non-circuits, which
+            // this needs to compact/clear). SlotItem[] runs parallel to slotInfos by index.
+            var slotInfos = _panelScheduleService.GetSlotLayout(psv, _doc);
+            var items = new List<RoomOrderPanelSorter.SlotItem>(slotInfos.Count);
+            var display = new string[slotInfos.Count];
+
+            for (int i = 0; i < slotInfos.Count; i++)
+            {
+                var slot = slotInfos[i];
+                bool isCircuit = slot.SlotType == "Circuit";
+                string room = "";
+                if (isCircuit && _doc.GetElement(slot.CircuitId) is ElectricalSystem es)
+                {
+                    if (overrides.TryGetValue(es.UniqueId, out var o) && !string.IsNullOrWhiteSpace(o))
+                        room = o;
+                    else
+                    {
+                        var fixtures = CircuitService.GetFixturesOnCircuit(es);
+                        room = fixtures.Count > 0 ? (roomCache.FindRoomName(fixtures[0]) ?? "") : "";
+                    }
+                    string number = ParameterHelper.GetCircuitNumber(es);
+                    string load = ParameterHelper.GetLoadName(es) ?? "";
+                    string roomLabel = string.IsNullOrWhiteSpace(room) ? "(no room)" : room;
+                    display[i] = $"{number}  ·  {roomLabel}" + (string.IsNullOrWhiteSpace(load) ? "" : $"  ·  {load}");
+                }
+                else
+                {
+                    display[i] = $"({slot.SlotType})";
+                }
+                items.Add(new RoomOrderPanelSorter.SlotItem(isCircuit, room));
+            }
+
+            var swaps = RoomOrderPanelSorter.ComputeSwaps(items, roomOrder);
+
+            var spareSpaceCells = slotInfos
+                .Where(s => s.SlotType == "Spare" || s.SlotType == "Space")
+                .Select(s => (s.Row, s.Col))
+                .ToList();
+
+            if (swaps.Count == 0 && spareSpaceCells.Count == 0)
+            {
+                TaskDialog.Show("TurboNumber", "Panel is already in room order.");
+                return false;
+            }
+
+            // Post-sort preview: apply the swaps to the display labels (mirrors the shim's
+            // MoveSlotTo loop) and list the resulting circuit order.
+            var sortedDisplay = (string[])display.Clone();
+            foreach (var (a, b) in swaps)
+                (sortedDisplay[a], sortedDisplay[b]) = (sortedDisplay[b], sortedDisplay[a]);
+
+            int circuitCount = items.Count(x => x.IsCircuit);
+            int roomCount = items.Where(x => x.IsCircuit && !string.IsNullOrWhiteSpace(x.RoomName))
+                .Select(x => x.RoomName)
+                .Distinct(System.StringComparer.OrdinalIgnoreCase)
+                .Count();
+            int spareCount = slotInfos.Count(s => s.SlotType == "Spare");
+            int spaceCount = slotInfos.Count(s => s.SlotType == "Space");
+
+            var targetLines = new List<string>();
+            for (int i = 0; i < sortedDisplay.Length; i++)
+            {
+                if (!sortedDisplay[i].StartsWith("(")) // skip the sunk non-circuit slots
+                    targetLines.Add($"{i + 1}.  {sortedDisplay[i]}");
+            }
+
+            var dlg = new TaskDialog("TurboNumber")
+            {
+                MainInstruction = $"Sort panel \"{psv.Name}\" by room order?",
+                MainContent = $"{circuitCount} circuits across {roomCount} rooms, {swaps.Count} moves." +
+                    (spareCount + spaceCount > 0
+                        ? $"\n{spareCount} spares and {spaceCount} spaces will be cleared to Empty."
+                        : ""),
+                ExpandedContent = string.Join("\n", targetLines),
+                CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+                DefaultButton = TaskDialogResult.No
+            };
+            if (dlg.Show() != TaskDialogResult.Yes)
+                return false;
+
+            return _panelScheduleService.ApplyRoomSort(_doc, psv, spareSpaceCells, swaps, slotInfos);
+        }
 
         public bool AssignSpare(object scheduleView, IReadOnlyList<(int Row, int Col)> slots)
             => _panelScheduleService.AssignSpareMultiple(_doc, (PanelScheduleView)scheduleView, slots.ToList());

@@ -26,15 +26,16 @@ namespace TurboSuite.Number.Services
     }
 
     /// <summary>
-    /// Revit-free contract for persisting the Keypad tab's room-ordering state
-    /// (the per-room click order and the sidebar-open flag) to ExtensibleStorage.
-    /// Implemented shim-side (wraps <c>RoomOrderStorageService</c>). The matching loads
-    /// run at collection time and are passed into the ViewModel ctor.
+    /// Revit-free contract for persisting the project-wide room order (per-room click
+    /// order) and the keypad tab's room-sort toggle to ExtensibleStorage. Implemented
+    /// shim-side (room order → shared <c>RoomOrderStorageService</c>; toggle →
+    /// TurboNumber-local <c>CircuitNamingStorageService</c>). The matching loads run at
+    /// collection time and are passed into the ViewModel ctors.
     /// </summary>
     public interface IRoomOrderStore
     {
         void SaveRoomOrder(IReadOnlyList<(string Name, int ClickOrder)> roomOrder);
-        void SaveSidebarVisible(bool isVisible);
+        void SaveKeypadRoomSorted(bool isSorted);
     }
 
     /// <summary>

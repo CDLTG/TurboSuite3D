@@ -51,6 +51,7 @@ namespace TurboSuite.Number
                 var circuits = collectorService.GetCircuits(doc);
                 var keypads = collectorService.GetKeypads(doc);
                 var powerSupplies = collectorService.GetPowerSupplies(doc);
+                var allRoomNames = collectorService.GetAllRoomNames(doc);
 
                 if (circuits.Count == 0 && keypads.Count == 0 && powerSupplies.Count == 0)
                 {
@@ -75,7 +76,8 @@ namespace TurboSuite.Number
                 var deviceSelector = new DeviceSelector(uidoc);
 
                 var viewModel = new NumberMainViewModel(doc, circuits, keypads, powerSupplies,
-                    workQueue, switchIdWriter, prefixSuffixStore, roomOrderStore, circuitOps, deviceSelector);
+                    allRoomNames, workQueue, switchIdWriter, prefixSuffixStore, roomOrderStore,
+                    circuitOps, deviceSelector);
 
                 var window = new TurboNumberWindow
                 {
