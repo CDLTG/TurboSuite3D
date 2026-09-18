@@ -7,6 +7,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-09-18
+
+### Added
+- TurboNumber: project-wide room order — edited in a window sidebar and seeded from every Space/region — that sorts the keypad grid and drives a Circuit Numbers **Sort by Room** reordering of a switchboard panel's slots.
+- TurboDocs: Control Package cut sheets on the Cut Sheets tab.
+- TurboDocs: Client Ea./Ext. columns on the Counts Quote, with a global markup.
+
+### Fixed
+- TurboNumber: by-design unpaneled circuits are excluded from the Circuit Numbers summary.
+
 ## [1.5.1] — 2026-09-15
 
 ### Added
@@ -267,6 +277,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.5.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.2
 [1.5.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.1
 [1.5.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.0
 [1.4.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.4.3
