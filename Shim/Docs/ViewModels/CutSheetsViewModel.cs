@@ -19,8 +19,55 @@ public class CutSheetsViewModel : ViewModelBase
     private string _statusText = string.Empty;
     private bool _isGenerating;
 
+    private bool _isFixturePackage = true;
+
     public string ProjectName { get; }
     public ObservableCollection<FixtureSpecModel> Fixtures { get; }
+
+    /// <summary>Control Package rows (control parts), loaded post-construction via
+    /// <see cref="LoadControlRows"/> — mirrors the BomVM.LoadData idiom.</summary>
+    public ObservableCollection<FixtureSpecModel> ControlParts { get; } = new();
+
+    /// <summary>Fixture vs. Control package radio (mirrors NotesViewModel). The setter re-queries
+    /// CanExecute — the shared window Generate button gates on the current mode's collection, and the
+    /// DocsViewModel wiring only re-queries on IsGenerating, not on a mode flip.</summary>
+    public bool IsFixturePackage
+    {
+        get => _isFixturePackage;
+        set
+        {
+            if (SetProperty(ref _isFixturePackage, value))
+            {
+                OnPropertyChanged(nameof(IsControlPackage));
+                OnPropertyChanged(nameof(CurrentRows));
+                OnPropertyChanged(nameof(GridGroupHeader));
+                OnPropertyChanged(nameof(ItemColumnHeader));
+                OnPropertyChanged(nameof(DescriptionColumnHeader));
+                OnPropertyChanged(nameof(ItemColumnWidth));
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
+    public bool IsControlPackage
+    {
+        get => !_isFixturePackage;
+        set => IsFixturePackage = !value;
+    }
+
+    /// <summary>The collection the grid binds to — fixtures or control parts, by mode.</summary>
+    public ObservableCollection<FixtureSpecModel> CurrentRows => IsFixturePackage ? Fixtures : ControlParts;
+
+    // Mode-bound labels — fixture wording unchanged, control shows generic terms.
+    public string GridGroupHeader => IsFixturePackage ? "Fixture Types" : "Control Parts";
+    public string ItemColumnHeader => IsFixturePackage ? "Type" : "Item";
+    public string DescriptionColumnHeader => IsFixturePackage ? "Family Name" : "Description";
+
+    // Fixture "Type" marks are short (45px, unchanged); control labels (combined part numbers /
+    // Model names) need room — long ones trim with a tooltip.
+    public System.Windows.Controls.DataGridLength ItemColumnWidth =>
+        IsFixturePackage ? new System.Windows.Controls.DataGridLength(45)
+                         : new System.Windows.Controls.DataGridLength(160);
 
     public double Progress
     {
@@ -103,7 +150,42 @@ public class CutSheetsViewModel : ViewModelBase
         ClearDefaultPdfCommand = new RelayCommand<FixtureSpecModel>(ExecuteClearDefaultPdf);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
         DeselectAllCommand = new RelayCommand(() => SetAllSelected(false));
-        GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && Fixtures.Any(f => f.IsSelected));
+        GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && CurrentRows.Any(f => f.IsSelected));
+    }
+
+    /// <summary>Populates the Control Package rows and applies saved control-mode settings (selection,
+    /// per-project local path, gold-star default). Called post-construction from DocsCommand, so the
+    /// ctor still takes only fixtures. Keys everything off the row's stable key (its CatalogNumber).</summary>
+    public void LoadControlRows(IEnumerable<FixtureSpecModel> rows)
+    {
+        ControlParts.Clear();
+        var settings = DocsSettingsService.Load();
+
+        foreach (var row in rows)
+        {
+            string key = row.CatalogNumber;
+
+            // Priority: per-project local path > global default by key
+            if (settings.ControlLocalPdfPaths.TryGetValue(key, out var path) && File.Exists(path))
+                row.LocalPdfPath = path;
+            else if (!string.IsNullOrWhiteSpace(key)
+                     && settings.ControlDefaultPdfPaths.TryGetValue(key, out var defaultPath)
+                     && File.Exists(defaultPath))
+                row.LocalPdfPath = defaultPath;
+
+            if (row.HasLocalPdf
+                && settings.ControlDefaultPdfPaths.TryGetValue(key, out var defPath)
+                && row.LocalPdfPath == defPath)
+                row.IsDefaultPdf = true;
+
+            if (settings.SelectedControlKeys.Count > 0)
+                row.IsSelected = settings.SelectedControlKeys.Contains(key);
+
+            ControlParts.Add(row);
+        }
+
+        OnPropertyChanged(nameof(CurrentRows));
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
     }
 
     public void SaveSettings()
@@ -118,6 +200,19 @@ public class CutSheetsViewModel : ViewModelBase
             .Select(SettingsKey)
             .Distinct()
             .ToList();
+
+        // Control mode — persisted in its own fields so the two modes can't clobber each other.
+        // Written every save regardless of the active mode (the VM always holds both collections).
+        settings.ControlLocalPdfPaths = ControlParts
+            .Where(r => r.HasLocalPdf && !string.IsNullOrWhiteSpace(r.CatalogNumber))
+            .GroupBy(r => r.CatalogNumber)
+            .ToDictionary(g => g.Key, g => g.First().LocalPdfPath);
+        settings.SelectedControlKeys = ControlParts
+            .Where(r => r.IsSelected)
+            .Select(r => r.CatalogNumber)
+            .Distinct()
+            .ToList();
+
         DocsSettingsService.Save(settings);
     }
 
@@ -167,7 +262,8 @@ public class CutSheetsViewModel : ViewModelBase
     {
         if (!fixture.HasLocalPdf || string.IsNullOrWhiteSpace(fixture.CatalogNumber)) return;
         var settings = DocsSettingsService.Load();
-        settings.DefaultLocalPdfPaths[fixture.CatalogNumber] = fixture.LocalPdfPath;
+        if (IsControlPackage) settings.ControlDefaultPdfPaths[fixture.CatalogNumber] = fixture.LocalPdfPath;
+        else settings.DefaultLocalPdfPaths[fixture.CatalogNumber] = fixture.LocalPdfPath;
         DocsSettingsService.Save(settings);
         fixture.IsDefaultPdf = true;
     }
@@ -176,18 +272,25 @@ public class CutSheetsViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(fixture.CatalogNumber)) return;
         var settings = DocsSettingsService.Load();
-        settings.DefaultLocalPdfPaths.Remove(fixture.CatalogNumber);
+        if (IsControlPackage) settings.ControlDefaultPdfPaths.Remove(fixture.CatalogNumber);
+        else settings.DefaultLocalPdfPaths.Remove(fixture.CatalogNumber);
         DocsSettingsService.Save(settings);
         fixture.IsDefaultPdf = false;
     }
 
     private void SetAllSelected(bool selected)
     {
-        foreach (var fixture in Fixtures)
-            fixture.IsSelected = selected;
+        foreach (var row in CurrentRows)
+            row.IsSelected = selected;
     }
 
     private async void ExecuteGenerate()
+    {
+        if (IsControlPackage) await GenerateControlAsync();
+        else await GenerateFixturesAsync();
+    }
+
+    private async Task GenerateFixturesAsync()
     {
         var selected = Fixtures.Where(f => f.IsSelected).ToList();
         if (selected.Count == 0) return;
@@ -251,6 +354,81 @@ public class CutSheetsViewModel : ViewModelBase
 
             string outputPath = saveDialog.FileName;
             await Task.Run(() => CutSheetPdfService.MergeAndStamp(results, settings, ProjectName, outputPath));
+
+            Progress = 100;
+            StatusText = errors.Count > 0
+                ? $"Done. {errors.Count} failed: {string.Join(", ", errors)}. Saved to {Path.GetFileName(outputPath)}"
+                : $"Done. Saved to {Path.GetFileName(outputPath)}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsGenerating = false;
+        }
+    }
+
+    private async Task GenerateControlAsync()
+    {
+        // Only selected rows that actually have something to bind (a URL or an attached local PDF).
+        // "No cutsheet" rows are shown/selectable in the grid but contribute no page.
+        var selected = ControlParts
+            .Where(r => r.IsSelected
+                        && (!string.IsNullOrWhiteSpace(r.DataSheetUrl)
+                            || (r.HasLocalPdf && File.Exists(r.LocalPdfPath))))
+            .ToList();
+        if (selected.Count == 0)
+        {
+            StatusText = "Nothing to generate — no selected control part has a cutsheet.";
+            return;
+        }
+
+        var saveDialog = new SaveFileDialog
+        {
+            Filter = "PDF Files|*.pdf",
+            FileName = $"{ProjectName} Control Cut Sheets.pdf"
+        };
+        if (saveDialog.ShowDialog() != true) return;
+
+        _parent.SaveSettings();
+        IsGenerating = true;
+        Progress = 0;
+
+        var results = new List<(string typeMark, byte[]? pdfData, string catalogNumber, string dataSheetUrl)>();
+        var errors = new List<string>();
+
+        try
+        {
+            // Load/download phase (0-80%)
+            for (int i = 0; i < selected.Count; i++)
+            {
+                var row = selected[i];
+                Progress = (double)i / selected.Count * 80.0;
+
+                byte[]? data;
+                if (row.HasLocalPdf && File.Exists(row.LocalPdfPath))
+                {
+                    StatusText = $"Loading {i + 1} of {selected.Count}: {row.TypeMark}...";
+                    data = await DownloadService.ReadLocalPdfAsync(row.LocalPdfPath);
+                }
+                else
+                {
+                    StatusText = $"Downloading {i + 1} of {selected.Count}: {row.TypeMark}...";
+                    data = await DownloadService.DownloadPdfAsync(row.DataSheetUrl, CancellationToken.None);
+                }
+                if (data == null) errors.Add(row.TypeMark);
+
+                results.Add((row.TypeMark, data, row.CatalogNumber, row.DataSheetUrl));
+            }
+
+            // Merge phase (80-100%) — plain bind, no header/footer stamp
+            StatusText = "Merging PDFs...";
+            Progress = 85;
+
+            string outputPath = saveDialog.FileName;
+            await Task.Run(() => CutSheetPdfService.MergePlain(results, ProjectName, outputPath));
 
             Progress = 100;
             StatusText = errors.Count > 0

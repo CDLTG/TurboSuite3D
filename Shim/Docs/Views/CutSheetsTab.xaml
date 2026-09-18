@@ -2,6 +2,7 @@
     x:Class="TurboSuite.Docs.Views.CutSheetsTab"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:TurboSuite.Docs.Views"
     FontFamily="Segoe UI" FontSize="11">
 
     <UserControl.Resources>
@@ -9,6 +10,9 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/TurboSuite;component/Shared/Styles/TurboSuiteStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Carries the VM DataContext so DataGrid column headers (outside the visual tree) can bind mode-swapped text -->
+            <local:BindingProxy x:Key="Proxy" Data="{Binding}"/>
 
             <!-- Faint selection highlight and lighter grid lines -->
             <Style TargetType="DataGridRow">
@@ -37,10 +41,12 @@
                 <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown"/>
             </Style>
 
-            <!-- Vertically center text in taller rows -->
+            <!-- Vertically center text in taller rows; trim long control labels with a hover tooltip -->
             <Style x:Key="CenteredTextElement" TargetType="TextBlock">
                 <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="Margin" Value="4,0,0,0"/>
+                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -50,8 +56,19 @@
         <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
-        <!-- Fixture Types fills remaining space -->
-        <GroupBox Header="Fixture Types" Margin="6,0,6,0" Style="{StaticResource BoldHeaderGroupBox}">
+        <!-- Package toggle -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,0,0,8">
+            <TextBlock Text="Package:" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <RadioButton Content="Fixture Package" GroupName="CutSheetPackage"
+                         IsChecked="{Binding IsFixturePackage}"
+                         Margin="0,0,20,0" VerticalContentAlignment="Center"/>
+            <RadioButton Content="Control Package" GroupName="CutSheetPackage"
+                         IsChecked="{Binding IsControlPackage}"
+                         VerticalContentAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Type grid fills remaining space -->
+        <GroupBox Header="{Binding GridGroupHeader}" Margin="6,0,6,0" Style="{StaticResource BoldHeaderGroupBox}">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <Button Content="Select All" Command="{Binding SelectAllCommand}" Width="75" Height="24"
@@ -61,7 +78,7 @@
                                 Style="{StaticResource RevitButtonStyle}" Padding="8,4"/>
                     </StackPanel>
 
-                    <DataGrid ItemsSource="{Binding Fixtures}"
+                    <DataGrid ItemsSource="{Binding CurrentRows}"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               CanUserSortColumns="False"
@@ -82,9 +99,12 @@
                                     </Style>
                                 </DataGridCheckBoxColumn.HeaderStyle>
                             </DataGridCheckBoxColumn>
-                            <DataGridTextColumn Header="Type" Binding="{Binding TypeMark}" Width="45" IsReadOnly="True"
+                            <DataGridTextColumn Header="{Binding Data.ItemColumnHeader, Source={StaticResource Proxy}}"
+                                                Binding="{Binding TypeMark}"
+                                                Width="{Binding Data.ItemColumnWidth, Source={StaticResource Proxy}}" IsReadOnly="True"
                                                 ElementStyle="{StaticResource CenteredTextElement}"/>
-                            <DataGridTextColumn Header="Family Name" Binding="{Binding FamilyName}" Width="200" IsReadOnly="True"
+                            <DataGridTextColumn Header="{Binding Data.DescriptionColumnHeader, Source={StaticResource Proxy}}"
+                                                Binding="{Binding FamilyName}" Width="200" IsReadOnly="True"
                                                 ElementStyle="{StaticResource CenteredTextElement}"/>
                             <DataGridTemplateColumn Header="PDF Source" Width="*">
                                 <DataGridTemplateColumn.CellTemplate>
@@ -129,6 +149,16 @@
                                                         <Setter Property="Text" Value="{Binding DataSheetUrl}"/>
                                                         <Setter Property="Foreground" Value="#666666"/>
                                                         <Style.Triggers>
+                                                            <!-- Control mode, no URL: mark it a no-cutsheet part (still local-attachable) -->
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding DataSheetUrl}" Value=""/>
+                                                                    <Condition Binding="{Binding Data.IsControlPackage, Source={StaticResource Proxy}}" Value="True"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Text" Value="— no cutsheet —"/>
+                                                                <Setter Property="Foreground" Value="#999999"/>
+                                                                <Setter Property="FontStyle" Value="Italic"/>
+                                                            </MultiDataTrigger>
                                                             <DataTrigger Binding="{Binding HasLocalPdf}" Value="True">
                                                                 <Setter Property="Text" Value="{Binding LocalPdfPath}"/>
                                                                 <Setter Property="Foreground" Value="#1A7F37"/>

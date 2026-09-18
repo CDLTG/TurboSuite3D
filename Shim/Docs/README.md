@@ -142,18 +142,32 @@ Collects from `OST_LightingDevices` family instances with valid driver parameter
 
 ## Cut Sheets Tab
 
-Downloads spec sheet PDFs from lighting fixture and power supply types, stamps a company header/footer on every page, and merges them into a single bookmarked PDF. Password-protected PDFs that cannot be embedded render a placeholder page with the source URL.
+Downloads spec-sheet PDFs and merges them into a single bookmarked PDF. A **Package** radio (like the Cover tab) switches between two modes that share one grid, download service, and local-PDF-override machinery but differ in what they collect and how they bind:
 
-### What It Does
+- **Fixture Package** (default) — fixture + RPS cut sheets, **stamped** with a company header/footer.
+- **Control Package** — control-parts cut sheets bound **as-is** (no stamp), one page per distinct cutsheet.
+
+### Fixture Package
 
 1. **Collects fixture and RPS types** — Scans placed `OST_LightingFixtures` and valid `OST_LightingDevices` for unique types with a "Data Sheet URL" parameter. Multiple families sharing a Type Mark collapse to one row; the "primary" variant is chosen by populated URL/CatalogNumber, then by base name (token-subset of all siblings — e.g. `Tape` is preferred over `Tape (Hook)` or `Bar Tape`).
 2. **Downloads or loads spec sheets** — Fetches each PDF from the URL via HTTP, or uses a local PDF file if one has been browsed to. Users can set a **default local PDF** per catalog number (gold star) that persists across projects.
-3. **Stamps header/footer** — Adds a company header (logo, project name, date, Type Mark) and footer (address, phone, website) to every page.
-4. **Merges into one PDF** — Combines all spec sheets into a single output file with PDF bookmarks at each type's first page. Password-protected PDFs render a placeholder page with the source URL.
+3. **Stamps header/footer** — Adds a company header (logo, project name, date, Type Mark) and footer (address, phone, website) to every page (`CutSheetPdfService.MergeAndStamp`).
+4. **Merges into one PDF** — one output file, bookmarked at each type's first page. Password-protected PDFs render a placeholder page with the source URL.
 
-### Company Settings
+### Control Package
 
-Company info (logo, address, phone, website) is saved to `%APPDATA%\TurboSuite\TurboDocsSettings.json` and reused across all projects. Legacy `TurboCutsSettings.json` files are automatically migrated on first load.
+The control BOM is a *recommendation* (derived hardware, no placed element to read a URL from), so its cutsheet URLs are **hard-coded** in `Core/Docs/Services/ControlCutSheetUrlResolver.cs`, keyed two ways:
+
+- **BOM hardware** (panels, modules, processors, supply, interfaces, shade panel, DALI/Crestron parts) — keyed by **part number**. Sourced by reusing the already-collected `bomData` (`BomCollectorService`). Wire harnesses are deliberately cutsheet-less (`KnownNoCutsheet`) and dropped.
+- **Keypads / hybrid repeaters** — *placed* families with thousands of color/button/engraving SKUs that share one cutsheet, so keyed by the **`Model`** parameter (1:1 with the cutsheet). Collected as distinct Models by `ControlDeviceModelCollector`, not through the BOM tally.
+
+Rows are built by the pure `Core/Docs/Services/ControlCutSheetRowBuilder` (resolve → **collapse identical URLs to one page** whose label lists every part it covers → order: closed by BOM category, then keypads alphabetically, then repeaters → derive a stable key), then mapped onto `FixtureSpecModel` so the shared grid/commands work unchanged. Binding is `CutSheetPdfService.MergePlain` — natural-size pages, per-part bookmarks, **no stamp**; a URL that fails to download or is password-protected renders a notice page.
+
+A part with **no URL** (a keypad `Model` not in the map, or blank) shows a greyed "— no cutsheet —" row that is **omitted from the output** but still selectable to attach a local PDF; the DALI/DMX parts (`LQSE2-1DALUNV-D`, `QSE-CI-DMX`) are mapped and only appear when those experimental features place hardware. The URL map is transcribed from the dev-authored `Specs/control-cutsheet-urls.txt`; a completeness unit test asserts every part a `BrandConfig` can emit is mapped or explicitly no-cutsheet.
+
+### Settings
+
+Company info (logo, address, phone, website) is saved to `%APPDATA%\TurboSuite\TurboDocsSettings.json` and reused across all projects. Legacy `TurboCutsSettings.json` files are automatically migrated on first load. The two Package modes persist selection and local-PDF overrides in **separate fields** (`SelectedControlKeys` / `ControlLocalPdfPaths` / `ControlDefaultPdfPaths` vs. the fixture fields), so they never clobber each other; both are written on every save.
 
 ## Control BOM Tab
 

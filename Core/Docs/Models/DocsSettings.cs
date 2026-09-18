@@ -21,6 +21,13 @@ public class DocsSettings
     // Default local PDF paths — keyed by catalog number, persists across projects
     public Dictionary<string, string> DefaultLocalPdfPaths { get; set; } = new();
 
+    // Cut Sheets tab — Control Package mode. Fully isolated from the fixture fields above so the two
+    // modes' selections/overrides can never clobber each other. All keyed by the row's stable key
+    // (normalized URL, or "model:<Model>" for a no-cutsheet row). Empty on old settings files.
+    public List<string> SelectedControlKeys { get; set; } = new();
+    public Dictionary<string, string> ControlLocalPdfPaths { get; set; } = new();
+    public Dictionary<string, string> ControlDefaultPdfPaths { get; set; } = new();
+
     // Schedule tab settings
     public List<string> ScheduleSelectedTypeMarks { get; set; } = new();
     public bool ScheduleUseLargeFormat { get; set; }

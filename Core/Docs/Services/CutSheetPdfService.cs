@@ -98,6 +98,93 @@ public static class CutSheetPdfService
     }
 
     /// <summary>
+    /// Binds control-part cutsheets <b>as-is</b> — pages at natural size, no header/footer stamp — with
+    /// a per-entry bookmark. Used by the Cut Sheets tab's Control Package mode, where the downloaded PDF
+    /// is the deliverable and the firm stamp is unwanted. Mirrors <see cref="MergeAndStamp"/>'s
+    /// password/failed-download fallbacks (every entry reaching here was meant to have a PDF — the VM
+    /// drops "no cutsheet" rows before calling), minus all the stamping.
+    /// </summary>
+    public static void MergePlain(
+        List<(string typeMark, byte[]? pdfData, string catalogNumber, string dataSheetUrl)> specSheets,
+        string projectName,
+        string outputPath)
+    {
+        using var output = new PdfDocument();
+        output.Info.Title = $"{projectName} Control Cut Sheets";
+
+        foreach (var (typeMark, pdfData, _, dataSheetUrl) in specSheets)
+        {
+            int bookmarkPageIndex = output.PageCount;
+
+            if (pdfData != null)
+            {
+                try
+                {
+                    using var formStream = new MemoryStream(pdfData);
+                    var form = XPdfForm.FromStream(formStream);
+                    for (int i = 0; i < form.PageCount; i++)
+                    {
+                        form.PageIndex = i;
+                        var page = output.AddPage();
+                        page.Width = XUnit.FromPoint(form.PointWidth);
+                        page.Height = XUnit.FromPoint(form.PointHeight);
+                        using var gfx = XGraphics.FromPdfPage(page);
+                        gfx.DrawImage(form, 0, 0, form.PointWidth, form.PointHeight);
+                    }
+                }
+                catch (PdfSharp.Pdf.IO.PdfReaderException)
+                {
+                    DrawPlainNotice(output,
+                        "This cut sheet PDF is password-protected and cannot be embedded.",
+                        "Print this page separately from the manufacturer's website.",
+                        dataSheetUrl);
+                }
+            }
+            else
+            {
+                DrawPlainNotice(output,
+                    "This cut sheet could not be retrieved.",
+                    "Open the link below to download it manually.",
+                    dataSheetUrl);
+            }
+
+            if (!string.IsNullOrWhiteSpace(typeMark) && output.PageCount > bookmarkPageIndex)
+                output.Outlines.Add(typeMark, output.Pages[bookmarkPageIndex]);
+        }
+
+        // PDFsharp cannot save a page-less document; guarantee at least one.
+        if (output.PageCount == 0) output.AddPage();
+
+        output.Save(outputPath);
+    }
+
+    /// <summary>A full-page, letter-size notice for a plain-merge entry whose PDF was password-protected
+    /// or could not be fetched — the stamp-less analogue of <see cref="DrawPasswordNotice"/>.</summary>
+    private static void DrawPlainNotice(PdfDocument output, string line1, string line2, string url)
+    {
+        var page = output.AddPage();
+        page.Width = XUnit.FromPoint(612);   // US Letter
+        page.Height = XUnit.FromPoint(792);
+        using var gfx = XGraphics.FromPdfPage(page);
+        gfx.DrawRectangle(XBrushes.White, 0, 0, page.Width.Point, page.Height.Point);
+
+        double w = page.Width.Point;
+        double centerY = page.Height.Point / 2;
+        var font = new XFont("Segoe UI", 11);
+        var brush = new XSolidBrush(XColor.FromGrayScale(0.45));
+
+        gfx.DrawString(line1, font, brush, new XPoint(w / 2, centerY - 10), XStringFormats.TopCenter);
+        gfx.DrawString(line2, font, brush, new XPoint(w / 2, centerY + 10), XStringFormats.TopCenter);
+
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            var urlFont = new XFont("Segoe UI", 9);
+            var urlBrush = new XSolidBrush(XColor.FromArgb(0x33, 0x66, 0xCC));
+            gfx.DrawString(url, urlFont, urlBrush, new XPoint(w / 2, centerY + 34), XStringFormats.TopCenter);
+        }
+    }
+
+    /// <summary>
     /// Draws an XPdfForm at the specified rectangle using a coordinate transform.
     /// DrawImage is passed the form's NATURAL dimensions and the TranslateTransform +
     /// ScaleTransform does all the sizing — so this is agnostic to whether the renderer

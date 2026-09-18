@@ -126,6 +126,26 @@ public class DocsCommand : IExternalCommand
         viewModel.NotesVM.LoadNotes(generalNotes, controlNotes);
         viewModel.CountsVM.LoadData(countsFixtures);
 
+        // Control Package cut sheets — BOM hardware keyed by part number (reuse the already-collected
+        // bomData), plus placed keypad/repeater families keyed by Model. Defensive: a collection hiccup
+        // must not sink the whole window.
+        try
+        {
+            var (keypadModels, repeaterModels) = ControlDeviceModelCollector.Collect(doc);
+            var controlRows = ControlCutSheetRowBuilder
+                .Build(bomData?.Items ?? new List<BomLineItem>(), keypadModels, repeaterModels)
+                .Select(r => new FixtureSpecModel
+                {
+                    TypeMark = r.Label,
+                    FamilyName = r.Description,
+                    DataSheetUrl = r.Url,
+                    CatalogNumber = r.Key,
+                })
+                .ToList();
+            viewModel.CutSheetsVM.LoadControlRows(controlRows);
+        }
+        catch { /* Control cut sheets unavailable — tab still works in Fixture mode */ }
+
         var window = new TurboDocsWindow { DataContext = viewModel };
         var helper = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
         window.ShowDialog();
