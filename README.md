@@ -98,6 +98,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 
 | Parameter | On | Type | Used By |
 |-----------|----|------|---------|
+| `TurboSuite Role` | Fixture, device & tag/detail family types | Text | All commands (classifies which family a command acts on or stamps) |
 | `Switch ID` | Lighting Device instances | Text | TurboDriver, TurboNumber |
 | `Remote Power Supply` | Lighting Fixture types | Yes/No (Integer) | TurboDriver, TurboWire, TurboBubble |
 | `Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS |
@@ -108,16 +109,20 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 
 ### Tag Families
 
-| Family Name | Category | Used By |
-|-------------|----------|---------|
-| `AL_Tag_Lighting Fixture (Type)` | Lighting Fixture Tags | TurboTag |
-| `AL_Tag_Lighting Fixture (Linear Length)` | Lighting Fixture Tags | TurboTag, TurboDriver |
-| `AL_Tag_Lighting Fixture (Switchleg)` | Lighting Fixture Tags | TurboBubble |
-| `AL_Tag_Lighting Fixture (Remote Switchleg)` | Lighting Fixture Tags | TurboBubble |
-| `AL_Tag_Electrical Fixture (Switchleg)` | Electrical Fixture Tags | TurboBubble |
-| `AL_Tag_Lighting Device (SwitchID)` | Lighting Device Tags | TurboTag, TurboDriver |
-| `AL_Tag_Lighting Device (Keypad)` | Lighting Device Tags | TurboTag |
-| `AL_Tag_Lighting Device (Switchleg)` | Lighting Device Tags | TurboDriver |
+TurboSuite selects tag families by their **`TurboSuite Role` type parameter**, not by family name — load a tag family for each role below and assign it that role (the family's own name is up to you). A project must have one tag family per role a command uses, or that command places no tag.
+
+| Role (`TurboSuite Role`) | Category | Used By |
+|--------------------------|----------|---------|
+| `FixtureTypeTag` | Lighting Fixture Tags | TurboTag |
+| `LinearTag` | Lighting Fixture Tags | TurboTag, TurboDriver |
+| `RunLengthTag` | Lighting Fixture Tags | TurboTag |
+| `LinearFeedTag` | Lighting Fixture Tags | TurboBubble |
+| `FixtureSwitchlegTag` | Lighting Fixture Tags | TurboBubble |
+| `RemoteSwitchlegTag` | Lighting Fixture Tags | TurboBubble |
+| `ElectricalSwitchlegTag` | Electrical Fixture Tags | TurboBubble |
+| `SwitchIdTag` | Lighting Device Tags | TurboTag, TurboDriver |
+| `KeypadTag` | Lighting Device Tags | TurboTag |
+| `DeviceSwitchlegTag` | Lighting Device Tags | TurboDriver |
 
 ### Text Note Types
 

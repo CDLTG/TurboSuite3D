@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 using TurboSuite.Driver.Models;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Driver.Services
@@ -309,7 +310,8 @@ namespace TurboSuite.Driver.Services
                             {
                                 result.Warnings.Add(
                                     $"{tagsPlaced}/{expectedTags} tags placed. " +
-                                    "Ensure tag families are loaded: AL_Tag_Lighting Device (SwitchID), AL_Tag_Lighting Device (Switchleg).");
+                                    $"Ensure tag families are loaded whose '{ParameterNames.TurboSuiteRole}' is " +
+                                    $"'{Roles.SwitchIdTag}' or '{Roles.DeviceSwitchlegTag}'.");
                             }
 
                             globalIndex++;
