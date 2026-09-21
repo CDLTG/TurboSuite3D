@@ -103,12 +103,14 @@ public static class CountsWorkbookService
     // mirror that — a single Type-level SellEa loses non-primary catalogs' bid prices and
     // would falsely diff in Bid Compare whenever a Type's primary catalog changes.
     private const int CsColSellEa1 = 23;    // W
-    // Per-Type tariff % captured at snapshot write time, broadcast to every row of the Type
-    // (every row of Type X holds the same value). Mirrors the SellEa pattern — every snapshot
+    // Per-Type SELL tariff DOLLAR captured at snapshot write time, broadcast to every row of the
+    // Type (every row of Type X holds the same value). Mirrors the SellEa pattern — every snapshot
     // row is self-contained for Bid Compare's static B5 calculation, no canonical-row lookup
-    // needed at read time. Source is Worksheet col L, which is canonical-per-Type (literal only
-    // on the Type's first row; other rows mirror via formula).
-    private const int CsColTariffPct = 29;  // AC
+    // needed at read time. It freezes the already-marked-up figure `TariffFlat*(1+canonicalMarkup)`
+    // — Worksheet col L is now a flat mfr tariff dollar (canonical-per-Type, literal only on the
+    // Type's first row) and col K on that same canonical row supplies the markup applied to it.
+    // Bid Compare's static bid total sums it ONCE per Type (dedupe by Type), not per row.
+    private const int CsColTariffSell = 29;  // AC
     // Hidden frozen-expansion column (AD). Length-token catalog slots can't be represented by
     // the fixed Cat1-6 / SellEa1-6 layout — one slot explodes into many resolved cut-length SKUs,
     // each with its own Worksheet price. So token slots keep their raw template in Cat1-6 (so
@@ -1519,7 +1521,7 @@ public static class CountsWorkbookService
         ws.Cell(1, CsColCatCombo).Value = "_CatCombo";
         for (int s = 0; s < 6; s++)
             ws.Cell(1, CsColSellEa1 + s).Value = $"_SellEa{s + 1}";
-        ws.Cell(1, CsColTariffPct).Value = "_TariffPct";
+        ws.Cell(1, CsColTariffSell).Value = "_TariffSell";
         ws.Cell(1, CsColTokenFreeze).Value = "_TokenFreeze";
         for (int s = 0; s < 6; s++)
             ws.Cell(1, CsColQty1 + s).Value = $"_Qty{s + 1}";
@@ -1630,14 +1632,18 @@ public static class CountsWorkbookService
                     }
                 }
 
-                // Freeze the Type's tariff % from Worksheet col L (canonical row). Broadcast to
-                // every snapshot row of this Type so Bid Compare's static B5 can read tariff
-                // per-row without re-running a canonical lookup at compare time.
-                double tariff = 0;
+                // Freeze the Type's SELL tariff dollar from Worksheet: flat mfr tariff (col L) marked
+                // up by the Type's canonical-row markup (col K), both read off the canonical row.
+                // Broadcast to every snapshot row of this Type so Bid Compare's static bid total can
+                // read it without re-running a canonical lookup at compare time (it sums once per Type).
+                double tariffFlat = 0, canonMarkup = 0;
                 if (typeFirstRow.TryGetValue(f.TypeMark, out int tRow))
-                    pricingWs.Cell(tRow, WsColTariff).TryGetValue(out tariff);
-                ws.Cell(row, CsColTariffPct).Value = tariff;
-                ws.Cell(row, CsColTariffPct).Style.NumberFormat.Format = "0.00%";
+                {
+                    pricingWs.Cell(tRow, WsColTariff).TryGetValue(out tariffFlat);
+                    pricingWs.Cell(tRow, WsColMarkup).TryGetValue(out canonMarkup);
+                }
+                ws.Cell(row, CsColTariffSell).Value = tariffFlat * (1 + canonMarkup);
+                ws.Cell(row, CsColTariffSell).Style.NumberFormat.Format = "$#,##0.00";
             }
 
             // Freeze length-token slots. Each token slot explodes into resolved cut-length SKUs
@@ -1684,7 +1690,7 @@ public static class CountsWorkbookService
         ws.Column(CsColCatCombo).Hide();
         for (int s = 0; s < 6; s++)
             ws.Column(CsColSellEa1 + s).Hide();
-        ws.Column(CsColTariffPct).Hide();
+        ws.Column(CsColTariffSell).Hide();
         ws.Column(CsColTokenFreeze).Hide();
         for (int s = 0; s < 6; s++)
             ws.Column(CsColQty1 + s).Hide();
@@ -1768,7 +1774,7 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColDesc).Value = "Description";
         ws.Cell(1, WsColUnitCost).Value = "Unit Cost";
         ws.Cell(1, WsColMarkup).Value = "Markup";
-        ws.Cell(1, WsColTariff).Value = "Tariff";
+        ws.Cell(1, WsColTariff).Value = "Tariff $";
         ws.Cell(1, WsColAdder).Value = "Adder";
         for (int n = 0; n < 6; n++)
             ws.Cell(1, WsColNote1 + n).Value = $"Note {n + 1}";
@@ -1984,7 +1990,9 @@ public static class CountsWorkbookService
     {
         ws.Column(WsColUnitCost).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(WsColMarkup).Style.NumberFormat.Format = "0%";
-        ws.Column(WsColTariff).Style.NumberFormat.Format = "0%";
+        // Tariff is now a flat mfr dollar surcharge per Type (not a percent) — the markup on the
+        // Type's canonical row is applied to it downstream to produce the sold tariff.
+        ws.Column(WsColTariff).Style.NumberFormat.Format = "$#,##0.00";
         ws.Column(WsColAdder).Style.NumberFormat.Format = "$#,##0.00";
 
         // Center Markup / Tariff / Adder / Phase (header + data) — short numeric values read
@@ -2123,17 +2131,18 @@ public static class CountsWorkbookService
         // Active flag lives at WsColActive (AG after the Type-repeat column shift). Every spill
         // predicate filters on AG=1 to exclude strikethrough rows. Phase column is N.
         WriteSingleHelperPipeline(ws, lastDataRow, QuoteHelperCols,
-            predicate: $"(AG2:AG{lastDataRow}=1)", includeDelta: true);
+            predicate: $"(AG2:AG{lastDataRow}=1)", includeDelta: true, phaseFilter: null);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase1HelperCols,
-            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=1)", includeDelta: false);
+            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=1)", includeDelta: false, phaseFilter: 1);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase2HelperCols,
-            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=2)", includeDelta: false);
+            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=2)", includeDelta: false, phaseFilter: 2);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase3HelperCols,
-            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=3)", includeDelta: false);
+            predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=3)", includeDelta: false, phaseFilter: 3);
     }
 
     private static void WriteSingleHelperPipeline(
-        IXLWorksheet ws, int lastDataRow, string[] cols, string predicate, bool includeDelta)
+        IXLWorksheet ws, int lastDataRow, string[] cols, string predicate, bool includeDelta,
+        int? phaseFilter)
     {
         // Per-row array expressions (unfiltered; FILTER applied inside Gap).
         string Col(string c) => $"{c}2:{c}{lastDataRow}";
@@ -2164,8 +2173,6 @@ public static class CountsWorkbookService
         string dispBuyEa   = $"IF({noBid},\"NO BID\",IF({included},\"INCLUDED\",{buyEa}))";
         string dispSellExt = $"IF({noBid},\"NO BID\",IF({included},\"ABOVE\",{sellExt}))";
         string dispBuyExt  = $"IF({noBid},\"NO BID\",IF({included},\"ABOVE\",{buyExt}))";
-        // Tariff base = Sell Ext. (includes Adder). Prior version omitted M, underpricing tariffs.
-        string tariffBasePerRow = sellExt;
         // Exclude "dependent" placeholder — it's a visual cue on Worksheet for drag-fill links,
         // not a real description. Treated as blank here so it doesn't leak into print sheets.
         string catalogCombined =
@@ -2174,11 +2181,15 @@ public static class CountsWorkbookService
         // Gap LAMBDA: emits gap rows at type-group boundaries, a "Tariff" row, and up to six
         // per-Type NOTE rows at each group's end. Inline LAMBDA — defined-name LAMBDAs called
         // from spill cells trip Excel's load-time parser.
-        // Per-row type tariff %: XLOOKUP against the full A/L ranges returns the first match,
-        // which is the Type's canonical row (where the literal L value lives). Non-canonical
-        // rows have L blank, so only the canonical is found. Wrapped in IFERROR to coerce a
-        // blank canonical L to 0 so arithmetic downstream stays numeric.
-        string typeKPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("L")}),0)";
+        // Per-row flat tariff dollar: XLOOKUP against the full A/L ranges returns the first match,
+        // which is the Type's canonical row (where the literal L value lives), broadcast to every
+        // row of the Type. Wrapped in IFERROR to coerce a blank canonical L to 0 so arithmetic
+        // downstream stays numeric.
+        string typeTariffFlatPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("L")}),0)";
+        // Per-row canonical markup: same first-match XLOOKUP against col K. This is the markup on
+        // the Type's canonical row (the row carrying the tariff literal) — the one applied to the
+        // flat tariff to produce the sold tariff.
+        string typeMarkupCanonPerRow = $"IFERROR(_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col("K")}),0)";
         // Per-row type Note_n: same XLOOKUP pattern against each note column (O–T). Blank
         // canonical cells make XLOOKUP return the number 0 (not ""), so we wrap in LET and
         // coerce any numeric result back to "" — otherwise the downstream gate (_xlpm.n<>"")
@@ -2187,8 +2198,10 @@ public static class CountsWorkbookService
         string NotePerRow(string noteCol) =>
             $"IFERROR(_xlfn.LET(_xlpm.v,_xlfn.XLOOKUP({Col("A")},{Col("A")},{Col(noteCol)}),IF(_xlpm.v=0,\"\",_xlpm.v)),\"\")";
         string typesArg = $"_xlfn._xlws.FILTER({Col("A")},{predicate})";
-        string pctsArg = $"_xlfn._xlws.FILTER({typeKPerRow},{predicate})";
-        string baseArg = $"_xlfn._xlws.FILTER({tariffBasePerRow},{predicate})";
+        // pctsArg now carries the flat tariff dollar (kept the name to minimise churn in the LAMBDA
+        // bindings); markupArg carries the canonical markup applied to it on the Sell side.
+        string pctsArg = $"_xlfn._xlws.FILTER({typeTariffFlatPerRow},{predicate})";
+        string markupArg = $"_xlfn._xlws.FILTER({typeMarkupCanonPerRow},{predicate})";
         string[] noteArgs = noteCols
             .Select(nc => $"_xlfn._xlws.FILTER({NotePerRow(nc)},{predicate})")
             .ToArray();
@@ -2211,7 +2224,7 @@ public static class CountsWorkbookService
             // LET binds the same names to the same args, so this is a pure syntactic transform —
             // see the throwaway-harness validation in roadmap Dependencies-1.
             string letHead = "_xlfn.LET("
-                 + $"_xlpm.types,{typesArg},_xlpm.vals,{valsArg},_xlpm.pcts,{pctsArg},_xlpm.base,{baseArg},"
+                 + $"_xlpm.types,{typesArg},_xlpm.vals,{valsArg},_xlpm.pcts,{pctsArg},_xlpm.markup,{markupArg},"
                  + string.Join(",", Enumerable.Range(1, 6).Select(i => $"_xlpm.n{i},{noteArgs[i - 1]}")) + ",";
             return letHead
                  +   "IF(ROWS(_xlpm.vals)<=1,_xlpm.vals,"
@@ -2220,7 +2233,6 @@ public static class CountsWorkbookService
                  +       "_xlpm.nxt,_xlfn.VSTACK(_xlfn.DROP(_xlpm.types,1),\"\"),"
                  +       "_xlpm.gapCol,IF(_xlpm.types<>_xlpm.prev,\"\",_xlfn.NA()),"
                  +       "_xlpm.isLast,_xlpm.types<>_xlpm.nxt,"
-                 +       "_xlpm.totals,_xlfn.BYROW(_xlpm.types,_xlfn.LAMBDA(_xlpm.tv,SUMPRODUCT((_xlpm.types=_xlpm.tv)*_xlpm.base))),"
                  +       $"_xlpm.tariffCol,IF(_xlpm.isLast*(_xlpm.pcts<>0),{tariffContentExpr},_xlfn.NA()),"
                  +       noteLetCols + ","
                  +       $"_xlfn.TOCOL(_xlfn.HSTACK({hstackCols}),2)"
@@ -2236,16 +2248,30 @@ public static class CountsWorkbookService
         string[] NoteLabel() => Enumerable.Repeat("\"NOTE:\"", 6).ToArray();
         string[] NoteText() => new[] { "_xlpm.n1", "_xlpm.n2", "_xlpm.n3", "_xlpm.n4", "_xlpm.n5", "_xlpm.n6" };
 
-        // Sell subtotal = Σ(filtered line items) + Σ(filtered per-row tariff allocation).
-        // K is only populated on each Type's canonical row, so we use the per-row XLOOKUP
-        // resolver (typeKPerRow) to broadcast the type's tariff % onto every row in the group.
+        // Per-Type active-row count (COUNTIFS returns an array over the A-range key), matching the
+        // spill predicate: AG=1 for Quote, plus the phase for the phased sheets. Used to count each
+        // Type's flat tariff ONCE — allocate 1/n across the Type's n active rows so the row-wise
+        // SUMPRODUCT lands one flat tariff per Type. +(=0) guards the div where a Type has no active
+        // rows (the numerator is already 0 there via the predicate).
+        string activeCntPerRow = phaseFilter is int ph
+            ? $"COUNTIFS({Col("A")},{Col("A")},{Col("AG")},1,{Col("N")},{ph})"
+            : $"COUNTIFS({Col("A")},{Col("A")},{Col("AG")},1)";
+        string tariffDenom = $"({activeCntPerRow}+({activeCntPerRow}=0))";
+
+        // Sell subtotal = Σ(filtered line items) + per-Type sell tariff. The tariff is the flat mfr
+        // dollar (typeTariffFlatPerRow) marked up by the Type's canonical-row markup
+        // (typeMarkupCanonPerRow); both are broadcast per-row via XLOOKUP, so the 1/n allocation
+        // makes each Type contribute exactly one flat tariff × (1+markup).
         string sellSubtotal =
             $"SUMPRODUCT(({predicate})*{sellEa}*{effQty})"
-            + $"+SUMPRODUCT(({predicate})*{tariffBasePerRow}*{typeKPerRow})";
-        // Buy subtotal = Σ(filtered Unit Cost * EffQty). No tariff on Buy side.
+            + $"+SUMPRODUCT(({predicate})*{typeTariffFlatPerRow}*(1+{typeMarkupCanonPerRow})/{tariffDenom})";
+        // Buy subtotal = Σ(filtered Unit Cost * EffQty) + per-Type flat tariff (raw, no markup —
+        // the mfr surcharge is a real buy cost). Same 1/n per-Type allocation as Sell.
         // Uses the coerced buyEa (not raw Col("I")) so text placeholders like "dependent"
         // contribute 0 instead of #VALUE-poisoning the whole subtotal.
-        string buySubtotal = $"SUMPRODUCT(({predicate})*{buyEa}*{effQty})";
+        string buySubtotal =
+            $"SUMPRODUCT(({predicate})*{buyEa}*{effQty})"
+            + $"+SUMPRODUCT(({predicate})*{typeTariffFlatPerRow}/{tariffDenom})";
 
         // Quote footer notes — appended to the Type column under the Grand Total line.
         // FILTER drops empty rows so users can fill fewer than 15 notes without blank spill.
@@ -2336,14 +2362,15 @@ public static class CountsWorkbookService
             ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(effDelta, "\"\"", NoteBlank())},\"\")";
         // Buy Ea. — blank tariff row, blank note rows, no footer rows
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(dispBuyEa, "\"\"", NoteBlank())},\"\")";
-        // Buy Ext. + footer values
+        // Buy Ext. + footer values (tariff row carries the per-Type flat mfr tariff, un-marked-up)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(dispBuyExt, "\"\"", NoteBlank())},\"\"),{buyValueFooter})";
+            $"_xlfn.VSTACK(IFERROR({Gap(dispBuyExt, "_xlpm.pcts", NoteBlank())},\"\"),{buyValueFooter})";
         // Sell Ea. — blank tariff row, blank note rows, no footer rows (labels live on Qty)
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"IFERROR({Gap(dispSellEa, "\"\"", NoteBlank())},\"\")";
-        // Sell Ext. + footer values (tariff row carries per-type tariff amount; note rows blank)
+        // Sell Ext. + footer values (tariff row carries the per-Type flat mfr tariff marked up by
+        // the Type's canonical-row markup; note rows blank)
         ws.Cell($"{cols[i++]}2").FormulaA1 =
-            $"_xlfn.VSTACK(IFERROR({Gap(dispSellExt, "_xlpm.totals*_xlpm.pcts", NoteBlank())},\"\"),{sellValueFooter})";
+            $"_xlfn.VSTACK(IFERROR({Gap(dispSellExt, "_xlpm.pcts*(1+_xlpm.markup)", NoteBlank())},\"\"),{sellValueFooter})";
         // InDataBlock flag — 1 for every data row, type-gap row, tariff row, and note row;
         // blank for footer/quote-notes rows (no VSTACK append). Mirrors Gap's structural shape
         // so the flag column aligns row-for-row with the visible helper columns on the print
@@ -2464,13 +2491,17 @@ public static class CountsWorkbookService
                     baseline.Cell(r, CsColQty1 + c).Value = rawQty;
             }
 
-            // Refresh per-Type tariff % from Worksheet col L (canonical row). Broadcast to every
-            // snapshot row of this Type so Bid Compare's static B5 can read it per-row.
-            double tariff = 0;
+            // Refresh per-Type SELL tariff dollar from Worksheet: flat mfr tariff (col L) marked up
+            // by the Type's canonical-row markup (col K), both off the canonical row. Broadcast to
+            // every snapshot row of this Type so Bid Compare's static bid total can sum once per Type.
+            double tariffFlat = 0, canonMarkup = 0;
             if (typeFirstRow.TryGetValue(type, out int tRow))
-                wsSheet.Cell(tRow, WsColTariff).TryGetValue(out tariff);
-            baseline.Cell(r, CsColTariffPct).Value = tariff;
-            baseline.Cell(r, CsColTariffPct).Style.NumberFormat.Format = "0.00%";
+            {
+                wsSheet.Cell(tRow, WsColTariff).TryGetValue(out tariffFlat);
+                wsSheet.Cell(tRow, WsColMarkup).TryGetValue(out canonMarkup);
+            }
+            baseline.Cell(r, CsColTariffSell).Value = tariffFlat * (1 + canonMarkup);
+            baseline.Cell(r, CsColTariffSell).Style.NumberFormat.Format = "$#,##0.00";
 
             // Refresh frozen per-SKU SellEa in the token-freeze column, same canonicalization as
             // the Cat1-6 slots above. Re-resolve each cut-length SKU against the live Worksheet.
@@ -2875,12 +2906,14 @@ public static class CountsWorkbookService
             return cmp != 0 ? cmp : a.Slot.CompareTo(b.Slot);
         });
 
-        // 4. Bid Total static. Subtotal = line items + per-Type tariff allocation; Lutron and
-        //    Freight are added AFTER tax (matches Quote's LIGHTING PACKAGE TOTAL formula —
-        //    sub × (1+tax) + Lutron + N(Freight)). Tariff % is read from the snapshot's AC
-        //    column (broadcast per-row at snapshot time).
+        // 4. Bid Total static. Subtotal = line items + per-Type tariff; Lutron and Freight are
+        //    added AFTER tax (matches Quote's LIGHTING PACKAGE TOTAL formula — sub × (1+tax) +
+        //    Lutron + N(Freight)). The sell tariff dollar is read from the snapshot's AC column
+        //    (broadcast per-row at snapshot time) and counted ONCE per Type — it's a flat mfr
+        //    surcharge, not a per-row percentage, so we dedupe by Type here.
         double bidPreAdj = 0;
         double bidTariff = 0;
+        var bidTariffTypesSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int r = 2; r <= blLast; r++)
         {
             string type = baseline.Cell(r, CsColType).GetString();
@@ -2897,12 +2930,16 @@ public static class CountsWorkbookService
                 rowSellExt += ReadSlotQty(baseline, r, c, q) * slot;
             }
             // Token slots price per resolved cut-length SKU (qty * SellEa) from the freeze column,
-            // not via CsColCount * SellEa1-6. Same per-row tariff applies.
+            // not via CsColCount * SellEa1-6.
             foreach (var e in ReadTokenFreeze(baseline.Cell(r, CsColTokenFreeze).GetString()))
                 rowSellExt += e.Qty * e.SellEa;
             bidPreAdj += rowSellExt;
-            baseline.Cell(r, CsColTariffPct).TryGetValue(out double rowTariff);
-            bidTariff += rowSellExt * rowTariff;
+            // Sell tariff dollar is broadcast to every row of the Type; add it once per Type.
+            if (bidTariffTypesSeen.Add(type))
+            {
+                baseline.Cell(r, CsColTariffSell).TryGetValue(out double typeTariff);
+                bidTariff += typeTariff;
+            }
         }
         double bidSubtotal = bidPreAdj + bidTariff;
         double bidTotalIncl = bidSubtotal * (1.0 + bidTaxRate) + bidLutron + bidFreight;
@@ -2913,15 +2950,22 @@ public static class CountsWorkbookService
         ws.Style.Font.FontName = "Segoe UI";
         ws.Style.Font.FontSize = 11;
 
-        // Match Quote's sellSubtotal: Σ(line items) + Σ(sellExt × per-row tariff%). Per-row
-        // tariff is broadcast from each Type's canonical L row via XLOOKUP, mirroring Quote.
+        // Match Quote's sellSubtotal: Σ(line items) + per-Type sell tariff. The tariff is a flat
+        // mfr dollar (col L) marked up by the Type's canonical-row markup (col K), both broadcast
+        // per-row via XLOOKUP; it's counted ONCE per Type by allocating 1/n across the Type's
+        // active rows (÷ activeCntPerRow), mirroring Quote's flat-tariff subtotal.
         string activeFlag = $"(Worksheet!AG2:AG{wsLast}=1)";
         string sellEaPerRow = $"IFERROR((Worksheet!J2:J{wsLast}*(1+Worksheet!K2:K{wsLast}))+Worksheet!M2:M{wsLast},0)";
         string effQty = $"Worksheet!BR2:BR{wsLast}";
-        string tariffPerRow = $"IFERROR(_xlfn.XLOOKUP(Worksheet!A2:A{wsLast},Worksheet!A2:A{wsLast},Worksheet!L2:L{wsLast}),0)";
+        string tariffFlatPerRow = $"IFERROR(_xlfn.XLOOKUP(Worksheet!A2:A{wsLast},Worksheet!A2:A{wsLast},Worksheet!L2:L{wsLast}),0)";
+        string canonMarkupPerRow = $"IFERROR(_xlfn.XLOOKUP(Worksheet!A2:A{wsLast},Worksheet!A2:A{wsLast},Worksheet!K2:K{wsLast}),0)";
+        // Active-row count per Type (COUNTIFS returns an array over the A-range key). +(=0) guards
+        // the div where a Type has no active rows (numerator is already 0 there via activeFlag).
+        string activeCntPerRow =
+            $"COUNTIFS(Worksheet!A2:A{wsLast},Worksheet!A2:A{wsLast},Worksheet!AG2:AG{wsLast},1)";
         string subFormula =
             $"SUMPRODUCT({activeFlag}*{sellEaPerRow}*{effQty})"
-            + $"+SUMPRODUCT({activeFlag}*{sellEaPerRow}*{effQty}*{tariffPerRow})";
+            + $"+SUMPRODUCT({activeFlag}*{tariffFlatPerRow}*(1+{canonMarkupPerRow})/({activeCntPerRow}+({activeCntPerRow}=0)))";
         string lutronExpr = "IF(LutronSubtotal=\"\",0,LutronSubtotal)";
         string freightExpr = "IF(FreightSell=\"\",0,FreightSell)";
         string taxExpr = $"IF(Dashboard!{DashSalesTaxCell}=\"\",0,Dashboard!{DashSalesTaxCell})";
