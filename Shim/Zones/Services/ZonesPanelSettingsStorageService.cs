@@ -11,11 +11,12 @@ namespace TurboSuite.Zones.Services
 {
     public static class ZonesPanelSettingsStorageService
     {
-        // V3 (new GUID): added AllowRelayZeroTenPackingField. Old V2 entities are cached in Revit's
-        // memory and cannot be extended at runtime, so a new schema is required — see CLAUDE.md
+        // V4 (new GUID): added Orphan{Keys,Values}Field for the orphan-location → host-location pool
+        // assignments (plan item 5). V3 added AllowRelayZeroTenPackingField. Old entities are cached in
+        // Revit's memory and cannot be extended at runtime, so a new schema is required — see CLAUDE.md
         // "ExtensibleStorage Schema Changes" for the coordinated-rollout recovery procedure.
-        private static readonly Guid SchemaGuid = new Guid("f4a1c2d3-5e6f-4a7b-8c9d-0e1f2a3b4c5d");
-        private const string SchemaName = "TurboZonesPanelSettingsV3";
+        private static readonly Guid SchemaGuid = new Guid("a7b3e9c1-2d4f-4b6a-9e8c-1f0d3a5b7c9e");
+        private const string SchemaName = "TurboZonesPanelSettingsV4";
         private const string BrandField = "Brand";
         private const string UseDedicatedRelayModuleField = "UseDedicatedRelayModule";
         private const string AllowRelayZeroTenPackingField = "AllowRelayZeroTenPacking";
@@ -23,6 +24,8 @@ namespace TurboSuite.Zones.Services
         private const string SpecialValuesField = "SpecialDeviceValues";
         private const string PanelSizeKeysField = "PanelSizeKeys";
         private const string PanelSizeValuesField = "PanelSizeValues";
+        private const string OrphanKeysField = "OrphanLocationKeys";
+        private const string OrphanValuesField = "OrphanLocationValues";
 
         private static Schema GetOrCreateSchema()
         {
@@ -40,6 +43,8 @@ namespace TurboSuite.Zones.Services
             builder.AddArrayField(SpecialValuesField, typeof(string));
             builder.AddArrayField(PanelSizeKeysField, typeof(string));
             builder.AddArrayField(PanelSizeValuesField, typeof(string));
+            builder.AddArrayField(OrphanKeysField, typeof(string));
+            builder.AddArrayField(OrphanValuesField, typeof(string));
             return builder.Finish();
         }
 
@@ -88,6 +93,17 @@ namespace TurboSuite.Zones.Services
                 }
             }
 
+            var orphanKeys = entity.Get<IList<string>>(OrphanKeysField);
+            var orphanValues = entity.Get<IList<string>>(OrphanValuesField);
+            if (orphanKeys != null && orphanValues != null)
+            {
+                for (int i = 0; i < Math.Min(orphanKeys.Count, orphanValues.Count); i++)
+                {
+                    if (int.TryParse(orphanKeys[i], out int orphan) && int.TryParse(orphanValues[i], out int host))
+                        settings.OrphanLocationAssignments[orphan] = host;
+                }
+            }
+
             return settings;
         }
 
@@ -108,6 +124,8 @@ namespace TurboSuite.Zones.Services
                 entity.Set(SpecialValuesField, (IList<string>)settings.SpecialDeviceSelections.Values.ToList());
                 entity.Set(PanelSizeKeysField, (IList<string>)settings.PanelSizeOverrides.Keys.ToList());
                 entity.Set(PanelSizeValuesField, (IList<string>)settings.PanelSizeOverrides.Values.Select(v => v.ToString()).ToList());
+                entity.Set(OrphanKeysField, (IList<string>)settings.OrphanLocationAssignments.Keys.Select(k => k.ToString()).ToList());
+                entity.Set(OrphanValuesField, (IList<string>)settings.OrphanLocationAssignments.Values.Select(v => v.ToString()).ToList());
                 storage.SetEntity(entity);
 
                 tx.Commit();

@@ -22,5 +22,11 @@ namespace TurboSuite.Zones.Models
         public bool AllowRelayZeroTenPacking { get; set; }
         public Dictionary<string, string> SpecialDeviceSelections { get; set; } = new Dictionary<string, string>();
         public Dictionary<string, int> PanelSizeOverrides { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Orphan-location → host-location pool assignments (plan item 5), both location numbers.
+        /// The only user-facing arrangement input: an orphan (panels but no processor) is grouped with a
+        /// processor-bearing location's pool. Reconciled against the live allocation on every load/rebuild
+        /// (<see cref="Services.OrphanLocationService.Reconcile"/>), so a stale entry self-heals.</summary>
+        public Dictionary<int, int> OrphanLocationAssignments { get; set; } = new Dictionary<int, int>();
     }
 }

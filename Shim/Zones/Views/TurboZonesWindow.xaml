@@ -480,14 +480,49 @@
                                                                 <RowDefinition Height="Auto"/>
                                                                 <RowDefinition Height="*"/>
                                                             </Grid.RowDefinitions>
-                                                            <!-- Location header (top-aligned) -->
-                                                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5,0,0,3">
+                                                            <!-- Location header (top-aligned). For an orphan location the amber hint IS the
+                                                                 pool dropdown: a borderless toggle that opens a popup, so it adds no column
+                                                                 height and the panels below never shift. -->
+                                                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5,0,0,3" VerticalAlignment="Center">
                                                                 <TextBlock FontSize="9" FontWeight="SemiBold"
                                                                            Foreground="{StaticResource TextSecondaryBrush}"
                                                                            VerticalAlignment="Center">
                                                                     <Run Text="Location "/>
                                                                     <Run Text="{Binding Location.LocationNumber, Mode=OneWay}"/>
                                                                 </TextBlock>
+                                                                <!-- Orphan pool assignment: shown only for a location with panels but no processor -->
+                                                                <Grid Visibility="{Binding IsOrphan, Converter={StaticResource BoolToVisibility}}"
+                                                                      Margin="5,0,0,0" VerticalAlignment="Center">
+                                                                    <ToggleButton x:Name="OrphanToggle"
+                                                                                  Background="Transparent" BorderThickness="0" Padding="0"
+                                                                                  Cursor="Hand" FontSize="9" FontWeight="Normal" Foreground="#B06A00"
+                                                                                  ToolTip="Assign this location's panels to a processor's pool">
+                                                                        <ToggleButton.Template>
+                                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                                <Border Background="{TemplateBinding Background}"
+                                                                                        Padding="{TemplateBinding Padding}">
+                                                                                    <ContentPresenter VerticalAlignment="Center"/>
+                                                                                </Border>
+                                                                            </ControlTemplate>
+                                                                        </ToggleButton.Template>
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                            <TextBlock Text="{Binding LocationHint, Mode=OneWay}" VerticalAlignment="Center"/>
+                                                                            <Path Data="M 0 0 L 7 0 L 3.5 4 Z" Fill="#B06A00"
+                                                                                  Margin="3,1,0,0" VerticalAlignment="Center"/>
+                                                                        </StackPanel>
+                                                                    </ToggleButton>
+                                                                    <Popup IsOpen="{Binding IsChecked, ElementName=OrphanToggle, Mode=TwoWay}"
+                                                                           PlacementTarget="{Binding ElementName=OrphanToggle}" Placement="Bottom"
+                                                                           StaysOpen="False" AllowsTransparency="True">
+                                                                        <Border Background="White" BorderBrush="#AAAAAA" BorderThickness="1" Padding="1">
+                                                                            <ListBox ItemsSource="{Binding OrphanTargets}"
+                                                                                     DisplayMemberPath="Label"
+                                                                                     SelectedItem="{Binding SelectedOrphanTarget, Mode=TwoWay}"
+                                                                                     MouseLeftButtonUp="OrphanTargetItem_Click"
+                                                                                     FontSize="9" BorderThickness="0" MinWidth="96" Cursor="Hand"/>
+                                                                        </Border>
+                                                                    </Popup>
+                                                                </Grid>
                                                             </StackPanel>
                                                             <!-- Panels for this location (bottom-aligned): lighting panels, then shade columns -->
                                                             <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Bottom">

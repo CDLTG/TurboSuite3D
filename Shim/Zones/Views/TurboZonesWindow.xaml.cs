@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using TurboSuite.Zones.ViewModels;
@@ -22,6 +23,21 @@ namespace TurboSuite.Zones.Views
         {
             if (e.Key == Key.Escape)
                 Close();
+        }
+
+        /// <summary>Closes the orphan-pool popup once a location is picked. Handled on the ListBox, not the
+        /// item: the ListBox captures the mouse on button-down, so the button-up targets the ListBox and a
+        /// per-item handler would never fire. It runs only on a real mouse-up (not the initial selection
+        /// sync), and selection commits on mouse-down — so the TwoWay SelectedItem binding has already run
+        /// the assignment. A Popup hosts its child in a separate window, so it is the ListBox's LOGICAL
+        /// parent (ListBox → Border → Popup), walked up here.</summary>
+        private void OrphanTargetItem_Click(object sender, MouseButtonEventArgs e)
+        {
+            DependencyObject cur = sender as DependencyObject;
+            while (cur != null && !(cur is Popup))
+                cur = LogicalTreeHelper.GetParent(cur);
+            if (cur is Popup popup)
+                popup.IsOpen = false;
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)

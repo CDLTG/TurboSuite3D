@@ -32,7 +32,8 @@ namespace TurboSuite.Zones.Services
         /// apart through the inputs even while sharing the algorithm.
         /// </summary>
         public static List<ProcessorInstance> BuildProcessorInstances(
-            List<PanelResult> allPanels, BomExtras extras, BrandConfig brand = null)
+            List<PanelResult> allPanels, BomExtras extras, BrandConfig brand = null,
+            IReadOnlyDictionary<int, int> orphanToHost = null)
         {
             var instances = new List<ProcessorInstance>();
             if (allPanels == null) return instances;
@@ -61,31 +62,43 @@ namespace TurboSuite.Zones.Services
 
             if (instances.Count == 0) return instances;
 
-            var links = new List<ProcessorLink>();
-            foreach (var inst in instances)
-            {
-                links.Add(inst.Link1);
-                links.Add(inst.Link2);
-            }
+            // One ProcessorSlot per instance, in panel order, carrying the location parsed from its panel
+            // name — the geography the packer pools by. LinkCount is the HQP7-2's two.
+            var slots = instances
+                .Select(inst => new ProcessorSlot(
+                    PanelAllocationService.ParseLocationNumber(inst.PanelName)))
+                .ToList();
 
             // Brand rides along so a compartment device's nameplate legs (QSE-IO → 5) show on the bars.
             // PDU is computed too but nothing here reads it — only the BOM's supply sizer does.
-            var packed = ControlLinkPacker.Pack(
-                ControlLinkPacker.BuildDemand(allPanels, extras, brand), links.Count);
+            // The orphan-assignment map relabels an orphan location's units onto their host BEFORE the
+            // pack, as a pure pre-pass, so the packer only ever sees "prefer a matching location".
+            var demand = ControlLinkPacker.RelabelLocations(
+                ControlLinkPacker.BuildDemand(allPanels, extras, brand), orphanToHost);
+            var packed = ControlLinkPacker.Pack(demand, slots);
 
-            for (int i = 0; i < links.Count; i++)
+            // Read the per-processor grouping directly — Link 1 / Link 2 as arranged, no positional
+            // mapping of a flat list.
+            for (int i = 0; i < instances.Count; i++)
             {
-                var result = i < packed.Links.Count ? packed.Links[i] : null;
-
-                // Type first: it is what decides a link's capacity, so the over-capacity flags raised
-                // by the two setters below are only correct once it is set.
-                links[i].LinkType = result?.LinkType ?? ProcessorLink.QsLinkType;
-                links[i].UsedDevices = result?.Devices ?? 0;
-                links[i].UsedLoads = result?.Loads ?? 0;
-                links[i].UsedRepeaters = result?.Repeaters ?? 0;
+                var group = i < packed.Processors.Count ? packed.Processors[i] : null;
+                ApplyToLink(instances[i].Link1, group?.Link1);
+                ApplyToLink(instances[i].Link2, group?.Link2);
             }
 
             return instances;
+        }
+
+        /// <summary>Copies a packed link's arrangement onto the sidebar's <see cref="ProcessorLink"/>.
+        /// Type first: it decides the link's capacity, so the over-capacity flags the count setters raise
+        /// are only correct once it is set.</summary>
+        private static void ApplyToLink(ProcessorLink link, PackedLink result)
+        {
+            if (link == null) return;
+            link.LinkType = result?.LinkType ?? ProcessorLink.QsLinkType;
+            link.UsedDevices = result?.Devices ?? 0;
+            link.UsedLoads = result?.Loads ?? 0;
+            link.UsedRepeaters = result?.Repeaters ?? 0;
         }
 
         private static bool IsProcessorSlot(string slot)

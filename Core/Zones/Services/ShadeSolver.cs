@@ -46,13 +46,23 @@ namespace TurboSuite.Zones.Services
             // panel at a location that doesn't exist, so they are NOT counted — they surface as a BOM
             // warning instead, and are likewise dropped from the panel-breakdown display.
             int assignedShades = 0, unassignedShades = 0, recommendedPanels = 0;
+            var units = new List<DemandLinkUnit>();
             foreach (var l in locations)
             {
                 if (l == null || l.ShadeCount <= 0) continue;
-                if (PanelAllocationService.ParseLocationNumber(l.LocationName) > 0)
+                int locationNumber = PanelAllocationService.ParseLocationNumber(l.LocationName);
+                if (locationNumber > 0)
                 {
                     assignedShades += l.ShadeCount;
                     recommendedPanels += PanelsForLocation(l.ShadeCount);   // per location, then summed
+
+                    // One indivisible unit per physical QSPS-10PNL: its motors' fill + the panel device,
+                    // its motors' switch legs, tagged with the location it pools on. Same total as the
+                    // aggregate below (Σ fill = assignedShades, Σ (fill+1) = assignedShades + panels), so
+                    // the count is unchanged — only the divisibility, which the one-line depends on.
+                    foreach (int fill in PanelFills(l.ShadeCount))
+                        units.Add(new DemandLinkUnit(
+                            l.LocationName, locationNumber, devices: fill + 1, loads: fill));
                 }
                 else
                 {
@@ -82,7 +92,8 @@ namespace TurboSuite.Zones.Services
                 },
                 linkDevices: assignedShades + recommendedPanels,
                 linkLoads: assignedShades,
-                diagnostic: diagnostic);
+                diagnostic: diagnostic,
+                linkUnits: units);
         }
 
         /// <summary>QSPS-10PNL panels one location needs — its shades ceil'd to whole ten-output panels.

@@ -24,6 +24,10 @@ namespace TurboSuite.Zones.ViewModels
         private ObservableCollection<BomLineItem> _bomItems;
         private readonly Dictionary<string, string> _specialDeviceSelections = new Dictionary<string, string>();
         private readonly Dictionary<string, int> _panelSizeOverrides = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Orphan-location → host-location pool assignments (plan item 5). Reconciled against the
+        /// live allocation every rebuild, so a stale entry self-heals; persisted in the panel settings.</summary>
+        private Dictionary<int, int> _orphanAssignments = new Dictionary<int, int>();
         private readonly int _keypadCount;
         private readonly int _twoGangKeypadCount;
         private readonly int _wirelessDeviceCount;
@@ -215,15 +219,20 @@ namespace TurboSuite.Zones.ViewModels
             AttachPanelHandlers();
             RebuildLinkAssignments();
 
-            // Build location displays for XAML binding
+            // Build location displays for XAML binding, each carrying its orphan-assignment affordance
+            // (item 5): a header hint and, for an orphan location, the pool dropdown.
+            var orphans = OrphanLocationService.OrphanLocations(AllocationResult);
+            var hosts = OrphanLocationService.HostLocations(AllocationResult);
             var displays = new ObservableCollection<LocationDisplayViewModel>();
             for (int i = 0; i < AllocationResult.Locations.Count; i++)
             {
-                displays.Add(new LocationDisplayViewModel
+                var display = new LocationDisplayViewModel
                 {
                     Location = AllocationResult.Locations[i],
                     IsLastLocation = (i == AllocationResult.Locations.Count - 1)
-                });
+                };
+                ConfigureOrphanDisplay(display, orphans, hosts);
+                displays.Add(display);
             }
             LocationDisplays = displays;
 
@@ -251,6 +260,12 @@ namespace TurboSuite.Zones.ViewModels
                 // Restore panel size overrides
                 foreach (var kvp in settings.PanelSizeOverrides)
                     _panelSizeOverrides[kvp.Key] = kvp.Value;
+
+                // Restore orphan-location pool assignments (reconciled against the live allocation on the
+                // build below, so any stale entry is dropped before it is used).
+                _orphanAssignments = settings.OrphanLocationAssignments != null
+                    ? new Dictionary<int, int>(settings.OrphanLocationAssignments)
+                    : new Dictionary<int, int>();
             }
 
             // Auto-build on load
@@ -290,6 +305,10 @@ namespace TurboSuite.Zones.ViewModels
             // Save panel size overrides
             foreach (var kvp in _panelSizeOverrides)
                 settings.PanelSizeOverrides[kvp.Key] = kvp.Value;
+
+            // Save orphan-location pool assignments (already reconciled by the last rebuild).
+            foreach (var kvp in _orphanAssignments)
+                settings.OrphanLocationAssignments[kvp.Key] = kvp.Value;
 
             return settings;
         }
@@ -353,7 +372,12 @@ namespace TurboSuite.Zones.ViewModels
             if (e.PropertyName == nameof(PanelResult.SelectedSpecialDevice)
                 || e.PropertyName == nameof(PanelResult.SelectedSpecialDevice2))
             {
+                // A compartment change can add or remove a processor, which changes which locations are
+                // orphans/hosts — so refresh the dropdowns/hints in place (RebuildLinkAssignments has
+                // already reconciled the map). Done without rebuilding LocationDisplays so the compartment
+                // ComboBox that fired this is not torn down mid-event.
                 RebuildLinkAssignments();
+                RefreshOrphanAffordances();
                 RebuildBom();
                 SaveSettings();
             }
@@ -422,12 +446,86 @@ namespace TurboSuite.Zones.ViewModels
                 return;
             }
 
+            // Drop stale orphan assignments against the current allocation before they are used (an orphan
+            // that got its own processor, a host that lost one, a renamed location).
+            _orphanAssignments = OrphanLocationService.Reconcile(_orphanAssignments, _allocationResult);
+
             // Build one processor instance per placed "Processor" slot and pack onto their links. Same
             // inputs as the BOM, on purpose — the bars and the processor recommendation are two questions
-            // to one packer, counted per-slot just as the supply sizer counts them.
+            // to one packer, counted per-slot just as the supply sizer counts them. The orphan map relabels
+            // each assigned location's panels onto its host pool before the pack (a pure pre-pass).
             ProcessorDisplays = new ObservableCollection<ProcessorInstance>(
-                LinkAssignmentService.BuildProcessorInstances(allPanels, BuildBomExtras(), _currentBrand));
+                LinkAssignmentService.BuildProcessorInstances(
+                    allPanels, BuildBomExtras(), _currentBrand, _orphanAssignments));
         }
+
+        /// <summary>Recomputes the orphan/host sets and refreshes every location column's dropdown + hint
+        /// in place — without rebuilding the LocationDisplays collection, so it is safe to call from inside
+        /// a compartment ComboBox's own change event. Used when a live processor add/remove reshapes the
+        /// orphan set between full rebuilds.</summary>
+        private void RefreshOrphanAffordances()
+        {
+            if (_locationDisplays == null || AllocationResult == null) return;
+
+            var orphans = OrphanLocationService.OrphanLocations(AllocationResult);
+            var hosts = OrphanLocationService.HostLocations(AllocationResult);
+            foreach (var display in _locationDisplays)
+                ConfigureOrphanDisplay(display, orphans, hosts);
+        }
+
+        /// <summary>Sets a location column's orphan affordance: the header hint, and — for an orphan
+        /// location on a Lutron job — the pool dropdown (unassigned + every processor-bearing location),
+        /// selected from the reconciled map.</summary>
+        private void ConfigureOrphanDisplay(
+            LocationDisplayViewModel display, SortedSet<int> orphans, SortedSet<int> hosts)
+        {
+            int loc = display.Location?.LocationNumber ?? 0;
+            bool isOrphan = IsLutronSelected && orphans.Contains(loc);
+
+            if (!isOrphan)
+            {
+                display.UpdateOrphanState(false, new List<OrphanTargetOption>(), null, "", AssignOrphan);
+                return;
+            }
+
+            var options = new List<OrphanTargetOption> { new OrphanTargetOption("— unassigned —", null) };
+            foreach (int host in hosts)
+                options.Add(new OrphanTargetOption($"Location {host}", host));
+
+            bool assigned = _orphanAssignments.TryGetValue(loc, out int assignedHost);
+            var selected = assigned
+                ? options.FirstOrDefault(o => o.HostLocation == assignedHost) ?? options[0]
+                : options[0];
+
+            display.UpdateOrphanState(true, options, selected, OrphanTag(assigned ? assignedHost : (int?)null), AssignOrphan);
+        }
+
+        /// <summary>The one user input (item 5): assign an orphan location to a host pool, or clear it. The
+        /// allocation is unchanged, so this only re-derives the arrangement (bars) and refreshes the hint
+        /// in place — LocationDisplays is not rebuilt, so the dropdown that fired this is not torn down
+        /// mid-event.</summary>
+        private void AssignOrphan(int orphanLocation, int? hostLocation)
+        {
+            if (hostLocation.HasValue)
+                _orphanAssignments[orphanLocation] = hostLocation.Value;
+            else
+                _orphanAssignments.Remove(orphanLocation);
+
+            RebuildLinkAssignments();
+
+            var display = _locationDisplays?.FirstOrDefault(
+                d => d.Location?.LocationNumber == orphanLocation);
+            if (display != null)
+                display.LocationHint = OrphanTag(hostLocation);
+
+            SaveSettings();
+        }
+
+        /// <summary>The compact header tag for an orphan's pool state: "→ 1" when assigned to Location
+        /// 1, "→ ?" while unassigned. Deliberately short so it does not widen the location column past
+        /// its panels; the popup list carries the full "Location 1" labels.</summary>
+        private static string OrphanTag(int? hostLocation)
+            => hostLocation.HasValue ? $"→ {hostLocation.Value}" : "→ ?";
 
         private void SaveSpecialDeviceSelections()
         {

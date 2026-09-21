@@ -127,16 +127,19 @@ namespace TurboSuite.Tests.Zones
         public void SingleProcessorInstance_LabelledByPanelName()
             => Assert.Equal("1-A", Assert.Single(Assign(new List<PanelResult> { Proc("1-A", 1, 4) })).Label);
 
-        /// <summary>Keypads pour into whatever room the panels left, filling links in order rather
-        /// than spreading — packing tightly is the point when the question is "how many links".</summary>
+        /// <summary>Keypads isolate onto a spare QS link (rule #2): with the modules on Link 1 and Link 2
+        /// a genuinely empty QS link, the keypads take Link 2 to keep their lag off the module link. This
+        /// is the arrange-mode convention the bars now show — distinct from the sizing question, which
+        /// still packs tight (ControlLinkPackerTests.KeypadsFillGapsRatherThanForcingLinks). Isolation is
+        /// fit-preserving and adds no link: Link 2 already existed and was empty.</summary>
         [Fact]
-        public void KeypadsFillTheFirstLinkBeforeTheSecond()
+        public void KeypadsIsolateOntoASpareQsLink()
         {
             var proc = Proc("1-A", modules: 3, cap: 4);
             var inst = Assert.Single(Assign(new List<PanelResult> { proc }, new BomExtras { KeypadCount = 10 }));
 
-            Assert.Equal(13, inst.Link1.UsedDevices);   // 3 modules + 10 keypads, room for 96 more
-            Assert.Equal(0, inst.Link2.UsedDevices);
+            Assert.Equal(3, inst.Link1.UsedDevices);    // modules only — keypad lag kept off it
+            Assert.Equal(10, inst.Link2.UsedDevices);   // the 10 keypads, isolated onto the spare QS link
         }
 
         /// <summary>Wireless takes the TRAILING link, which is what the packer's ordering guarantees:

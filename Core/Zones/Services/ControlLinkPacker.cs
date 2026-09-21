@@ -97,9 +97,7 @@ namespace TurboSuite.Zones.Services
             Pour(demand.FloatingDevices, qsBins, unlimited, asDevices: true, totalPdu: demand.FloatingDevicePdu);
             Pour(demand.FloatingLoads, qsBins, unlimited, asDevices: false);
 
-            var links = qsBins
-                .Select(b => new PackedLink(ProcessorLink.QsLinkType, b.Devices, b.Loads, b.UnitNames, consumedPdu: b.Pdu))
-                .ToList();
+            var links = qsBins.Select(b => b.ToQsLink()).ToList();
             links.AddRange(PackWireless(demand.RepeaterCount, demand.WirelessDevices, ccaLinks));
 
             return new LinkPackResult(links, qsBins.Count, ccaLinks);
@@ -115,6 +113,144 @@ namespace TurboSuite.Zones.Services
             var packed = Pack(demand, availableLinks: null);
             int links = Math.Max(1, packed.TotalLinkCount);
             return Math.Max(1, (int)Math.Ceiling((double)links / LinksPerProcessor));
+        }
+
+        /// <summary>
+        /// The constrained/arrange mode: packs the demand onto the links a fixed set of placed
+        /// processors provides, arranged by the firm conventions (rules #2–#4). Distinct from the flat
+        /// <see cref="Pack(LinkDemand, int?)"/> overload — this one is <b>location-aware</b>: it pools a
+        /// location's indivisible units onto a processor sharing that location, fans keypads onto a spare
+        /// QS link, and reports the result <b>grouped per processor</b> so the sidebar reads Link 1 / Link
+        /// 2 directly rather than mapping a flat list positionally.
+        ///
+        /// <b>Fit-preserving by construction.</b> Every preference falls back rather than overflowing: a
+        /// located unit that does not fit its own-location processor spans to spare capacity on another
+        /// (rule #3), and keypads collapse onto a shared link when no spare QS link exists (rule #2). So
+        /// if the flat collapse fits in these processors, this arrangement fits too — the count never
+        /// moves, only the arrangement within it. <see cref="RecommendProcessors"/> owns the count.
+        ///
+        /// The orphan-assignment map (item 5) never reaches here: it is applied as a
+        /// <see cref="RelabelLocations"/> pre-pass that rewrites an orphan unit's location to its host's,
+        /// so this method only ever knows one rule — "prefer a processor whose location matches; span if
+        /// full."
+        /// </summary>
+        public static LinkPackResult Pack(LinkDemand? demand, IReadOnlyList<ProcessorSlot>? processors)
+        {
+            // No processor structure means the sizing question, which the flat overload answers.
+            if (processors == null)
+                return Pack(demand, availableLinks: null);
+
+            demand ??= new LinkDemand();
+
+            // The flat link-slot structure, processor-major. Clear Connect is carved off the TRAILING
+            // positions (Gap #9): the last ccaLinks slots go RF, the rest are QS.
+            var slots = new List<(int Proc, int LinkNumber, int Location)>();
+            for (int p = 0; p < processors.Count; p++)
+            {
+                int linkCount = Math.Max(0, processors[p].LinkCount);
+                for (int ln = 1; ln <= linkCount; ln++)
+                    slots.Add((p, ln, processors[p].Location));
+            }
+
+            int totalLinks = slots.Count;
+            bool hasQsWork = demand.PinnedUnits.Count > 0
+                             || demand.FloatingUnits.Count > 0
+                             || demand.FloatingDevices > 0
+                             || demand.FloatingLoads > 0;
+
+            int ccaLinks = ClearConnectLinksFor(
+                demand.RepeaterCount, demand.WirelessDevices, totalLinks, hasQsWork, unlimited: false);
+            int firstCcaSlot = totalLinks - ccaLinks;   // slots at or after this index go RF
+
+            // One QS bin per QS slot, carrying its processor/link identity for deterministic tiebreaks.
+            var qsBins = new List<Bin>();
+            var binBySlot = new Dictionary<int, Bin>();
+            for (int s = 0; s < firstCcaSlot; s++)
+            {
+                var bin = new Bin { ProcIndex = slots[s].Proc, LinkNumber = slots[s].LinkNumber, Location = slots[s].Location };
+                qsBins.Add(bin);
+                binBySlot[s] = bin;
+            }
+
+            // 1) Located, indivisible units (dimmer + shade panels) — pool onto a QS link in their own
+            //    location; span to spare capacity elsewhere if their pool is full (never add a link).
+            var located = Ordered(demand.PinnedUnits.Where(u => u.Location > 0)).ToList();
+            foreach (int location in located.Select(u => u.Location).Distinct().OrderBy(n => n))
+            {
+                var localBins = qsBins.Where(b => b.Location == location)
+                    .OrderBy(b => b.ProcIndex).ThenBy(b => b.LinkNumber).ToList();
+                foreach (var unit in located.Where(u => u.Location == location))
+                    PlaceLocated(unit, localBins, qsBins);
+            }
+
+            // 2) Location-less indivisible units (a dimmer panel whose name carries no location, a
+            //    floating interface) — no pooling preference, first-fit into spare capacity.
+            foreach (var unit in Ordered(demand.PinnedUnits.Where(u => u.Location <= 0)))
+                Place(unit, qsBins, unlimited: false);
+            foreach (var unit in Ordered(demand.FloatingUnits))
+                Place(unit, qsBins, unlimited: false);
+
+            // 3) Keypads (QS-only) pour last, isolated onto a located-unit-free QS link where one exists,
+            //    else collapsing onto shared gaps (the text-block case). Never a Clear Connect link.
+            PourKeypads(demand.FloatingDevices, qsBins, demand.FloatingDevicePdu);
+            PourKeypads(demand.FloatingLoads, qsBins, totalPdu: 0, asDevices: false);
+
+            // 4) Clear Connect links, assigned back to their carved trailing slots.
+            var ccaList = PackWireless(demand.RepeaterCount, demand.WirelessDevices, ccaLinks).ToList();
+
+            var bySlot = new PackedLink[totalLinks];
+            for (int s = 0; s < firstCcaSlot; s++)
+                bySlot[s] = binBySlot[s].ToQsLink();
+            for (int i = 0; i < ccaList.Count; i++)
+                bySlot[firstCcaSlot + i] = ccaList[i];
+
+            // Per-processor grouping, positional to the input list.
+            var groups = new List<ProcessorGroup>();
+            int slotCursor = 0;
+            for (int p = 0; p < processors.Count; p++)
+            {
+                int linkCount = Math.Max(0, processors[p].LinkCount);
+                PackedLink link1 = linkCount >= 1 ? bySlot[slotCursor] : EmptyQsLink();
+                PackedLink link2 = linkCount >= 2 ? bySlot[slotCursor + 1] : EmptyQsLink();
+                groups.Add(new ProcessorGroup(processors[p].Location, link1, link2));
+                slotCursor += linkCount;
+            }
+
+            // Flat list: QS first, Clear Connect last — the shape the flat overload produces, so counting
+            // and any positional back-compat are unchanged.
+            var flat = new List<PackedLink>();
+            for (int s = 0; s < firstCcaSlot; s++) flat.Add(bySlot[s]);
+            flat.AddRange(ccaList);
+
+            return new LinkPackResult(flat, qsBins.Count, ccaLinks, groups);
+        }
+
+        private static PackedLink EmptyQsLink()
+            => new PackedLink(ProcessorLink.QsLinkType, 0, 0, System.Array.Empty<string>());
+
+        /// <summary>
+        /// Rewrites units' locations by the orphan-assignment map (item 5) before a pooling pack — an
+        /// orphan location (panels but no processor) is relabelled to the processor-bearing location the
+        /// designer assigned it to, so its panels pool there. Pure: returns a new demand, so
+        /// <see cref="Pack(LinkDemand, IReadOnlyList{ProcessorSlot})"/> never learns the word "orphan".
+        /// A location absent from the map is left as-is (self-pools, or floats when no processor matches).
+        /// </summary>
+        public static LinkDemand RelabelLocations(
+            LinkDemand demand, IReadOnlyDictionary<int, int>? orphanToHost)
+        {
+            if (demand == null) return new LinkDemand();
+            if (orphanToHost == null || orphanToHost.Count == 0) return demand;
+
+            LinkUnit Relabel(LinkUnit u) =>
+                u.Location > 0 && orphanToHost.TryGetValue(u.Location, out int host) && host != u.Location
+                    ? u.WithLocation(host)
+                    : u;
+
+            return new LinkDemand(
+                demand.PinnedUnits.Select(Relabel).ToList(),
+                demand.FloatingUnits.Select(Relabel).ToList(),
+                demand.FloatingDevices, demand.FloatingLoads,
+                demand.RepeaterCount, demand.WirelessDevices, demand.FloatingDevicePdu);
         }
 
         /// <summary>
@@ -171,6 +307,11 @@ namespace TurboSuite.Zones.Services
 
             var floatingUnits = new List<LinkUnit>();
 
+            // Located, indivisible units a subsystem reports as physical panels rather than a divisible
+            // pour — shade panels (QSPS-10PNL), one per unit. They pool by location exactly like dimmer
+            // panels, so they join the pinned units below.
+            var subsystemUnits = new List<LinkUnit>();
+
             // Wired keypads only. A wireless one is not a QS device at all — it rides the Clear
             // Connect link, and pouring it in here would charge a link that never sees it while
             // leaving the link that does under-reported.
@@ -190,9 +331,21 @@ namespace TurboSuite.Zones.Services
                 int required = CompartmentQuantity(demand);
                 if (required <= 0)
                 {
-                    // A subsystem with no compartment part — a future DALI DIN module, or a demand
-                    // that is pure link budget. Nothing pins it to a panel, and it is many small
-                    // devices rather than one big one, so it pours like keypads do.
+                    // A subsystem reporting located physical panels (shades) — pack each whole, pooled by
+                    // location, like a dimmer panel. The units carry the same budget the aggregate would
+                    // pour, so it is one or the other, never both.
+                    if (demand.LinkUnits.Count > 0)
+                    {
+                        var category = CategoryForSubsystem(demand.Subsystem);
+                        foreach (var u in demand.LinkUnits)
+                            subsystemUnits.Add(new LinkUnit(
+                                u.Name, u.Devices, u.Loads, pdu: 0, category, u.Location));
+                        continue;
+                    }
+
+                    // A subsystem with no compartment part and no located units — a future DALI DIN
+                    // module, or a demand that is pure link budget. Nothing pins it to a panel, and it is
+                    // many small devices rather than one big one, so it pours like keypads do.
                     floatingDevices += demand.LinkDevices;
                     floatingLoads += demand.LinkLoads;
                     continue;
@@ -223,7 +376,8 @@ namespace TurboSuite.Zones.Services
                     else
                     {
                         floatingUnits.Add(new LinkUnit(
-                            demand.Subsystem + " interface", deviceShares[i], loadShares[i], subsystemPdu));
+                            demand.Subsystem + " interface", deviceShares[i], loadShares[i], subsystemPdu,
+                            LinkCategory.Interface));
                     }
                 }
 
@@ -236,8 +390,13 @@ namespace TurboSuite.Zones.Services
 
             var pinned = panels
                 .Where(p => panelDevices[p] > 0 || panelLoads[p] > 0)
-                .Select(p => new LinkUnit(p.PanelName, panelDevices[p], panelLoads[p], panelPdu[p]))
+                .Select(p => new LinkUnit(p.PanelName, panelDevices[p], panelLoads[p], panelPdu[p],
+                    LinkCategory.Modules, PanelAllocationService.ParseLocationNumber(p.PanelName)))
                 .ToList();
+
+            // Shade panels join the pinned units — located and indivisible, they pool exactly as the
+            // dimmer panels do.
+            pinned.AddRange(subsystemUnits);
 
             return new LinkDemand(pinned, floatingUnits, floatingDevices, floatingLoads,
                 extras.HybridRepeaterCount, extras.WirelessDeviceCount, floatingDevicePdu);
@@ -264,6 +423,13 @@ namespace TurboSuite.Zones.Services
             => !string.IsNullOrEmpty(selection)
                && !string.Equals(selection, "Empty", StringComparison.OrdinalIgnoreCase)
                && !string.Equals(selection, "Processor", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The category a subsystem's located units carry. Shades today; a future located
+        /// subsystem adds its case here.</summary>
+        private static LinkCategory CategoryForSubsystem(string subsystem)
+            => string.Equals(subsystem, ShadeSolver.SubsystemName, StringComparison.OrdinalIgnoreCase)
+                ? LinkCategory.Shades
+                : LinkCategory.None;
 
         private static int CompartmentQuantity(ControlSubsystemDemand demand)
             => demand.Parts
@@ -443,7 +609,61 @@ namespace TurboSuite.Zones.Services
         }
 
         private static Bin Emptiest(List<Bin> bins)
-            => bins.OrderByDescending(b => Math.Min(b.DeviceRoom, b.LoadRoom)).First();
+            => bins.OrderByDescending(b => Math.Min(b.DeviceRoom, b.LoadRoom))
+                   .ThenBy(b => b.ProcIndex).ThenBy(b => b.LinkNumber).First();
+
+        /// <summary>A located unit prefers a QS link in its own location; if none there fits, it spans to
+        /// spare capacity anywhere (rule #3), landing over-capacity on the emptiest only when the whole
+        /// budget is full. Never opens a link — the budget is fixed.</summary>
+        private static void PlaceLocated(LinkUnit unit, List<Bin> localBins, List<Bin> allQsBins)
+        {
+            foreach (var bin in localBins)
+            {
+                if (bin.Fits(unit)) { bin.Add(unit); return; }
+            }
+            Place(unit, allQsBins, unlimited: false);   // span, then emptiest — the collapse fallback
+        }
+
+        /// <summary>
+        /// Keypads (or their loads) pour into the fixed QS budget, isolated onto located-unit-free links
+        /// first (rule #2 best-practice) and collapsing onto shared gaps only when no spare QS link
+        /// exists. Never opens a link and never touches Clear Connect. PDU rides the device pour so a
+        /// per-link draw stays right.
+        /// </summary>
+        private static void PourKeypads(int amount, List<Bin> qsBins, int totalPdu, bool asDevices = true)
+        {
+            if (amount <= 0 || qsBins.Count == 0) return;
+
+            var ordered = qsBins.OrderBy(b => b.ProcIndex).ThenBy(b => b.LinkNumber).ToList();
+            var isolated = ordered.Where(b => b.LocatedUnits == 0);
+            var shared = ordered.Where(b => b.LocatedUnits > 0);
+            var targets = isolated.Concat(shared).ToList();   // spare QS links first, module links after
+
+            int total = amount, placed = 0, placedPdu = 0;
+            int PduFor(int take)
+            {
+                if (!asDevices || totalPdu == 0 || total == 0) return 0;
+                placed += take;
+                int target = (int)((long)totalPdu * placed / total);
+                int chunk = target - placedPdu;
+                placedPdu = target;
+                return chunk;
+            }
+
+            foreach (var bin in targets)
+            {
+                if (amount <= 0) break;
+                int room = asDevices ? bin.DeviceRoom : bin.LoadRoom;
+                if (room <= 0) continue;
+                int take = Math.Min(room, amount);
+                bin.Add(asDevices ? take : 0, asDevices ? 0 : take, PduFor(take), LinkCategory.Keypads);
+                amount -= take;
+            }
+
+            if (amount > 0)
+                Emptiest(qsBins).Add(asDevices ? amount : 0, asDevices ? 0 : amount, PduFor(amount),
+                    LinkCategory.Keypads);
+        }
 
         /// <summary>Splits a total into <paramref name="parts"/> whole shares that sum back to it
         /// exactly — largest remainder, so the leftover lands on the first shares rather than
@@ -474,6 +694,20 @@ namespace TurboSuite.Zones.Services
             public int Pdu;
             public readonly List<string> UnitNames = new List<string>();
 
+            /// <summary>Which categories landed here — for the per-link composition the one-line reads,
+            /// and for the keypad-isolation "is this link free of located units" test.</summary>
+            public readonly HashSet<LinkCategory> Categories = new HashSet<LinkCategory>();
+
+            /// <summary>How many located (Modules/Shades) units landed here. A keypad prefers an
+            /// emptiest link with none (isolation, rule #2).</summary>
+            public int LocatedUnits;
+
+            // Identity, set only by the pooling overload: which processor and link this bin is, and the
+            // processor's location. The flat overload leaves these at their defaults.
+            public int ProcIndex = -1;
+            public int LinkNumber;
+            public int Location;
+
             public int DeviceRoom => ProcessorLink.MaxDevices - Devices;
             public int LoadRoom => ProcessorLink.MaxLoads - Loads;
 
@@ -484,16 +718,26 @@ namespace TurboSuite.Zones.Services
                 Devices += unit.Devices;
                 Loads += unit.Loads;
                 Pdu += unit.Pdu;
+                if (unit.Category != LinkCategory.None)
+                    Categories.Add(unit.Category);
+                if (unit.Category == LinkCategory.Modules || unit.Category == LinkCategory.Shades)
+                    LocatedUnits++;
                 if (!string.IsNullOrEmpty(unit.Name))
                     UnitNames.Add(unit.Name!);
             }
 
-            public void Add(int devices, int loads, int pdu = 0)
+            public void Add(int devices, int loads, int pdu = 0, LinkCategory category = LinkCategory.None)
             {
                 Devices += devices;
                 Loads += loads;
                 Pdu += pdu;
+                if (category != LinkCategory.None && (devices > 0 || loads > 0))
+                    Categories.Add(category);
             }
+
+            public PackedLink ToQsLink() => new PackedLink(
+                ProcessorLink.QsLinkType, Devices, Loads, UnitNames, consumedPdu: Pdu,
+                categories: Categories.ToList());
         }
     }
 
@@ -557,12 +801,15 @@ namespace TurboSuite.Zones.Services
     /// <summary>One indivisible thing that must fit on a single link.</summary>
     public sealed class LinkUnit
     {
-        public LinkUnit(string? name, int devices, int loads, int pdu = 0)
+        public LinkUnit(string? name, int devices, int loads, int pdu = 0,
+            LinkCategory category = LinkCategory.None, int location = 0)
         {
             Name = name;
             Devices = devices;
             Loads = loads;
             Pdu = pdu;
+            Category = category;
+            Location = location;
         }
 
         /// <summary>What it is, for the packed link's contents list — a panel name, or an interface.</summary>
@@ -574,30 +821,90 @@ namespace TurboSuite.Zones.Services
         /// <summary>Signed V+ PDU this unit draws — the sum of its sited interfaces' draws. 0 for a
         /// bare panel of modules, which take no bus power.</summary>
         public int Pdu { get; }
+
+        /// <summary>What kind of work this unit is (rule #2 fan-out, one-line rendering). Packing-neutral
+        /// — the count/fit never depend on it.</summary>
+        public LinkCategory Category { get; }
+
+        /// <summary>The location this unit pools onto (rule #4), from the panel name. 0 = location-less
+        /// (a floating interface); such a unit places into spare capacity with no pooling preference.</summary>
+        public int Location { get; }
+
+        /// <summary>A copy of this unit relabelled onto a different pool — the orphan-assignment pre-pass
+        /// (item 5), which rewrites an orphan unit's <see cref="Location"/> before the pack so the packer
+        /// only ever knows "prefer a matching location", never the concept of "orphan".</summary>
+        public LinkUnit WithLocation(int location)
+            => new LinkUnit(Name, Devices, Loads, Pdu, Category, location);
+    }
+
+    /// <summary>A processor's two links after the pooling pack — positional to the input
+    /// <see cref="ProcessorSlot"/> list, so <c>Processors[i]</c> is slot <c>i</c>'s pair. Clear Connect,
+    /// carved off the trailing link positions, lands on <see cref="Link2"/> of the last processors.</summary>
+    public sealed class ProcessorGroup
+    {
+        public ProcessorGroup(int location, PackedLink link1, PackedLink link2)
+        {
+            Location = location;
+            Link1 = link1;
+            Link2 = link2;
+        }
+
+        /// <summary>The location this processor sits in (0 when its panel name carries none).</summary>
+        public int Location { get; }
+
+        public PackedLink Link1 { get; }
+        public PackedLink Link2 { get; }
     }
 
     /// <summary>How the demand landed. When packed against a fixed link budget, <see cref="Links"/>
     /// has exactly that many entries, QS first and Clear Connect last.</summary>
     public sealed class LinkPackResult
     {
-        public LinkPackResult(IReadOnlyList<PackedLink> links, int qsLinkCount, int clearConnectLinkCount)
+        public LinkPackResult(IReadOnlyList<PackedLink> links, int qsLinkCount, int clearConnectLinkCount,
+            IReadOnlyList<ProcessorGroup>? processors = null)
         {
             Links = links;
             QsLinkCount = qsLinkCount;
             ClearConnectLinkCount = clearConnectLinkCount;
+            Processors = processors ?? System.Array.Empty<ProcessorGroup>();
         }
 
         public IReadOnlyList<PackedLink> Links { get; }
         public int QsLinkCount { get; }
         public int ClearConnectLinkCount { get; }
         public int TotalLinkCount => QsLinkCount + ClearConnectLinkCount;
+
+        /// <summary>Per-processor grouping — populated only by the pooling overload
+        /// (<see cref="ControlLinkPacker.Pack(LinkDemand, IReadOnlyList{ProcessorSlot})"/>). Empty from
+        /// the flat overload, whose callers read <see cref="Links"/> positionally.</summary>
+        public IReadOnlyList<ProcessorGroup> Processors { get; }
+    }
+
+    /// <summary>One placed processor, as the pooling pack sees it: where it is, and how many links it
+    /// heads (a HQP7-2 has two). Built by <c>LinkAssignmentService</c> from the sited processor
+    /// compartments, one per slot, with the location parsed from the panel name.</summary>
+    public sealed class ProcessorSlot
+    {
+        public ProcessorSlot(int location, int linkCount = ControlLinkPacker.LinksPerProcessor)
+        {
+            Location = location;
+            LinkCount = linkCount;
+        }
+
+        /// <summary>The location this processor sits in — 0 when its panel name has none. A located unit
+        /// pools onto a processor sharing its location; keypads and location-less units ignore it.</summary>
+        public int Location { get; }
+
+        /// <summary>Links this processor heads. Always <see cref="ControlLinkPacker.LinksPerProcessor"/>
+        /// (2) for the shipped HQP7-2; kept a field for the MDU processors and forward-compat.</summary>
+        public int LinkCount { get; }
     }
 
     /// <summary>One link's contents after packing.</summary>
     public sealed class PackedLink
     {
         public PackedLink(string linkType, int devices, int loads, IReadOnlyList<string> unitNames,
-            int repeaters = 0, int consumedPdu = 0)
+            int repeaters = 0, int consumedPdu = 0, IReadOnlyList<LinkCategory>? categories = null)
         {
             LinkType = linkType;
             Devices = devices;
@@ -605,6 +912,7 @@ namespace TurboSuite.Zones.Services
             UnitNames = unitNames;
             Repeaters = repeaters;
             ConsumedPdu = consumedPdu;
+            Categories = categories ?? System.Array.Empty<LinkCategory>();
         }
 
         public string LinkType { get; }
@@ -626,6 +934,10 @@ namespace TurboSuite.Zones.Services
         /// <summary>Which units landed here. Nothing renders this yet — it is what makes a packing
         /// decision explicable when one needs explaining.</summary>
         public IReadOnlyList<string> UnitNames { get; }
+
+        /// <summary>Which categories ride this link (rule #2 arrangement, one-line composition). Empty on
+        /// a link the flat/sizing pack produced, since nothing there reads it.</summary>
+        public IReadOnlyList<LinkCategory> Categories { get; }
 
         public bool IsClearConnect
             => string.Equals(LinkType, ProcessorLink.ClearConnectLinkType, StringComparison.OrdinalIgnoreCase);

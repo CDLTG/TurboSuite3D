@@ -28,13 +28,15 @@ namespace TurboSuite.Zones.Models
             IReadOnlyList<DemandPart>? parts = null,
             int linkDevices = 0,
             int linkLoads = 0,
-            string? diagnostic = null)
+            string? diagnostic = null,
+            IReadOnlyList<DemandLinkUnit>? linkUnits = null)
         {
             Subsystem = subsystem;
             Parts = parts ?? new List<DemandPart>();
             LinkDevices = linkDevices;
             LinkLoads = linkLoads;
             Diagnostic = diagnostic;
+            LinkUnits = linkUnits ?? System.Array.Empty<DemandLinkUnit>();
         }
 
         /// <summary>Which subsystem this is — "DMX", later "DALI". Identifies the demand in the UI and
@@ -55,6 +57,17 @@ namespace TurboSuite.Zones.Models
         /// channel = 1 switch leg"</i>, so this is the total channel count across every interface.</summary>
         public int LinkLoads { get; }
 
+        /// <summary>
+        /// The subsystem's link budget already broken into <b>indivisible, located units</b>, when it
+        /// wires as physical panels rather than a divisible pour — shades are the first: one QSPS-10PNL
+        /// per unit, each wiring to a single QS link. When this is non-empty the packer places these as
+        /// whole located units (pooling by <see cref="DemandLinkUnit.Location"/>) instead of pouring
+        /// <see cref="LinkDevices"/>/<see cref="LinkLoads"/>; the two describe the same budget, so a
+        /// consumer reads one or the other, never both. Empty for a divisible subsystem (a future DALI
+        /// DIN pour), which keeps the aggregate pour.
+        /// </summary>
+        public IReadOnlyList<DemandLinkUnit> LinkUnits { get; }
+
         /// <summary>Why the demand is zero or unsolvable, in the subsystem's own words — surfaced as a
         /// BOM warning line. Null when the demand is a clean solve (including a clean zero).</summary>
         public string? Diagnostic { get; }
@@ -71,6 +84,34 @@ namespace TurboSuite.Zones.Models
         /// <see cref="Unsolvable"/>: silent, with nothing for the user to fix.</summary>
         public static ControlSubsystemDemand None(string subsystem) =>
             new ControlSubsystemDemand(subsystem);
+    }
+
+    /// <summary>
+    /// One indivisible, located unit of a subsystem's link budget — a physical panel that wires to a
+    /// single QS link (a QSPS-10PNL shade panel). The packer treats it exactly like a dimmer panel:
+    /// it pools by <see cref="Location"/> and never splits across two links, which is the physical
+    /// truth the one-line must draw.
+    /// </summary>
+    public sealed class DemandLinkUnit
+    {
+        public DemandLinkUnit(string name, int location, int devices, int loads)
+        {
+            Name = name;
+            Location = location;
+            Devices = devices;
+            Loads = loads;
+        }
+
+        /// <summary>What it is, for the packed link's contents list — e.g. the shade panel's location
+        /// name.</summary>
+        public string Name { get; }
+
+        /// <summary>The location this unit pools with (<see cref="Services.PanelAllocationService"/>'s
+        /// parsed number). 0 when it has none.</summary>
+        public int Location { get; }
+
+        public int Devices { get; }
+        public int Loads { get; }
     }
 
     /// <summary>One part a subsystem needs, already counted.</summary>
