@@ -34,7 +34,7 @@ Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selec
 - **DMX warnings never fail a document.** A design that will not solve, or one solved over partly zoned tape, contributes a warning line naming the reason — including *"N fixtures have no Control Zone"*.
 - **A subsystem only earns silence by speaking.** DMX circuits are excluded from Unassigned Circuits because TurboDMX owns them — but only when it actually accounted for them, with parts or with a reason. A circuit whose fixtures declare `Dimming Protocol = DMX` yet carry no `DMX Channels` is invisible to TurboDMX, so it falls back into Unassigned Circuits instead of disappearing from every surface at once.
 - **Panel size overrides:** Users can force any panel to a different size; modules auto-redistribute to accommodate.
-- **Processor links** (Lutron): two per placed processor, packed by `Core/Zones/Services/ControlLinkPacker.cs`. See "Control links" below — this is a recommendation surface, and there is deliberately no way to assign a panel to a link.
+- **Processor links** (Lutron): two per placed processor, packed by `Core/Zones/Services/ControlLinkPacker.cs`. See "Control links" below — this is a recommendation surface. The bars are *arranged* by the firm's link conventions (a location's panels pool onto a processor in that location; keypads isolate onto a spare QS link), but there is still no manual panel→link assignment. The one input is the **orphan-location → pool** dropdown (a location with panels but no processor of its own), which supplies geography the tool cannot derive, not a link choice.
 - **Amp-aware allocation** (Lutron): Module limits enforced per part number — ELV `LQSE-4A5` 6.6/4.2/16 A (slot 1 / slots 2-4 / module total), 0-10V `LQSE-4T5` 5.0/5.0/20 A, switching `LQSE-4S8` 8.0/8.0/16 A. Circuits over the slot-2-4 limit auto-promote to slot 1. When sequential circuit-number order produces an overloaded module, the allocator falls back to first-fit-decreasing bin-packing only when it would reduce module count or overload count. Overloaded modules render with a red background in Panel Breakdown and overloaded rows render in bold red on a pale red highlight in the Panel Schedule PDF.
 - **BOM:** Categorized bill-of-materials with part numbers, built by `Core/Zones/Services/ControlBomBuilder.cs` — the **same builder** the TurboDocs Control BOM PDF uses, so the two cannot disagree about what to order. The only per-consumer difference is `BomAudience`, which governs presentation and never quantities: this tab renders as `DesignSurface`, keeping zero-quantity lines and annotating a shortfall.
 - **Processor count follows what is placed**, not what is recommended — over *or* under. A processor's location can't be derived; it is an assignment the designer makes to a specific panel, so this tab is the single source of truth for the count. The recommendation stays advisory: placing fewer than recommended flags the BOM line with `(N of M placed)` rather than silently inflating the order. Processors are counted **per compartment slot**, so an LV21 with a processor in each of its two compartments is two processors — two sidebar blocks, four link bars, and two supplies.
@@ -43,19 +43,42 @@ Visualizes how dimmer modules (Relay, 0-10V, ELV) slot into panels for the selec
 
 ## Control links
 
-The sidebar answers exactly one question: **do I need another processor?** The Panel Breakdown is a
-recommendation surface — the designer makes two decisions (panel sizes, and where processors, I/O and
-DMX interfaces go) and everything else is derived. There is **no manual panel→link assignment and
-will not be**: if the derived layout does not fit, the answer is another processor, and the bars are
-how that is said. Downstream the design is imported into Lutron's own software, which is what the
-BOM's "Verify bill of materials with official control system documentation" is for.
+The sidebar answers two things at once: **do I need another processor?** and **how is the wiring
+arranged?** The Panel Breakdown is a recommendation surface — the designer makes two decisions (panel
+sizes, and where processors, I/O and DMX interfaces go) and everything else is derived. There is **no
+manual panel→link assignment and will not be**: if the derived layout does not fit, the answer is
+another processor, and the bars are how that is said. Downstream the design is imported into Lutron's
+own software, which is what the BOM's "Verify bill of materials with official control system
+documentation" is for.
 
-**One packer, two questions.** `ControlLinkPacker` both recommends a processor count (pack into
-unlimited links, divide by two) and fills the capacity bars (pack into the links that exist, show
-overflow). They were separate algorithms until they were merged, and they disagreed — the BOM pooled
-every device in the job and divided, which assumes a panel's modules can be split across two links.
-They cannot. The invariant now holds by construction: **if a bar is over capacity the BOM recommends
-more processors, and if it recommends more, some bar is over.**
+**One packer, two modes.** `ControlLinkPacker` both recommends a processor count (`Pack(demand, null)`
+— pack into unlimited links, divide by two) and fills the capacity bars (`Pack(demand, processors)` —
+pack into the links the placed processors provide). They were separate algorithms until they were
+merged, and they disagreed — the BOM pooled every device in the job and divided, which assumes a
+panel's modules can be split across two links. They cannot. The **sizing** mode is a plain first-fit
+collapse and owns the count; the **arrange** mode adds the firm conventions (below) *within* that fixed
+budget. Fan-out is **fit-preserving** — every preference falls back to the collapse rather than
+overflowing a link — so it can never redden a bar the sizing pass would not. The invariant holds by
+construction: **if a bar is over capacity the BOM recommends more processors, and if it recommends
+more, some bar is over.**
+
+**The arrange conventions (bars only, never the count).**
+
+- **Location pooling.** A location's indivisible units (dimmer *and* shade panels) prefer a QS link on
+  a processor **in that location**; if that pool is full the link **spans** to spare capacity on
+  another processor rather than adding one. Location is parsed from the panel name (`1-A` → 1).
+- **Keypad isolation.** Keypads pour last, preferring an emptiest **located-unit-free** QS link (to
+  keep keypad lag off the module link) and collapsing onto a shared link when no spare QS link exists
+  — the text-block case, where Link 2 is RF so there is nowhere to isolate. Keypads are **QS-only**;
+  they never ride a Clear Connect link.
+- **Orphan-location → pool (the one input).** A location with panels but no processor is an *orphan*;
+  the designer assigns it to a processor-bearing location's pool via a header dropdown. This is applied
+  as a pure **relabel pre-pass** (`RelabelLocations`) that rewrites the orphan's location to its host's
+  before the pack, so the packer only ever knows "prefer a matching location," never the word "orphan."
+  The map is `orphan → host`, both location numbers (processors have no stable identity), reconciled
+  against the live allocation every rebuild (stale entries self-heal) and persisted in the panel-
+  settings ES schema. `OrphanLocationService` computes the orphan/host sets; unassigned orphans float
+  freely, so the solve never blocks on the input.
 
 **A link has three budgets, and they are different kinds of thing** (Lutron 3691127f p.2):
 
@@ -85,9 +108,15 @@ processor. Wireless devices ride those links and consume their device budget; wi
 When the link budget is fixed, CC-A stops one link short of consuming every link that has QS work, so
 the overflow shows as an over-capacity bar rather than hiding the panels.
 
-**Packing is first-fit decreasing over indivisible units.** A panel is one unit — its modules plus any
-compartment device sited in it all ride the same link. Interfaces a subsystem requires but nobody has
-sited yet float and pack anywhere; keypads are one device each and pour into whatever room is left.
+**Packing is over indivisible units.** A panel is one unit — its modules plus any compartment device
+sited in it all ride the same link, and it can never be split across two. In sizing mode this is plain
+first-fit decreasing; in arrange mode the units pool by location (above). **Shade panels are units
+too:** each recommended QSPS-10PNL is one indivisible located unit (its motors a fill *inside* it, like
+a dimmer panel's circuits), so a shade panel never straddles two links — the physical truth the one-
+line depends on. The device/leg totals are identical to the old divisible pour (a shade contributes
+`motors + panels` devices either way), so the count is unchanged; only the divisibility differs.
+Interfaces a subsystem requires but nobody has sited yet float and pack anywhere; keypads are one
+device each and pour last (isolated onto a spare QS link where one exists, per the conventions above).
 
 ## Dependencies
 
