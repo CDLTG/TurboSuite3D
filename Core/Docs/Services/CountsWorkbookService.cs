@@ -2155,10 +2155,15 @@ public static class CountsWorkbookService
         // exclusion logic is needed. Per-row, case-insensitive, blank-safe (UPPER(TRIM(J))).
         // Wire dispXxx into the four Gap value calls only; leave the numeric variants for the math.
         string noBid = $"EXACT(UPPER(TRIM({Col("J")})),\"NO BID\")";
-        string dispSellEa  = $"IF({noBid},\"NO BID\",{sellEa})";
-        string dispBuyEa   = $"IF({noBid},\"NO BID\",{buyEa})";
-        string dispSellExt = $"IF({noBid},\"NO BID\",{sellExt})";
-        string dispBuyExt  = $"IF({noBid},\"NO BID\",{buyExt})";
+        // "INCLUDED" sentinel: a package's secondary lines, priced together with the line above.
+        // Same $0-into-totals fall-through as NO BID (J*1 → IFERROR → 0), but displays the two-part
+        // "included above" convention — INCLUDED in the Ea. columns, ABOVE in the Ext. columns.
+        // Any future sentinel adds its own flag here and nests one more IF into the four wrappers.
+        string included = $"EXACT(UPPER(TRIM({Col("J")})),\"INCLUDED\")";
+        string dispSellEa  = $"IF({noBid},\"NO BID\",IF({included},\"INCLUDED\",{sellEa}))";
+        string dispBuyEa   = $"IF({noBid},\"NO BID\",IF({included},\"INCLUDED\",{buyEa}))";
+        string dispSellExt = $"IF({noBid},\"NO BID\",IF({included},\"ABOVE\",{sellExt}))";
+        string dispBuyExt  = $"IF({noBid},\"NO BID\",IF({included},\"ABOVE\",{buyExt}))";
         // Tariff base = Sell Ext. (includes Adder). Prior version omitted M, underpricing tariffs.
         string tariffBasePerRow = sellExt;
         // Exclude "dependent" placeholder — it's a visual cue on Worksheet for drag-fill links,
@@ -3874,7 +3879,7 @@ public static class CountsWorkbookService
             var key = (entry.Type.ToUpperInvariant(), entry.Catalog.ToUpperInvariant());
             var existing = existingByKey.GetValueOrDefault(key);
             bool hasLiteralCost = existing != null
-                && ((existing.UnitCost.HasValue && !existing.CostIsFormula) || IsNoBid(existing.UnitCostText));
+                && ((existing.UnitCost.HasValue && !existing.CostIsFormula) || IsCostSentinel(existing.UnitCostText));
             if (hasLiteralCost && !canonicalSheetRowByCatalog.ContainsKey(entry.Catalog))
                 canonicalSheetRowByCatalog[entry.Catalog] = sheetRow;
         }
@@ -4137,7 +4142,7 @@ public static class CountsWorkbookService
             {
                 // Phase intentionally left blank — removed rows must not appear in Phase sheet FILTER results
                 ws.Cell(row, WsColDesc).Value = existing.Description ?? "";
-                if (IsNoBid(existing.UnitCostText)) ws.Cell(row, WsColUnitCost).Value = existing.UnitCostText;
+                if (IsCostSentinel(existing.UnitCostText)) ws.Cell(row, WsColUnitCost).Value = existing.UnitCostText;
                 else if (existing.UnitCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existing.UnitCost.Value;
                 if (existing.Markup.HasValue) ws.Cell(row, WsColMarkup).Value = existing.Markup.Value;
                 if (existing.Tariff.HasValue) ws.Cell(row, WsColTariff).Value = existing.Tariff.Value;
@@ -4346,7 +4351,7 @@ public static class CountsWorkbookService
         bool isNewRow, string? existingCostText = null)
     {
         bool isCanonical = row == canonicalRow;
-        bool isNoBid = IsNoBid(existingCostText);
+        bool isSentinel = IsCostSentinel(existingCostText);
 
         // Markup % and Adder have NO canonical — every row holds its own literal (user-entered
         // or drag-filled). Preserve whatever value was read. `ReadExistingWorksheetRows`
@@ -4364,7 +4369,7 @@ public static class CountsWorkbookService
             if (!isNewRow)
             {
                 if (existingDesc != null) ws.Cell(row, WsColDesc).Value = existingDesc;
-                if (isNoBid) ws.Cell(row, WsColUnitCost).Value = existingCostText;
+                if (isSentinel) ws.Cell(row, WsColUnitCost).Value = existingCostText;
                 else if (existingCost.HasValue) ws.Cell(row, WsColUnitCost).Value = existingCost.Value;
             }
             return;
@@ -4382,7 +4387,7 @@ public static class CountsWorkbookService
             StyleAutoFilledCell(ws.Cell(row, WsColDesc));
         }
 
-        if (!isNewRow && isNoBid)
+        if (!isNewRow && isSentinel)
         {
             ws.Cell(row, WsColUnitCost).Value = existingCostText;
         }
@@ -4469,6 +4474,16 @@ public static class CountsWorkbookService
     // (Internal double-spaces are an unsupported typo — Excel TRIM collapses them, C# Trim does not.)
     private static bool IsNoBid(string? s) =>
         string.Equals(s?.Trim(), "NO BID", StringComparison.OrdinalIgnoreCase);
+
+    // The "INCLUDED" sentinel: a literal the pricing team types into Unit Cost to mark a package's
+    // secondary line, priced together with the line above (displays INCLUDED / ABOVE on the quote).
+    private static bool IsIncluded(string? s) =>
+        string.Equals(s?.Trim(), "INCLUDED", StringComparison.OrdinalIgnoreCase);
+
+    // Any recognized non-numeric Unit Cost literal that stands in for a price. Round-trip
+    // preservation and canonical-row selection key on this set, not the individual literals, so a
+    // new sentinel needs only its own IsXxx detector plus an entry here (and a display wrapper).
+    private static bool IsCostSentinel(string? s) => IsNoBid(s) || IsIncluded(s);
 
     /// <summary>
     /// Reads the 6 Schedule Notes cells for a row. The canonical row holds the authoritative
