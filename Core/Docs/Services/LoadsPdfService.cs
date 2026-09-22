@@ -43,108 +43,46 @@ public static class LoadsPdfService
     private const double BaselineOffset    = 11;
     private const double ColumnPadding     = 6;
 
+    // ── Room bands (By Room export) ──
+    private const double RoomHeaderHeight   = 18;
+    private const double RoomHeaderFontSize = 9;
+    private const double RoomGap            = 8;
+
+    // Column-header placement on the By-Room export: true = repeated under every room band
+    // (matches the Lutron reference); false = drawn once at the top of each page. This is the
+    // single toggle called out in the plan — flip it and nothing else changes.
+    private const bool ColumnHeadersPerRoom = true;
+
     // ── Footer ──
     private const double FooterHeight = 28;
 
     #endregion
 
+    private const double ContentWidth = PageWidth - MarginLeft - MarginRight;
+    private const double UsableBottom = PageHeight - FooterHeight;
+
+    // Column headers, left-to-right. Index 0 ("Ckt") is centered; the rest are left-aligned.
+    private static readonly string[] Headers =
+        { "Ckt", "Load", "Dimming", "Fixtures", "Qty", "Driver", "Watts" };
+
+    // ──────────────────────────────────────────────────────────────────────────────────────
+    // By Circuit — a single flat list (unchanged output).
+    // ──────────────────────────────────────────────────────────────────────────────────────
     public static void Generate(
         List<LoadsCircuitModel> circuits,
         string projectName,
         string outputPath,
         DocsSettings settings)
     {
-        // Fonts
-        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
-        var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
-        var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
-        var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
-
         var fontRow       = new XFont("Segoe UI", RowFontSize);
         var fontColHeader = new XFont("Segoe UI", HeaderFontSize, XFontStyleEx.Bold);
         var fontPageNum   = new XFont("Segoe UI Light", 7);
+        var gridPen       = new XPen(XColor.FromGrayScale(0.85), 0.5);
+        var centerData    = new XStringFormat { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
 
-        var gridPen = new XPen(XColor.FromGrayScale(0.85), 0.5);
+        var (colX, colW) = ComputeColumns(circuits, fontRow, fontColHeader);
 
-        // Column headers
-        string[] headers = { "Ckt", "Load", "Dimming", "Fixtures", "Qty", "Driver", "Watts" };
-
-        // ── Measurement pass: determine column widths ──
-        double colCircuit, colLoad, colDimming, colFixtures, colQuantity, colDriver, colWattage;
-
-        using (var tempPdf = new PdfDocument())
-        {
-            var tempPage = tempPdf.AddPage();
-            using var tempGfx = XGraphics.FromPdfPage(tempPage);
-
-            double maxCircuit = 0, maxDimming = 0, maxFixtures = 0;
-            double maxQuantity = 0, maxDriver = 0, maxWattage = 0;
-
-            foreach (var c in circuits)
-            {
-                double w = tempGfx.MeasureString(c.CircuitNumber, fontRow).Width;
-                if (w > maxCircuit) maxCircuit = w;
-
-                w = tempGfx.MeasureString(c.DimmingProtocol, fontRow).Width;
-                if (w > maxDimming) maxDimming = w;
-
-                w = tempGfx.MeasureString(c.FixturesDisplay, fontRow).Width;
-                if (w > maxFixtures) maxFixtures = w;
-
-                w = tempGfx.MeasureString(c.QuantityDisplay, fontRow).Width;
-                if (w > maxQuantity) maxQuantity = w;
-
-                w = tempGfx.MeasureString(c.DriverDisplay, fontRow).Width;
-                if (w > maxDriver) maxDriver = w;
-
-                w = tempGfx.MeasureString(c.TotalWattsDisplay, fontRow).Width;
-                if (w > maxWattage) maxWattage = w;
-            }
-
-            // Measure header widths to enforce minimums
-            double[] headerWidths = new double[7];
-            for (int i = 0; i < 7; i++)
-                headerWidths[i] = tempGfx.MeasureString(headers[i], fontColHeader).Width;
-
-            double minPad = ColumnPadding * 4; // extra breathing room for non-Load columns
-            colCircuit  = Math.Max(maxCircuit, headerWidths[0]) + minPad;
-            colDimming  = Math.Max(maxDimming, headerWidths[2]) + minPad;
-            colFixtures = Math.Max(maxFixtures, headerWidths[3]) + minPad;
-            colQuantity = Math.Max(maxQuantity, headerWidths[4]) + minPad;
-            colDriver   = Math.Max(maxDriver, headerWidths[5]) + minPad;
-            colWattage  = Math.Max(maxWattage, headerWidths[6]) + minPad;
-        }
-
-        double contentWidth = PageWidth - MarginLeft - MarginRight;
-        double fixedColsWidth = colCircuit + colDimming + colFixtures + colQuantity + colDriver + colWattage;
-        colLoad = Math.Max(contentWidth - fixedColsWidth, 60);
-
-        // Column X positions (left edge of each column)
-        double[] colX = new double[7];
-        double[] colW = { colCircuit, colLoad, colDimming, colFixtures, colQuantity, colDriver, colWattage };
-        colX[0] = MarginLeft;
-        for (int i = 1; i < 7; i++)
-            colX[i] = colX[i - 1] + colW[i - 1];
-
-        // Load logo
-        XImage? logo = null;
-        MemoryStream? logoStream = null;
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(settings.LogoFilePath) && File.Exists(settings.LogoFilePath))
-            {
-                if (settings.LogoFilePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-                {
-                    logoStream = new MemoryStream(File.ReadAllBytes(settings.LogoFilePath));
-                    logo = XPdfForm.FromStream(logoStream);
-                }
-                else
-                {
-                    logo = XImage.FromFile(settings.LogoFilePath);
-                }
-            }
-        }
-        catch { /* logo remains null */ }
+        XImage? logo = LoadLogo(settings, out MemoryStream? logoStream);
 
         using var pdf = new PdfDocument();
         pdf.Info.Title = $"{projectName} Load Schedule";
@@ -156,138 +94,314 @@ public static class LoadsPdfService
         void StartNewPage()
         {
             gfx?.Dispose();
-            page = pdf.AddPage();
-            page.Width  = XUnit.FromPoint(PageWidth);
-            page.Height = XUnit.FromPoint(PageHeight);
-            gfx = XGraphics.FromPdfPage(page);
+            page = NewPage(pdf, out gfx);
             y = MarginTop;
-
-            // Header: project name + subtitle (left), logo (right)
-            gfx.DrawString(projectName, fontHeaderProject, XBrushes.Black,
-                new XPoint(MarginLeft, y + HeaderProjectFontSize));
-            gfx.DrawString("LOAD SCHEDULE", fontHeaderSubtitle, XBrushes.Black,
-                new XPoint(MarginLeft, y + HeaderProjectFontSize + HeaderSubtitleFontSize + 3));
-
-            if (logo != null)
-            {
-                double logoW, logoH;
-                if (logo is XPdfForm pdfLogo)
-                {
-                    logoH = HeaderLogoHeight;
-                    logoW = pdfLogo.PointWidth * (logoH / pdfLogo.PointHeight);
-                }
-                else
-                {
-                    logoH = HeaderLogoHeight;
-                    logoW = (double)logo.PixelWidth * (logoH / logo.PixelHeight);
-                }
-                double logoX = PageWidth - MarginRight - logoW - HeaderLogoRightInset;
-                double logoY = y + (HeaderProjectFontSize + HeaderSubtitleFontSize - logoH) / 2;
-                if (logo is XPdfForm pdfForm)
-                    DrawScaledForm(gfx, pdfForm, logoX, logoY, logoW, logoH);
-                else
-                    gfx.DrawImage(logo, logoX, logoY, logoW, logoH);
-            }
-
-            double noteY = y + HeaderProjectFontSize + HeaderSubtitleFontSize + 16;
-            gfx.DrawString(
-                "Note: Verify load schedule with official control system documentation.",
-                fontHeaderNote, brushHeaderNote, new XPoint(MarginLeft, noteY));
-
-            y += HeaderHeight + HeaderSpacing;
-
-            // ── Column headers ──
-            var headerBrush = new XSolidBrush(XColor.FromGrayScale(0.15));
-            // Ckt header centered
-            var centerAlign = new XStringFormat
-            {
-                Alignment = XStringAlignment.Center,
-                LineAlignment = XLineAlignment.BaseLine
-            };
-            gfx.DrawString(headers[0], fontColHeader, headerBrush,
-                new XPoint(colX[0] + colW[0] / 2, y + BaselineOffset - 2), centerAlign);
-            for (int i = 1; i < 7; i++)
-            {
-                gfx.DrawString(headers[i], fontColHeader, headerBrush,
-                    new XPoint(colX[i] + ColumnPadding, y + BaselineOffset - 2));
-            }
-            y += ColumnHeaderHeight;
-
-            // Line under column headers
-            gfx.DrawLine(new XPen(XColor.FromGrayScale(0.50), 0.75),
-                MarginLeft, y, PageWidth - MarginRight, y);
+            DrawPageHeaderBlock(gfx!, projectName, logo, ref y);
+            DrawColumnHeaders(gfx!, colX, colW, fontColHeader, ByCircuitHeaderRule, ref y);
         }
 
         StartNewPage();
 
-        var centerAlignData = new XStringFormat
-        {
-            Alignment = XStringAlignment.Center,
-            LineAlignment = XLineAlignment.BaseLine
-        };
-
         foreach (var circuit in circuits)
         {
-            if (y + LineHeight > PageHeight - FooterHeight)
+            if (y + LineHeight > UsableBottom)
                 StartNewPage();
-
-            double baseline = y + BaselineOffset;
-
-            // Circuit (centered)
-            gfx!.DrawString(circuit.CircuitNumber, fontRow, XBrushes.Black,
-                new XPoint(colX[0] + colW[0] / 2, baseline), centerAlignData);
-
-            // Load (truncate if too wide)
-            double loadMaxWidth = colW[1] - ColumnPadding * 2;
-            string loadName = circuit.LoadName;
-            if (gfx.MeasureString(loadName, fontRow).Width > loadMaxWidth && loadName.Length > 0)
-            {
-                while (loadName.Length > 1 && gfx.MeasureString(loadName + "\u2026", fontRow).Width > loadMaxWidth)
-                    loadName = loadName[..^1];
-                loadName += "\u2026";
-            }
-            gfx.DrawString(loadName, fontRow, XBrushes.Black,
-                new XPoint(colX[1] + ColumnPadding, baseline));
-
-            // Dimming
-            gfx.DrawString(circuit.DimmingProtocol, fontRow, XBrushes.Black,
-                new XPoint(colX[2] + ColumnPadding, baseline));
-
-            // Fixtures
-            gfx.DrawString(circuit.FixturesDisplay, fontRow, XBrushes.Black,
-                new XPoint(colX[3] + ColumnPadding, baseline));
-
-            // Quantity
-            gfx.DrawString(circuit.QuantityDisplay, fontRow, XBrushes.Black,
-                new XPoint(colX[4] + ColumnPadding, baseline));
-
-            // Driver
-            gfx.DrawString(circuit.DriverDisplay, fontRow, XBrushes.Black,
-                new XPoint(colX[5] + ColumnPadding, baseline));
-
-            // Wattage
-            gfx.DrawString(circuit.TotalWattsDisplay, fontRow, XBrushes.Black,
-                new XPoint(colX[6] + ColumnPadding, baseline));
-
-            y += LineHeight;
-
-            // Subtle gridline after each row
-            gfx.DrawLine(gridPen, MarginLeft, y, PageWidth - MarginRight, y);
+            DrawRow(gfx!, circuit, colX, colW, fontRow, gridPen, centerData, ref y);
         }
 
-        // Dispose main graphics before footer pass
         gfx?.Dispose();
-        gfx = null;
+        WriteFooters(pdf, settings, fontPageNum);
+        pdf.Save(outputPath);
+        logoStream?.Dispose();
+    }
 
-        // Footer + page numbers on every page
+    // ──────────────────────────────────────────────────────────────────────────────────────
+    // By Room — circuits grouped into room sections, each under a gray band.
+    // ──────────────────────────────────────────────────────────────────────────────────────
+    public static void GenerateByRoom(
+        List<LoadSection> sections,
+        string projectName,
+        string outputPath,
+        DocsSettings settings)
+    {
+        var fontRow        = new XFont("Segoe UI", RowFontSize);
+        var fontColHeader  = new XFont("Segoe UI", HeaderFontSize, XFontStyleEx.Bold);
+        var fontRoomHeader = new XFont("Segoe UI", RoomHeaderFontSize, XFontStyleEx.Bold);
+        var fontPageNum    = new XFont("Segoe UI Light", 7);
+        var gridPen        = new XPen(XColor.FromGrayScale(0.85), 0.5);
+        var centerData     = new XStringFormat { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
+
+        var allCircuits = sections.SelectMany(s => s.Circuits).ToList();
+        var (colX, colW) = ComputeColumns(allCircuits, fontRow, fontColHeader);
+
+        XImage? logo = LoadLogo(settings, out MemoryStream? logoStream);
+
+        using var pdf = new PdfDocument();
+        pdf.Info.Title = $"{projectName} Load Schedule";
+
+        PdfPage? page = null;
+        XGraphics? gfx = null;
+        double y = 0;
+
+        void StartNewPage()
+        {
+            gfx?.Dispose();
+            page = NewPage(pdf, out gfx);
+            y = MarginTop;
+            DrawPageHeaderBlock(gfx!, projectName, logo, ref y);
+            // Column headers live under each room band when ColumnHeadersPerRoom; otherwise they
+            // lead the page like the By-Circuit export.
+            if (!ColumnHeadersPerRoom)
+                DrawColumnHeaders(gfx!, colX, colW, fontColHeader, ByRoomHeaderRule, ref y);
+        }
+
+        // Draw a room band (+ per-room column headers) at the current y, redrawing on continuation.
+        void DrawBand(LoadSection section, bool continued)
+        {
+            DrawRoomBand(gfx!, section, continued, fontRoomHeader, ref y);
+            if (ColumnHeadersPerRoom)
+                DrawColumnHeaders(gfx!, colX, colW, fontColHeader, ByRoomHeaderRule, ref y);
+        }
+
+        StartNewPage();
+
+        double bandBlock = RoomHeaderHeight + (ColumnHeadersPerRoom ? ColumnHeaderHeight : 0) + LineHeight;
+        // Box around each room's on-page segment — matching the Panel Schedule's module outline.
+        // A room can span pages, so the box is closed per page segment (band → last row on the page).
+        var boxPen = new XPen(XColor.FromGrayScale(0.50), 0.75);
+
+        foreach (var section in sections)
+        {
+            // Keep-with-next: never orphan a band (+ its column headers + at least one row) at the
+            // bottom of a page.
+            if (y + bandBlock > UsableBottom)
+                StartNewPage();
+
+            double segmentTop = y;
+            DrawBand(section, continued: false);
+            // Bookmark the section on the page where it opens.
+            pdf.Outlines.Add(section.RoomName, page!);
+
+            foreach (var circuit in section.Circuits)
+            {
+                if (y + LineHeight > UsableBottom)
+                {
+                    // Close the box around this page's segment before the break, then reopen it
+                    // under the continuation band on the next page.
+                    gfx!.DrawRectangle(boxPen, MarginLeft, segmentTop, ContentWidth, y - segmentTop);
+                    StartNewPage();
+                    segmentTop = y;
+                    DrawBand(section, continued: true);
+                }
+                DrawRow(gfx!, circuit, colX, colW, fontRow, gridPen, centerData, ref y);
+            }
+
+            gfx!.DrawRectangle(boxPen, MarginLeft, segmentTop, ContentWidth, y - segmentTop);
+            y += RoomGap;
+        }
+
+        gfx?.Dispose();
+        WriteFooters(pdf, settings, fontPageNum);
+        pdf.Save(outputPath);
+        logoStream?.Dispose();
+    }
+
+    // ── Shared rendering helpers ──────────────────────────────────────────────────────────
+
+    private static PdfPage NewPage(PdfDocument pdf, out XGraphics gfx)
+    {
+        var page = pdf.AddPage();
+        page.Width  = XUnit.FromPoint(PageWidth);
+        page.Height = XUnit.FromPoint(PageHeight);
+        gfx = XGraphics.FromPdfPage(page);
+        return page;
+    }
+
+    /// <summary>Measure column widths from the circuit set. Load flexes to fill the remainder.</summary>
+    private static (double[] colX, double[] colW) ComputeColumns(
+        IReadOnlyList<LoadsCircuitModel> circuits, XFont fontRow, XFont fontColHeader)
+    {
+        double colCircuit, colDimming, colFixtures, colQuantity, colDriver, colWattage;
+
+        using (var tempPdf = new PdfDocument())
+        {
+            var tempPage = tempPdf.AddPage();
+            using var tempGfx = XGraphics.FromPdfPage(tempPage);
+
+            double maxCircuit = 0, maxDimming = 0, maxFixtures = 0;
+            double maxQuantity = 0, maxDriver = 0, maxWattage = 0;
+
+            foreach (var c in circuits)
+            {
+                maxCircuit  = Math.Max(maxCircuit,  tempGfx.MeasureString(c.CircuitNumber, fontRow).Width);
+                maxDimming  = Math.Max(maxDimming,  tempGfx.MeasureString(c.DimmingProtocol, fontRow).Width);
+                maxFixtures = Math.Max(maxFixtures, tempGfx.MeasureString(c.FixturesDisplay, fontRow).Width);
+                maxQuantity = Math.Max(maxQuantity, tempGfx.MeasureString(c.QuantityDisplay, fontRow).Width);
+                maxDriver   = Math.Max(maxDriver,   tempGfx.MeasureString(c.DriverDisplay, fontRow).Width);
+                maxWattage  = Math.Max(maxWattage,  tempGfx.MeasureString(c.TotalWattsDisplay, fontRow).Width);
+            }
+
+            double[] hw = new double[7];
+            for (int i = 0; i < 7; i++)
+                hw[i] = tempGfx.MeasureString(Headers[i], fontColHeader).Width;
+
+            double minPad = ColumnPadding * 4; // extra breathing room for non-Load columns
+            colCircuit  = Math.Max(maxCircuit,  hw[0]) + minPad;
+            colDimming  = Math.Max(maxDimming,  hw[2]) + minPad;
+            colFixtures = Math.Max(maxFixtures, hw[3]) + minPad;
+            colQuantity = Math.Max(maxQuantity, hw[4]) + minPad;
+            colDriver   = Math.Max(maxDriver,   hw[5]) + minPad;
+            colWattage  = Math.Max(maxWattage,  hw[6]) + minPad;
+        }
+
+        double fixedCols = colCircuit + colDimming + colFixtures + colQuantity + colDriver + colWattage;
+        double colLoad = Math.Max(ContentWidth - fixedCols, 60);
+
+        double[] colW = { colCircuit, colLoad, colDimming, colFixtures, colQuantity, colDriver, colWattage };
+        double[] colX = new double[7];
+        colX[0] = MarginLeft;
+        for (int i = 1; i < 7; i++)
+            colX[i] = colX[i - 1] + colW[i - 1];
+
+        return (colX, colW);
+    }
+
+    private static XImage? LoadLogo(DocsSettings settings, out MemoryStream? logoStream)
+    {
+        logoStream = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(settings.LogoFilePath) && File.Exists(settings.LogoFilePath))
+            {
+                if (settings.LogoFilePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    logoStream = new MemoryStream(File.ReadAllBytes(settings.LogoFilePath));
+                    return XPdfForm.FromStream(logoStream);
+                }
+                return XImage.FromFile(settings.LogoFilePath);
+            }
+        }
+        catch { /* logo remains null */ }
+        return null;
+    }
+
+    /// <summary>Project name + subtitle (left), logo (right), verify note. Assumes y is at MarginTop;
+    /// advances y past the header band.</summary>
+    private static void DrawPageHeaderBlock(XGraphics gfx, string projectName, XImage? logo, ref double y)
+    {
+        var fontHeaderProject  = new XFont("Segoe UI", HeaderProjectFontSize, XFontStyleEx.Bold);
+        var fontHeaderSubtitle = new XFont("Segoe UI", HeaderSubtitleFontSize);
+        var fontHeaderNote     = new XFont("Segoe UI Light", HeaderNoteFontSize);
+        var brushHeaderNote    = new XSolidBrush(XColor.FromGrayScale(0.40));
+
+        gfx.DrawString(projectName, fontHeaderProject, XBrushes.Black,
+            new XPoint(MarginLeft, y + HeaderProjectFontSize));
+        gfx.DrawString("LOAD SCHEDULE", fontHeaderSubtitle, XBrushes.Black,
+            new XPoint(MarginLeft, y + HeaderProjectFontSize + HeaderSubtitleFontSize + 3));
+
+        if (logo != null)
+        {
+            double logoH = HeaderLogoHeight;
+            double logoW = logo is XPdfForm pdfLogo
+                ? pdfLogo.PointWidth * (logoH / pdfLogo.PointHeight)
+                : (double)logo.PixelWidth * (logoH / logo.PixelHeight);
+            double logoX = PageWidth - MarginRight - logoW - HeaderLogoRightInset;
+            double logoY = y + (HeaderProjectFontSize + HeaderSubtitleFontSize - logoH) / 2;
+            if (logo is XPdfForm pdfForm)
+                DrawScaledForm(gfx, pdfForm, logoX, logoY, logoW, logoH);
+            else
+                gfx.DrawImage(logo, logoX, logoY, logoW, logoH);
+        }
+
+        double noteY = y + HeaderProjectFontSize + HeaderSubtitleFontSize + 16;
+        gfx.DrawString(
+            "Note: Verify load schedule with official control system documentation.",
+            fontHeaderNote, brushHeaderNote, new XPoint(MarginLeft, noteY));
+
+        y += HeaderHeight + HeaderSpacing;
+    }
+
+    // The two column-header underlines: By Circuit keeps the heavier divider; By Room matches the
+    // Panel Schedule's lighter, thinner rule (its room box already carries the visual weight).
+    private static readonly XPen ByCircuitHeaderRule = new XPen(XColor.FromGrayScale(0.50), 0.75);
+    private static readonly XPen ByRoomHeaderRule    = new XPen(XColor.FromGrayScale(0.85), 0.5);
+
+    private static void DrawColumnHeaders(XGraphics gfx, double[] colX, double[] colW,
+        XFont fontColHeader, XPen underlinePen, ref double y)
+    {
+        var headerBrush = new XSolidBrush(XColor.FromGrayScale(0.15));
+        var centerAlign = new XStringFormat { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
+        gfx.DrawString(Headers[0], fontColHeader, headerBrush,
+            new XPoint(colX[0] + colW[0] / 2, y + BaselineOffset - 2), centerAlign);
+        for (int i = 1; i < 7; i++)
+            gfx.DrawString(Headers[i], fontColHeader, headerBrush,
+                new XPoint(colX[i] + ColumnPadding, y + BaselineOffset - 2));
+        y += ColumnHeaderHeight;
+        gfx.DrawLine(underlinePen, MarginLeft, y, PageWidth - MarginRight, y);
+    }
+
+    /// <summary>Gray room band: name (uppercase) left, room total wattage right. A "(No Room)"
+    /// section prints no wattage. Advances y past the band.</summary>
+    private static void DrawRoomBand(XGraphics gfx, LoadSection section, bool continued,
+        XFont fontRoomHeader, ref double y)
+    {
+        gfx.DrawRectangle(new XSolidBrush(XColor.FromGrayScale(0.88)),
+            MarginLeft, y, ContentWidth, RoomHeaderHeight);
+
+        string label = section.RoomName.ToUpperInvariant() + (continued ? " (continued)" : "");
+        double centerY = y + RoomHeaderHeight / 2;
+        gfx.DrawString(label, fontRoomHeader, XBrushes.Black,
+            new XPoint(MarginLeft + ColumnPadding, centerY),
+            new XStringFormat { Alignment = XStringAlignment.Near, LineAlignment = XLineAlignment.Center });
+
+        if (!section.IsNoRoom)
+        {
+            double watts = section.Circuits.Sum(c => c.ApparentLoadVA);
+            gfx.DrawString($"{Math.Round(watts)} W", fontRoomHeader, XBrushes.Black,
+                new XPoint(PageWidth - MarginRight - ColumnPadding, centerY),
+                new XStringFormat { Alignment = XStringAlignment.Far, LineAlignment = XLineAlignment.Center });
+        }
+
+        y += RoomHeaderHeight;
+    }
+
+    private static void DrawRow(XGraphics gfx, LoadsCircuitModel circuit, double[] colX, double[] colW,
+        XFont fontRow, XPen gridPen, XStringFormat centerData, ref double y)
+    {
+        double baseline = y + BaselineOffset;
+
+        // Circuit (centered)
+        gfx.DrawString(circuit.CircuitNumber, fontRow, XBrushes.Black,
+            new XPoint(colX[0] + colW[0] / 2, baseline), centerData);
+
+        // Load (truncate if too wide)
+        double loadMaxWidth = colW[1] - ColumnPadding * 2;
+        string loadName = circuit.LoadName;
+        if (gfx.MeasureString(loadName, fontRow).Width > loadMaxWidth && loadName.Length > 0)
+        {
+            while (loadName.Length > 1 && gfx.MeasureString(loadName + "…", fontRow).Width > loadMaxWidth)
+                loadName = loadName[..^1];
+            loadName += "…";
+        }
+        gfx.DrawString(loadName, fontRow, XBrushes.Black, new XPoint(colX[1] + ColumnPadding, baseline));
+
+        gfx.DrawString(circuit.DimmingProtocol, fontRow, XBrushes.Black, new XPoint(colX[2] + ColumnPadding, baseline));
+        gfx.DrawString(circuit.FixturesDisplay, fontRow, XBrushes.Black, new XPoint(colX[3] + ColumnPadding, baseline));
+        gfx.DrawString(circuit.QuantityDisplay, fontRow, XBrushes.Black, new XPoint(colX[4] + ColumnPadding, baseline));
+        gfx.DrawString(circuit.DriverDisplay, fontRow, XBrushes.Black, new XPoint(colX[5] + ColumnPadding, baseline));
+        gfx.DrawString(circuit.TotalWattsDisplay, fontRow, XBrushes.Black, new XPoint(colX[6] + ColumnPadding, baseline));
+
+        y += LineHeight;
+        gfx.DrawLine(gridPen, MarginLeft, y, PageWidth - MarginRight, y);
+    }
+
+    private static void WriteFooters(PdfDocument pdf, DocsSettings settings, XFont fontPageNum)
+    {
         for (int i = 0; i < pdf.PageCount; i++)
         {
             using var g = XGraphics.FromPdfPage(pdf.Pages[i]);
             DrawFooter(g, settings, fontPageNum, i + 1, pdf.PageCount);
         }
-
-        pdf.Save(outputPath);
-        logoStream?.Dispose();
     }
 
     private static void DrawScaledForm(XGraphics gfx, XPdfForm form, double x, double y, double width, double height)

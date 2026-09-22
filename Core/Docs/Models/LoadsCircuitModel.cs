@@ -14,6 +14,11 @@ public class LoadsCircuitModel
         set => _circuitNumber = string.Equals(value, "<unnamed>", StringComparison.OrdinalIgnoreCase) ? "<...>" : value;
     }
     public string LoadName { get; set; } = string.Empty;
+    /// <summary>The circuit's resolved room, stamped by the collector (override → first
+    /// load-fixture's Space → 2D region → null). Empty/whitespace means unresolved, and the
+    /// By-Room export files it under the trailing "(No Room)" section. Not printed as a column;
+    /// it only drives the By-Room grouping.</summary>
+    public string RoomName { get; set; } = string.Empty;
     /// <summary>The circuit's raw aggregated Dimming Protocol ("MLV", "ELV; 0-10V") — what the
     /// PDF's "Dimming" column prints. Deliberately the protocol as authored, not the module type
     /// it maps to, so the schedule shows what a reader would find on the fixture.</summary>

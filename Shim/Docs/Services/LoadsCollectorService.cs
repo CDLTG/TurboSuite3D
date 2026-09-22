@@ -20,6 +20,13 @@ public static class LoadsCollectorService
             .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
             .Cast<ElectricalSystem>();
 
+        // Room resolution for the By-Room export — the same resolver TurboZones/TurboNumber use,
+        // so the three agree on room names (ZonesCollectorService:31-35). Built once outside the
+        // loop; the Space lookup caches its per-level boundary walk.
+        var regionFallback = new RegionRoomLookupService(doc);
+        var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
+        var roomOverrides = RoomOverrideStorageService.Load(doc);
+
         foreach (var circuit in circuits)
         {
             try
@@ -37,6 +44,9 @@ public static class LoadsCollectorService
                 var fixtureGroups = new List<LoadsFixtureGroup>();
                 var driverSwitchIds = new List<string>();
                 var fixtureProtocols = new List<string>();
+                // First load-fixture on the circuit (Lighting/Electrical Fixtures only, never a
+                // driver Device) — the anchor for room resolution, matching GetFixturesOnCircuit.
+                FamilyInstance? firstFixture = null;
 
                 if (circuit.Elements != null)
                 {
@@ -50,6 +60,8 @@ public static class LoadsCollectorService
                         if (fi.Category?.BuiltInCategory is BuiltInCategory.OST_LightingFixtures
                             or BuiltInCategory.OST_ElectricalFixtures)
                         {
+                            firstFixture ??= fi;
+
                             // Collected off every fixture, not just the TypeMark-bearing ones —
                             // the "Dimming" column describes the circuit, so an untagged fixture
                             // still gets a say in what protocol it runs.
@@ -85,10 +97,18 @@ public static class LoadsCollectorService
                         .ToList();
                 }
 
+                // Resolve room: first fixture's Space (→ 2D region), with a persisted per-circuit
+                // override taking priority — the order TurboZones/TurboNumber use.
+                string roomName = firstFixture != null ? (roomCache.FindRoomName(firstFixture) ?? "") : "";
+                if (roomOverrides.TryGetValue(circuit.UniqueId, out var roomOverride)
+                    && !string.IsNullOrWhiteSpace(roomOverride))
+                    roomName = roomOverride;
+
                 results.Add(new LoadsCircuitModel
                 {
                     CircuitNumber = circuitNumber,
                     LoadName = ParameterHelper.GetLoadName(circuit),
+                    RoomName = roomName,
                     DimmingProtocol = LoadsDimmingResolver.ResolveDisplay(fixtureProtocols),
                     ApparentLoadVA = ParameterHelper.GetApparentLoad(circuit),
                     FixtureGroups = fixtureGroups,

@@ -26,13 +26,24 @@
         <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
+        <!-- Export mode -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,0,12,8">
+            <TextBlock Text="Sort:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+            <RadioButton Content="By Circuit" GroupName="LoadsSort"
+                         IsChecked="{Binding IsByCircuit}"
+                         Margin="0,0,20,0" VerticalContentAlignment="Center"/>
+            <RadioButton Content="By Room" GroupName="LoadsSort"
+                         IsChecked="{Binding IsByRoom}"
+                         VerticalContentAlignment="Center"/>
+        </StackPanel>
+
         <!-- Circuits -->
         <GroupBox Header="Circuits" Margin="6,0,6,0" Style="{StaticResource BoldHeaderGroupBox}">
             <DockPanel Margin="8">
                 <DataGrid ItemsSource="{Binding Circuits}"
                           AutoGenerateColumns="False"
                           CanUserAddRows="False" CanUserDeleteRows="False"
-                          CanUserSortColumns="True"
+                          CanUserSortColumns="False"
                           IsReadOnly="True"
                           SelectionMode="Single"
                           HeadersVisibility="Column"
@@ -40,15 +51,12 @@
                           HorizontalGridLinesBrush="#E0E0E0"
                           VerticalGridLinesBrush="#E0E0E0"
                           BorderThickness="1" BorderBrush="#CCCCCC"
-                          MinHeight="150"
-                          ColumnHeaderStyle="{StaticResource SortableColumnHeaderStyle}"
-                          Sorting="DataGrid_Sorting">
+                          MinHeight="150">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="110"
-                                            SortDirection="Ascending"/>
+                        <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="110"/>
                         <DataGridTextColumn Header="Load" Binding="{Binding LoadName}" Width="*"/>
-                        <DataGridTextColumn Header="Wattage" Binding="{Binding TotalWattsDisplay}" Width="100"
-                                            SortMemberPath="ApparentLoadVA"/>
+                        <DataGridTextColumn Header="Room" Binding="{Binding RoomName}" Width="140"/>
+                        <DataGridTextColumn Header="Wattage" Binding="{Binding TotalWattsDisplay}" Width="100"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>

@@ -36,7 +36,11 @@ public class DocsSettings
     public List<string> SpecificationNotes { get; set; } = new();
 
     // Load Schedule tab settings
+    // Superseded by LoadsByRoom below (the column-header sort was removed in favor of a
+    // By Circuit / By Room radio). Retained only so old settings files load without loss.
     public string LoadsSelectedSortColumn { get; set; } = "CircuitNumber";
+    // Load Schedule export mode: false = By Circuit (flat list, default), true = By Room (grouped).
+    public bool LoadsByRoom { get; set; }
 
     // Power Supplies tab settings
     public List<string> RPSSelectedTypeMarks { get; set; } = new();

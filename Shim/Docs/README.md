@@ -63,11 +63,18 @@ Embedded line feeds (alt+0010) in parameter values are replaced with ", " for si
 
 ## Load Schedule Tab
 
-Generates a load schedule PDF from electrical circuit parameters in a flat table format.
+Generates a load schedule PDF from electrical circuit parameters, in one of two sort modes chosen by a **By Circuit / By Room** radio.
 
 ### Layout
 
 Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded; **shade circuits are excluded** (`ShadeCircuitClassifier.IsShadeCircuit` — the same drop TurboZones' lighting collector makes) — a shade is modeled only to carry a control circuit + BOM, not as a designed electrical load, so it has no accurate wattage and stays off the load schedule. Shade breakers still appear on the **Panel Schedule**.
+
+### Sort modes
+
+- **By Circuit** (default) — a single flat table, natural circuit-number sort, `<...>` pinned to the bottom. Default file name `{Project} Load Schedule.pdf`.
+- **By Room** — circuits grouped into room sections under gray subheader bands (room name + section total wattage), mirroring how the Lutron software groups its load schedule. Each room band is boxed (Panel-Schedule style, closed per page segment) with per-room column headers; the lighter column-header rule distinguishes it from By Circuit's heavier one. Default file name `{Project} Load Schedule by Room.pdf`, so the two exports co-exist in one folder.
+
+Room order and grouping are pure/testable in `Core/Docs/Services/LoadScheduleSectioner.cs` (oracle suite in `Tests/Docs/`): sections run **project-wide Room Order** (the shared `RoomOrderStorageService` primitive) first, then resolved-but-unordered rooms alpha, then a trailing **(No Room)** for circuits with no resolvable room; within each section, natural circuit-number sort. Each circuit's room is stamped by `LoadsCollectorService` via the shared resolver (per-circuit override → first load-fixture's Space → 2D region), the same one TurboZones/TurboNumber use, so the three agree on room names. The `LoadsPdfService.ColumnHeadersPerRoom` const toggles the By-Room column headers between per-room (default) and once-per-page.
 
 **Fixtures column** — smart Type Mark combining:
 - All same Type Mark → show as-is

@@ -15,25 +15,37 @@ namespace TurboSuite.Docs.ViewModels;
 public class LoadsViewModel : ViewModelBase
 {
     private readonly DocsViewModel _parent;
-    private string _selectedSortColumn = "CircuitNumber";
-    private bool _sortDescending;
+    private bool _isByRoom;
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
 
+    // Project-wide Room Order (ordered room names), loaded from ExtensibleStorage at collection
+    // time and passed to LoadCircuits — a VM cannot read Revit synchronously. Drives By Room.
+    private List<string> _roomOrder = new();
+
     public string ProjectName { get; }
     public ObservableCollection<LoadsCircuitModel> Circuits { get; } = new();
 
-    public string SelectedSortColumn
+    /// <summary>By Circuit (flat list) vs By Room (grouped) export radio. Mirrors the Cut Sheets
+    /// package radio; the setter re-queries so the DocsViewModel wiring picks up the flip.</summary>
+    public bool IsByRoom
     {
-        get => _selectedSortColumn;
-        set => SetProperty(ref _selectedSortColumn, value);
+        get => _isByRoom;
+        set
+        {
+            if (SetProperty(ref _isByRoom, value))
+            {
+                OnPropertyChanged(nameof(IsByCircuit));
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+            }
+        }
     }
 
-    public bool SortDescending
+    public bool IsByCircuit
     {
-        get => _sortDescending;
-        set => SetProperty(ref _sortDescending, value);
+        get => !_isByRoom;
+        set => IsByRoom = !value;
     }
 
     public double Progress
@@ -68,61 +80,49 @@ public class LoadsViewModel : ViewModelBase
         GenerateCommand = new RelayCommand(ExecuteGenerate, () => !IsGenerating && Circuits.Count > 0);
     }
 
-    public void LoadCircuits(List<LoadsCircuitModel> circuits)
+    public void LoadCircuits(List<LoadsCircuitModel> circuits, List<string> roomOrder)
     {
         Circuits.Clear();
         foreach (var c in circuits)
             Circuits.Add(c);
 
+        _roomOrder = roomOrder ?? new List<string>();
+
         var settings = DocsSettingsService.Load();
-        if (!string.IsNullOrWhiteSpace(settings.LoadsSelectedSortColumn))
-            _selectedSortColumn = settings.LoadsSelectedSortColumn;
+        _isByRoom = settings.LoadsByRoom;
+        OnPropertyChanged(nameof(IsByRoom));
+        OnPropertyChanged(nameof(IsByCircuit));
     }
 
     public void SaveSettings()
     {
         var settings = DocsSettingsService.Load();
-        settings.LoadsSelectedSortColumn = SelectedSortColumn;
+        settings.LoadsByRoom = IsByRoom;
         DocsSettingsService.Save(settings);
     }
 
-    private List<LoadsCircuitModel> GetSortedCircuits()
-    {
-        // Pin <...> placeholders to the bottom regardless of direction, matching the XAML grid.
-        var primary = Circuits.OrderBy(c => c.CircuitNumber == "<...>" ? 1 : 0);
-
-        IOrderedEnumerable<LoadsCircuitModel> ordered = SelectedSortColumn switch
-        {
-            "LoadName" when SortDescending => primary
-                .ThenByDescending(c => c.LoadName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
-            "LoadName" => primary
-                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase),
-            "TotalWatts" when SortDescending => primary
-                .ThenByDescending(c => c.ApparentLoadVA)
-                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
-            "TotalWatts" => primary
-                .ThenBy(c => c.ApparentLoadVA)
-                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
-            _ when SortDescending => primary
-                .ThenByDescending(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase)
-                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
-            _ => primary
-                .ThenBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase)
-                .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase),
-        };
-        return ordered.ToList();
-    }
+    /// <summary>By Circuit ordering: natural circuit number, with the DMX "&lt;...&gt;" placeholder
+    /// pinned to the bottom regardless — matching the grid.</summary>
+    private List<LoadsCircuitModel> GetByCircuitList() =>
+        Circuits
+            .OrderBy(c => c.CircuitNumber == "<...>" ? 1 : 0)
+            .ThenBy(c => c.CircuitNumber, NaturalStringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.LoadName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private async void ExecuteGenerate()
     {
         if (Circuits.Count == 0) return;
 
+        bool byRoom = IsByRoom;
+
+        // Distinct default names so a By Circuit and a By Room export can co-exist in one folder.
         var saveDialog = new SaveFileDialog
         {
             Filter = "PDF Files|*.pdf",
-            FileName = $"{ProjectName} Load Schedule.pdf"
+            FileName = byRoom
+                ? $"{ProjectName} Load Schedule by Room.pdf"
+                : $"{ProjectName} Load Schedule.pdf"
         };
         if (saveDialog.ShowDialog() != true) return;
 
@@ -130,12 +130,16 @@ public class LoadsViewModel : ViewModelBase
         IsGenerating = true;
         Progress = 0;
 
+        var byCircuitList = GetByCircuitList();
+        var sections = byRoom
+            ? LoadScheduleSectioner.Section(Circuits.ToList(), _roomOrder)
+            : null;
+
         try
         {
             StatusText = "Generating load schedule...";
             Progress = 50;
 
-            var sorted = GetSortedCircuits();
             string outputPath = saveDialog.FileName;
             var settings = new DocsSettings
             {
@@ -146,7 +150,11 @@ public class LoadsViewModel : ViewModelBase
                 CompanyWebsite = _parent.CompanyWebsite,
                 FooterDate = _parent.HeaderDate.ToString("yyyy.MM.dd"),
             };
-            await Task.Run(() => LoadsPdfService.Generate(sorted, ProjectName, outputPath, settings));
+
+            if (byRoom)
+                await Task.Run(() => LoadsPdfService.GenerateByRoom(sections!, ProjectName, outputPath, settings));
+            else
+                await Task.Run(() => LoadsPdfService.Generate(byCircuitList, ProjectName, outputPath, settings));
 
             Progress = 100;
             StatusText = $"Done. Saved to {Path.GetFileName(outputPath)}";

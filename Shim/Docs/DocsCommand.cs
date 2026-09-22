@@ -9,6 +9,7 @@ using TurboSuite.Docs.Services;
 using TurboSuite.Docs.ViewModels;
 using TurboSuite.Docs.Views;
 using TurboSuite.Shared.Constants;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Docs;
@@ -83,8 +84,10 @@ public class DocsCommand : IExternalCommand
         var (rpsScheduleItems, rpsInstances, rpsCutSheetFixtures) = RPSCollectorService.Collect(doc);
         var rpsBreakdown = RPSCollectorService.CollectBreakdown(doc);
 
-        // Collect load schedule circuit data
+        // Collect load schedule circuit data + the project-wide Room Order (ordered names) that
+        // drives the By-Room export. List position is the authoritative order (RoomOrderViewModel).
         var loadsCircuits = LoadsCollectorService.Collect(doc);
+        var loadsRoomOrder = RoomOrderStorageService.Load(doc).Select(r => r.Name).ToList();
 
         // Collect panel schedule data
         PanelScheduleData? panelData = null;
@@ -118,7 +121,7 @@ public class DocsCommand : IExternalCommand
         var viewModel = new DocsViewModel(cutSheetFixtures, rpsCutSheetFixtures, projectName, projectNumber);
         viewModel.ScheduleVM.LoadFixtures(scheduleFixtures);
         viewModel.PowerSuppliesVM.LoadData(rpsScheduleItems, rpsInstances, rpsBreakdown);
-        viewModel.LoadsVM.LoadCircuits(loadsCircuits);
+        viewModel.LoadsVM.LoadCircuits(loadsCircuits, loadsRoomOrder);
         if (panelData != null)
             viewModel.PanelScheduleVM.LoadData(panelData);
         if (bomData != null)
