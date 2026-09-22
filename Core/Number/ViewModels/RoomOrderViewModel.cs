@@ -130,7 +130,7 @@ namespace TurboSuite.Number.ViewModels
 
             // Room order is read from ExtensibleStorage at collection time and passed in —
             // a Core ctor cannot read Revit synchronously. Seed from the persisted order,
-            // then fold in any rooms that have appeared since (append-alphabetical).
+            // then reconcile against the live room enumeration (prune gone, add new).
             for (int i = 0; i < savedRoomOrder.Count; i++)
             {
                 var item = new RoomOrderItem(savedRoomOrder[i].Name, i + 1);
@@ -141,7 +141,7 @@ namespace TurboSuite.Number.ViewModels
             if (RoomOrder.Count == 0)
                 BuildRoomOrder();
             else
-                MergeNewRooms();
+                ReconcileWithLiveRooms();
             RefreshPositions();
 
             CollectionViewSource.GetDefaultView(RoomOrder).Filter = RoomMatchesSearch;
@@ -291,8 +291,31 @@ namespace TurboSuite.Number.ViewModels
                 RoomOrder.Add(new RoomOrderItem(names[i], i + 1));
         }
 
-        private void MergeNewRooms()
+        /// <summary>
+        /// Two-way reconcile of the persisted order against the live room enumeration
+        /// (<see cref="_allRoomNames"/>): first prune saved rooms that no longer exist,
+        /// then append rooms that have appeared since (alphabetical). The prune is what
+        /// reaps a stale name after its Space/region is renamed — e.g. SHOWER →
+        /// GRAND SHOWER — which the old add-only merge left lingering forever. Runs once
+        /// at window open (live names are captured at construction), so a mid-session
+        /// rename reflects on next open, matching the add cadence. In-memory only: the
+        /// pruned tombstone is dropped from ExtensibleStorage the next time any reorder
+        /// commits, and never re-displays meanwhile.
+        /// </summary>
+        private void ReconcileWithLiveRooms()
         {
+            var live = new HashSet<string>(
+                _allRoomNames.Where(n => !string.IsNullOrEmpty(n)),
+                StringComparer.OrdinalIgnoreCase);
+
+            // Prune: drop any saved room absent from the current enumeration.
+            for (int i = RoomOrder.Count - 1; i >= 0; i--)
+            {
+                if (!live.Contains(RoomOrder[i].Name))
+                    RoomOrder.RemoveAt(i);
+            }
+
+            // Add: fold in rooms that have appeared since (append-alphabetical).
             var existing = new HashSet<string>(RoomOrder.Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
             var newNames = _allRoomNames
                 .Where(n => !string.IsNullOrEmpty(n) && !existing.Contains(n))
