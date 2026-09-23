@@ -7,6 +7,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.5.3] — 2026-09-23
+
+### Added
+- TurboDocs: Load Schedule now offers three formats via a single **Format** radio — By Circuit, By Circuit (Construction) 8.5" × 28.5" strip, and By Room.
+- TurboDocs: INCLUDED/ABOVE Unit Cost sentinel on the Counts Quote.
+
+### Changed
+- TurboZones: convention-based link packing (Section 1).
+- TurboDocs: Counts tariff is a flat manufacturer dollar amount, not a percentage.
+
+### Fixed
+- TurboNumber: prune stale room names from the Room Order on open.
+
 ## [1.5.2] — 2026-09-18
 
 ### Added
@@ -277,6 +290,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.5.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.3
 [1.5.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.2
 [1.5.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.1
 [1.5.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.0
