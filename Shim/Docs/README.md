@@ -67,7 +67,7 @@ Generates a load schedule PDF from electrical circuit parameters, in one of thre
 
 ### Layout
 
-Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Driver | Watts**. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded; **shade circuits are excluded** (`ShadeCircuitClassifier.IsShadeCircuit` — the same drop TurboZones' lighting collector makes) — a shade is modeled only to carry a control circuit + BOM, not as a designed electrical load, so it has no accurate wattage and stays off the load schedule. Shade breakers still appear on the **Panel Schedule**.
+Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Supply | Watts**. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded; **shade circuits are excluded** (`ShadeCircuitClassifier.IsShadeCircuit` — the same drop TurboZones' lighting collector makes) — a shade is modeled only to carry a control circuit + BOM, not as a designed electrical load, so it has no accurate wattage and stays off the load schedule. Shade breakers still appear on the **Panel Schedule**.
 
 ### Format options
 
@@ -86,7 +86,7 @@ Room order and grouping are pure/testable in `Core/Docs/Services/LoadScheduleSec
 
 **Qty column** — point-based fixtures sum to integer count; linear fixtures sum to total feet (e.g. `38.5'`)
 
-**Driver column** — Switch IDs from remote power supplies (`OST_LightingDevices`), with consecutive suffix combining (e.g. `X04a,X04b,X04c,X04d` → `X04a-d`)
+**Supply column** — Switch IDs from remote power supplies (`OST_LightingDevices`), with consecutive suffix combining (e.g. `X04a,X04b,X04c,X04d` → `X04a-d`). Headed "Supply" (not "Driver") because a remote power supply may be a transformer or other non-driver unit.
 
 ### Parameter Mapping
 
@@ -97,7 +97,7 @@ Room order and grouping are pure/testable in `Core/Docs/Services/LoadScheduleSec
 | Dimming | The control a load *needs* (a purchasing signal), not the module the BOM allocates. Raw Dimming Protocol aggregated across the circuit's fixtures (`MLV`, `ELV; 0-10V`) — **except `RELAY` dominates**: a Switch-type wall device (authored `Dimming Protocol = RELAY`, its Dimmer-type siblings left blank so the fixtures' protocol passes through) or a relay-authored fixture forces the whole circuit to read `RELAY`, so a dimmable fixture switched on/off shows `RELAY` ("buy a switch"), not its latent `ELV` ("buy an ELV dimmer"). Loads-only, via `Core/Docs/Services/LoadsDimmingResolver` — the control BOM and panel breakdown are unaffected (switched circuits are excluded there by `ZonesCircuitData.IsWiredToSwitch`). |
 | Fixtures | ALL_MODEL_TYPE_MARK (from OST_LightingFixtures + OST_ElectricalFixtures) |
 | Qty | Element count or Linear Length sum |
-| Driver | Switch ID (from OST_LightingDevices on circuit) |
+| Supply | Switch ID (from OST_LightingDevices on circuit) |
 | Watts | RBS_ELEC_APPARENT_LOAD |
 
 ## Panel Schedule Tab

@@ -79,7 +79,7 @@ public static class LoadsPdfService
 
     // Column headers, left-to-right. Index 0 ("Ckt") is centered; the rest are left-aligned.
     private static readonly string[] Headers =
-        { "Ckt", "Load", "Dimming", "Fixtures", "Qty", "Driver", "Watts" };
+        { "Ckt", "Load", "Dimming", "Fixtures", "Qty", "Supply", "Watts" };
 
     // ──────────────────────────────────────────────────────────────────────────────────────
     // By Circuit — a single flat list (unchanged output).
@@ -248,7 +248,7 @@ public static class LoadsPdfService
             ("Dimming",  c => c.DimmingProtocol),
             ("Fixtures", c => c.FixturesDisplay),
             ("Qty",      c => c.QuantityDisplay),
-            ("Driver",   c => c.DriverDisplay),
+            ("Supply",   c => c.DriverDisplay),
             ("Watts",    c => c.TotalWattsDisplay),
         };
 
