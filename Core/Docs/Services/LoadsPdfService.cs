@@ -51,10 +51,26 @@ public static class LoadsPdfService
     // Column-header placement on the By-Room export: true = repeated under every room band
     // (matches the Lutron reference); false = drawn once at the top of each page. This is the
     // single toggle called out in the plan — flip it and nothing else changes.
-    private const bool ColumnHeadersPerRoom = true;
+    // static readonly (not const) on purpose: it keeps both placement branches live to the
+    // compiler, so flipping the toggle needs no other edit and neither branch trips CS0162.
+    private static readonly bool ColumnHeadersPerRoom = true;
 
     // ── Footer ──
     private const double FooterHeight = 28;
+
+    // ── Construction strip (By Circuit only — 8.5x28.5, mirrors the RPS lookup strip) ──
+    // A flush field reference, not a branded deliverable: 28.5" tall page, content-fit columns
+    // so the strip width follows the data, a one-line title band, condensed rows, and no footer.
+    private const double StripPageHeight   = 28.5 * 72;  // 2052 pt
+    private const double StripMargin       = 2;          // hair border, near edge-to-edge
+    private const double StripTitleFontSize = 10;
+    private const double StripHeaderHeight  = 20;        // title band height
+    private const double StripHeaderSpacing = 2;         // title/table hug the rule
+    private const double StripRowHeight     = 14;
+    private const double StripHeaderRowHeight = 14;
+    private const double StripFontSize      = 7.5;
+    private const double StripCellPadding   = 6;
+    private const double StripColumnGap     = 12;        // trailing slack past each content-fit column
 
     #endregion
 
@@ -204,6 +220,167 @@ public static class LoadsPdfService
         WriteFooters(pdf, settings, fontPageNum);
         pdf.Save(outputPath);
         logoStream?.Dispose();
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────
+    // By Circuit — construction strip (8.5x28.5). Same flat list and columns as Generate, but a
+    // content-fit, condensed, unfooted field-reference layout modeled on RPSLookupPdfService's
+    // large format. Deliberately independent of the Letter path so that shipped output is untouched.
+    // ──────────────────────────────────────────────────────────────────────────────────────
+    public static void GenerateByCircuitConstruction(
+        List<LoadsCircuitModel> circuits,
+        string projectName,
+        string outputPath,
+        DocsSettings settings)
+    {
+        var fontTitle   = new XFont("Segoe UI", StripTitleFontSize);
+        var fontColHead = new XFont("Segoe UI", StripFontSize, XFontStyleEx.Bold);
+        var fontCell    = new XFont("Segoe UI", StripFontSize);
+        var penRule     = new XPen(XColor.FromGrayScale(0.80), 0.5);
+        var altRowBrush = new XSolidBrush(XColor.FromGrayScale(0.95));
+
+        // (Header, cell selector). Same seven columns as the Letter By-Circuit export; all
+        // left-aligned on the strip (the RPS reference left-aligns everything, incl. its number col).
+        var columns = new (string Header, Func<LoadsCircuitModel, string> Selector)[]
+        {
+            ("Ckt",      c => c.CircuitNumber),
+            ("Load",     c => c.LoadName),
+            ("Dimming",  c => c.DimmingProtocol),
+            ("Fixtures", c => c.FixturesDisplay),
+            ("Qty",      c => c.QuantityDisplay),
+            ("Driver",   c => c.DriverDisplay),
+            ("Watts",    c => c.TotalWattsDisplay),
+        };
+
+        // ── Content-fit each column (header + every cell), strip width follows ──
+        double[] colW = new double[columns.Length];
+        double contentW, titleWidth;
+        using (var tempPdf = new PdfDocument())
+        {
+            var tempPage = tempPdf.AddPage();
+            using var tempGfx = XGraphics.FromPdfPage(tempPage);
+
+            for (int c = 0; c < columns.Length; c++)
+            {
+                double maxWidth = tempGfx.MeasureString(columns[c].Header, fontColHead).Width;
+                foreach (var circuit in circuits)
+                {
+                    string value = columns[c].Selector(circuit);
+                    if (string.IsNullOrEmpty(value)) continue;
+                    double w = tempGfx.MeasureString(value, fontCell).Width;
+                    if (w > maxWidth) maxWidth = w;
+                }
+                colW[c] = StripCellPadding + maxWidth + StripColumnGap;
+            }
+
+            titleWidth = tempGfx.MeasureString("LOAD SCHEDULE", fontTitle).Width;
+        }
+
+        contentW = Math.Max(colW.Sum(), titleWidth);
+        double pageW = StripMargin + contentW + StripMargin;
+
+        double[] colX = new double[columns.Length];
+        colX[0] = StripMargin;
+        for (int i = 1; i < columns.Length; i++)
+            colX[i] = colX[i - 1] + colW[i - 1];
+
+        RenderStrip(circuits, columns, projectName, outputPath,
+            pageW, contentW, colX, colW, fontTitle, fontColHead, fontCell, penRule, altRowBrush);
+    }
+
+    private static void RenderStrip(
+        List<LoadsCircuitModel> circuits,
+        (string Header, Func<LoadsCircuitModel, string> Selector)[] columns,
+        string projectName,
+        string outputPath,
+        double pageW, double contentW,
+        double[] colX, double[] colW,
+        XFont fontTitle, XFont fontColHead, XFont fontCell, XPen penRule, XBrush altRowBrush)
+    {
+        using var pdf = new PdfDocument();
+        pdf.Info.Title = $"{projectName} Load Schedule";
+
+        XGraphics? gfx = null;
+        double y = 0;
+
+        void StartNewPage()
+        {
+            gfx?.Dispose();
+            var page = pdf.AddPage();
+            page.Width  = XUnit.FromPoint(pageW);
+            page.Height = XUnit.FromPoint(StripPageHeight);
+            gfx = XGraphics.FromPdfPage(page);
+            y = StripMargin;
+
+            // Title band: plain black title above a thin rule (no logo, no verify note).
+            double ruleY = y + StripHeaderHeight - 2;
+            gfx.DrawString("LOAD SCHEDULE", fontTitle, XBrushes.Black,
+                new XPoint(StripMargin, ruleY - 4));
+            gfx.DrawLine(penRule, StripMargin, ruleY, StripMargin + contentW, ruleY);
+            y += StripHeaderHeight + StripHeaderSpacing;
+
+            // Column headers: plain black, no band.
+            for (int c = 0; c < columns.Length; c++)
+                gfx.DrawString(columns[c].Header, fontColHead, XBrushes.Black,
+                    new XPoint(colX[c] + StripCellPadding, y + StripHeaderRowHeight - 6));
+            y += StripHeaderRowHeight;
+        }
+
+        StartNewPage();
+
+        bool firstRowOnPage = true;
+        bool anyRowOnPage = false;
+
+        void DrawBottomBorder()
+        {
+            if (anyRowOnPage)
+                gfx!.DrawLine(penRule, StripMargin, y, StripMargin + contentW, y);
+        }
+
+        for (int r = 0; r < circuits.Count; r++)
+        {
+            if (y + StripRowHeight > StripPageHeight - StripMargin)
+            {
+                DrawBottomBorder();
+                StartNewPage();
+                firstRowOnPage = true;
+                anyRowOnPage = false;
+            }
+
+            // Alternating shade, then the top separator on top of it (so shading never covers a
+            // rule); no rule above the first row on a page — the header sits directly above it.
+            if (r % 2 == 1)
+                gfx!.DrawRectangle(altRowBrush, StripMargin, y, contentW, StripRowHeight);
+            if (!firstRowOnPage)
+                gfx!.DrawLine(penRule, StripMargin, y, StripMargin + contentW, y);
+
+            var circuit = circuits[r];
+            for (int c = 0; c < columns.Length; c++)
+            {
+                string value = columns[c].Selector(circuit);
+                if (string.IsNullOrEmpty(value)) continue;
+
+                // Shrink-to-fit: content-fit widths never clip, but a per-cell guard mirrors RPS.
+                var cellFont = fontCell;
+                double maxCellWidth = colW[c] - StripCellPadding * 2;
+                double textWidth = gfx!.MeasureString(value, cellFont).Width;
+                if (textWidth > maxCellWidth && maxCellWidth > 0)
+                    cellFont = new XFont("Segoe UI", StripFontSize * (maxCellWidth / textWidth));
+
+                gfx!.DrawString(value, cellFont, XBrushes.Black,
+                    new XPoint(colX[c] + StripCellPadding, y + StripRowHeight - 5));
+            }
+
+            y += StripRowHeight;
+            firstRowOnPage = false;
+            anyRowOnPage = true;
+        }
+
+        DrawBottomBorder();
+        gfx?.Dispose();
+
+        // No footer — the strip ships unfooted as a field reference (matches the RPS strip).
+        pdf.Save(outputPath);
     }
 
     // ── Shared rendering helpers ──────────────────────────────────────────────────────────

@@ -41,6 +41,10 @@ public class DocsSettings
     public string LoadsSelectedSortColumn { get; set; } = "CircuitNumber";
     // Load Schedule export mode: false = By Circuit (flat list, default), true = By Room (grouped).
     public bool LoadsByRoom { get; set; }
+    // By-Circuit page size: false = Letter (default), true = 8.5x28.5 construction strip. Only
+    // meaningful when !LoadsByRoom — the three Format radios are mutually exclusive, so the
+    // invalid (LoadsByRoom && LoadsUseLargeFormat) pair is never written.
+    public bool LoadsUseLargeFormat { get; set; }
 
     // Power Supplies tab settings
     public List<string> RPSSelectedTypeMarks { get; set; } = new();

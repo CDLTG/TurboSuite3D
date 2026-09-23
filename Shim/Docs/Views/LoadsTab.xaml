@@ -26,13 +26,16 @@
         <ProgressBar DockPanel.Dock="Bottom" Value="{Binding Progress}" Height="18" Margin="0,4,0,0"
                      Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibility}}"/>
 
-        <!-- Export mode -->
+        <!-- Export format -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,0,12,8">
-            <TextBlock Text="Sort:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
-            <RadioButton Content="By Circuit" GroupName="LoadsSort"
+            <TextBlock Text="Format:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+            <RadioButton x:Name="ByCircuitRadio" Content="By Circuit" GroupName="LoadsFormat"
                          IsChecked="{Binding IsByCircuit}"
                          Margin="0,0,20,0" VerticalContentAlignment="Center"/>
-            <RadioButton Content="By Room" GroupName="LoadsSort"
+            <RadioButton Content="By Circuit (Construction)" GroupName="LoadsFormat"
+                         IsChecked="{Binding IsByCircuitConstruction}"
+                         Margin="0,0,20,0" VerticalContentAlignment="Center"/>
+            <RadioButton Content="By Room" GroupName="LoadsFormat"
                          IsChecked="{Binding IsByRoom}"
                          VerticalContentAlignment="Center"/>
         </StackPanel>

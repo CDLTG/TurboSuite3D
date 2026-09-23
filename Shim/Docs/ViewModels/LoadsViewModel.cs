@@ -12,10 +12,16 @@ using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Docs.ViewModels;
 
+/// <summary>The three mutually-exclusive Load Schedule outputs. Page size is not an orthogonal
+/// axis here — the 28.5" construction strip only exists for By Circuit — so it collapses into a
+/// single radio group rather than a separate Page Size row (contrast the Power Supplies tab,
+/// where Large applies to all outputs and stays orthogonal).</summary>
+public enum LoadsFormat { ByCircuit, ByCircuitConstruction, ByRoom }
+
 public class LoadsViewModel : ViewModelBase
 {
     private readonly DocsViewModel _parent;
-    private bool _isByRoom;
+    private LoadsFormat _format = LoadsFormat.ByCircuit;
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
@@ -27,16 +33,19 @@ public class LoadsViewModel : ViewModelBase
     public string ProjectName { get; }
     public ObservableCollection<LoadsCircuitModel> Circuits { get; } = new();
 
-    /// <summary>By Circuit (flat list) vs By Room (grouped) export radio. Mirrors the Cut Sheets
-    /// package radio; the setter re-queries so the DocsViewModel wiring picks up the flip.</summary>
-    public bool IsByRoom
+    /// <summary>Backing field for the three Format radios. Each radio binds one of the IsXxx
+    /// bool properties; their setters only act on a true (a click that selects) and ignore the
+    /// false the group raises on the deselected radio — the enum is the single source of truth.</summary>
+    private LoadsFormat Format
     {
-        get => _isByRoom;
+        get => _format;
         set
         {
-            if (SetProperty(ref _isByRoom, value))
+            if (SetProperty(ref _format, value))
             {
                 OnPropertyChanged(nameof(IsByCircuit));
+                OnPropertyChanged(nameof(IsByCircuitConstruction));
+                OnPropertyChanged(nameof(IsByRoom));
                 System.Windows.Input.CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -44,8 +53,20 @@ public class LoadsViewModel : ViewModelBase
 
     public bool IsByCircuit
     {
-        get => !_isByRoom;
-        set => IsByRoom = !value;
+        get => _format == LoadsFormat.ByCircuit;
+        set { if (value) Format = LoadsFormat.ByCircuit; }
+    }
+
+    public bool IsByCircuitConstruction
+    {
+        get => _format == LoadsFormat.ByCircuitConstruction;
+        set { if (value) Format = LoadsFormat.ByCircuitConstruction; }
+    }
+
+    public bool IsByRoom
+    {
+        get => _format == LoadsFormat.ByRoom;
+        set { if (value) Format = LoadsFormat.ByRoom; }
     }
 
     public double Progress
@@ -89,15 +110,22 @@ public class LoadsViewModel : ViewModelBase
         _roomOrder = roomOrder ?? new List<string>();
 
         var settings = DocsSettingsService.Load();
-        _isByRoom = settings.LoadsByRoom;
-        OnPropertyChanged(nameof(IsByRoom));
+        // ByRoom wins; otherwise the stored page-size flag picks Letter vs Construction.
+        _format = settings.LoadsByRoom
+            ? LoadsFormat.ByRoom
+            : settings.LoadsUseLargeFormat ? LoadsFormat.ByCircuitConstruction : LoadsFormat.ByCircuit;
         OnPropertyChanged(nameof(IsByCircuit));
+        OnPropertyChanged(nameof(IsByCircuitConstruction));
+        OnPropertyChanged(nameof(IsByRoom));
     }
 
     public void SaveSettings()
     {
         var settings = DocsSettingsService.Load();
-        settings.LoadsByRoom = IsByRoom;
+        // Never write the invalid (ByRoom && Large) pair — the three states map cleanly onto
+        // the two flags, so By Circuit ↔ Construction round-trips even after a By Room detour.
+        settings.LoadsByRoom = _format == LoadsFormat.ByRoom;
+        settings.LoadsUseLargeFormat = _format == LoadsFormat.ByCircuitConstruction;
         DocsSettingsService.Save(settings);
     }
 
@@ -114,15 +142,18 @@ public class LoadsViewModel : ViewModelBase
     {
         if (Circuits.Count == 0) return;
 
-        bool byRoom = IsByRoom;
+        LoadsFormat format = _format;
 
-        // Distinct default names so a By Circuit and a By Room export can co-exist in one folder.
+        // Distinct default names so the three exports can co-exist in one folder.
         var saveDialog = new SaveFileDialog
         {
             Filter = "PDF Files|*.pdf",
-            FileName = byRoom
-                ? $"{ProjectName} Load Schedule by Room.pdf"
-                : $"{ProjectName} Load Schedule.pdf"
+            FileName = format switch
+            {
+                LoadsFormat.ByRoom => $"{ProjectName} Load Schedule by Room.pdf",
+                LoadsFormat.ByCircuitConstruction => $"{ProjectName} Load Schedule (Construction).pdf",
+                _ => $"{ProjectName} Load Schedule.pdf",
+            }
         };
         if (saveDialog.ShowDialog() != true) return;
 
@@ -131,7 +162,7 @@ public class LoadsViewModel : ViewModelBase
         Progress = 0;
 
         var byCircuitList = GetByCircuitList();
-        var sections = byRoom
+        var sections = format == LoadsFormat.ByRoom
             ? LoadScheduleSectioner.Section(Circuits.ToList(), _roomOrder)
             : null;
 
@@ -151,10 +182,21 @@ public class LoadsViewModel : ViewModelBase
                 FooterDate = _parent.HeaderDate.ToString("yyyy.MM.dd"),
             };
 
-            if (byRoom)
-                await Task.Run(() => LoadsPdfService.GenerateByRoom(sections!, ProjectName, outputPath, settings));
-            else
-                await Task.Run(() => LoadsPdfService.Generate(byCircuitList, ProjectName, outputPath, settings));
+            await Task.Run(() =>
+            {
+                switch (format)
+                {
+                    case LoadsFormat.ByRoom:
+                        LoadsPdfService.GenerateByRoom(sections!, ProjectName, outputPath, settings);
+                        break;
+                    case LoadsFormat.ByCircuitConstruction:
+                        LoadsPdfService.GenerateByCircuitConstruction(byCircuitList, ProjectName, outputPath, settings);
+                        break;
+                    default:
+                        LoadsPdfService.Generate(byCircuitList, ProjectName, outputPath, settings);
+                        break;
+                }
+            });
 
             Progress = 100;
             StatusText = $"Done. Saved to {Path.GetFileName(outputPath)}";
