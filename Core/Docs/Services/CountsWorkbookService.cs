@@ -53,20 +53,27 @@ public static class CountsWorkbookService
     // between V and the end of the visible data. =IF(V="",D,V) written per-row.
     private const int WsColEffQty      = 70;  // BR — hidden helper
 
-    // Hidden helper pipeline columns on Worksheet. Active flag (AF) is a per-row 0/1 literal
-    // written by C#; every helper spill formula filters on (AF=1) to exclude strikethrough rows.
-    // AG-AP feed the Quote sheet; AQ-AY / AZ-BH / BI-BP feed Phase 1/2/3. The final column of
-    // each set (AP/AY/BH/BR) is an InDataBlock flag (1 for data/tariff/note/gap rows, blank for
-    // footer/notes-library) that drives the print-sheet border CF. All columns AF and beyond
-    // are hidden and locked.
+    // Hidden helper pipeline columns on Worksheet. The active flag lives at WsColActive (AG) — a
+    // per-row 0/1 literal written by C#; every helper spill filters on (AG=1) to drop strikethrough
+    // rows. QuoteHelperCols AH–AQ feed the Quote sheet; Phase1/2/3HelperCols AR–AZ / BA–BI / BJ–BS
+    // feed the phase sheets (Phase 3 spans BJ–BS but skips BR). The last column of each set
+    // (AQ / AZ / BI / BS) is an InDataBlock flag (1 for data/tariff/note/gap rows, blank for
+    // footer/notes-library) driving the print-sheet border CF. WsColEffQty is BR. QuoteClientHelperCols
+    // BT/BU carry the Quote-only Client Ea./Ext. spills (ClientMarkup on product+tariff+Lutron, freight
+    // unscaled). WsColHelperLast (BU) bounds the hide/clear loops. All columns AG and beyond are hidden
+    // and locked.
     private const int WsColActive = 33;     // AG
     private const string HelperFirstCol = "AH";
-    private const int WsColHelperLast = 71; // BS (Phase 3 InDataBlock flag)
+    private const int WsColHelperLast = 73; // BU (Quote-only Client Ext. spill)
 
     private static readonly string[] QuoteHelperCols =   { "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ" };
     private static readonly string[] Phase1HelperCols =  { "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ" };
     private static readonly string[] Phase2HelperCols =  { "BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH", "BI" };
     private static readonly string[] Phase3HelperCols =  { "BJ", "BK", "BL", "BM", "BN", "BO", "BP", "BQ", "BS" };
+    // Appended after the phase blocks (not inserted beside the Quote Sell cols) so the Phase1/2/3
+    // arrays and EffQty (BR) keep their letters — the Quote references these by column letter via
+    // ANCHORARRAY, so physical adjacency is irrelevant. Quote-only: the phase pipeline calls pass null.
+    private static readonly string[] QuoteClientHelperCols = { "BT", "BU" }; // Client Ea., Client Ext.
 
     // Counts sheet column indices (1-based)
     private const int CsColType = 1;        // A
@@ -622,9 +629,11 @@ public static class CountsWorkbookService
         ws.Cell("B9").Style.NumberFormat.Format = "$#,##0.00";
         StyleEditableCell(ws.Cell("B9"));
 
-        // Global client markup — applied to the whole Sell column on the Quote (Client Ea./Ext.).
-        // Blank by default: 1 + blank coerces to 1, so Client == Sell until a pricer enters a %.
-        // Row 11 below stays the blank inter-section spacer, so no dark-bar border drop is needed.
+        // Global client markup (ClientMarkup, Dashboard B10) — applied on the Quote (Client Ea./Ext.)
+        // to product, tariff, and the Lutron sub-total, but NOT to freight: freight reaches the client
+        // at the Sell figure (FreightSell) unmarked, so freight margin comes solely from the Buy→Sell
+        // spread (B8→B9). Blank by default: 1 + blank coerces to 1, so Client == Sell until a pricer
+        // enters a %. Row 11 below stays the blank inter-section spacer, so no dark-bar border drop is needed.
         ws.Cell("A10").Value = "Client Markup";
         ws.Cell("B10").Style.NumberFormat.Format = "0.00%";
         StyleEditableCell(ws.Cell("B10"));
@@ -2131,7 +2140,8 @@ public static class CountsWorkbookService
         // Active flag lives at WsColActive (AG after the Type-repeat column shift). Every spill
         // predicate filters on AG=1 to exclude strikethrough rows. Phase column is N.
         WriteSingleHelperPipeline(ws, lastDataRow, QuoteHelperCols,
-            predicate: $"(AG2:AG{lastDataRow}=1)", includeDelta: true, phaseFilter: null);
+            predicate: $"(AG2:AG{lastDataRow}=1)", includeDelta: true, phaseFilter: null,
+            clientCols: QuoteClientHelperCols);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase1HelperCols,
             predicate: $"(AG2:AG{lastDataRow}=1)*(N2:N{lastDataRow}=1)", includeDelta: false, phaseFilter: 1);
         WriteSingleHelperPipeline(ws, lastDataRow, Phase2HelperCols,
@@ -2142,7 +2152,7 @@ public static class CountsWorkbookService
 
     private static void WriteSingleHelperPipeline(
         IXLWorksheet ws, int lastDataRow, string[] cols, string predicate, bool includeDelta,
-        int? phaseFilter)
+        int? phaseFilter, string[]? clientCols = null)
     {
         // Per-row array expressions (unfiltered; FILTER applied inside Gap).
         string Col(string c) => $"{c}2:{c}{lastDataRow}";
@@ -2316,6 +2326,22 @@ public static class CountsWorkbookService
         }
         string SellStack(bool tax, bool lutron, bool freight) => ValueStack(tax, lutron, freight, "FreightSell", true);
         string BuyStack(bool tax, bool lutron, bool freight)  => ValueStack(tax, lutron, freight, "FreightBuy",  false);
+        // Client footer: like SellStack, but the client markup (1+ClientMarkup) rides the subtotal,
+        // its tax, and Lutron — while freight passes through at the Sell figure (FreightSell)
+        // UNMARKED, so freight margin comes only from the Buy→Sell spread, not the client markup.
+        // Grand Total resolves to sub*(1+markup)*(1+tax) + Lutron*(1+markup) + FreightSell.
+        string ClientStack(bool tax, bool lutron, bool freight)
+        {
+            const string subC = "_xlpm.sub*(1+ClientMarkup)";
+            string taxExpr = $"{subC}*SalesTaxRate";
+            var parts = new List<string> { "\"\"", "\"\"", subC };
+            string total = subC;
+            if (tax)     { parts.Add(taxExpr);                          total += $"+({taxExpr})"; }
+            if (lutron)  { parts.Add("LutronSubtotal*(1+ClientMarkup)"); total += "+LutronSubtotal*(1+ClientMarkup)"; }
+            if (freight) { parts.Add("FreightSell");                     total += "+N(FreightSell)"; }
+            parts.Add(total);
+            return $"_xlfn.VSTACK({string.Join(",", parts)})";
+        }
 
         // Freight predicate: row appears unless BOTH cells are blank.
         const string freightBlank = "AND(FreightBuy=\"\",FreightSell=\"\")";
@@ -2331,6 +2357,9 @@ public static class CountsWorkbookService
         string labelFooter = Branch8(LabelStack);
         string sellValueFooter = $"_xlfn.LET(_xlpm.sub,{sellSubtotal},{Branch8(SellStack)})";
         string buyValueFooter  = $"_xlfn.LET(_xlpm.sub,{buySubtotal},{Branch8(BuyStack)})";
+        // Client footer reuses the Sell subtotal as its base (client marks up the sell figure);
+        // ClientStack applies (1+ClientMarkup) to sub/tax/Lutron and leaves freight unscaled.
+        string clientValueFooter = $"_xlfn.LET(_xlpm.sub,{sellSubtotal},{Branch8(ClientStack)})";
 
         // Type-column padding before the spilled quote-footer notes. Must grow row-for-row with
         // the footer block so notes always sit a fixed gap below the Grand Total. Footer occupies
@@ -2402,6 +2431,22 @@ public static class CountsWorkbookService
         // Append a single 1 row — corresponds to the buffer row VSTACKed in front of the
         // footer block so the print-sheet border CF ($flagCol=1) paints that row too.
         ws.Cell($"{cols[i++]}2").FormulaA1 = $"_xlfn.VSTACK(IFERROR({flagLambda},\"\"),1)";
+
+        // Client Ea./Ext. spills (Quote only — phase calls pass null). Same shape as Sell Ea./Ext.
+        // above, but ClientMarkup rides product + tariff + Lutron; freight stays at the Sell figure
+        // (clientValueFooter/ClientStack). The "NO BID"/"INCLUDED"/"ABOVE" sentinels emit before the
+        // multiply, so the markup only ever touches the numeric branch (no *(1+…) on a text cell).
+        if (clientCols != null)
+        {
+            string dispClientEa  = $"IF({noBid},\"NO BID\",IF({included},\"INCLUDED\",({sellEa})*(1+ClientMarkup)))";
+            string dispClientExt = $"IF({noBid},\"NO BID\",IF({included},\"ABOVE\",({sellExt})*(1+ClientMarkup)))";
+            // Client Ea. — body only, no footer (labels live on the Qty column), like Sell Ea.
+            ws.Cell($"{clientCols[0]}2").FormulaA1 = $"IFERROR({Gap(dispClientEa, "\"\"", NoteBlank())},\"\")";
+            // Client Ext. — body + client footer, like Sell Ext. Tariff row = flat tariff × canonical
+            // markup × client markup (Sell uses pcts*(1+markup); multiply by the client factor).
+            ws.Cell($"{clientCols[1]}2").FormulaA1 =
+                $"_xlfn.VSTACK(IFERROR({Gap(dispClientExt, "_xlpm.pcts*(1+_xlpm.markup)*(1+ClientMarkup)", NoteBlank())},\"\"),{clientValueFooter})";
+        }
     }
 
 
@@ -2654,22 +2699,14 @@ public static class CountsWorkbookService
             ws.Cell(spillRow, i + 1).FormulaA1 = formula;
         }
 
-        // Client Ea. (col 10) / Client Ext. (col 11): Sell × (1 + ClientMarkup) over the whole
-        // Sell spill — line items, tariff row, and the footer through the Grand Total all scale
-        // (this is the "mark up everything, including Lutron & Freight" behavior). The ISNUMBER
-        // guard lets blank gap rows and the "NO BID" sentinel pass through unscaled instead of
-        // erroring to #VALUE!. Derives from the Worksheet Sell Ea./Ext. helper cols
-        // (QuoteHelperCols[7]/[8]) via the same ANCHORARRAY-of-Worksheet idiom the columns above
-        // use — deliberately not a same-sheet spill reference. On a pre-feature workbook that has
-        // no ClientMarkup named range these two cells show a cosmetic #NAME? and nothing else is
-        // affected (the Client columns are leaf cells).
-        string ClientScale(string sellHelperCol)
-        {
-            string a = $"_xlfn.ANCHORARRAY(Worksheet!{sellHelperCol}2)";
-            return $"IF(ISNUMBER({a}),{a}*(1+ClientMarkup),{a})";
-        }
-        ws.Cell(spillRow, 10).FormulaA1 = ClientScale(QuoteHelperCols[7]); // Client Ea.  ← Sell Ea.
-        ws.Cell(spillRow, 11).FormulaA1 = ClientScale(QuoteHelperCols[8]); // Client Ext. ← Sell Ext.
+        // Client Ea. (col 10) / Client Ext. (col 11) mirror the Worksheet Client helper spills
+        // (QuoteClientHelperCols = BT/BU) via the same ANCHORARRAY-of-Worksheet idiom as cols 1–9
+        // above — deliberately not a same-sheet spill. Those helpers apply ClientMarkup to product +
+        // tariff + Lutron but leave freight at the Sell figure (see clientValueFooter/ClientStack in
+        // WriteSingleHelperPipeline). On a pre-6091c15 workbook with no ClientMarkup named range
+        // these cells resolve to a cosmetic #NAME? and nothing else is affected (leaf cells).
+        ws.Cell(spillRow, 10).FormulaA1 = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteClientHelperCols[0]}2)"; // Client Ea.
+        ws.Cell(spillRow, 11).FormulaA1 = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteClientHelperCols[1]}2)"; // Client Ext.
 
         // InDataBlock flag — moved from col 10 to hidden col 12 (behind the Client columns).
         ws.Cell(spillRow, 12).FormulaA1 = $"_xlfn.ANCHORARRAY(Worksheet!{QuoteHelperCols[9]}2)";
@@ -3871,7 +3908,7 @@ public static class CountsWorkbookService
         sub = "unprotect.lastRow2";
         lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
         // Clear contents/formats on rows 2..lastRow rather than deleting rows. Once Excel
-        // opens the workbook it materializes the row-2 dynamic-array spills (BT2:CC2 etc.)
+        // opens the workbook it materializes the row-2 dynamic-array spills (AH2:BU2)
         // and tags every spilled cell with array-formula metadata; ClosedXML's Row.Delete
         // then trips an IndexOutOfRangeException trying to fix up references. Clearing the
         // range avoids the delete path entirely and lets the row-write loop overwrite from
