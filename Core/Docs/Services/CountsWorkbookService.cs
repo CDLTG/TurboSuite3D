@@ -27,11 +27,11 @@ public static class CountsWorkbookService
     // pricing block (H–V). Mirrors the Type value in gray italic; locked.
     private const int WsColTypeRepeat = 7;  // G
     private const int WsColDesc = 8;        // H
-    // Column I is a hidden, unused gap. It formerly held the "Calc" dropdown (Reel/Channel/
-    // End Cap/Clip), retired when stock-cut quantities moved into the `N @ft`/`@in` Catalog Qty
-    // mode. Kept as a gap (not shifted out) so Description (H), Unit Cost (J), and every column
-    // to the right keep their positions.
-    private const int WsColCalc = 9;        // I (hidden gap)
+    // Column I is a freeform per-row Notes column (unlocked, editable on every row). It formerly
+    // held the retired "Calc" dropdown and sat hidden as a gap; it now carries pricer notes that
+    // survive the Sync-workbook round-trip (read into WorksheetRowData.LineNote, keyed by
+    // (Type, Catalog) like Description). Distinct from the per-Type Note 1–6 columns (N–S).
+    private const int WsColLineNote = 9;    // I (freeform per-row notes)
     private const int WsColUnitCost = 10;   // J
     private const int WsColMarkup = 11;     // K
     private const int WsColTariff = 12;     // L
@@ -1769,7 +1769,7 @@ public static class CountsWorkbookService
         ws.Cell(1, WsColQty).Value = "Qty";
         ws.Cell(1, WsColPrevQty).Value = "Prev";
         ws.Cell(1, WsColDelta).Value = "Δ";
-        // Column I (WsColCalc) is a hidden gap — no header. (Was the retired "Calc" dropdown.)
+        ws.Cell(1, WsColLineNote).Value = "Notes";
         ws.Cell(1, WsColPhase).Value = "Phase";
         ws.Cell(1, WsColDesc).Value = "Description";
         ws.Cell(1, WsColUnitCost).Value = "Unit Cost";
@@ -1910,7 +1910,7 @@ public static class CountsWorkbookService
         ws.Column(WsColCatalog).AdjustToContents();
         ApplyQtyColumnFormatting(ws);
         ws.Column(WsColDesc).Width = 25;
-        ws.Column(WsColCalc).Hide();  // retired Calc dropdown — column I is now a hidden gap
+        ws.Column(WsColLineNote).Width = 30;  // freeform per-row Notes column
         ws.Column(WsColUnitCost).Width = 12;
         ws.Column(WsColMarkup).Width = 10;
         ws.Column(WsColTariff).Width = 10;
@@ -4010,13 +4010,16 @@ public static class CountsWorkbookService
             // else: row has no current fixture (shouldn't occur for non-token new rows) — leave Qty blank.
             ws.Cell(row, WsColDelta).FormulaA1 = $"IF(E{row}=\"\",\"\",D{row}-E{row})";
 
-            // Carry Mfr/Qty overrides forward on matched rows. EffQty (P) is always rewritten.
+            // Carry Mfr/Qty overrides and the freeform per-row note forward on matched rows.
+            // EffQty (P) is always rewritten.
             if (existing != null)
             {
                 if (!string.IsNullOrEmpty(existing.MfrOverride))
                     ws.Cell(row, WsColMfrOverride).Value = existing.MfrOverride;
                 if (existing.QtyOverride.HasValue)
                     ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
+                if (!string.IsNullOrEmpty(existing.LineNote))
+                    ws.Cell(row, WsColLineNote).Value = existing.LineNote;
             }
             ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
@@ -4200,6 +4203,8 @@ public static class CountsWorkbookService
                     ws.Cell(row, WsColMfrOverride).Value = existing.MfrOverride;
                 if (existing.QtyOverride.HasValue)
                     ws.Cell(row, WsColQtyOverride).Value = existing.QtyOverride.Value;
+                if (!string.IsNullOrEmpty(existing.LineNote))
+                    ws.Cell(row, WsColLineNote).Value = existing.LineNote;
             }
             ws.Cell(row, WsColEffQty).FormulaA1 = $"IF(V{row}=\"\",D{row},V{row})";
             ws.Cell(row, WsColEffQty).Style.NumberFormat.Format = "0";
@@ -4236,6 +4241,13 @@ public static class CountsWorkbookService
         ApplyWorksheetBorders(ws, lastDataRow);
         // Alt-row banding is painted before the row-write loops above so the per-row
         // green/yellow/red highlights override it; not re-applied here.
+
+        // Freeform per-row Notes column (I) — unhide/size/header idempotently so workbooks
+        // authored by an older build (where column I was a hidden, header-less gap) pick it up
+        // on their first sync under this version.
+        ws.Cell(1, WsColLineNote).Value = "Notes";
+        ws.Column(WsColLineNote).Unhide();
+        ws.Column(WsColLineNote).Width = 30;
 
         // Override + Notes column formatting — mirrors BuildWorksheetSheet so update passes
         // don't drop it. 16.64 char-width ≈ 190px in the target environment.
@@ -4915,6 +4927,7 @@ public static class CountsWorkbookService
                 MfrOverride = ws.Cell(r, WsColMfrOverride).GetString(),
                 QtyOverride = ReadNumericCell(ws.Cell(r, WsColQtyOverride)),
                 Notes = ReadNotes(ws, r),
+                LineNote = ReadTextCell(ws.Cell(r, WsColLineNote)) ?? string.Empty,
             });
         }
 
@@ -4946,6 +4959,8 @@ public static class CountsWorkbookService
         public string MfrOverride { get; init; } = string.Empty;
         public double? QtyOverride { get; init; }
         public string[] Notes { get; init; } = new string[6];
+        // Freeform per-row note (column I) — preserved across Sync-workbook round-trips.
+        public string LineNote { get; init; } = string.Empty;
     }
 
     #endregion
