@@ -20,6 +20,44 @@ public static class DownloadService
         }
     };
 
+    /// <summary>
+    /// Resolves a Data Sheet URL value to PDF bytes, routing by content the way the
+    /// TurboSchedule open-button does: a filesystem path (UNC share or rooted local path,
+    /// or a file:// URI) is read from disk; a web URL is downloaded. Explorer's
+    /// "Copy as path" surrounding quotes are stripped, and a bare host (no scheme) gets
+    /// https:// prepended so the download is a valid absolute URI. Returns null on any failure.
+    /// </summary>
+    public static Task<byte[]?> FetchPdfAsync(string target, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+            return Task.FromResult<byte[]?>(null);
+
+        var value = target.Trim().Trim('"');
+        if (value.Length == 0)
+            return Task.FromResult<byte[]?>(null);
+
+        try
+        {
+            if (value.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                return ReadLocalPdfAsync(new Uri(value).LocalPath);
+
+            // A real web scheme (http/https/ftp/...) downloads; only then do we test for a
+            // filesystem path, so "https://..." never trips the path branch.
+            if (value.Contains("://"))
+                return DownloadPdfAsync(value, ct);
+
+            if (value.StartsWith(@"\\") || Path.IsPathRooted(value))
+                return ReadLocalPdfAsync(value);
+
+            // Bare host, e.g. "lutron.com/spec.pdf".
+            return DownloadPdfAsync("https://" + value, ct);
+        }
+        catch
+        {
+            return Task.FromResult<byte[]?>(null);
+        }
+    }
+
     public static async Task<byte[]?> DownloadPdfAsync(string url, CancellationToken ct)
     {
         try

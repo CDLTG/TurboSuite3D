@@ -1,5 +1,6 @@
 #nullable disable
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Navigation;
@@ -109,22 +110,36 @@ namespace TurboSuite.Schedule.Views
             e.Handled = true;
         }
 
-        // The ↗ glyph on a URL field opens the value in the default browser. Bare values (no scheme)
-        // get https:// prepended; a malformed URL is swallowed rather than thrown at the user.
+        // The ↗ glyph on a URL field opens the value via ShellExecute, matching native Revit: a
+        // filesystem path (local drive or UNC) is handed to its registered handler (e.g. the default
+        // PDF viewer), a web URL goes to the browser. Only a bare web host (no scheme, not a path)
+        // gets https:// prepended. A malformed target is swallowed rather than thrown at the user.
         private void UrlGlyph_Click(object sender, MouseButtonEventArgs e)
         {
             e.Handled = true;
             if ((sender as FrameworkElement)?.DataContext is not SpecField field)
                 return;
 
-            var url = field.Value?.Trim();
-            if (string.IsNullOrEmpty(url))
+            var target = field.Value?.Trim();
+            if (string.IsNullOrEmpty(target))
                 return;
-            if (!url.Contains("://"))
-                url = "https://" + url;
 
-            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-            catch { /* malformed/unsupported URL — ignore */ }
+            // Windows Explorer's "Copy as path" wraps the value in double quotes; strip a surrounding
+            // pair so a pasted path works as-is. A quote is never valid in a path or URL, so this is safe.
+            target = target.Trim('"');
+            if (string.IsNullOrEmpty(target))
+                return;
+
+            // A local drive path, a UNC share, or anything already carrying a scheme (http://,
+            // file://, …) is passed through untouched. Only a scheme-less, non-rooted value —
+            // a bare web host like "lutron.com/spec.pdf" — gets https:// so the browser accepts it.
+            bool isFilePath = target.StartsWith(@"\\") || Path.IsPathRooted(target);
+            bool hasScheme = target.Contains("://");
+            if (!isFilePath && !hasScheme)
+                target = "https://" + target;
+
+            try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); }
+            catch { /* malformed/unsupported target — ignore */ }
         }
     }
 }

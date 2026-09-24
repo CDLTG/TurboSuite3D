@@ -327,7 +327,7 @@ public class CutSheetsViewModel : ViewModelBase
                 else if (!string.IsNullOrWhiteSpace(fixture.DataSheetUrl))
                 {
                     StatusText = $"Downloading {i + 1} of {selected.Count}: {fixture.TypeMark}...";
-                    data = await DownloadService.DownloadPdfAsync(fixture.DataSheetUrl, CancellationToken.None);
+                    data = await DownloadService.FetchPdfAsync(fixture.DataSheetUrl, CancellationToken.None);
                     if (data == null) errors.Add(fixture.TypeMark);
                 }
                 else
@@ -416,7 +416,7 @@ public class CutSheetsViewModel : ViewModelBase
                 else
                 {
                     StatusText = $"Downloading {i + 1} of {selected.Count}: {row.TypeMark}...";
-                    data = await DownloadService.DownloadPdfAsync(row.DataSheetUrl, CancellationToken.None);
+                    data = await DownloadService.FetchPdfAsync(row.DataSheetUrl, CancellationToken.None);
                 }
                 if (data == null) errors.Add(row.TypeMark);
 

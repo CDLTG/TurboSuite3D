@@ -160,7 +160,7 @@ Downloads spec-sheet PDFs and merges them into a single bookmarked PDF. A **Pack
 ### Fixture Package
 
 1. **Collects fixture and RPS types** — Scans placed `OST_LightingFixtures` and valid `OST_LightingDevices` for unique types with a "Data Sheet URL" parameter. Multiple families sharing a Type Mark collapse to one row; the "primary" variant is chosen by populated URL/CatalogNumber, then by base name (token-subset of all siblings — e.g. `Tape` is preferred over `Tape (Hook)` or `Bar Tape`).
-2. **Downloads or loads spec sheets** — Fetches each PDF from the URL via HTTP, or uses a local PDF file if one has been browsed to. Users can set a **default local PDF** per catalog number (gold star) that persists across projects.
+2. **Downloads or loads spec sheets** — Resolves each "Data Sheet URL" by content (`DownloadService.FetchPdfAsync`): a web URL is fetched via HTTP, while a filesystem path (UNC share, rooted local path, or `file://` URI — Explorer "Copy as path" quotes are stripped) is read from disk. Alternatively a local PDF file browsed to in the grid is used. Users can set a **default local PDF** per catalog number (gold star) that persists across projects.
 3. **Stamps header/footer** — Adds a company header (logo, project name, date, Type Mark) and footer (address, phone, website) to every page (`CutSheetPdfService.MergeAndStamp`).
 4. **Merges into one PDF** — one output file, bookmarked at each type's first page. Password-protected PDFs render a placeholder page with the source URL.
 
