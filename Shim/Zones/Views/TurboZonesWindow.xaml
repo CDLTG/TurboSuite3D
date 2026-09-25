@@ -285,6 +285,12 @@
 
                     <!-- Top bar: Brand selector -->
                     <DockPanel Grid.Row="0" Margin="4,6,4,4">
+                        <!-- Section 2: generate the control one-line (Lutron only). Draws with renderer
+                             fallbacks until the ControlPanel/Module/LvSlot/SmartPanel families are authored. -->
+                        <Button Content="Draw One-Line"
+                                Command="{Binding PanelTab.DrawOneLineCommand}"
+                                DockPanel.Dock="Right" Height="24" Padding="10,0" VerticalAlignment="Center"
+                                Visibility="{Binding PanelTab.IsLutronSelected, Converter={StaticResource BoolToVisibility}}"/>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Brand:" VerticalAlignment="Center" Margin="0,0,4,0"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>

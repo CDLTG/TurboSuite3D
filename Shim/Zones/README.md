@@ -118,6 +118,28 @@ line depends on. The device/leg totals are identical to the old divisible pour (
 Interfaces a subsystem requires but nobody has sited yet float and pack anywhere; keypads are one
 device each and pour last (isolated onto a spare QS link where one exists, per the conventions above).
 
+## Control One-Line (Section 2 — in progress)
+
+A **Draw One-Line** button (Panel Breakdown top bar, Lutron only) generates the Lutron control one-line
+into an owned Drafting View — a wipe-and-redraw off the **same pack the capacity bars use**
+(`LinkAssignmentService.PackForOneLine`), so the diagram and the bars can't disagree. Clean Core-planner →
+shim-renderer split modeled on TurboDMX: `Core/Zones/OneLine/` holds the pure geometry
+(`ControlOneLineGeometry` — the source of truth, tuned in-Revit), the drawing model, `ControlOneLinePlanner`
+(horizontal bays — processor panel at left, QS links running right; rule-#5 node order; keypad + wireless
+stubs; one shared HOME NETWORK node with CAT6 to each processor), and `ControlRenderDataFactory` (PanelResult
++ BrandConfig → per-panel render data; module tiles **bottom-up**, part-number-labeled). The packer exposes
+per-link composition via `PackedLink.Units` (Section 2a). `Shim/Zones/Services/ControlOneLineService.cs`
+replays it into per-page owned views: panels are **family-composed** — a branded enclosure family (resolved
+by the node's `EnclosureRole`: `ControlPanelDetail` PD8/PD9, `ControlLv21Detail`) filled with the shared
+`ControlModuleDetail` + `ControlLvSlotDetail` tiles, plus `ControlSmartPanelDetail` shades and
+`ControlWireMarkAnnotation` markers — and **each family degrades to a renderer-drawn box + text when it isn't
+loaded**, so it draws before any `.rfa` is authored.
+
+**Status:** draws end-to-end with fallbacks; authoring the five families + in-Revit geometry tuning, the wire
+legend (dense per-job numbering + its own view), and 42×30 pagination remain (see the Section 2 plan).
+Deferred: cross-session ViewId persistence — wipe-and-redraw currently resolves the owned view by its
+deterministic name.
+
 ## Dependencies
 
 ### Required Custom Parameters

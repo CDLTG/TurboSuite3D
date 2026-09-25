@@ -4,9 +4,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Windows.Input;
 using System.Windows.Threading;
 using TurboSuite.Abstractions;
 using TurboSuite.Zones.Models;
+using TurboSuite.Zones.OneLine;
 using TurboSuite.Zones.Services;
 using TurboSuite.Shared.ViewModels;
 
@@ -59,6 +61,13 @@ namespace TurboSuite.Zones.ViewModels
         private bool _savePending;
         private bool _saveDirty;
 
+        // Section 2 one-line: the shim renderer (null ⇒ the Draw button stays disabled), an in-session
+        // page-index → owned-view-id registry (so redraws reuse the same views; a fresh session falls back
+        // to finding them by deterministic name), and the mid-draw latch.
+        private readonly IControlOneLineService _oneLineService;
+        private readonly Dictionary<int, long> _oneLineViewIds = new Dictionary<int, long>();
+        private bool _drawingOneLine;
+
         public PanelBreakdownTabViewModel(List<ZonesCircuitData> circuits,
             KeypadCounts keypadCounts,
             ControlDeviceGroup hybridRepeaters,
@@ -66,10 +75,13 @@ namespace TurboSuite.Zones.ViewModels
             IRevitWorkQueue workQueue, IPanelSettingsStore settingsStore,
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
             IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
-            IReadOnlyList<ShadeLocationTally> shadeLocations = null)
+            IReadOnlyList<ShadeLocationTally> shadeLocations = null,
+            IControlOneLineService oneLineService = null)
         {
             _workQueue = workQueue;
             _settingsStore = settingsStore;
+            _oneLineService = oneLineService;
+            DrawOneLineCommand = new RelayCommand(DrawOneLine, CanDrawOneLine);
             _subsystemDemands = subsystemDemands;
             _daliModulesByZone = daliModulesByZone;
             _shadeLocations = shadeLocations;
@@ -420,6 +432,45 @@ namespace TurboSuite.Zones.ViewModels
             SubsystemDemands = _subsystemDemands,
             Audience = BomAudience.DesignSurface
         };
+
+        // ── Draw One-Line (Section 2) ────────────────────────────────────────────────────────────────
+        public ICommand DrawOneLineCommand { get; }
+
+        /// <summary>The control-system label seeding the owned view names (one system per window today).</summary>
+        public string SystemName { get; set; } = "TurboControl";
+
+        /// <summary>Lutron only (CC-A/QS is Lutron-specific), a placed processor, a service, and not mid-draw.</summary>
+        private bool CanDrawOneLine()
+            => _oneLineService != null && _workQueue != null && !_drawingOneLine
+               && IsLutronSelected && ProcessorDisplays != null && ProcessorDisplays.Count > 0;
+
+        /// <summary>Plan the one-line off the SAME pack the capacity bars use (identical demand + slots +
+        /// orphan relabel, so the diagram and the bars can't disagree), then wipe-and-redraw the owned
+        /// per-page view(s) on the API thread via the work queue. Mirrors <c>DmxMainViewModel.DrawOneLine</c>.</summary>
+        private void DrawOneLine()
+        {
+            if (!CanDrawOneLine() || _allocationResult == null) return;
+
+            var pack = LinkAssignmentService.PackForOneLine(
+                _allocationResult.AllPanels, BuildBomExtras(), _currentBrand, _orphanAssignments);
+            var panels = ControlRenderDataFactory.BuildPanels(_allocationResult.AllPanels, _currentBrand);
+            var pages = ControlOneLinePlanner.Build(pack, panels, SystemName);
+            if (pages.Count == 0) return;
+
+            _drawingOneLine = true;
+            CommandManager.InvalidateRequerySuggested();
+
+            _workQueue.Enqueue(
+                () => _oneLineService.Draw(pages, SystemName, _oneLineViewIds),
+                result =>
+                {
+                    _drawingOneLine = false;
+                    if (result is IReadOnlyList<ControlOneLineResult> results)
+                        foreach (var r in results)
+                            if (r.Ok) _oneLineViewIds[r.PageIndex] = r.ViewId;
+                    CommandManager.InvalidateRequerySuggested();
+                });
+        }
 
         private void RebuildLinkAssignments()
         {

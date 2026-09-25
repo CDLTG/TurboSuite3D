@@ -702,6 +702,16 @@ namespace TurboSuite.Zones.Services
             /// emptiest link with none (isolation, rule #2).</summary>
             public int LocatedUnits;
 
+            /// <summary>The link's ordered contents in LANDING order (Section 2a) — a parallel ledger the
+            /// one-line planner walks; capacity math never reads it. Located/floating units are appended as
+            /// they land here; keypads are collapsed to one synthetic unit in <see cref="ToQsLink"/>.</summary>
+            public readonly List<PackedLinkUnit> Units = new List<PackedLinkUnit>();
+
+            /// <summary>Keypad DEVICES poured onto this link (not switch-leg loads) — collapsed to a single
+            /// synthetic keypad unit in <see cref="ToQsLink"/>, so a link that received keypads across both
+            /// pours still shows one keypad node carrying its device share.</summary>
+            public int KeypadDevices;
+
             // Identity, set only by the pooling overload: which processor and link this bin is, and the
             // processor's location. The flat overload leaves these at their defaults.
             public int ProcIndex = -1;
@@ -724,6 +734,10 @@ namespace TurboSuite.Zones.Services
                     LocatedUnits++;
                 if (!string.IsNullOrEmpty(unit.Name))
                     UnitNames.Add(unit.Name!);
+                // Parallel ledger for the one-line (Section 2a): record the unit as it lands. Named only —
+                // an unnamed/padding unit has nothing to join to a render node.
+                if (!string.IsNullOrEmpty(unit.Name))
+                    Units.Add(new PackedLinkUnit(unit.Name!, unit.Category, unit.Devices, unit.Loads));
             }
 
             public void Add(int devices, int loads, int pdu = 0, LinkCategory category = LinkCategory.None)
@@ -733,11 +747,21 @@ namespace TurboSuite.Zones.Services
                 Pdu += pdu;
                 if (category != LinkCategory.None && (devices > 0 || loads > 0))
                     Categories.Add(category);
+                // Keypads collapse to one synthetic Units entry per link (built in ToQsLink); accumulate the
+                // device share here so a link split across the two keypad pours still shows a single node.
+                if (category == LinkCategory.Keypads && devices > 0)
+                    KeypadDevices += devices;
             }
 
-            public PackedLink ToQsLink() => new PackedLink(
-                ProcessorLink.QsLinkType, Devices, Loads, UnitNames, consumedPdu: Pdu,
-                categories: Categories.ToList());
+            public PackedLink ToQsLink()
+            {
+                var units = new List<PackedLinkUnit>(Units);
+                if (KeypadDevices > 0)
+                    units.Add(new PackedLinkUnit("Keypads", LinkCategory.Keypads, KeypadDevices, 0));
+                return new PackedLink(
+                    ProcessorLink.QsLinkType, Devices, Loads, UnitNames, consumedPdu: Pdu,
+                    categories: Categories.ToList(), units: units);
+            }
         }
     }
 
@@ -900,11 +924,37 @@ namespace TurboSuite.Zones.Services
         public int LinkCount { get; }
     }
 
+    /// <summary>
+    /// One node on a packed link (Section 2a), recorded in LANDING order as it was placed — the ordered,
+    /// typed contents the Section-2 one-line planner walks. Join <see cref="Name"/> back to its
+    /// <c>PanelResult</c>/<c>ShadePanelResult</c> for the render data (part numbers, fill). A parallel
+    /// ledger to the capacity math: recording a unit never changes <see cref="PackedLink.Devices"/>/
+    /// <see cref="PackedLink.Loads"/> or the FFD order. Keypads collapse to ONE synthetic unit per link
+    /// (<see cref="Name"/> "Keypads", carrying that link's keypad device share, <see cref="Loads"/> 0). The
+    /// planner re-sorts these for the stable diagram (rule #5); this only preserves what landed where.
+    /// </summary>
+    public sealed class PackedLinkUnit
+    {
+        public PackedLinkUnit(string name, LinkCategory category, int devices, int loads)
+        {
+            Name = name;
+            Category = category;
+            Devices = devices;
+            Loads = loads;
+        }
+
+        public string Name { get; }
+        public LinkCategory Category { get; }
+        public int Devices { get; }
+        public int Loads { get; }
+    }
+
     /// <summary>One link's contents after packing.</summary>
     public sealed class PackedLink
     {
         public PackedLink(string linkType, int devices, int loads, IReadOnlyList<string> unitNames,
-            int repeaters = 0, int consumedPdu = 0, IReadOnlyList<LinkCategory>? categories = null)
+            int repeaters = 0, int consumedPdu = 0, IReadOnlyList<LinkCategory>? categories = null,
+            IReadOnlyList<PackedLinkUnit>? units = null)
         {
             LinkType = linkType;
             Devices = devices;
@@ -913,6 +963,7 @@ namespace TurboSuite.Zones.Services
             Repeaters = repeaters;
             ConsumedPdu = consumedPdu;
             Categories = categories ?? System.Array.Empty<LinkCategory>();
+            Units = units ?? System.Array.Empty<PackedLinkUnit>();
         }
 
         public string LinkType { get; }
@@ -938,6 +989,11 @@ namespace TurboSuite.Zones.Services
         /// <summary>Which categories ride this link (rule #2 arrangement, one-line composition). Empty on
         /// a link the flat/sizing pack produced, since nothing there reads it.</summary>
         public IReadOnlyList<LinkCategory> Categories { get; }
+
+        /// <summary>The link's ordered, typed contents in landing order (Section 2a) — keypads collapsed to
+        /// one synthetic unit. Empty on a Clear Connect link and on a link that recorded none. The one-line
+        /// planner consumes this (via <see cref="LinkPackResult.Processors"/>), not <see cref="UnitNames"/>.</summary>
+        public IReadOnlyList<PackedLinkUnit> Units { get; }
 
         public bool IsClearConnect
             => string.Equals(LinkType, ProcessorLink.ClearConnectLinkType, StringComparison.OrdinalIgnoreCase);

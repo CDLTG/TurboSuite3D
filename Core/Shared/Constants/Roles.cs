@@ -56,6 +56,18 @@ public static class Roles
     public const string DmxTerminatorDetail = "DmxTerminatorDetail";
     public const string DmxWireMarkAnnotation = "DmxWireMarkAnnotation";
 
+    // Control one-line (TurboZones, Section 2). Enclosures are BRANDED parts → one role each; the component
+    // tiles (module, LV slot) and the wire marker are brand-agnostic and shared. The renderer picks an
+    // enclosure family by the node's EnclosureRole and fills it with module + LV-slot tile families. Every
+    // one degrades to a renderer-drawn box/text when its family is absent, so the diagram draws without any
+    // authored family. HOME NETWORK, wires, and stubs stay native (not catalog parts).
+    public const string ControlPanelDetail = "ControlPanelDetail";        // PD8/PD9 enclosure
+    public const string ControlLv21Detail = "ControlLv21Detail";          // LV21 enclosure (2 LV slots)
+    public const string ControlSmartPanelDetail = "ControlSmartPanelDetail"; // QSPS shade panel
+    public const string ControlModuleDetail = "ControlModuleDetail";      // module tile (shared)
+    public const string ControlLvSlotDetail = "ControlLvSlotDetail";      // LV-compartment tile (shared)
+    public const string ControlWireMarkAnnotation = "ControlWireMarkAnnotation";
+
     /// <summary>
     /// A human-facing phrase for a finder role, used in "not found" messages — deliberately decoupled
     /// from the family name (which may be renamed freely under the LOD scheme). Falls back to the role
@@ -86,6 +98,12 @@ public static class Roles
             [DmxProcessorDetail] = "DMX Processor detail",
             [DmxTerminatorDetail] = "DMX Terminator detail",
             [DmxWireMarkAnnotation] = "DMX Wire Mark annotation",
+            [ControlPanelDetail] = "Control Panel (PD8/PD9) detail",
+            [ControlLv21Detail] = "Control LV21 enclosure detail",
+            [ControlSmartPanelDetail] = "Control Shade Panel detail",
+            [ControlModuleDetail] = "Control Module tile detail",
+            [ControlLvSlotDetail] = "Control LV Slot tile detail",
+            [ControlWireMarkAnnotation] = "Control Wire Mark annotation",
         };
 
     /// <summary>Every recognized role, keyed case-insensitively to its canonical spelling.</summary>
@@ -98,6 +116,8 @@ public static class Roles
             FixtureSwitchlegTag, RemoteSwitchlegTag, ElectricalSwitchlegTag, DeviceSwitchlegTag,
             LinearFeedTag, LinearFeedDetail, DmxDecoderDetail, DmxDriverDetail, DmxInterfaceDetail,
             DmxProcessorDetail, DmxTerminatorDetail, DmxWireMarkAnnotation,
+            ControlPanelDetail, ControlLv21Detail, ControlSmartPanelDetail, ControlModuleDetail,
+            ControlLvSlotDetail, ControlWireMarkAnnotation,
         });
 
     /// <summary>

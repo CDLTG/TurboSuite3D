@@ -62,12 +62,9 @@ namespace TurboSuite.Zones.Services
 
             if (instances.Count == 0) return instances;
 
-            // One ProcessorSlot per instance, in panel order, carrying the location parsed from its panel
-            // name — the geography the packer pools by. LinkCount is the HQP7-2's two.
-            var slots = instances
-                .Select(inst => new ProcessorSlot(
-                    PanelAllocationService.ParseLocationNumber(inst.PanelName)))
-                .ToList();
+            // One ProcessorSlot per placed processor compartment, in panel order — identical to the instance
+            // order above, and shared with the one-line (PackForOneLine) so both pack the same geography.
+            var slots = BuildSlots(allPanels);
 
             // Brand rides along so a compartment device's nameplate legs (QSE-IO → 5) show on the bars.
             // PDU is computed too but nothing here reads it — only the BOM's supply sizer does.
@@ -103,5 +100,34 @@ namespace TurboSuite.Zones.Services
 
         private static bool IsProcessorSlot(string slot)
             => string.Equals(slot, "Processor", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The slot list both the capacity bars and the one-line pack against — one
+        /// <see cref="ProcessorSlot"/> per placed "Processor" compartment, in panel order, location parsed
+        /// from the panel name.</summary>
+        private static List<ProcessorSlot> BuildSlots(List<PanelResult> allPanels)
+        {
+            var slots = new List<ProcessorSlot>();
+            if (allPanels == null) return slots;
+            foreach (var panel in allPanels)
+                foreach (var slot in panel.CompartmentSlots)
+                    if (IsProcessorSlot(slot))
+                        slots.Add(new ProcessorSlot(PanelAllocationService.ParseLocationNumber(panel.PanelName)));
+            return slots;
+        }
+
+        /// <summary>Runs the SAME pack the capacity bars use (identical demand + slots), returning the full
+        /// <see cref="LinkPackResult"/> — its <c>Processors</c> and per-link <c>Units</c> — for the Section-2
+        /// one-line planner, which needs the composition that <see cref="ProcessorInstance"/> drops.</summary>
+        public static LinkPackResult PackForOneLine(
+            List<PanelResult> allPanels, BomExtras extras, BrandConfig brand = null,
+            IReadOnlyDictionary<int, int> orphanToHost = null)
+        {
+            var slots = BuildSlots(allPanels);
+            if (slots.Count == 0)
+                return new LinkPackResult(System.Array.Empty<PackedLink>(), 0, 0);
+            var demand = ControlLinkPacker.RelabelLocations(
+                ControlLinkPacker.BuildDemand(allPanels, extras, brand), orphanToHost);
+            return ControlLinkPacker.Pack(demand, slots);
+        }
     }
 }

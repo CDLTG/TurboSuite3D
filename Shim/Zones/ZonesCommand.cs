@@ -108,7 +108,8 @@ namespace TurboSuite.Zones
                     keypadCounts, hybridRepeaters,
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
                     subsystemDemands, daliModulesByZone, shadeLocations,
-                    shadeCircuits, shadeLoadNameWriter);
+                    shadeCircuits, shadeLoadNameWriter,
+                    new ControlOneLineService(uidoc));   // Section 2 one-line renderer
 
                 var window = new TurboZonesWindow
                 {

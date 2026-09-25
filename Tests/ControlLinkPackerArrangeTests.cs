@@ -271,4 +271,66 @@ namespace TurboSuite.Tests.Zones
             Assert.True(packed.Links[0].IsOverCapacity);      // 110 > 99 — the visible over-capacity signal
         }
     }
+
+    /// <summary>Section 2a — <see cref="PackedLink.Units"/>: the ordered, typed per-link contents the
+    /// one-line planner walks. A parallel ledger — the frozen Set-1 counts (in ControlLinkPackerTests.cs)
+    /// prove it moved nothing.</summary>
+    public class PackedLinkUnitsTests : ControlLinkPackerArrangeTestBase
+    {
+        /// <summary>A link carrying a dimmer + a shade panel + collapsed keypads reports one Units entry per
+        /// located unit (named, typed, in landing order) plus a single trailing keypad node — never a split
+        /// or a missing keypad. (Text-block case: wireless forces Link 2 RF, so all three share Link 1.)</summary>
+        [Fact]
+        public void MixedLinkReportsTypedUnitsWithKeypadsCollapsedLast()
+        {
+            var extras = new BomExtras
+            {
+                KeypadCount = 10,
+                HybridRepeaters = Tally.Repeaters(3),   // forces Link 2 → Clear Connect, so no spare QS link
+                SubsystemDemands = new[]
+                {
+                    ShadeSolver.Solve(new List<ShadeLocationTally> { new ShadeLocationTally("SHADE 1", 5) })
+                },
+            };
+
+            var packed = PackPooled(new List<PanelResult> { Panel("1-A", modules: 3) }, Slots(1), extras);
+            var link1 = packed.Processors[0].Link1;   // the sole QS link — carries everything
+
+            Assert.Equal(3, link1.Units.Count);
+
+            var modules = Assert.Single(link1.Units, u => u.Category == LinkCategory.Modules);
+            Assert.Equal("1-A", modules.Name);
+            Assert.Equal(3, modules.Devices);
+
+            var shade = Assert.Single(link1.Units, u => u.Category == LinkCategory.Shades);
+            Assert.Equal("SHADE 1", shade.Name);
+            Assert.Equal(6, shade.Devices);           // one QSPS-10PNL: 5 motors + 1 panel device
+
+            // Keypads collapse to exactly one synthetic node, and it lands LAST (poured after located units).
+            var keypads = Assert.Single(link1.Units, u => u.Category == LinkCategory.Keypads);
+            Assert.Same(keypads, link1.Units[link1.Units.Count - 1]);
+            Assert.Equal("Keypads", keypads.Name);
+            Assert.Equal(10, keypads.Devices);
+        }
+
+        /// <summary>Keypads collapse to ONE keypad Units node per link, carrying that link's keypad device
+        /// share and no loads — here isolated alone on the spare QS link.</summary>
+        [Fact]
+        public void KeypadsCollapseToOneUnitPerLinkWithTheirDeviceShare()
+        {
+            var packed = PackPooled(
+                new List<PanelResult> { Panel("1-A", modules: 3) }, Slots(1),
+                new BomExtras { KeypadCount = 10 });
+
+            var moduleUnit = Assert.Single(packed.Processors[0].Link1.Units);
+            Assert.Equal(LinkCategory.Modules, moduleUnit.Category);
+            Assert.Equal("1-A", moduleUnit.Name);
+
+            var keypadUnit = Assert.Single(packed.Processors[0].Link2.Units);   // isolated onto the spare link
+            Assert.Equal(LinkCategory.Keypads, keypadUnit.Category);
+            Assert.Equal("Keypads", keypadUnit.Name);
+            Assert.Equal(10, keypadUnit.Devices);
+            Assert.Equal(0, keypadUnit.Loads);
+        }
+    }
 }
