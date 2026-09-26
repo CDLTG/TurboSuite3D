@@ -86,12 +86,33 @@ namespace TurboSuite.Zones.OneLine
         /// <summary>
         /// A power panel (dimmer OR processor-hosting — same enclosure). Drawn as a vertical tile stack:
         /// <c>[module tile]×N</c> then, when it hosts the processor, a bottom <c>[processor compartment]</c>
-        /// tile, then a footer. HEIGHT IS DYNAMIC in the module count — use <see cref="Height"/>. Connection
-        /// points are given relative to the panel CENTER; because height varies, the vertical ones are computed
-        /// from <see cref="Height"/> at call time via the helpers, not stored as fixed offsets.
+        /// tile, then a footer.
+        ///
+        /// <para><b>Fixed 9-rung enclosure (the real 59″ box). </b>All power panels draw at ONE height — 9
+        /// rungs — even though <see cref="Height"/> takes counts. This falls out of the data model, not a
+        /// special case here: <c>PanelResult.ModuleTiles.Count</c> always equals <c>PanelCapacity</c>
+        /// (<c>EmptySlots</c> pads to it), so PD8 (cap 8 + 1 LV compartment) and PD9 (cap 9 + 0) both total 9,
+        /// and <see cref="Height"/>(m, lv) returns the same value for every power panel. The **LV compartment is
+        /// authored/rendered as the BOTTOM rung** (drawn at tile index after the modules), only on a PD8 — a PD9
+        /// is 9 modules and never hosts a processor. <see cref="Height"/> is deliberately kept count-driven (NOT
+        /// a flat constant) so the deferred LV21 — 0 modules + 2 LV rungs — gets its own smaller height.</para>
+        ///
+        /// <para><b>Origin = family BOTTOM-CENTER; artwork grows UP.</b> Families are authored asymmetric — the
+        /// insertion origin sits at the bottom-center of the art, which expands upward from it. The renderer
+        /// places each family at the BOTTOM of its band (band center − height/2, via
+        /// <c>ControlOneLineService.PlaceFamilyGrowUp</c>), so the grown-up art fills the same band the tiles +
+        /// fallback occupy. Layout math (planner + <see cref="TileCenterY"/>) still works in band CENTERS, and
+        /// connection points are relative to the panel CENTER; because <see cref="Height"/> is uniform for power
+        /// panels the vertical ones are stable, but they are still computed from <see cref="Height"/> via the
+        /// helpers so the LV21 (different height) stays correct.</para>
         /// </summary>
         public static class Panel
         {
+            /// <summary>The real 59″ enclosure's DIN-rung count. Documents the fixed-height invariant (a power
+            /// panel always fills exactly this many rungs: modules + the bottom LV compartment on a PD8); it is
+            /// not a divisor in <see cref="Height"/>, which stays count-driven so LV21 keeps its own height.</summary>
+            public const int SlotCount = 9;
+
             public const double Width = 42.0 / 12.0;    // 3'-6"  (≈0.875" on paper) — holds a part number tile
 
             // Tile stack metrics (renderer draws each tile as a detail rectangle + centered part-number text).

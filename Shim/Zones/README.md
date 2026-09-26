@@ -135,6 +135,14 @@ by the node's `EnclosureRole`: `ControlPanelDetail` PD8/PD9, `ControlLv21Detail`
 `ControlWireMarkAnnotation` markers — and **each family degrades to a renderer-drawn box + text when it isn't
 loaded**, so it draws before any `.rfa` is authored.
 
+**Family-authoring convention:** all power panels are the one fixed **9-rung** 59″ enclosure — PD9 = 9 modules
+(never hosts a processor), PD8 = 8 modules + the LV compartment on the **bottom rung**; the 9-rung fixed height
+falls out of the data model (`ModuleTiles.Count == PanelCapacity`), so a single `ControlPanelDetail` serves both.
+Families are authored with a **bottom-center origin, artwork expanding upward**; the renderer places each at its
+band bottom (`ControlOneLineService.PlaceFamilyGrowUp`) while the planner/geometry keep reasoning in band
+centers. The wire marker stays a centered glyph. Anchors are per-panel-relative (no diagram-wide rung grid);
+cross-panel alignment among power panels is emergent from their identical fixed height.
+
 **Status:** draws end-to-end with fallbacks; authoring the five families + in-Revit geometry tuning, the wire
 legend (dense per-job numbering + its own view), and 42×30 pagination remain (see the Section 2 plan).
 Deferred: cross-session ViewId persistence — wipe-and-redraw currently resolves the owned view by its

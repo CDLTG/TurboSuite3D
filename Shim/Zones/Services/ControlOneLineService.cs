@@ -112,7 +112,10 @@ namespace TurboSuite.Zones.Services
 
             var enclosure = ResolveSymbol(node.EnclosureRole);
             if (enclosure != null)
-                PlaceFamily(view, enclosure, node.Center,
+                // Families are authored bottom-origin (asymmetric — the artwork grows UP from the insertion
+                // point), so place the enclosure at the band BOTTOM (center − h/2); its art then fills the same
+                // [center ± h/2] band the tiles + fallback occupy. See PlaceFamilyGrowUp.
+                PlaceFamilyGrowUp(view, enclosure, cx, cy, h,
                     (G.Panel.NameParam, node.Name), (G.Panel.FillParam, node.FillText), (G.Panel.PartNumberParam, node.PartNumber));
             else
                 DrawPanelEnclosureFallback(view, node, h, solid, textType, warnings);
@@ -125,7 +128,7 @@ namespace TurboSuite.Zones.Services
                 if (moduleFam != null)
                 {
                     if (!string.IsNullOrEmpty(part))   // empty slots are shown by the enclosure family's grid
-                        PlaceFamily(view, moduleFam, new XY(cx, ty), (G.Module.PartNumberParam, part));
+                        PlaceFamilyGrowUp(view, moduleFam, cx, ty, G.Panel.TileHeight, (G.Module.PartNumberParam, part));
                 }
                 else DrawTileFallback(view, cx, ty, part ?? "empty", solid, textType, warnings);
             }
@@ -134,7 +137,7 @@ namespace TurboSuite.Zones.Services
             for (int j = 0; j < node.LvSlots.Count; j++)
             {
                 double ty = G.Panel.TileCenterY(cy, h, node.ModuleTiles.Count + j);
-                if (lvFam != null) PlaceFamily(view, lvFam, new XY(cx, ty), (G.LvSlot.LabelParam, node.LvSlots[j]));
+                if (lvFam != null) PlaceFamilyGrowUp(view, lvFam, cx, ty, G.Panel.TileHeight, (G.LvSlot.LabelParam, node.LvSlots[j]));
                 else DrawTileFallback(view, cx, ty, node.LvSlots[j], solid, textType, warnings);
             }
         }
@@ -165,7 +168,7 @@ namespace TurboSuite.Zones.Services
             var fam = ResolveSymbol(Roles.ControlSmartPanelDetail);
             if (fam != null)
             {
-                PlaceFamily(view, fam, node.Center,
+                PlaceFamilyGrowUp(view, fam, node.Center.X, node.Center.Y, G.ShadePanel.Height,
                     (G.ShadePanel.NameParam, node.Name), (G.ShadePanel.FillParam, node.FillText), (G.ShadePanel.PartNumberParam, node.PartNumber));
                 return;
             }
@@ -176,6 +179,14 @@ namespace TurboSuite.Zones.Services
             DrawText(view, new XY(cx - w / 2.0 + inset, cy - h / 2.0 + 5.0 / 12.0), node.Name, ControlTextAlign.Left, textType, warnings);
             DrawText(view, new XY(cx + w / 2.0 - inset, cy - h / 2.0 + 5.0 / 12.0), node.FillText, ControlTextAlign.Right, textType, warnings);
         }
+
+        // Place a bottom-origin family (artwork expands UP from its insertion point) so it fills a band whose
+        // CENTER is (centerX, bandCenterY) and whose height is bandHeight. The planner works in band centers
+        // (node.Center / TileCenterY); this derives the bottom-center insertion point (center − height/2),
+        // keeping all layout math center-based while honoring the grow-up authoring convention.
+        private void PlaceFamilyGrowUp(View view, FamilySymbol sym, double centerX, double bandCenterY,
+            double bandHeight, params (string param, string value)[] ps)
+            => PlaceFamily(view, sym, new XY(centerX, bandCenterY - bandHeight / 2.0), ps);
 
         // Place a family instance and write its label params (skipping nulls / read-only / missing params).
         private void PlaceFamily(View view, FamilySymbol sym, XY at, params (string param, string value)[] ps)
