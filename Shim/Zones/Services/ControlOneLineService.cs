@@ -15,10 +15,11 @@ namespace TurboSuite.Zones.Services
     /// <summary>
     /// Shim-side <see cref="IControlOneLineService"/> — the control one-line generator. Each 42×30 page OWNS
     /// a Drafting View (deterministic name + persisted id, keyed by page index), so a draw is a pure
-    /// <b>wipe-and-redraw</b> from the <see cref="ControlOneLineDrawing"/> snapshot. Panels and shade boxes
-    /// are <b>renderer-drawn</b> here (outline <c>DetailCurve</c>s + module tiles + footer <c>TextNote</c>s
-    /// off <see cref="ControlOneLineGeometry.Panel"/>) — no node family — so the diagram draws with no
-    /// authored artwork; only the optional wire-mark annotation is a family, and it degrades to "skip
+    /// <b>wipe-and-redraw</b> from the <see cref="ControlOneLineDrawing"/> snapshot. Panels and shade nodes are
+    /// <b>family-composed</b> — an enclosure family (by <c>EnclosureRole</c>) plus a module/LV tile family per
+    /// slot, positioned off <see cref="ControlOneLineGeometry.Panel"/>; a missing node family <b>warns once and
+    /// skips</b> (there is no box + text stand-in). Wires, notes, and the HOME NETWORK glyph are drawn natively
+    /// (<c>DetailCurve</c>s / <c>TextNote</c>s); the wire-mark annotation is a family that degrades to "skip
     /// markers" when absent. Reuses the TurboDMX one-line service's view-ownership, wipe, wire/note/marker,
     /// and resolution helpers. One transaction per page on the API thread via the work queue.
     /// </summary>
@@ -62,6 +63,14 @@ namespace TurboSuite.Zones.Services
                         var solid = ResolveLineStyle(new[] { "Lighting Fixture", "<Solid>", "Solid", "Medium Lines", "Thin Lines" });
                         var textType = ResolveTextType();
 
+                        // Node families are the only path — a missing one warns once (deduped) and skips its
+                        // pieces; there is no renderer-drawn box fallback. Enclosure role varies per node, so it
+                        // is resolved inside DrawPanelNode against the same warned-role set.
+                        var warnedRoles = new HashSet<string>();
+                        var moduleFam = ResolveSymbol(Roles.ControlModuleDetail);
+                        var lvFam = ResolveSymbol(Roles.ControlLvSlotDetail);
+                        var shadeFam = ResolveSymbol(Roles.ControlSmartPanelDetail);
+
                         long vid = viewRegistry != null && viewRegistry.TryGetValue(page.PageIndex, out long v) ? v : 0L;
                         var view = FindOrCreateViewByIdOrName(page.ViewName(systemName), vid, result.Warnings, out bool created);
                         if (view == null) { tx.RollBack(); results.Add(result); continue; }
@@ -70,8 +79,8 @@ namespace TurboSuite.Zones.Services
                         _doc.Regenerate();   // a just-created view / duplicated text type must be a valid draw target
                         if (!created) WipeView(view);
 
-                        foreach (var p in page.Panels) { DrawPanelNode(view, p, solid, textType, result.Warnings); result.Panels++; }
-                        foreach (var s in page.Shades) { DrawShadeNode(view, s, solid, textType, result.Warnings); result.Shades++; }
+                        foreach (var p in page.Panels) { DrawPanelNode(view, p, moduleFam, lvFam, result.Warnings, warnedRoles); result.Panels++; }
+                        foreach (var s in page.Shades) { DrawShadeNode(view, s, shadeFam, result.Warnings, warnedRoles); result.Shades++; }
                         foreach (var sym in page.Symbols) { DrawSymbol(view, sym, solid, textType, result.Warnings); result.Symbols++; }
                         result.Wires += DrawWires(view, page.Wires, dashed, solid);
                         result.Notes += DrawNotes(view, page.Notes, textType, result.Warnings);
@@ -100,84 +109,70 @@ namespace TurboSuite.Zones.Services
             return results;
         }
 
-        // ── Node drawing (renderer-drawn — no family) ────────────────────────────────────────────────
+        // ── Node drawing (family-composed — no renderer-drawn fallback) ──────────────────────────────
         // A panel = enclosure family (chosen by the node's EnclosureRole) + one module-tile family per filled
-        // module slot + one LV-slot family per LV compartment, each positioned off the geometry. Every family
-        // degrades to a renderer-drawn box + text when it isn't loaded, so the diagram draws with no artwork.
-        private void DrawPanelNode(View view, ControlPanelNode node, GraphicsStyle solid, ElementId textType,
-            List<string> warnings)
+        // module slot + one LV-slot family per LV compartment, each placed off the geometry. Families are the
+        // ONLY path: a missing family warns once (deduped via warnedRoles) and skips its pieces — never a
+        // box + text stand-in that could be mistaken for finished artwork or mask a mis-roled/unloaded family.
+        private void DrawPanelNode(View view, ControlPanelNode node, FamilySymbol moduleFam, FamilySymbol lvFam,
+            List<string> warnings, HashSet<string> warnedRoles)
         {
-            double h = G.Panel.Height(node.ModuleTiles.Count, node.LvSlots.Count);
+            var moduleTiles = node.ModuleTiles;
+            var lvSlots = node.LvSlots;
+            int total = moduleTiles.Count + lvSlots.Count;
+            double h = G.Panel.Height(moduleTiles.Count, lvSlots.Count);
             double cx = node.Center.X, cy = node.Center.Y;
+            double originY = cy - h / 2.0;   // enclosure family origin (bottom-center) after PlaceFamilyGrowUp
 
             var enclosure = ResolveSymbol(node.EnclosureRole);
             if (enclosure != null)
                 // Families are authored bottom-origin (asymmetric — the artwork grows UP from the insertion
-                // point), so place the enclosure at the band BOTTOM (center − h/2); its art then fills the same
-                // [center ± h/2] band the tiles + fallback occupy. See PlaceFamilyGrowUp.
+                // point), so place the enclosure at the band BOTTOM (center − h/2); its art then fills the
+                // [center ± h/2] band. See PlaceFamilyGrowUp.
                 PlaceFamilyGrowUp(view, enclosure, cx, cy, h,
                     (G.Panel.NameParam, node.Name), (G.Panel.FillParam, node.FillText), (G.Panel.PartNumberParam, node.PartNumber));
-            else
-                DrawPanelEnclosureFallback(view, node, h, solid, textType, warnings);
+            else WarnMissing(node.EnclosureRole, warnings, warnedRoles);
 
-            var moduleFam = ResolveSymbol(Roles.ControlModuleDetail);
-            for (int i = 0; i < node.ModuleTiles.Count; i++)
+            // Tile anchor Y (absolute) for top-down slot index `slot`. Tile families anchor by ORIGIN at the
+            // rung spot (art positioned around the origin), so they are placed AT the point — no band. A power
+            // panel (SlotCount tiles) uses the authored RungOffsets (bottom-up); LV21/other fall back to the
+            // derived grid until their own offsets are authored.
+            double AnchorY(int slot) =>
+                total == G.Panel.RungOffsets.Length
+                    ? originY + G.Panel.RungOffsets[total - 1 - slot]
+                    : G.Panel.TileCenterY(cy, h, slot);
+
+            // Module tiles fill the top slots (0..count-1); LV slots the bottom (count..) — the bottom rung
+            // holds the LV compartment on a PD8, a module on a PD9.
+            for (int i = 0; i < moduleTiles.Count; i++)
             {
-                double ty = G.Panel.TileCenterY(cy, h, i);
-                string part = node.ModuleTiles[i];
-                if (moduleFam != null)
-                {
-                    if (!string.IsNullOrEmpty(part))   // empty slots are shown by the enclosure family's grid
-                        PlaceFamilyGrowUp(view, moduleFam, cx, ty, G.Panel.TileHeight, (G.Module.PartNumberParam, part));
-                }
-                else DrawTileFallback(view, cx, ty, part ?? "empty", solid, textType, warnings);
+                string part = moduleTiles[i];
+                if (string.IsNullOrEmpty(part)) continue;   // empty slots are shown by the enclosure family's grid
+                if (moduleFam == null) { WarnMissing(Roles.ControlModuleDetail, warnings, warnedRoles); continue; }
+                PlaceFamily(view, moduleFam, new XY(cx, AnchorY(i)), (G.Module.PartNumberParam, part));
             }
 
-            var lvFam = ResolveSymbol(Roles.ControlLvSlotDetail);
-            for (int j = 0; j < node.LvSlots.Count; j++)
+            for (int j = 0; j < lvSlots.Count; j++)
             {
-                double ty = G.Panel.TileCenterY(cy, h, node.ModuleTiles.Count + j);
-                if (lvFam != null) PlaceFamilyGrowUp(view, lvFam, cx, ty, G.Panel.TileHeight, (G.LvSlot.LabelParam, node.LvSlots[j]));
-                else DrawTileFallback(view, cx, ty, node.LvSlots[j], solid, textType, warnings);
+                if (lvFam == null) { WarnMissing(Roles.ControlLvSlotDetail, warnings, warnedRoles); continue; }
+                PlaceFamily(view, lvFam, new XY(cx, AnchorY(moduleTiles.Count + j)), (G.LvSlot.LabelParam, lvSlots[j]));
             }
         }
 
-        private void DrawPanelEnclosureFallback(View view, ControlPanelNode node, double h, GraphicsStyle solid,
-            ElementId textType, List<string> warnings)
+        private void DrawShadeNode(View view, ControlShadeNode node, FamilySymbol shadeFam,
+            List<string> warnings, HashSet<string> warnedRoles)
         {
-            double cx = node.Center.X, cy = node.Center.Y, w = G.Panel.Width;
-            DrawRect(view, cx, cy, w, h, solid);
-            double footerTopY = cy - h / 2.0 + G.Panel.FooterHeight;
-            DrawSegment(view, new XYZ(cx - w / 2.0, footerTopY, 0), new XYZ(cx + w / 2.0, footerTopY, 0), solid);
-            double inset = G.Panel.TileInset;
-            DrawText(view, new XY(cx - w / 2.0 + inset, footerTopY - 1.0 / 12.0), node.Name, ControlTextAlign.Left, textType, warnings);
-            DrawText(view, new XY(cx - w / 2.0 + inset, footerTopY - 7.0 / 12.0), node.FillText, ControlTextAlign.Left, textType, warnings);
-            DrawText(view, new XY(cx + w / 2.0 - inset, footerTopY - 1.0 / 12.0), node.PartNumber, ControlTextAlign.Right, textType, warnings);
+            if (shadeFam == null) { WarnMissing(Roles.ControlSmartPanelDetail, warnings, warnedRoles); return; }
+            PlaceFamilyGrowUp(view, shadeFam, node.Center.X, node.Center.Y, G.ShadePanel.Height,
+                (G.ShadePanel.NameParam, node.Name), (G.ShadePanel.FillParam, node.FillText), (G.ShadePanel.PartNumberParam, node.PartNumber));
         }
 
-        private void DrawTileFallback(View view, double cx, double ty, string label, GraphicsStyle solid,
-            ElementId textType, List<string> warnings)
+        // Warn once per missing node-family role (deduped), so a job with an unloaded family reports it rather
+        // than drawing a look-alike box.
+        private static void WarnMissing(string role, List<string> warnings, HashSet<string> warnedRoles)
         {
-            DrawRect(view, cx, ty, G.Panel.TileWidth, G.Panel.TileHeight, solid);
-            DrawText(view, new XY(cx, ty), label, ControlTextAlign.Center, textType, warnings, centerV: true);
-        }
-
-        private void DrawShadeNode(View view, ControlShadeNode node, GraphicsStyle solid, ElementId textType,
-            List<string> warnings)
-        {
-            var fam = ResolveSymbol(Roles.ControlSmartPanelDetail);
-            if (fam != null)
-            {
-                PlaceFamilyGrowUp(view, fam, node.Center.X, node.Center.Y, G.ShadePanel.Height,
-                    (G.ShadePanel.NameParam, node.Name), (G.ShadePanel.FillParam, node.FillText), (G.ShadePanel.PartNumberParam, node.PartNumber));
-                return;
-            }
-            double cx = node.Center.X, cy = node.Center.Y, w = G.ShadePanel.Width, h = G.ShadePanel.Height;
-            DrawRect(view, cx, cy, w, h, solid);
-            DrawText(view, new XY(cx, cy + h / 2.0 - 2.0 / 12.0), node.PartNumber, ControlTextAlign.Center, textType, warnings);
-            double inset = G.Panel.TileInset;
-            DrawText(view, new XY(cx - w / 2.0 + inset, cy - h / 2.0 + 5.0 / 12.0), node.Name, ControlTextAlign.Left, textType, warnings);
-            DrawText(view, new XY(cx + w / 2.0 - inset, cy - h / 2.0 + 5.0 / 12.0), node.FillText, ControlTextAlign.Right, textType, warnings);
+            if (warnedRoles.Add(role))
+                warnings.Add($"No {Roles.Label(role)} loaded — node skipped.");
         }
 
         // Place a bottom-origin family (artwork expands UP from its insertion point) so it fills a band whose

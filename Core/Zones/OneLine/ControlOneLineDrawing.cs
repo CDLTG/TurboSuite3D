@@ -81,10 +81,10 @@ namespace TurboSuite.Zones.OneLine
     }
 
     /// <summary>
-    /// A shade panel node (QSPS-10PNL) — the smaller external enclosure. Labeled with its part number +
-    /// <see cref="FillText"/> (e.g. "9/10"); one motor leg drops from the bottom labeled <c>n MOTORS</c>
-    /// (v1 single stub — the <see cref="ControlOneLineGeometry.ShadePanel.MotorDrop"/> anchor v2 fans out
-    /// per motor). <see cref="MotorCount"/> is carried so the v2 fan is additive.
+    /// A shade panel node (QSPS-10PNL) — same width as a power panel, shorter, bottom-aligned on the QS link.
+    /// Labeled with its part number + <see cref="FillText"/> (e.g. "9/10"); one motor leg rises from the TOP
+    /// labeled <c>n MOTORS</c> (v1 single stub — the <see cref="ControlOneLineGeometry.ShadePanel.MotorTap"/>
+    /// anchor v2 fans out per motor). <see cref="MotorCount"/> is carried so the v2 fan is additive.
     /// </summary>
     public sealed class ControlShadeNode
     {

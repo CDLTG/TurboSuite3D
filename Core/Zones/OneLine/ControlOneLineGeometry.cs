@@ -113,14 +113,54 @@ namespace TurboSuite.Zones.OneLine
             /// not a divisor in <see cref="Height"/>, which stays count-driven so LV21 keeps its own height.</summary>
             public const int SlotCount = 9;
 
-            public const double Width = 42.0 / 12.0;    // 3'-6"  (≈0.875" on paper) — holds a part number tile
+            /// <summary>LV21's rung count (2 LV rungs, no modules) — the low anchor for the linear
+            /// height-per-rung fit in <see cref="Height"/>.</summary>
+            private const int Lv21SlotCount = 2;
 
-            // Tile stack metrics (renderer draws each tile as a detail rectangle + centered part-number text).
-            public const double TileHeight = 9.0 / 12.0;    // 0'-9"
-            public const double TileGap = 1.5 / 12.0;       // gap between tiles
-            public const double TileInset = 3.0 / 12.0;     // side inset of a tile inside the panel
-            public const double HeaderPad = 3.0 / 12.0;     // top pad above the first tile
-            public const double FooterHeight = 15.0 / 12.0; // name + fill + part number
+            public const double Width = (71.0 + 197.0 / 256.0) / 12.0;   // 5'-11 197/256" — measured authored family width
+
+            // ── Measured outer heights of the authored enclosures (transcribed 2026-09-28) ──────────────
+            // The power enclosure (9 rungs) and the LV21 (2 rungs) share one DIN-rung line, so their heights
+            // are linear in rung count; Height() fits a line through these two points, reproducing each
+            // exactly and yielding the shared rung pitch as a byproduct.
+            public const double PowerPanelHeight = (272.0 + 61.0 / 64.0) / 12.0;    // 22'-8 61/64"  (9 rungs)
+            public const double Lv21Height       = (93.0 + 103.0 / 256.0) / 12.0;   // 7'-9 103/256" (2 rungs)
+
+            /// <summary>Rung pitch shared across the enclosure line, derived from the two measured heights.</summary>
+            public static double RungPitch => (PowerPanelHeight - Lv21Height) / (SlotCount - Lv21SlotCount);
+
+            /// <summary>The non-rung remainder of a full panel (header pad above rung 1 + footer band),
+            /// derived so <see cref="Height"/> lands on the measured outer heights exactly.</summary>
+            public static double NonRungHeight => PowerPanelHeight - SlotCount * RungPitch;
+
+            // Header pad above the first rung + footer band, split from NonRungHeight on the original 3:15
+            // proportion (interim — the footer/header split only shifts tile Ys, which the per-tile origin
+            // offsets will supersede).
+            public static double HeaderPad => NonRungHeight * (3.0 / 18.0);
+            public static double FooterHeight => NonRungHeight * (15.0 / 18.0);
+
+            // Tile art size is irrelevant to placement — each tile family anchors by its (bottom-center) ORIGIN
+            // at a rung Y in RungOffsets; TileHeight is kept only for the LV21 interim fallback grid.
+            public const double TileHeight = (21.0 + 15.0 / 32.0) / 12.0;   // 1'-9 15/32" (ControlModuleDetail)
+            public const double TileInset = 3.0 / 12.0;     // tile-grid spec (side inset); not used by the renderer
+
+            /// <summary>Rung anchor Ys for a power panel, measured UP from the family BOTTOM origin, BOTTOM RUNG
+            /// FIRST (index 0 = rung 1 = the LV/processor compartment on a PD8, or module 1 on a PD9; index 8 =
+            /// top). Transcribed from the authored ControlPanelDetail (2026-09-28). A module tile and the LV tile
+            /// anchor to the SAME rung spot, so both are placed at <c>originY + RungOffsets[r]</c>. Renderer maps
+            /// its top-down tile index <c>k</c> (of <see cref="SlotCount"/> total) to <c>RungOffsets[SlotCount-1-k]</c>.</summary>
+            public static readonly double[] RungOffsets =
+            {
+                (42.0 + 7.0 / 8.0) / 12.0,        // rung 1 (bottom): 3'-6 7/8"
+                (68.0 + 135.0 / 256.0) / 12.0,    // rung 2:          5'-8 135/256"
+                (94.0 + 45.0 / 256.0) / 12.0,     // rung 3:          7'-10 45/256"
+                (119.0 + 53.0 / 64.0) / 12.0,     // rung 4:          9'-11 53/64"
+                (145.0 + 61.0 / 128.0) / 12.0,    // rung 5:          12'-1 61/128"
+                (171.0 + 1.0 / 8.0) / 12.0,       // rung 6:          14'-3 1/8"
+                (196.0 + 199.0 / 256.0) / 12.0,   // rung 7:          16'-4 199/256"
+                (222.0 + 109.0 / 256.0) / 12.0,   // rung 8:          18'-6 109/256"
+                (248.0 + 5.0 / 64.0) / 12.0,      // rung 9 (top):    20'-8 5/64"
+            };
 
             // Footer label params the renderer writes on the enclosure family (ControlPanelDetail /
             // ControlLv21Detail); the family author names its text params to match. Tiles are SEPARATE family
@@ -130,7 +170,7 @@ namespace TurboSuite.Zones.OneLine
             public const string PartNumberParam = "PartNumber";
 
             public static double TileWidth => Width - 2 * TileInset;
-            public static double TilePitch => TileHeight + TileGap;
+            public static double TilePitch => RungPitch;
 
             /// <summary>Total drawn height for a panel with <paramref name="moduleCount"/> module tiles plus
             /// <paramref name="lvSlotCount"/> LV-compartment tiles (PD8/PD9 = 1, LV21 = 2, shade panels = 0).</summary>
@@ -173,22 +213,24 @@ namespace TurboSuite.Zones.OneLine
         }
 
         /// <summary>
-        /// A shade panel (QSPS-10PNL) — a SMALLER external enclosure than a power panel. Labeled with its part
-        /// number + <c>n/10</c> fill; one motor leg drops from the bottom (v1 single stub — the
-        /// <see cref="Layout.MotorDropZone"/> anchor that v2 expands into a per-motor fan).
+        /// A shade panel (QSPS-10PNL) — same width as a power panel, shorter. BOTTOM-ALIGNED with the power
+        /// panels on the QS link (origin on the shared baseline), so it takes the same caret tap at its origin;
+        /// labeled with its part number + <c>n/10</c> fill. One motor leg rises out the TOP as a single
+        /// <c>n MOTORS</c> stub (v1 — no shade symbols; the <see cref="MotorTap"/> anchor v2 fans per motor).
         /// </summary>
         public static class ShadePanel
         {
-            public const double Width = 30.0 / 12.0;    // 2'-6"
-            public const double Height = 21.0 / 12.0;   // 1'-9"
+            public const double Width = (71.0 + 197.0 / 256.0) / 12.0;    // 5'-11 197/256" (measured; == power panel W)
+            public const double Height = (93.0 + 103.0 / 256.0) / 12.0;   // 7'-9 103/256"  (measured; == LV21 H)
 
             // Label params the renderer writes on the ControlSmartPanelDetail family.
             public const string NameParam = "PanelName";
             public const string FillParam = "Fill";
             public const string PartNumberParam = "PartNumber";
 
-            public static readonly XY LinkIn = XY.In(-15, 0);    // left edge mid ← QS link
-            public static readonly XY MotorDrop = XY.In(0, -10.5); // bottom mid → n-MOTORS leg (v1) / fan (v2)
+            /// <summary>Motor-leg tap from the node CENTER — TOP mid; the n-MOTORS stub rises from here (v1) /
+            /// fans per motor (v2). The QS link attaches at the bottom ORIGIN via the caret, not a side point.</summary>
+            public static readonly XY MotorTap = new XY(0, Height / 2.0);
         }
 
         /// <summary>Wire-type marker — Generic Annotation placed ON a wire; <c>WireMark</c> = the per-job
@@ -205,14 +247,19 @@ namespace TurboSuite.Zones.OneLine
         /// </summary>
         public static class Layout
         {
-            /// <summary>Vertical gap between one processor's two link rows (edge-to-edge between their panels).</summary>
-            public const double LinkRowGap = 12.0 / 12.0;   // 1'-0"
+            /// <summary>Vertical spacing between link ROWS, panel-origin to panel-origin (== center-to-center,
+            /// since every row's panels are the uniform-height power enclosure). Each processor's links are
+            /// flattened into rows top-down; up to 4 rows fit a 42×30 sheet. Sized so 4 rows fill the usable
+            /// height with clearance.</summary>
+            public const double RowPitch = (28.0 * 12.0) / 12.0;   // 28'-0" origin-to-origin
 
-            /// <summary>Vertical gap between consecutive processor bays.</summary>
-            public const double BayGap = 24.0 / 12.0;       // 2'-0"
+            /// <summary>Horizontal edge-to-edge gap between consecutive power panels on a link (holds the wire +
+            /// marker). Derived so panel CENTER-TO-CENTER is exactly the target below (c-c = <see cref="Panel.Width"/>
+            /// + this gap); re-measuring the family width keeps the 10' c-c automatically. Tune by the c-c target.</summary>
+            public const double NodeGap = PanelCenterToCenter - Panel.Width;   // ⇒ 4'-0 59/256" gap at the current width
 
-            /// <summary>Horizontal edge-to-edge gap between consecutive nodes on a link (holds the wire + marker).</summary>
-            public const double NodeGap = 30.0 / 12.0;      // 2'-6"
+            /// <summary>Target panel center-to-center spacing along a link: 10'-0".</summary>
+            public const double PanelCenterToCenter = 120.0 / 12.0;   // 10'-0"
 
             /// <summary>Processor-column center X — the left rail; bays hang their panels here.</summary>
             public const double ProcessorColumnX = 0.0;
@@ -227,6 +274,14 @@ namespace TurboSuite.Zones.OneLine
 
             /// <summary>120 V feed stub length (rises from a panel's top edge).</summary>
             public const double FeedStubLength = 12.0 / 12.0;     // 1'-0"
+
+            // ── QS link spine + panel caret (child/orphan panels tap the daisy from below, Lutron-style) ──
+            /// <summary>The QS daisy-chain (spine) runs this far BELOW a child panel's bottom origin; each panel
+            /// taps up to it with a caret. Equals the caret height, so the caret feet land on the spine.</summary>
+            public const double LinkSpineDropFt = 12.0 / 12.0;    // 1'-0"
+            /// <summary>Caret (chevron) half-width — apex at the panel origin, each foot this far to the side
+            /// (so a 2'-0"-wide caret). Its height is <see cref="LinkSpineDropFt"/> (apex − spine).</summary>
+            public const double CaretHalfWidth = 12.0 / 12.0;     // 1'-0"  (2'-0" total width)
 
             // ── Keypad tail zone (v1 = one REFER-TO-PLAN stub; v2 expands into a compact column-wrapped list) ──
             /// <summary>Horizontal gap from the last node's right edge to the keypad-tail anchor.</summary>

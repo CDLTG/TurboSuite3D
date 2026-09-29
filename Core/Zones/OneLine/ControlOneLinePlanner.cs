@@ -74,7 +74,14 @@ namespace TurboSuite.Zones.OneLine
             double colX = G.Layout.ProcessorColumnX;
             double headRightX = colX + G.Panel.Width / 2.0;
             var headCenters = new List<XY>();
-            double cursorTopY = 0.0;
+
+            // Rows are LINKS, laid out top-down at a uniform origin-to-origin pitch: every processor's two links
+            // are flattened into consecutive rows (proc1·link1, proc1·link2, proc2·link1, …), so 2× PD8 and 1×
+            // LV21 both fill 4 rows identically. A processor enclosure is drawn (existing logic) centered between
+            // the two rows its links occupy. Row 0 center sits at Y=0; each row below is RowPitch lower.
+            // (Pagination past 4 rows / >2 groups is a later step — for now all rows lay onto one page.)
+            int rowBase = 0;   // first row index this group's two links occupy
+            double RowCenterY(int r) => -r * G.Layout.RowPitch;
 
             foreach (var group in groups)
             {
@@ -97,20 +104,15 @@ namespace TurboSuite.Zones.OneLine
 
                 double headH = PanelHeight(headRd);
 
-                // ── Resolve each link's downstream (rule-#5 ordered), and the bay's tallest node ──
+                // ── Resolve each link's downstream (rule-#5 ordered) ──
                 var downstream = new List<PackedLinkUnit>[2];
-                double maxH = headH;
                 for (int i = 0; i < 2; i++)
-                {
                     downstream[i] = Order(links[i].Units, excludeName: i == headLink ? headName : null, natural);
-                    foreach (var u in downstream[i])
-                        if (u.Category != LinkCategory.Keypads)
-                            maxH = Math.Max(maxH, NodeHeight(u, panels));
-                }
 
-                double rowPitch = maxH + G.Layout.LinkRowGap;
-                double bayHalf = rowPitch / 2.0 + maxH / 2.0;
-                double bayCenterY = cursorTopY - bayHalf;
+                // This group's two links occupy rows [rowBase, rowBase+1] (link1 upper, link2 lower); the head
+                // is drawn centered between them — existing placement, refined in a later pass.
+                double[] rowY = { RowCenterY(rowBase), RowCenterY(rowBase + 1) };
+                double bayCenterY = (rowY[0] + rowY[1]) / 2.0;
                 var headCenter = new XY(colX, bayCenterY);
                 headCenters.Add(headCenter);
 
@@ -118,7 +120,6 @@ namespace TurboSuite.Zones.OneLine
                 panelNodes.Add(Node(headRd, headCenter));
                 Add120V(headCenter, headH);
 
-                double[] rowY = { bayCenterY + rowPitch / 2.0, bayCenterY - rowPitch / 2.0 };
                 // QS control riser on the head's right edge, joining both link rows.
                 Wire(new XY(headRightX, rowY[0]), new XY(headRightX, rowY[1]), dashed: true);
 
@@ -143,27 +144,55 @@ namespace TurboSuite.Zones.OneLine
                     bool hasKeypads = downstream[i].Any(u => u.Category == LinkCategory.Keypads);
                     if (located.Count == 0 && !hasKeypads) continue;   // empty QS link — no row
 
-                    double cursorX = headRightX;
-                    Mark(new XY(headRightX + G.Layout.NodeGap * 0.4, y), ControlWireType.QsControlLink);
+                    // The QS daisy (spine) runs LinkSpineDropFt BELOW the shared bottom-origin baseline; every
+                    // child node — dimmer AND shade, both bottom-aligned — taps it with a caret whose apex sits ON
+                    // its origin (Screenshot_582/591/592). The LAST node on a link that ends here (no keypad tail
+                    // after it) draws only the LEFT half of its caret, so no half-caret dangles past it.
+                    double panelBottomY = y - G.Panel.PowerPanelHeight / 2.0;
+                    double spineY = panelBottomY - G.Layout.LinkSpineDropFt;
 
-                    foreach (var u in located)
+                    // Lead-in: drop the link from the head's right-edge exit (row center) down to the spine.
+                    Wire(new XY(headRightX, y), new XY(headRightX, spineY), dashed: true);
+                    Mark(new XY(headRightX + G.Layout.NodeGap * 0.4, spineY), ControlWireType.QsControlLink);
+
+                    double cursorX = headRightX;      // right-edge cursor → preserves node center-to-center spacing
+                    double spineFromX = headRightX;   // X where the next spine segment starts
+
+                    // Caret from the spine up to a node's bottom origin at cxAt. leftHalfOnly = a terminal node
+                    // with nothing after it: draw spine→leftFoot→apex and stop, so no right half dangles.
+                    void Caret(double cxAt, bool leftHalfOnly)
                     {
+                        double leftFoot = cxAt - G.Layout.CaretHalfWidth;
+                        Wire(new XY(spineFromX, spineY), new XY(leftFoot, spineY), dashed: true);
+                        Wire(new XY(leftFoot, spineY), new XY(cxAt, panelBottomY), dashed: true);
+                        if (leftHalfOnly) { spineFromX = cxAt; return; }
+                        double rightFoot = cxAt + G.Layout.CaretHalfWidth;
+                        Wire(new XY(cxAt, panelBottomY), new XY(rightFoot, spineY), dashed: true);
+                        spineFromX = rightFoot;
+                    }
+
+                    for (int n = 0; n < located.Count; n++)
+                    {
+                        var u = located[n];
                         bool isShade = u.Category == LinkCategory.Shades;
                         double w = isShade ? G.ShadePanel.Width : G.Panel.Width;
                         double cx = cursorX + G.Layout.NodeGap + w / 2.0;
-                        Wire(new XY(cursorX, y), new XY(cx - w / 2.0, y), dashed: true);
+                        Caret(cx, leftHalfOnly: n == located.Count - 1 && !hasKeypads);
 
                         if (isShade)
                         {
-                            var c = new XY(cx, y);
+                            // Bottom-aligned with the power panels (origin on the shared baseline); the motor leg
+                            // rises out the TOP as a single "n MOTORS" stub — no shade symbols drawn.
+                            var c = new XY(cx, panelBottomY + G.ShadePanel.Height / 2.0);
                             int motors = u.Loads;   // ShadeSolver emits loads = fill = motors on this QSPS-10PNL
                             shadeNodes.Add(new ControlShadeNode(c, u.Name, ShadeSolver.PanelPartNumber,
                                 $"{motors}/{ShadeSolver.ShadesPerPanel}", motors));
-                            var m0 = c.Plus(G.ShadePanel.MotorDrop);
-                            var m1 = m0.Offset(0, -10.0 / 12.0);
+                            Add120V(c, G.ShadePanel.Height);   // same feed as a power panel (shared helper → stays in sync)
+                            var m0 = c.Plus(G.ShadePanel.MotorTap);
+                            var m1 = m0.Offset(0, G.Layout.FeedStubLength);
                             Wire(m0, m1, dashed: true);
                             Mark(new XY(m0.X, (m0.Y + m1.Y) / 2.0), ControlWireType.ShadeLink);
-                            Note(m1.Offset(ControlOnePlannerConstants.NoteDx, -ControlOnePlannerConstants.NoteDy),
+                            Note(m1.Offset(ControlOnePlannerConstants.NoteDx, ControlOnePlannerConstants.NoteDy),
                                 $"{motors} MOTORS", ControlTextAlign.Left);
                         }
                         else if (panels.TryGetValue(u.Name, out var prd))
@@ -178,16 +207,16 @@ namespace TurboSuite.Zones.OneLine
                     if (hasKeypads)
                     {
                         double kx = cursorX + G.Layout.KeypadTailGap;
-                        Wire(new XY(cursorX, y), new XY(kx, y), dashed: true);
-                        Tick(wires, new XY(kx, y), G.Layout.KeypadTickHalf);
-                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, y + ControlOnePlannerConstants.NoteDy),
+                        Wire(new XY(spineFromX, spineY), new XY(kx, spineY), dashed: true);
+                        Tick(wires, new XY(kx, spineY), G.Layout.KeypadTickHalf);
+                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY + ControlOnePlannerConstants.NoteDy),
                             "– ALL KEYPADS — REFER TO PLAN", ControlTextAlign.Left);
-                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, y - ControlOnePlannerConstants.NoteDy),
+                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY - ControlOnePlannerConstants.NoteDy),
                             "(MAX 10 KEYPADS PER HOMERUN)", ControlTextAlign.Left);
                     }
                 }
 
-                cursorTopY = bayCenterY - bayHalf - G.Layout.BayGap;
+                rowBase += 2;   // next group's links take the next two rows
             }
 
             // ── HOME NETWORK node + CAT6 to each head panel ──
@@ -243,11 +272,6 @@ namespace TurboSuite.Zones.OneLine
 
         private static double PanelHeight(ControlPanelRenderData rd)
             => G.Panel.Height(rd.ModuleTiles.Count, rd.LvSlots.Count);
-
-        private static double NodeHeight(PackedLinkUnit u,
-            IReadOnlyDictionary<string, ControlPanelRenderData> panels)
-            => u.Category != LinkCategory.Shades && panels.TryGetValue(u.Name, out var rd)
-                ? PanelHeight(rd) : G.ShadePanel.Height;
 
         private static ControlPanelNode Node(ControlPanelRenderData rd, XY center)
             => new ControlPanelNode(center, rd.Name, rd.PartNumber, rd.FillText, rd.ModuleTiles,
