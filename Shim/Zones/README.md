@@ -126,9 +126,14 @@ into an owned Drafting View — a wipe-and-redraw off the **same pack the capaci
 shim-renderer split modeled on TurboDMX: `Core/Zones/OneLine/` holds the pure geometry
 (`ControlOneLineGeometry` — the source of truth, tuned in-Revit), the drawing model, `ControlOneLinePlanner`
 (**row-per-link** layout — every processor's two links flatten into rows top-down at a **28' pitch**, ≤4
-rows/sheet; each row a QS **spine 1' below the panels with a caret up to each panel origin**, panels 10'
-center-to-center; **bottom-aligned shades** with a top **`n MOTORS`** tap; rule-#5 node order; keypad +
-wireless stubs; shared HOME NETWORK + CAT6), and `ControlRenderDataFactory` (PanelResult + BrandConfig →
+rows/sheet; the **head enclosure** — identified by processor **panel name** (so a module-less LV21 is seen, and
+its two processor compartments merge into **one** drawn head) — sits bottom-aligned in the left column and fans
+its QS links off its **right edge** as separate, crossing-free **dogleg lanes** (deepest row = leftmost lane +
+lowest exit) across a widened head→column-1 gap, each dropping into its row's spine; a completely **dead (0/0)
+link is dropped** so live rows stay consecutive; each row a QS **spine 1' below the panels with a caret up to
+each panel origin**, panels 10' center-to-center; **bottom-aligned shades** with a top **`n MOTORS`** tap;
+rule-#5 node order; keypad + wireless stubs; shared HOME NETWORK + CAT6 tapping each head's bottom-left), and
+`ControlRenderDataFactory` (PanelResult + BrandConfig →
 per-panel render data; module tiles **bottom-up**, part-number-labeled). The packer exposes per-link
 composition via `PackedLink.Units` (Section 2a). `Shim/Zones/Services/ControlOneLineService.cs` replays it
 into per-page owned views: panels are **family-composed** — a branded enclosure family (resolved by the
@@ -142,17 +147,18 @@ families are authored, so a missing one is a config error to surface, not a look
 falls out of the data model (`ModuleTiles.Count == PanelCapacity`), so a single `ControlPanelDetail` serves both.
 Families are authored with a **bottom-center origin, artwork expanding upward**; the renderer places each at its
 band bottom (`ControlOneLineService.PlaceFamilyGrowUp` for enclosures/shades) while the planner/geometry keep
-reasoning in band centers. Tiles anchor their origin to authored per-rung Y offsets (`Panel.RungOffsets`,
-measured up from the enclosure bottom origin), so anchors are per-panel-relative (no diagram-wide rung grid);
+reasoning in band centers. Tiles anchor their origin to authored per-rung Y offsets (`Panel.RungOffsets` for power panels,
+`Panel.Lv21RungOffsets` for the LV21, measured up from the enclosure bottom origin, picked by tile count), so
+anchors are per-panel-relative (no diagram-wide rung grid);
 cross-panel alignment among power panels is emergent from their identical fixed height. The wire marker stays
 a centered glyph.
 
 **Status:** the 6 families are authored, the box fallback is removed, and the measured family geometry (outer
-sizes, rung anchor offsets) is transcribed into `ControlOneLineGeometry`; spine/caret, bottom-aligned shades,
-and the row-per-link 28' layout are in. Remaining (see the Section 2 plan): **head/LV21 placement** (currently
-the interim centered-between-its-rows logic — an LV21 draws as two placeholder `P#` boxes), 42×30 **pagination**
-(>4 links → next sheet), the **wire legend** (dense per-job numbering + its own view), connection-point
-fine-tune, and cross-session ViewId persistence + experimental-gating before release.
+sizes, rung anchor offsets incl. the LV21's) is transcribed into `ControlOneLineGeometry`; spine/caret,
+bottom-aligned shades, the row-per-link 28' layout, and the **head-panel dogleg fan + one-head LV21 placement**
+(name-identified head, dead-link row compaction, LV21 tile offsets) are in. Remaining (see the Section 2 plan):
+42×30 **pagination** (>4 links → next sheet), the **wire legend** (dense per-job numbering + its own view),
+connection-point fine-tune, and cross-session ViewId persistence + experimental-gating before release.
 
 ## Dependencies
 

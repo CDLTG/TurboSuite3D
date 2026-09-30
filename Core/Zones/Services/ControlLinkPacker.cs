@@ -212,7 +212,7 @@ namespace TurboSuite.Zones.Services
                 int linkCount = Math.Max(0, processors[p].LinkCount);
                 PackedLink link1 = linkCount >= 1 ? bySlot[slotCursor] : EmptyQsLink();
                 PackedLink link2 = linkCount >= 2 ? bySlot[slotCursor + 1] : EmptyQsLink();
-                groups.Add(new ProcessorGroup(processors[p].Location, link1, link2));
+                groups.Add(new ProcessorGroup(processors[p].Location, link1, link2, processors[p].ProcessorPanelName));
                 slotCursor += linkCount;
             }
 
@@ -866,11 +866,12 @@ namespace TurboSuite.Zones.Services
     /// carved off the trailing link positions, lands on <see cref="Link2"/> of the last processors.</summary>
     public sealed class ProcessorGroup
     {
-        public ProcessorGroup(int location, PackedLink link1, PackedLink link2)
+        public ProcessorGroup(int location, PackedLink link1, PackedLink link2, string? processorPanelName = null)
         {
             Location = location;
             Link1 = link1;
             Link2 = link2;
+            ProcessorPanelName = processorPanelName;
         }
 
         /// <summary>The location this processor sits in (0 when its panel name carries none).</summary>
@@ -878,6 +879,12 @@ namespace TurboSuite.Zones.Services
 
         public PackedLink Link1 { get; }
         public PackedLink Link2 { get; }
+
+        /// <summary>The enclosure hosting this processor compartment (from <see cref="ProcessorSlot"/>). The
+        /// one-line planner reads it to find the head by name (a module-less LV21 is no unit on any link) and
+        /// to merge an LV21's two same-named compartments into one drawn head. Null from the flat overload
+        /// and from callers that don't supply it (the bars read <see cref="ProcessorInstance"/>, not this).</summary>
+        public string? ProcessorPanelName { get; }
     }
 
     /// <summary>How the demand landed. When packed against a fixed link budget, <see cref="Links"/>
@@ -909,10 +916,12 @@ namespace TurboSuite.Zones.Services
     /// compartments, one per slot, with the location parsed from the panel name.</summary>
     public sealed class ProcessorSlot
     {
-        public ProcessorSlot(int location, int linkCount = ControlLinkPacker.LinksPerProcessor)
+        public ProcessorSlot(int location, int linkCount = ControlLinkPacker.LinksPerProcessor,
+            string? processorPanelName = null)
         {
             Location = location;
             LinkCount = linkCount;
+            ProcessorPanelName = processorPanelName;
         }
 
         /// <summary>The location this processor sits in — 0 when its panel name has none. A located unit
@@ -922,6 +931,12 @@ namespace TurboSuite.Zones.Services
         /// <summary>Links this processor heads. Always <see cref="ControlLinkPacker.LinksPerProcessor"/>
         /// (2) for the shipped HQP7-2; kept a field for the MDU processors and forward-compat.</summary>
         public int LinkCount { get; }
+
+        /// <summary>The panel that hosts this processor compartment (its enclosure). Carried through to
+        /// <see cref="ProcessorGroup.ProcessorPanelName"/> so the one-line planner can identify the head
+        /// enclosure by name — the only way to see a module-less LV21, which is no unit on any link — and
+        /// merge an LV21's two compartments (same name) into one drawn enclosure. Pack itself ignores it.</summary>
+        public string? ProcessorPanelName { get; }
     }
 
     /// <summary>

@@ -162,6 +162,17 @@ namespace TurboSuite.Zones.OneLine
                 (248.0 + 5.0 / 64.0) / 12.0,      // rung 9 (top):    20'-8 5/64"
             };
 
+            /// <summary>LV21 rung anchor Ys, BOTTOM-UP (index 0 = bottom rung, index 1 = top), measured UP from the
+            /// family BOTTOM origin — the LV21's own 2-rung equivalent of <see cref="RungOffsets"/>. The bottom rung
+            /// shares the power panel's rung-1 offset (3'-6 7/8") so a processor tile sits at the same height in
+            /// either enclosure; the top rung is authored at 6'-6 47/64". Transcribed from the authored
+            /// ControlLv21Detail (2026-09-29). The renderer picks this vs <see cref="RungOffsets"/> by tile count.</summary>
+            public static readonly double[] Lv21RungOffsets =
+            {
+                (42.0 + 7.0 / 8.0) / 12.0,        // rung 1 (bottom): 3'-6 7/8"   (== power panel rung 1)
+                (78.0 + 47.0 / 64.0) / 12.0,      // rung 2 (top):    6'-6 47/64"
+            };
+
             // Footer label params the renderer writes on the enclosure family (ControlPanelDetail /
             // ControlLv21Detail); the family author names its text params to match. Tiles are SEPARATE family
             // placements — see the sibling <see cref="Module"/> / <see cref="LvSlot"/> classes.
@@ -264,13 +275,48 @@ namespace TurboSuite.Zones.OneLine
             /// <summary>Processor-column center X — the left rail; bays hang their panels here.</summary>
             public const double ProcessorColumnX = 0.0;
 
+            // ── Head → column-1 link fan (the head's QS links exit its RIGHT edge, dogleg through this gap in
+            //    separate lanes, and drop to each row's spine — Screenshot_593 / 582). KNOBS the user tunes:
+            //    (1) the head↔column-1 gap; (2) the exit points on the head's right edge; (3) the lane (bend) X. ──
+            /// <summary><b>KNOB 1.</b> Head-column center to column-1 center. Wider than
+            /// <see cref="PanelCenterToCenter"/> (the inter-panel spacing) so the fan of separate QS link lanes
+            /// fits in the gap between the head and the first panel column.</summary>
+            public const double HeadColumnCenterToCenter = 180.0 / 12.0;   // 15'-0" (> the 10' inter-panel c-c)
+
+            /// <summary>Edge-to-edge head→column-1 gap the link-lane fan nests into (derived from
+            /// <see cref="HeadColumnCenterToCenter"/> so re-measuring the panel width keeps the c-c target).</summary>
+            public const double HeadColumnGap = HeadColumnCenterToCenter - Panel.Width;   // ⇒ ~8'-0" gap
+
+            /// <summary><b>KNOB 2.</b> Height of the DEEPEST (last) row's link exit above the head's ORIGIN
+            /// (center-bottom of the artwork). Anchored to the bottom-origin — NOT the top edge — so exits stay low
+            /// regardless of enclosure height (a tall PD8 vs a short LV21). Shallower rows stack UP from here at
+            /// <see cref="HeadExitPitch"/> (deepest lowest, each earlier row one pitch higher — matches the lane
+            /// nesting and stays crossing-free).</summary>
+            public const double LastRowExitAboveOrigin = 9.0 / 12.0;   // 0'-9"
+            /// <summary><b>KNOB 2.</b> Vertical spacing between stacked link exits on the head's right edge
+            /// (each shallower row this far ABOVE its successor). A 4-link LV21's top exit lands at
+            /// <see cref="LastRowExitAboveOrigin"/> + 3× this.</summary>
+            public const double HeadExitPitch = 18.0 / 12.0;       // 1'-6"
+
+            /// <summary><b>KNOB 3.</b> X of link lane <paramref name="laneFromLeft"/> of
+            /// <paramref name="laneCount"/>, evenly distributed across the head→column-1 gap
+            /// [<paramref name="gapStartX"/>, <paramref name="gapEndX"/>] (endpoints excluded). Lane 0 = leftmost =
+            /// deepest row, so the doglegs never cross (a deeper link turns right below the shallower lanes' ends).</summary>
+            public static double LaneX(double gapStartX, double gapEndX, int laneFromLeft, int laneCount)
+                => gapStartX + (gapEndX - gapStartX) * (laneFromLeft + 1.0) / (laneCount + 1.0);
+
+            // The CAT6 tap enters the head bottom-left IN-LINE with the bottom (deepest-row) link exit on the right
+            // edge — it reuses <see cref="LastRowExitAboveOrigin"/> as its height so the two stay aligned by
+            // construction (clear of the QS fan on the right and the 120 V feed on top; Screenshot_582).
+
             // ── HOME NETWORK node (shared LAN switch; a CAT6 leg taps to each processor's left edge) ──
             public const double HomeNetworkWidth = 30.0 / 12.0;   // 2'-6"
             public const double HomeNetworkHeight = 12.0 / 12.0;  // 1'-0"
 
-            /// <summary>X of the vertical CAT6 trunk the HOME NETWORK drops; each bay taps it. Left of the
-            /// panel's left edge (−<see cref="Panel.Width"/>/2) so the tap runs cleanly into the panel.</summary>
-            public const double Cat6TrunkX = -36.0 / 12.0;        // 3'-0" left of the processor column
+            /// <summary>X of the vertical CAT6 trunk the HOME NETWORK drops; each head taps it at its bottom-left
+            /// (<see cref="Cat6TapInsetFromBottom"/>). Sits well left of the head's left edge so the tap is a
+            /// legible run (the old 3'-0" left the tap degenerately short against the ~3' half-width).</summary>
+            public const double Cat6TrunkX = -72.0 / 12.0;        // 6'-0" left of the processor column
 
             /// <summary>120 V feed stub length (rises from a panel's top edge).</summary>
             public const double FeedStubLength = 12.0 / 12.0;     // 1'-0"

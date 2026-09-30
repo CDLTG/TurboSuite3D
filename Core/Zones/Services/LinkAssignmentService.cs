@@ -111,7 +111,9 @@ namespace TurboSuite.Zones.Services
             foreach (var panel in allPanels)
                 foreach (var slot in panel.CompartmentSlots)
                     if (IsProcessorSlot(slot))
-                        slots.Add(new ProcessorSlot(PanelAllocationService.ParseLocationNumber(panel.PanelName)));
+                        slots.Add(new ProcessorSlot(
+                            PanelAllocationService.ParseLocationNumber(panel.PanelName),
+                            processorPanelName: panel.PanelName));
             return slots;
         }
 

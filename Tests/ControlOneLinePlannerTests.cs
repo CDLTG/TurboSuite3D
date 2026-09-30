@@ -33,6 +33,14 @@ namespace TurboSuite.Tests.Zones
         private static ProcessorGroup Group(PackedLink l1, PackedLink l2, int location = 1)
             => new ProcessorGroup(location, l1, l2);
 
+        private static ProcessorGroup GroupNamed(string procPanel, PackedLink l1, PackedLink l2, int location = 1)
+            => new ProcessorGroup(location, l1, l2, procPanel);
+
+        // An LV21 hosts processors but carries NO modules — it is no unit on any link, so only its NAME identifies it.
+        private static ControlPanelRenderData Lv21(string name)
+            => new ControlPanelRenderData(name, "HQ-LV21-120", "0/0", System.Array.Empty<string?>(),
+                new[] { "HQP7-2", "HQP7-2" }, hostsProcessor: true, Roles.ControlLv21Detail);
+
         private static LinkPackResult Pack(params ProcessorGroup[] groups)
         {
             var flat = groups.SelectMany(g => new[] { g.Link1, g.Link2 }).ToList();
@@ -150,6 +158,31 @@ namespace TurboSuite.Tests.Zones
             Assert.NotEqual(heads[0].Center.Y, heads[1].Center.Y);
             Assert.Single(page.Symbols, s => s.Kind == ControlSymbolKind.HomeNetwork);
             Assert.Contains(page.Markers, m => m.Type == ControlWireType.Cat6);
+        }
+
+        /// <summary>An LV21's two processor compartments arrive as two same-named <see cref="ProcessorGroup"/>s.
+        /// The planner MERGES them into ONE drawn head, found by name (the LV21 carries no modules, so it is no
+        /// unit on any link and the old unit-scan missed it — drawing two fallback P# boxes). Its four links fan
+        /// from the single head; the downstream dimmers still draw.</summary>
+        [Fact]
+        public void Lv21TwoCompartmentsDrawOneHeadNotTwoFallbackBoxes()
+        {
+            var pack = Pack(
+                GroupNamed("1-A", Qs(U("1-B", LinkCategory.Modules, 6)), EmptyQs()),
+                GroupNamed("1-A", Qs(U("1-C", LinkCategory.Modules, 6)), EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData>
+            { ["1-A"] = Lv21("1-A"), ["1-B"] = Dimmer("1-B"), ["1-C"] = Dimmer("1-C") };
+
+            var page = BuildOne(pack, panels);
+
+            // Exactly ONE head, and it is the named LV21 — not two, and not a "P#" stub.
+            var head = Assert.Single(page.Panels, p => p.HostsProcessor);
+            Assert.Equal("1-A", head.Name);
+            Assert.Equal(ControlOneLineGeometry.Layout.ProcessorColumnX, head.Center.X, 3);
+            Assert.DoesNotContain(page.Panels, p => p.Name.StartsWith("P", StringComparison.Ordinal) && p.HostsProcessor && p.Name != "1-A");
+            // Both compartments' dimmers draw downstream, to the head's right.
+            Assert.Contains(page.Panels, p => p.Name == "1-B" && p.Center.X > head.Center.X);
+            Assert.Contains(page.Panels, p => p.Name == "1-C" && p.Center.X > head.Center.X);
         }
     }
 }

@@ -134,12 +134,16 @@ namespace TurboSuite.Zones.Services
             else WarnMissing(node.EnclosureRole, warnings, warnedRoles);
 
             // Tile anchor Y (absolute) for top-down slot index `slot`. Tile families anchor by ORIGIN at the
-            // rung spot (art positioned around the origin), so they are placed AT the point — no band. A power
-            // panel (SlotCount tiles) uses the authored RungOffsets (bottom-up); LV21/other fall back to the
-            // derived grid until their own offsets are authored.
+            // rung spot (art positioned around the origin), so they are placed AT the point — no band. The
+            // authored bottom-up rung offsets are picked by tile count: a power panel (9) uses RungOffsets, an
+            // LV21 (2) uses Lv21RungOffsets; anything else falls back to the derived grid. RungOffsets is
+            // bottom-up so a top-down slot maps to [total - 1 - slot].
+            double[] rungs =
+                total == G.Panel.RungOffsets.Length ? G.Panel.RungOffsets :
+                total == G.Panel.Lv21RungOffsets.Length ? G.Panel.Lv21RungOffsets : null;
             double AnchorY(int slot) =>
-                total == G.Panel.RungOffsets.Length
-                    ? originY + G.Panel.RungOffsets[total - 1 - slot]
+                rungs != null
+                    ? originY + rungs[total - 1 - slot]
                     : G.Panel.TileCenterY(cy, h, slot);
 
             // Module tiles fill the top slots (0..count-1); LV slots the bottom (count..) — the bottom rung
