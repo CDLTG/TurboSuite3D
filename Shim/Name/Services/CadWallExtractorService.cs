@@ -24,6 +24,38 @@ public static class CadWallExtractorService
     /// <summary>Diagnostic: per-linked-DWG filename, placement scope, and contributed counts from the last call.</summary>
     public static string LastLinkInfo { get; private set; }
 
+    /// <summary>
+    /// How many distinct linked DWGs in <paramref name="view"/> would contribute WALL geometry under the current
+    /// W-tag settings — resolved from settings + link filenames only, WITHOUT reading any DWG, so it's cheap
+    /// enough for a pre-run check. Feeds the auto-generate under-seed warning: walls from ≥2 links while the
+    /// room-name seeds are scoped to a single link is the multi-building-under-seeded signature (crop-independent,
+    /// unlike "is the crop active", since an overall plan is often cropped just to trim CAD junk).
+    /// </summary>
+    public static int CountWallContributingLinks(Document doc, View view, CadRoomSourceSettings settings)
+    {
+        var wallEntries = ParseEntries(settings.WallLayerNames);
+        if (wallEntries.Count == 0) return 0;
+        string legacyScope = settings.SourceLinkName;
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var cadLinks = new FilteredElementCollector(doc, view.Id)
+            .OfClass(typeof(ImportInstance))
+            .Cast<ImportInstance>()
+            .Where(ii => ii.IsLinked);
+        foreach (var import in cadLinks)
+        {
+            if (doc.GetElement(import.GetTypeId()) is not CADLinkType cadLinkType) continue;
+            var extRef = cadLinkType.GetExternalFileReference();
+            if (extRef?.GetAbsolutePath() == null) continue;
+            string dwgPath = ModelPathUtils.ConvertModelPathToUserVisiblePath(extRef.GetAbsolutePath());
+            if (!File.Exists(dwgPath)) continue;
+            string dwgFile = Path.GetFileName(dwgPath);
+            if (BuildLayerSet(wallEntries, legacyScope, dwgFile).Count > 0)
+                seen.Add(dwgFile);
+        }
+        return seen.Count;
+    }
+
     public static (List<CadWallSegment> WallSegments, List<XYZ> DoorPositions, List<CadWallSegment> AreaSegments)
         ExtractWallGeometry(Document doc, View view, CadRoomSourceSettings settings)
     {

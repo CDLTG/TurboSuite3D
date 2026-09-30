@@ -374,6 +374,22 @@ public class TurboNameApiHandler : IExternalEventHandler
         var regionTypeId = ResolveRegionTypeId(settings, out string error);
         if (regionTypeId == ElementId.InvalidElementId) { ReportError(request, error); return; }
 
+        // ── Multi-building under-seed warning (before any work) ──
+        // Auto-generate floods out from the room-name seeds, which are scoped to a SINGLE link (RoomNameLinkName,
+        // set by Pick from view). If walls come from more than one linked DWG (separate buildings/floors) while
+        // names are scoped to one of them, only that building gets seeded and the rest come back silently empty.
+        // Crop state is NOT the signal — an "overall" plan is often cropped just to trim CAD junk, so a cropped
+        // multi-building view would slip past a crop check — so this keys on the scope/wall-link mismatch
+        // directly. Blank name scope (all links) reads every RCP and is exempt. The link count is resolved from
+        // settings + filenames without reading a DWG, so it's cheap enough to run before the watershed.
+        if (!string.IsNullOrWhiteSpace(settings.RoomNameLinkName)
+            && CadWallExtractorService.CountWallContributingLinks(_doc, _view, settings) >= 2
+            && !ConfirmUnderSeedRun())
+        {
+            Finish(request);
+            return;
+        }
+
         // ── Decide what (if anything) to clear, before touching the model ──
         ClearPlan clear;
         try
@@ -478,6 +494,24 @@ public class TurboNameApiHandler : IExternalEventHandler
             TaskDialog.Show("TurboName — Auto-generate", report);
         });
         Finish(request);
+    }
+
+    // Pre-run confirmation for an auto-generate whose room-name seeds are scoped to one linked CAD while the
+    // view has walls from several (see the gate in RunAutoGenerate). Returns true to proceed, false to cancel.
+    // Escape/Enter default to Cancel.
+    private bool ConfirmUnderSeedRun()
+    {
+        var dlg = new TaskDialog("TurboName — Auto-generate")
+        {
+            MainInstruction = "This view has walls from several linked DWGs.",
+            MainContent = "Only one building/floor will be partitioned. "
+                        + "Run TurboName on each view to seed them all.",
+            CommonButtons = TaskDialogCommonButtons.Cancel,
+            DefaultButton = TaskDialogResult.Cancel,
+        };
+        dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink1,
+            "Continue anyway", "Partition just this building.");
+        return dlg.Show() == TaskDialogResult.CommandLink1;
     }
 
     /// <summary>
