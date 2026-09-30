@@ -142,6 +142,12 @@ node's `EnclosureRole`: `ControlPanelDetail` PD8/PD9, `ControlLv21Detail`) fille
 `ControlWireMarkAnnotation` markers. A **missing family warns-and-skips** (no box-and-text fallback — the
 families are authored, so a missing one is a config error to surface, not a look-alike to draw).
 
+The renderer-drawn head-end glyphs follow the firm's sheet style: the HOME NETWORK box matches a module-tile
+footprint and anchors off the top head's origin, and the 120 V feed draws as a Lutron-style **L to a terminus
+square** (a plain glyph, **not** a wire marker/legend key). Prominent labels (HOME NETWORK, 120V, keypad /
+wireless / motor stubs) render in the firm `AL_Annotation_4.5"` text style, resolved by name and falling back
+to the generic note type when absent (`ControlNote.TextTypeName`).
+
 **Family-authoring convention:** all power panels are the one fixed **9-rung** 59″ enclosure — PD9 = 9 modules
 (never hosts a processor), PD8 = 8 modules + the LV compartment on the **bottom rung**; the 9-rung fixed height
 falls out of the data model (`ModuleTiles.Count == PanelCapacity`), so a single `ControlPanelDetail` serves both.

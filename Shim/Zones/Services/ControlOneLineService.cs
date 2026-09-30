@@ -208,8 +208,18 @@ namespace TurboSuite.Zones.Services
                 double cx = sym.Position.X, cy = sym.Position.Y;
                 double w = G.Layout.HomeNetworkWidth, h = G.Layout.HomeNetworkHeight;
                 DrawRect(view, cx, cy, w, h, solid);
-                DrawText(view, new XY(cx, cy + 2.0 / 12.0), "HOME NETWORK", ControlTextAlign.Center, textType, warnings);
-                DrawText(view, new XY(cx, cy - 3.0 / 12.0), "LAN SWITCH", ControlTextAlign.Center, textType, warnings);
+
+                // The HOME NETWORK label uses the firm's larger AL_Annotation_4.5" style (not the DMX 3"-equiv
+                // generic), and is ONE two-line centered TextNote rather than two stacked instances.
+                var labelType = ResolveTextTypeByName(G.LargeTextTypeName, warnings);
+                if (labelType == ElementId.InvalidElementId) labelType = textType;   // fall back to the generic
+                if (labelType != ElementId.InvalidElementId)
+                {
+                    double lineH = ModelLineHeight(labelType);   // two lines straddle the box center
+                    double centerNudge = (2.0 + 5.0 / 8.0) / 12.0;   // 0'-2 5/8" up — tuned to center the 4.5" block
+                    var opts = new TextNoteOptions(labelType) { HorizontalAlignment = HorizontalTextAlignment.Center, Rotation = 0.0 };
+                    TextNote.Create(_doc, view.Id, new XYZ(cx, cy + lineH + centerNudge, 0.0), "HOME NETWORK\rLAN SWITCH", opts);
+                }
             }
         }
 
@@ -231,10 +241,21 @@ namespace TurboSuite.Zones.Services
         private int DrawNotes(View view, IReadOnlyList<ControlNote> notes, ElementId textType, List<string> warnings)
         {
             if (textType == ElementId.InvalidElementId) { warnings.Add("No text type — notes skipped."); return 0; }
+            var namedCache = new Dictionary<string, ElementId>(StringComparer.Ordinal);
             int drawn = 0;
             foreach (var n in notes)
             {
-                var opts = new TextNoteOptions(textType) { HorizontalAlignment = Align(n.Align), Rotation = 0.0 };
+                var typeId = textType;
+                if (!string.IsNullOrEmpty(n.TextTypeName))
+                {
+                    if (!namedCache.TryGetValue(n.TextTypeName, out typeId))
+                    {
+                        typeId = ResolveTextTypeByName(n.TextTypeName, warnings);
+                        if (typeId == ElementId.InvalidElementId) typeId = textType;   // fall back once, cached
+                        namedCache[n.TextTypeName] = typeId;
+                    }
+                }
+                var opts = new TextNoteOptions(typeId) { HorizontalAlignment = Align(n.Align), Rotation = 0.0 };
                 TextNote.Create(_doc, view.Id, Pt(n.Position), n.Text, opts);
                 drawn++;
             }
@@ -368,6 +389,28 @@ namespace TurboSuite.Zones.Services
             }
             catch { /* name clash or locked — fall back to the base type */ }
             return baseType.Id;
+        }
+
+        // Resolve a TextNoteType by exact name (the firm's named styles, e.g. AL_Annotation_4.5"). Returns
+        // InvalidElementId (warned once) when absent, so the caller can fall back to the generic type.
+        private ElementId ResolveTextTypeByName(string name, List<string> warnings)
+        {
+            var match = new FilteredElementCollector(_doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>()
+                .FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
+            if (match != null) return match.Id;
+            warnings.Add($"Text style \"{name}\" not found — using the generic style.");
+            return ElementId.InvalidElementId;
+        }
+
+        // Model-space height of one text line for a type = its paper TEXT_SIZE × the view scale.
+        private double ModelLineHeight(ElementId textTypeId)
+        {
+            if (_doc.GetElement(textTypeId) is TextNoteType t)
+            {
+                var p = t.get_Parameter(BuiltInParameter.TEXT_SIZE);
+                if (p != null) return p.AsDouble() * G.ViewScale;
+            }
+            return G.NoteTextHeightFt * G.ViewScale;
         }
 
         private static HorizontalTextAlignment Align(ControlTextAlign a) => a switch

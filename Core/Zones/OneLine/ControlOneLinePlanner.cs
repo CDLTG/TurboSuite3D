@@ -62,16 +62,32 @@ namespace TurboSuite.Zones.OneLine
 
             void Wire(XY a, XY b, bool dashed) => wires.Add(new ControlWireSegment(a, b, dashed));
             void Mark(XY at, ControlWireType t) => markers.Add(new ControlMarker(at, t, NumberFor(t)));
-            void Note(XY at, string text, ControlTextAlign align) => notes.Add(new ControlNote(at, text, align));
+            void Note(XY at, string text, ControlTextAlign align, string? typeName = null)
+                => notes.Add(new ControlNote(at, text, align, textTypeName: typeName));
 
+            // A plain hollow square as 4 solid segments (renderer glyph — NOT a marker / legend key).
+            void Square(XY c, double s)
+            {
+                double x0 = c.X - s / 2.0, x1 = c.X + s / 2.0, y0 = c.Y - s / 2.0, y1 = c.Y + s / 2.0;
+                Wire(new XY(x0, y0), new XY(x1, y0), dashed: false);
+                Wire(new XY(x1, y0), new XY(x1, y1), dashed: false);
+                Wire(new XY(x1, y1), new XY(x0, y1), dashed: false);
+                Wire(new XY(x0, y1), new XY(x0, y0), dashed: false);
+            }
+
+            // 120 V feed, Lutron-style (Screenshot_599): up from the panel top edge, LEFT to a terminus square,
+            // with "120V" (firm style) above it. All renderer-drawn; the square is a plain glyph, not a legend key.
             void Add120V(XY center, double height)
             {
                 double topY = G.Panel.TopEdgeY(center.Y, height);
-                var a = new XY(center.X - 18.0 / 12.0, topY);
-                var b = a.Offset(0, G.Layout.FeedStubLength);
-                Wire(a, b, dashed: false);   // 120 V is power → solid
-                Mark(new XY(a.X, (topY + b.Y) / 2.0), ControlWireType.Input120V);
-                Note(b.Offset(0, ControlOnePlannerConstants.NoteDy), "120V", ControlTextAlign.Center);
+                double legX = center.X + G.Layout.Feed120VLegDx;
+                double cornerY = topY + G.Layout.Feed120VRise;
+                double termX = legX - G.Layout.Feed120VRun;   // horizontal run terminus = the square's right edge
+                Wire(new XY(legX, topY), new XY(legX, cornerY), dashed: false);        // up from the panel top (solid = power)
+                Wire(new XY(legX, cornerY), new XY(termX, cornerY), dashed: false);    // left to the terminus
+                Square(new XY(termX - G.Layout.Feed120VSquare / 2.0, cornerY), G.Layout.Feed120VSquare);
+                Note(new XY(termX + G.Layout.Feed120VLabelDx, cornerY + G.Layout.Feed120VLabelAboveCorner),
+                    "120V", ControlTextAlign.Left, G.LargeTextTypeName);
             }
 
             double colX = G.Layout.ProcessorColumnX;
@@ -197,8 +213,8 @@ namespace TurboSuite.Zones.OneLine
                         Wire(new XY(lx, y), b, dashed: true);
                         Mark(new XY((lx + b.X) / 2.0, y), ControlWireType.ClearConnect);
                         Tick(wires, b, G.Layout.KeypadTickHalf);
-                        Note(b.Offset(ControlOnePlannerConstants.NoteDx, ControlOnePlannerConstants.NoteDy),
-                            "– WIRELESS KEYPADS", ControlTextAlign.Left);
+                        Note(b.Offset(ControlOnePlannerConstants.NoteDx, G.Layout.WirelessLabelDy),
+                            "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName);
                         continue;
                     }
 
@@ -253,7 +269,7 @@ namespace TurboSuite.Zones.OneLine
                             Wire(m0, m1, dashed: true);
                             Mark(new XY(m0.X, (m0.Y + m1.Y) / 2.0), ControlWireType.ShadeLink);
                             Note(m1.Offset(ControlOnePlannerConstants.NoteDx, ControlOnePlannerConstants.NoteDy),
-                                $"{motors} MOTORS", ControlTextAlign.Left);
+                                $"{motors} MOTORS", ControlTextAlign.Left, G.LargeTextTypeName);
                         }
                         else if (panels.TryGetValue(u.Name, out var prd))
                         {
@@ -269,10 +285,10 @@ namespace TurboSuite.Zones.OneLine
                         double kx = cursorX + G.Layout.KeypadTailGap;
                         Wire(new XY(spineFromX, spineY), new XY(kx, spineY), dashed: true);
                         Tick(wires, new XY(kx, spineY), G.Layout.KeypadTickHalf);
-                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY + ControlOnePlannerConstants.NoteDy),
-                            "– ALL KEYPADS — REFER TO PLAN", ControlTextAlign.Left);
-                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY - ControlOnePlannerConstants.NoteDy),
-                            "(MAX 10 KEYPADS PER HOMERUN)", ControlTextAlign.Left);
+                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY + G.Layout.KeypadLine1Dy),
+                            "ALL KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName);
+                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY + G.Layout.KeypadLine2Dy),
+                            "(MAX 10 KEYPADS PER HOMERUN)", ControlTextAlign.Left, G.LargeTextTypeName);
                     }
                 }
             }
@@ -280,11 +296,16 @@ namespace TurboSuite.Zones.OneLine
             // ── HOME NETWORK node + CAT6 to each head's bottom-left ──
             if (headCat6Taps.Count > 0)
             {
-                double trunkX = G.Layout.Cat6TrunkX;
-                double topTapY = headCat6Taps[0].Y;
-                var netCenter = new XY(trunkX, topTapY + G.Layout.HomeNetworkHeight + 2.0);
+                // Anchor the box CENTER off the TOP head's ORIGIN (bottom-center): the tap is one
+                // LastRowExitAboveOrigin above that origin, so back it out to recover the origin Y. Placed left of
+                // the head column and level with the first module tile slot (rung 1). The trunk drops from this X.
+                double topHeadOriginY = headCat6Taps[0].Y - G.Layout.LastRowExitAboveOrigin;
+                var netCenter = new XY(G.Layout.ProcessorColumnX + G.Layout.HomeNetworkOffsetX,
+                                       topHeadOriginY + G.Layout.HomeNetworkOffsetY);
                 symbols.Add(new ControlSymbolInstance(ControlSymbolKind.HomeNetwork, netCenter,
                     new Dictionary<string, string>()));
+                double trunkX = netCenter.X;
+                double topTapY = headCat6Taps[0].Y;
                 double trunkTop = netCenter.Y - G.Layout.HomeNetworkHeight / 2.0;
                 double trunkBot = headCat6Taps[headCat6Taps.Count - 1].Y;
                 Wire(new XY(trunkX, trunkTop), new XY(trunkX, trunkBot), dashed: true);

@@ -160,12 +160,14 @@ namespace TurboSuite.Zones.OneLine
     /// <summary>One native <c>TextNote</c> the generator draws (leaders/headers/stubs, 1/16" by default).</summary>
     public sealed class ControlNote
     {
-        public ControlNote(XY position, string text, ControlTextAlign align, double? textHeightFt = null)
+        public ControlNote(XY position, string text, ControlTextAlign align, double? textHeightFt = null,
+            string? textTypeName = null)
         {
             Position = position;
             Text = text;
             Align = align;
             TextHeightFt = textHeightFt;
+            TextTypeName = textTypeName;
         }
 
         public XY Position { get; }
@@ -174,6 +176,10 @@ namespace TurboSuite.Zones.OneLine
 
         /// <summary>Paper text height override (feet); null ⇒ the renderer's default note type (1/16").</summary>
         public double? TextHeightFt { get; }
+
+        /// <summary>Named firm text style to render this note in (e.g. AL_Annotation_4.5"); null ⇒ the default
+        /// note type. Resolved by name in the shim; falls back to the default when the project lacks it.</summary>
+        public string? TextTypeName { get; }
     }
 
     /// <summary>A cross-page continuation glyph — the "To Sheet N" / "From Sheet N" bubble where a wire is

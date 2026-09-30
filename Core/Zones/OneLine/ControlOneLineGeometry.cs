@@ -46,6 +46,10 @@ namespace TurboSuite.Zones.OneLine
         /// <summary>Paper text height for the generator's native notes (1/16"), expressed in feet.</summary>
         public const double NoteTextHeightFt = (1.0 / 16.0) / 12.0;
 
+        /// <summary>Firm text style for prominent labels (HOME NETWORK, 120V) — larger than the generic note
+        /// type. Resolved by NAME in the shim; falls back to the generic type when the project lacks it.</summary>
+        public const string LargeTextTypeName = "AL_Annotation_4.5\"";
+
         /// <summary>Paper text height for a module tile's part number (1/16"). Tight against the tile height —
         /// tune together with <see cref="Panel.TileHeight"/>.</summary>
         public const double TileTextHeightFt = (1.0 / 16.0) / 12.0;
@@ -310,16 +314,29 @@ namespace TurboSuite.Zones.OneLine
             // construction (clear of the QS fan on the right and the 120 V feed on top; Screenshot_582).
 
             // ── HOME NETWORK node (shared LAN switch; a CAT6 leg taps to each processor's left edge) ──
-            public const double HomeNetworkWidth = 30.0 / 12.0;   // 2'-6"
-            public const double HomeNetworkHeight = 12.0 / 12.0;  // 1'-0"
+            // Box matches the module-tile footprint so it reads as a sibling glyph on the sheet.
+            public const double HomeNetworkWidth = 4.0 + (7.0 + 107.0 / 128.0) / 12.0;   // 4'-7 107/128" (== module tile W)
+            public const double HomeNetworkHeight = Panel.TileHeight;                    // 1'-9 15/32" (== module tile H)
 
-            /// <summary>X of the vertical CAT6 trunk the HOME NETWORK drops; each head taps it at its bottom-left
-            /// (<see cref="Cat6TapInsetFromBottom"/>). Sits well left of the head's left edge so the tap is a
-            /// legible run (the old 3'-0" left the tap degenerately short against the ~3' half-width).</summary>
-            public const double Cat6TrunkX = -72.0 / 12.0;        // 6'-0" left of the processor column
+            /// <summary>HOME NETWORK box CENTER relative to the TOP head's ORIGIN (bottom-center of the artwork):
+            /// <see cref="HomeNetworkOffsetX"/> left of the head column, <see cref="HomeNetworkOffsetY"/> up —
+            /// level with the first module tile slot (rung 1) so the node reads in-line with the panels' bottom
+            /// tile. The vertical CAT6 trunk drops straight from this X.</summary>
+            public const double HomeNetworkOffsetX = -120.0 / 12.0;                    // 10'-0" left of the head column
+            public static readonly double HomeNetworkOffsetY = Panel.RungOffsets[0];   // 3'-6 7/8" (first tile slot)
 
-            /// <summary>120 V feed stub length (rises from a panel's top edge).</summary>
+            /// <summary>120 V feed stub length (rises from a panel's top edge). Still used by the shade motor-tap
+            /// stub; the 120 V feed itself now uses the L-run knobs below.</summary>
             public const double FeedStubLength = 12.0 / 12.0;     // 1'-0"
+
+            // ── 120 V feed (Lutron-style L: up from the panel top, LEFT to a terminus SQUARE, "120V" above it).
+            //    All renderer-drawn; the square is a plain glyph — NOT tied to a marker or the wire legend. ──
+            public const double Feed120VLegDx = -18.0 / 12.0;            // vertical leg, 1'-6" left of the node center
+            public const double Feed120VRise = 12.0 / 12.0;             // vertical leg height above the node top edge
+            public const double Feed120VRun = 24.0 / 12.0;             // horizontal run LEFT to the terminus square
+            public const double Feed120VSquare = 7.0 / 12.0;          // terminus square side (plain glyph)
+            public const double Feed120VLabelDx = (2.0 + 1.0 / 2.0) / 12.0;          // "120V" X: 2 1/2" right of the square's right edge
+            public const double Feed120VLabelAboveCorner = (7.0 + 3.0 / 4.0) / 12.0;  // "120V" insertion Y: 7 3/4" above the L corner
 
             // ── QS link spine + panel caret (child/orphan panels tap the daisy from below, Lutron-style) ──
             /// <summary>The QS daisy-chain (spine) runs this far BELOW a child panel's bottom origin; each panel
@@ -334,6 +351,12 @@ namespace TurboSuite.Zones.OneLine
             public const double KeypadTailGap = NodeGap;
             /// <summary>Half-height of the terminal tick drawn at the keypad-tail anchor.</summary>
             public const double KeypadTickHalf = 6.5 / 12.0;
+            /// <summary>"ALL KEYPADS" (line 1) insertion Y above the spine.</summary>
+            public const double KeypadLine1Dy = 7.0 / 12.0;              // 0'-7"
+            /// <summary>"(MAX 10 KEYPADS PER HOMERUN)" (line 2) insertion Y above the spine.</summary>
+            public const double KeypadLine2Dy = (1.0 / 4.0) / 12.0;      // 0'-0 1/4"
+            /// <summary>"WIRELESS KEYPADS" insertion Y above the CC-A stub (2" base + 1.55" nudge).</summary>
+            public const double WirelessLabelDy = 3.55 / 12.0;          // ≈ 0'-3.55"
 
             /// <summary>Boilerplate note block origin (top-left of the page content), model feet from page origin.</summary>
             public static readonly XY BoilerplateOrigin = XY.In(0, 0);
