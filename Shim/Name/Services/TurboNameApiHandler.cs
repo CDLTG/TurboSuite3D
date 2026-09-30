@@ -57,6 +57,21 @@ public class TurboNameApiHandler : IExternalEventHandler
         var request = CurrentRequest;
         if (request == null) return;
 
+        // View-pin guard. The whole window is scoped to the view TurboName was opened in (_view): its layer
+        // list, crop-box floor isolation, region ownership, and per-view Lines/visibility overrides all key off
+        // it. If the user has since switched the active Revit view, acting would silently read/write the WRONG
+        // view — regions created in a view they aren't looking at, a layer hidden where they can't see it. We
+        // refuse and point them back rather than chase the active view, which would split the window's state (the
+        // red-preview snapshot/revert in particular must stay pinned to one view — see LayerRolePreviewService).
+        // This deliberately makes the "keep TurboName open and switch views" instinct fail loudly, forcing the
+        // expected per-view workflow (crop to one building/floor, open TurboName there, generate). Exempt:
+        // pick-from-view (a live, config-only read valid in any view) and close cleanup (teardown that must run).
+        if (RequiresLaunchView(request) && !ActiveViewIsLaunchView(app))
+        {
+            ReportWrongView(request, app);
+            return;
+        }
+
         try
         {
             switch (request)
@@ -103,6 +118,46 @@ public class TurboNameApiHandler : IExternalEventHandler
             Dispatch(() => request.OnComplete?.Invoke(new PickLoopUpdate(0, 0, true)));
             Finish(request);
         }
+    }
+
+    // ── View-pin guard (see the gate at the top of Execute) ──
+
+    // Every request reads or writes _view EXCEPT the live config pick (picks in the active view, writes only
+    // document-level settings) and the close teardown (must always run, reverts the red preview on _view).
+    private static bool RequiresLaunchView(TurboNameRequest request) => request switch
+    {
+        PickLayerRequest => false,
+        CloseCleanupRequest => false,
+        _ => true,
+    };
+
+    // Defensive: any failure to confirm we're on the launch view is treated as a foreign view and refuses —
+    // the safe default is never to act on the wrong view. Also covers a _view whose tab the user has closed.
+    private bool ActiveViewIsLaunchView(UIApplication app)
+    {
+        try
+        {
+            var active = app.ActiveUIDocument?.ActiveView;
+            return active != null && active.Id == _view.Id;
+        }
+        catch { return false; }
+    }
+
+    // Refuse a request raised from a view other than the one TurboName was opened in. Reuses ReportError, so
+    // the window unlocks through the same OnComplete/OnFinished path as any other terminal outcome.
+    private void ReportWrongView(TurboNameRequest request, UIApplication app)
+    {
+        string launchName = SafeViewName(_view);
+        string activeName = SafeViewName(app.ActiveUIDocument?.ActiveView);
+        ReportError(request,
+            $"TurboName is working in the view it was opened in — \"{launchName}\".\n\n" +
+            $"Switch back to \"{launchName}\", or close and reopen TurboName in \"{activeName}\" to work here.");
+    }
+
+    private static string SafeViewName(View view)
+    {
+        try { return view?.Name ?? "(unknown view)"; }
+        catch { return "(unavailable)"; }
     }
 
     // ── Region type resolution (from the live settings each time) ──
