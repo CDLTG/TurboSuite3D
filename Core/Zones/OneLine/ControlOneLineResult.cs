@@ -21,7 +21,6 @@ namespace TurboSuite.Zones.OneLine
 
         public int Panels { get; set; }
         public int Shades { get; set; }
-        public int Symbols { get; set; }
         public int Wires { get; set; }
         public int Notes { get; set; }
         public int Markers { get; set; }

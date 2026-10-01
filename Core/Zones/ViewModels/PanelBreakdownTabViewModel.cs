@@ -468,6 +468,10 @@ namespace TurboSuite.Zones.ViewModels
                     if (result is IReadOnlyList<ControlOneLineResult> results)
                         foreach (var r in results)
                             if (r.Ok) _oneLineViewIds[r.PageIndex] = r.ViewId;
+                    // Drop registry keys for sheets that no longer exist (the job shrank to fewer pages; the
+                    // service deleted those views). Keeps a stale id from being reused on the next draw.
+                    foreach (var staleKey in _oneLineViewIds.Keys.Where(k => k > pages.Count).ToList())
+                        _oneLineViewIds.Remove(staleKey);
                     CommandManager.InvalidateRequerySuggested();
                 });
         }

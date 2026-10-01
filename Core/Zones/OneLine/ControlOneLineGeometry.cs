@@ -60,12 +60,13 @@ namespace TurboSuite.Zones.OneLine
         public static double PaperInchesToModelFt(double paperInches) => paperInches * ViewScale / 12.0;
 
         /// <summary>
-        /// The 42×30 landscape page module (locked 2026-09-24). The planner fills one page top→bottom /
-        /// left→right and BREAKS to the next when the running content would exceed the usable rectangle,
-        /// dropping a <see cref="ContinuationBubble"/> where a QS link or the inter-processor CAT6 crosses.
-        /// Each page is its own owned Drafting View, keyed by page index (Sheet 1..N — stable, unlike processor
-        /// identity). The usable rectangle is the sheet minus its border margin and the titleblock strip,
-        /// expressed in MODEL FEET (paper inches × <see cref="ViewScale"/>).
+        /// The 42×30 landscape page module (locked 2026-09-24). The planner packs whole processor enclosures
+        /// onto a page and BREAKS to the next when the next enclosure would exceed the 4-row budget — an
+        /// enclosure is never split (the structural goal is a processor enclosure contained on one sheet), and
+        /// every tie is enclosure-local, so no wire is ever cut by a page boundary. Each page is its own owned
+        /// Drafting View, keyed by page index (Sheet 1..N — stable, unlike processor identity). The usable
+        /// rectangle is the sheet minus its border margin and the titleblock strip, expressed in MODEL FEET
+        /// (paper inches × <see cref="ViewScale"/>).
         /// </summary>
         public static class Page
         {
@@ -313,17 +314,14 @@ namespace TurboSuite.Zones.OneLine
             // edge — it reuses <see cref="LastRowExitAboveOrigin"/> as its height so the two stay aligned by
             // construction (clear of the QS fan on the right and the 120 V feed on top; Screenshot_582).
 
-            // ── HOME NETWORK node (shared LAN switch; a CAT6 leg taps to each processor's left edge) ──
-            // Box matches the module-tile footprint so it reads as a sibling glyph on the sheet.
-            public const double HomeNetworkWidth = 4.0 + (7.0 + 107.0 / 128.0) / 12.0;   // 4'-7 107/128" (== module tile W)
-            public const double HomeNetworkHeight = Panel.TileHeight;                    // 1'-9 15/32" (== module tile H)
-
-            /// <summary>HOME NETWORK box CENTER relative to the TOP head's ORIGIN (bottom-center of the artwork):
-            /// <see cref="HomeNetworkOffsetX"/> left of the head column, <see cref="HomeNetworkOffsetY"/> up —
-            /// level with the first module tile slot (rung 1) so the node reads in-line with the panels' bottom
-            /// tile. The vertical CAT6 trunk drops straight from this X.</summary>
-            public const double HomeNetworkOffsetX = -120.0 / 12.0;                    // 10'-0" left of the head column
-            public static readonly double HomeNetworkOffsetY = Panel.RungOffsets[0];   // 3'-6 7/8" (first tile slot)
+            // ── Ethernet-to-Home-Network stub (per processor head, Lutron-style — Screenshot_601). NO shared
+            //    switch node / trunk: each head gets its own CAT6 stub LEFT out of its left edge with a two-line
+            //    "ETHERNET LINK TO HOME NETWORK" label and a CAT6 wire marker (the legend key, #5). Nothing ties
+            //    heads together, so nothing crosses a page boundary. ──
+            public const double EthernetStubLen = 72.0 / 12.0;                          // 6'-0" run LEFT out of the head left edge
+            public static readonly double EthernetStubAboveOrigin = LastRowExitAboveOrigin;  // stub Y: inline with the bottom-row exit wire (0'-9")
+            public const double EthernetLabelDx = -(80.0 + 117.0 / 128.0) / 12.0;       // label X: 6'-8 117/128" LEFT of the head origin
+            public const double EthernetLabelDy = (25.0 + 19.0 / 256.0) / 12.0;         // label Y: 2'-1 19/256" ABOVE the head origin
 
             /// <summary>120 V feed stub length (rises from a panel's top edge). Still used by the shade motor-tap
             /// stub; the 120 V feed itself now uses the L-run knobs below.</summary>
@@ -360,17 +358,6 @@ namespace TurboSuite.Zones.OneLine
 
             /// <summary>Boilerplate note block origin (top-left of the page content), model feet from page origin.</summary>
             public static readonly XY BoilerplateOrigin = XY.In(0, 0);
-        }
-
-        /// <summary>
-        /// A cross-page continuation glyph (Lutron's "To Sheet N" / "See Sheet N" bubble). Placed where a QS
-        /// link or the inter-processor CAT6 is cut by the page boundary; the matching bubble on the next page
-        /// carries the same number so a reader can follow the wire across sheets.
-        /// </summary>
-        public static class ContinuationBubble
-        {
-            public const double Radius = 9.0 / 12.0;
-            public const string SheetParam = "SheetRef";   // e.g. "2" → renders "TO SHEET 2"
         }
 
         /// <summary>

@@ -25,11 +25,6 @@ namespace TurboSuite.Zones.OneLine
         DaliLoop            // DALI loop — present only when a DALI subsystem is
     }
 
-    /// <summary>The simple authored/annotation glyphs that are not panels, shades, notes, wires or markers.
-    /// Panels and shades are their own rich node records (renderer-drawn); this covers the shared head-end
-    /// glyph. The processor is NOT here — it folds into its panel as a compartment tile.</summary>
-    public enum ControlSymbolKind { HomeNetwork }
-
     /// <summary>
     /// A power panel node (dimmer OR processor-hosting — one enclosure size), rendered as the Panel-Breakdown
     /// tile stack: <see cref="ModuleTiles"/> top→bottom, then the processor compartment tile when
@@ -104,23 +99,6 @@ namespace TurboSuite.Zones.OneLine
         public int MotorCount { get; }
     }
 
-    /// <summary>One placed simple glyph: its kind, center position (model feet), and the instance label
-    /// params the renderer writes. The renderer resolves the family by the kind's TurboSuite Role.</summary>
-    public sealed class ControlSymbolInstance
-    {
-        public ControlSymbolInstance(ControlSymbolKind kind, XY position,
-            IReadOnlyDictionary<string, string> @params)
-        {
-            Kind = kind;
-            Position = position;
-            Params = @params;
-        }
-
-        public ControlSymbolKind Kind { get; }
-        public XY Position { get; }
-        public IReadOnlyDictionary<string, string> Params { get; }
-    }
-
     /// <summary>One drawn wire segment (a <c>DetailCurve</c>): endpoints + solid/dashed. Power = solid,
     /// control (QS/CAT6/Clear Connect) = dashed.</summary>
     public sealed class ControlWireSegment
@@ -182,54 +160,31 @@ namespace TurboSuite.Zones.OneLine
         public string? TextTypeName { get; }
     }
 
-    /// <summary>A cross-page continuation glyph — the "To Sheet N" / "From Sheet N" bubble where a wire is
-    /// cut by the page boundary. Stage-2 (pagination) only; the stage-1 single-page planner emits none.</summary>
-    public sealed class ControlContinuation
-    {
-        public ControlContinuation(XY position, int otherSheet, bool incoming)
-        {
-            Position = position;
-            OtherSheet = otherSheet;
-            Incoming = incoming;
-        }
-
-        public XY Position { get; }
-
-        /// <summary>The sheet this wire continues to (outgoing) or from (incoming).</summary>
-        public int OtherSheet { get; }
-
-        /// <summary>True = this bubble receives a wire from another sheet ("FROM SHEET n"); false = it sends
-        /// one on ("TO SHEET n").</summary>
-        public bool Incoming { get; }
-    }
-
     /// <summary>
     /// One page of the control one-line, as a pure, Revit-free set of primitives in model feet: the panel +
-    /// shade nodes, the simple glyphs, the wire segments, the wire-type markers, the native notes, and any
-    /// cross-page continuation bubbles. The shim renderer wipes this page's owned Drafting View and replays
-    /// it, so the drawing is regenerated from the snapshot every run (never hand-edited). One drawing per
-    /// 42×30 page; the common case is a single page (<see cref="PageCount"/> == 1).
+    /// shade nodes, the wire segments, the wire-type markers, and the native notes. The shim renderer wipes this
+    /// page's owned Drafting View and replays it, so the drawing is regenerated from the snapshot every run
+    /// (never hand-edited). One drawing per 42×30 page; the common case is a single page
+    /// (<see cref="PageCount"/> == 1). There are no cross-page continuation glyphs: every tie is enclosure-local
+    /// and an enclosure is never split across pages (the structural goal is a processor enclosure contained on
+    /// one sheet), so no wire is ever cut by a page boundary.
     /// </summary>
     public sealed class ControlOneLineDrawing
     {
         public ControlOneLineDrawing(int pageIndex, int pageCount,
             IReadOnlyList<ControlPanelNode> panels,
             IReadOnlyList<ControlShadeNode> shades,
-            IReadOnlyList<ControlSymbolInstance> symbols,
             IReadOnlyList<ControlWireSegment> wires,
             IReadOnlyList<ControlMarker> markers,
-            IReadOnlyList<ControlNote> notes,
-            IReadOnlyList<ControlContinuation> continuations)
+            IReadOnlyList<ControlNote> notes)
         {
             PageIndex = pageIndex;
             PageCount = pageCount;
             Panels = panels;
             Shades = shades;
-            Symbols = symbols;
             Wires = wires;
             Markers = markers;
             Notes = notes;
-            Continuations = continuations;
         }
 
         /// <summary>1-based page number — the stable key the owned view is registered under.</summary>
@@ -240,11 +195,9 @@ namespace TurboSuite.Zones.OneLine
 
         public IReadOnlyList<ControlPanelNode> Panels { get; }
         public IReadOnlyList<ControlShadeNode> Shades { get; }
-        public IReadOnlyList<ControlSymbolInstance> Symbols { get; }
         public IReadOnlyList<ControlWireSegment> Wires { get; }
         public IReadOnlyList<ControlMarker> Markers { get; }
         public IReadOnlyList<ControlNote> Notes { get; }
-        public IReadOnlyList<ControlContinuation> Continuations { get; }
 
         /// <summary>Deterministic owned-view name — a re-run finds + wipes this page's view by index (a stable
         /// key, unlike processor identity). e.g. "TurboControl One-Line - Sheet 1".</summary>

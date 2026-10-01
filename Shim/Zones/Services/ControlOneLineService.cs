@@ -81,7 +81,6 @@ namespace TurboSuite.Zones.Services
 
                         foreach (var p in page.Panels) { DrawPanelNode(view, p, moduleFam, lvFam, result.Warnings, warnedRoles); result.Panels++; }
                         foreach (var s in page.Shades) { DrawShadeNode(view, s, shadeFam, result.Warnings, warnedRoles); result.Shades++; }
-                        foreach (var sym in page.Symbols) { DrawSymbol(view, sym, solid, textType, result.Warnings); result.Symbols++; }
                         result.Wires += DrawWires(view, page.Wires, dashed, solid);
                         result.Notes += DrawNotes(view, page.Notes, textType, result.Warnings);
                         result.Markers += DrawMarkers(view, page.Markers, marker);
@@ -105,6 +104,10 @@ namespace TurboSuite.Zones.Services
             {
                 try { _uidoc.ActiveView = lastOpened; } catch { /* non-fatal: leave the user where they are */ }
             }
+            // A rebuild with FEWER pages than a prior run leaves higher-numbered owned sheets orphaned — delete
+            // them (done AFTER the active-view switch above, so a stale sheet is never the active view being
+            // deleted). By-name so it catches orphans a fresh session's empty registry would miss.
+            PruneStaleSheets(pages.Count, systemName, allWarnings);
             ReportWarnings(allWarnings);
             return results;
         }
@@ -200,29 +203,6 @@ namespace TurboSuite.Zones.Services
             }
         }
 
-        private void DrawSymbol(View view, ControlSymbolInstance sym, GraphicsStyle solid, ElementId textType,
-            List<string> warnings)
-        {
-            if (sym.Kind == ControlSymbolKind.HomeNetwork)
-            {
-                double cx = sym.Position.X, cy = sym.Position.Y;
-                double w = G.Layout.HomeNetworkWidth, h = G.Layout.HomeNetworkHeight;
-                DrawRect(view, cx, cy, w, h, solid);
-
-                // The HOME NETWORK label uses the firm's larger AL_Annotation_4.5" style (not the DMX 3"-equiv
-                // generic), and is ONE two-line centered TextNote rather than two stacked instances.
-                var labelType = ResolveTextTypeByName(G.LargeTextTypeName, warnings);
-                if (labelType == ElementId.InvalidElementId) labelType = textType;   // fall back to the generic
-                if (labelType != ElementId.InvalidElementId)
-                {
-                    double lineH = ModelLineHeight(labelType);   // two lines straddle the box center
-                    double centerNudge = (2.0 + 5.0 / 8.0) / 12.0;   // 0'-2 5/8" up — tuned to center the 4.5" block
-                    var opts = new TextNoteOptions(labelType) { HorizontalAlignment = HorizontalTextAlignment.Center, Rotation = 0.0 };
-                    TextNote.Create(_doc, view.Id, new XYZ(cx, cy + lineH + centerNudge, 0.0), "HOME NETWORK\rLAN SWITCH", opts);
-                }
-            }
-        }
-
         // ── Reused-from-DMX passes (adapted to the Control types) ────────────────────────────────────
         private int DrawWires(View view, IReadOnlyList<ControlWireSegment> wires, GraphicsStyle dashed, GraphicsStyle solid)
         {
@@ -277,24 +257,6 @@ namespace TurboSuite.Zones.Services
             return drawn;
         }
 
-        // ── Primitive draw helpers ───────────────────────────────────────────────────────────────────
-        private void DrawRect(View view, double cx, double cy, double w, double h, GraphicsStyle style)
-        {
-            double x0 = cx - w / 2.0, x1 = cx + w / 2.0, y0 = cy - h / 2.0, y1 = cy + h / 2.0;
-            var bl = new XYZ(x0, y0, 0); var br = new XYZ(x1, y0, 0);
-            var tr = new XYZ(x1, y1, 0); var tl = new XYZ(x0, y1, 0);
-            DrawSegment(view, bl, br, style);
-            DrawSegment(view, br, tr, style);
-            DrawSegment(view, tr, tl, style);
-            DrawSegment(view, tl, bl, style);
-        }
-
-        private void DrawSegment(View view, XYZ a, XYZ b, GraphicsStyle style)
-        {
-            if (a.IsAlmostEqualTo(b)) return;
-            var dc = _doc.Create.NewDetailCurve(view, Line.CreateBound(a, b));
-            if (style != null) { try { dc.LineStyle = style; } catch { /* leave default */ } }
-        }
 
         // A TextNote anchors at its top edge (no vertical-alignment API). centerV raises the insertion point
         // by half the model-space cap height so the glyph sits centered on a tile's midline.
@@ -330,6 +292,29 @@ namespace TurboSuite.Zones.Services
             try { view.Scale = G.ViewScale; } catch { /* some templates lock scale */ }
             created = true;
             return view;
+        }
+
+        // Delete owned one-line sheets numbered above the kept count (a job that shrank from N pages to fewer).
+        // Matched by the deterministic view name "{systemName} One-Line - Sheet {index}" so it works whether or
+        // not the in-session registry still holds the orphan's id (a fresh session starts with an empty one).
+        private void PruneStaleSheets(int keptPageCount, string systemName, List<string> warnings)
+        {
+            string prefix = $"{systemName} One-Line - Sheet ";
+            var stale = new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
+                .Where(v => !v.IsTemplate && v.Name.StartsWith(prefix, StringComparison.Ordinal)
+                            && int.TryParse(v.Name.Substring(prefix.Length), out int idx) && idx > keptPageCount)
+                .Select(v => v.Id).ToList();
+            if (stale.Count == 0) return;
+            using (var tx = new Transaction(_doc, "TurboZones — remove stale one-line sheets"))
+            {
+                tx.Start();
+                try { _doc.Delete(stale); tx.Commit(); }
+                catch (Exception ex)
+                {
+                    if (tx.HasStarted()) tx.RollBack();
+                    warnings.Add($"Could not remove {stale.Count} stale one-line sheet(s) — {ex.Message}");
+                }
+            }
         }
 
         private void TrySetName(View view, string name)
@@ -400,17 +385,6 @@ namespace TurboSuite.Zones.Services
             if (match != null) return match.Id;
             warnings.Add($"Text style \"{name}\" not found — using the generic style.");
             return ElementId.InvalidElementId;
-        }
-
-        // Model-space height of one text line for a type = its paper TEXT_SIZE × the view scale.
-        private double ModelLineHeight(ElementId textTypeId)
-        {
-            if (_doc.GetElement(textTypeId) is TextNoteType t)
-            {
-                var p = t.get_Parameter(BuiltInParameter.TEXT_SIZE);
-                if (p != null) return p.AsDouble() * G.ViewScale;
-            }
-            return G.NoteTextHeightFt * G.ViewScale;
         }
 
         private static HorizontalTextAlignment Align(ControlTextAlign a) => a switch

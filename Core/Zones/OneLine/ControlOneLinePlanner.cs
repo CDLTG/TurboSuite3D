@@ -21,11 +21,15 @@ namespace TurboSuite.Zones.OneLine
     /// head→column-1 gap as a fan of separate lanes — one per link, nested crossing-free (deepest row = leftmost
     /// lane + lowest exit) — dropping to each row's spine (Screenshot_593 / 582). Downstream panels/shades hang
     /// along each QS row in rule-#5 order (Modules → Shades → Keypads, natural-name within a category); keypads
-    /// collapse to one tail stub; a Clear Connect link doglegs to its row and draws a wireless stub. A shared
-    /// HOME NETWORK node feeds CAT6 to each head's bottom-left.</para>
+    /// collapse to one tail stub; a Clear Connect link doglegs to its row and draws a wireless stub. Each head
+    /// draws its own Ethernet-to-Home-Network stub out its left edge (Lutron-style — no shared switch node).</para>
     ///
-    /// <para><b>Stage 1 (this):</b> one job-wide page — the common case. Pagination into 42×30 pages +
-    /// continuation bubbles is stage 2; the return type is already a page list so that is additive.</para>
+    /// <para><b>Pagination (stage 2, done):</b> enclosures pack onto 42×30 pages IN PACKER ORDER, each
+    /// enclosure indivisible. An enclosure is ≤4 link-rows (an LV21 = 2 processors = 4 links), and a page holds
+    /// 4 rows, so an enclosure never splits — it always fits a fresh page. EVERY tie is enclosure-local (QS
+    /// links, the head fan, 120V, shades, keypads, the Ethernet stub), so nothing crosses a page boundary and
+    /// the drawing needs no continuation bubbles. The return type was always a page list, so pagination stayed
+    /// additive.</para>
     /// </summary>
     public static class ControlOnePlannerConstants
     {
@@ -51,9 +55,10 @@ namespace TurboSuite.Zones.OneLine
             var groups = pack?.Processors ?? Array.Empty<ProcessorGroup>();
             if (groups.Count == 0) return Array.Empty<ControlOneLineDrawing>();
 
+            // Per-PAGE accumulators — the drawing helpers below close over these variables, and the page loop
+            // (phase 2) re-points them at a fresh set per page, so every helper targets the page being built.
             var panelNodes = new List<ControlPanelNode>();
             var shadeNodes = new List<ControlShadeNode>();
-            var symbols = new List<ControlSymbolInstance>();
             var wires = new List<ControlWireSegment>();
             var markers = new List<ControlMarker>();
             var notes = new List<ControlNote>();
@@ -94,20 +99,32 @@ namespace TurboSuite.Zones.OneLine
             double headRightX = colX + G.Panel.Width / 2.0;
             double headLeftX = colX - G.Panel.Width / 2.0;
             double col1LeftX = headRightX + G.Layout.HeadColumnGap;   // column-1 panels start here; the gap holds the fan
-            var headCat6Taps = new List<XY>();                         // bottom-left CAT6 tap per head
 
-            // Rows are LINKS, laid out top-down at a uniform origin-to-origin pitch: every processor's two links
-            // are flattened into consecutive rows (proc1·link1, proc1·link2, proc2·link1, …), so 2× PD8 and 1×
-            // LV21 both fill 4 rows identically. Row 0 center sits at Y=0; each row below is RowPitch lower.
-            // (Pagination past 4 rows / >2 groups is a later step — for now all rows lay onto one page.)
-            int rowBase = 0;   // first row index this group's two links occupy
+            // Rows are LINKS at a uniform origin-to-origin pitch; row 0 sits at Y=0 and each row below is one
+            // RowPitch lower. The row index is PER PAGE (0..3), so every sheet's content occupies the same band.
             double RowCenterY(int r) => -r * G.Layout.RowPitch;
 
-            // Walk the groups, MERGING consecutive groups that share a processor panel name into one physical
-            // enclosure: an LV21 = two processor compartments = two same-named groups = ONE drawn head with up to
-            // 4 link rows (Screenshot_593). Groups with no name (tests / legacy) each stand alone, and the head is
-            // then found by scanning link units (the PD8 that is also a Modules unit). This is what fixes the
-            // module-less LV21 drawing as two fallback P# boxes — it is no unit on any link, so only the name sees it.
+            // Ethernet-to-Home-Network stub: a CAT6 run LEFT out of the head's left edge, with a two-line label
+            // and a CAT6 wire marker (the legend key, #5), per Lutron Screenshot_601. Per head — there is NO
+            // shared switch node or trunk, so nothing ties heads together or crosses a page boundary.
+            void AddEthernet(double headBottomY)
+            {
+                double y = headBottomY + G.Layout.EthernetStubAboveOrigin;      // inline with the bottom-row exit
+                var a = new XY(headLeftX, y);                                   // start at the head's left edge
+                var b = new XY(headLeftX - G.Layout.EthernetStubLen, y);        // run 6' LEFT
+                Wire(a, b, dashed: true);
+                Mark(new XY((a.X + b.X) / 2.0, y), ControlWireType.Cat6);
+                Note(new XY(colX + G.Layout.EthernetLabelDx, headBottomY + G.Layout.EthernetLabelDy),
+                    "ETHERNET LINK TO\rHOME NETWORK", ControlTextAlign.Center, G.LargeTextTypeName);
+            }
+
+            // ── Phase 0: resolve every physical enclosure (NO drawing yet). Walk the groups MERGING consecutive
+            //    groups that share a processor panel name into one enclosure: an LV21 = two processor compartments
+            //    = two same-named groups = ONE head with up to 4 link rows (Screenshot_593). Groups with no name
+            //    (tests / legacy) each stand alone, the head then found by scanning link units (the PD8 that is
+            //    also a Modules unit). Resolving here — before any drawing — lets the pager below know each
+            //    enclosure's row count so it can assign pages. ──
+            var enclosures = new List<Enclosure>();
             int headOrdinal = 0;
             int gi = 0;
             while (gi < groups.Count)
@@ -123,10 +140,9 @@ namespace TurboSuite.Zones.OneLine
                 }
                 headOrdinal++;
 
-                // The enclosure's links flattened in packer order (link1 then link2, per group). Rows are assigned
-                // AFTER liveness, below — a completely empty link (0 devices/loads, e.g. the spare QS link on a
-                // processor added only to host a Clear Connect link) consumes NO row, so live links stack
-                // consecutively with no blank band where a dead link would have sat.
+                // The enclosure's links flattened in packer order (link1 then link2, per group). Liveness is
+                // resolved below; a completely empty link (0 devices/loads, e.g. the spare QS link on a processor
+                // added only to host a Clear Connect link) is dropped — it consumes no row.
                 var plans = new List<LinkPlan>();
                 foreach (var g in encGroups)
                 {
@@ -134,9 +150,9 @@ namespace TurboSuite.Zones.OneLine
                     plans.Add(new LinkPlan { Link = g.Link2 });
                 }
 
-                // ── Identify the head: by enclosure name first (this is the ONLY way to see a module-less LV21),
-                //    else by scanning the links' units for a processor-hosting panel (a PD8 that is also a Modules
-                //    unit — the case the tests build without a name), else a stub. ──
+                // ── Identify the head: by enclosure name first (the ONLY way to see a module-less LV21), else by
+                //    scanning the links' units for a processor-hosting panel (a PD8 that is also a Modules unit —
+                //    the case the tests build without a name), else a P# stub. ──
                 ControlPanelRenderData? headRd = null;
                 if (!string.IsNullOrEmpty(encName) && panels.TryGetValue(encName, out var byName) && byName.HostsProcessor)
                     headRd = byName;
@@ -151,8 +167,6 @@ namespace TurboSuite.Zones.OneLine
                 headRd ??= new ControlPanelRenderData($"P{headOrdinal}", "", "0/0",
                     Array.Empty<string?>(), new[] { "PROCESSOR" }, hostsProcessor: true, Roles.ControlPanelDetail);
 
-                double headH = PanelHeight(headRd);
-
                 // ── Resolve each link's downstream (rule-#5 ordered, head excluded) + which links are LIVE ──
                 foreach (var pl in plans)
                 {
@@ -163,16 +177,59 @@ namespace TurboSuite.Zones.OneLine
                     pl.Live = pl.Located.Count > 0 || pl.HasKeypads;   // empty QS link → dropped, no row
                 }
 
-                // ── Compact: assign consecutive rows to the LIVE links only, in flattened order (dead links get
-                //    none, so no 28' blank band remains). The head bottom-aligns to the first live row's baseline. ──
-                int rowStart = rowBase;
                 var live = plans.Where(pl => pl.Live).ToList();
+                enclosures.Add(new Enclosure
+                {
+                    Name = encName,
+                    HeadRd = headRd,
+                    HeadH = PanelHeight(headRd),
+                    Live = live,
+                    RowCount = System.Math.Max(1, live.Count),   // a head with no live links still reserves one row
+                });
+            }
+
+            if (enclosures.Count == 0) return Array.Empty<ControlOneLineDrawing>();
+
+            // ── Phase 1: paginate. Pack enclosures onto 42×30 pages IN PACKER ORDER, each enclosure indivisible.
+            //    A page holds up to MaxRowsPerPage link-rows; the next enclosure starts a new page when it would
+            //    overflow the rows left on the current one. In the Lutron domain an enclosure never exceeds 4
+            //    rows (an LV21 = 2 processors = 4 links), so it always fits a fresh page — a hypothetical >4-row
+            //    enclosure still lands alone on its own page (guarded by the domain, not the code: there is no
+            //    3-processor enclosure). ──
+            const int MaxRowsPerPage = 4;
+            int curPage = 1, rowsOnPage = 0;
+            foreach (var enc in enclosures)
+            {
+                if (rowsOnPage > 0 && rowsOnPage + enc.RowCount > MaxRowsPerPage)
+                {
+                    curPage++;
+                    rowsOnPage = 0;
+                }
+                enc.Page = curPage;
+                enc.PageRowStart = rowsOnPage;
+                rowsOnPage += enc.RowCount;
+            }
+            int pageCount = curPage;
+
+            // Draw one enclosure's head + link fan at its per-page row band, appending to the CURRENT page's
+            // buckets. The row index is per page (enc.PageRowStart .. +RowCount-1), so each sheet uses the same
+            // 42×30 band. The local helpers (Wire/Note/Mark/Add120V/…) target whatever the page loop last
+            // pointed the accumulators at.
+            void DrawEnclosure(Enclosure enc)
+            {
+                var live = enc.Live;
+                var headRd = enc.HeadRd;
+                double headH = enc.HeadH;
+                string? encName = enc.Name;
+                int rowStart = enc.PageRowStart;
+
+                // Pin each live link to its per-page row — dead links already dropped, so live links stack
+                // consecutively with no 28' blank band where a dead link would have sat.
                 for (int idx = 0; idx < live.Count; idx++)
                 {
                     live[idx].Row = rowStart + idx;
                     live[idx].Y = RowCenterY(rowStart + idx);
                 }
-                rowBase = rowStart + System.Math.Max(1, live.Count);   // reserve ≥1 row even for a head with no live links
 
                 // Head is BOTTOM-ALIGNED to its first (top) row's baseline, in the left column (Screenshot_593).
                 // headBottomY is the head's ORIGIN Y (center-bottom of the artwork) — the datum link exits anchor to.
@@ -180,9 +237,8 @@ namespace TurboSuite.Zones.OneLine
                 var headCenter = new XY(colX, headBottomY + headH / 2.0);
 
                 panelNodes.Add(Node(headRd, headCenter));
-                Add120V(headCenter, headH);   // 120 V feed on top
-                // CAT6 enters bottom-left, IN-LINE with the bottom (deepest-row) link exit on the right edge.
-                headCat6Taps.Add(new XY(headLeftX, headBottomY + G.Layout.LastRowExitAboveOrigin));
+                Add120V(headCenter, headH);    // 120 V feed on top
+                AddEthernet(headBottomY);      // CAT6 stub LEFT to the home network (per head, Lutron-style)
 
                 // ── Fan the live links out of the head's right edge as separate, crossing-free lanes ──
                 // Live links in row order (shallowest first). Exits anchor to the head ORIGIN: the DEEPEST (last)
@@ -293,30 +349,42 @@ namespace TurboSuite.Zones.OneLine
                 }
             }
 
-            // ── HOME NETWORK node + CAT6 to each head's bottom-left ──
-            if (headCat6Taps.Count > 0)
+            // ── Phase 2: draw each page independently — fresh buckets, per-page row band. Each sheet is fully
+            //    self-contained: every tie is enclosure-local (QS links, the head fan, 120V, shades, keypads, and
+            //    each head's own Ethernet-to-Home-Network stub), and an enclosure never splits across pages, so
+            //    nothing crosses a page boundary and no continuation bubbles are needed. ──
+            var drawings = new List<ControlOneLineDrawing>();
+            for (int pg = 1; pg <= pageCount; pg++)
             {
-                // Anchor the box CENTER off the TOP head's ORIGIN (bottom-center): the tap is one
-                // LastRowExitAboveOrigin above that origin, so back it out to recover the origin Y. Placed left of
-                // the head column and level with the first module tile slot (rung 1). The trunk drops from this X.
-                double topHeadOriginY = headCat6Taps[0].Y - G.Layout.LastRowExitAboveOrigin;
-                var netCenter = new XY(G.Layout.ProcessorColumnX + G.Layout.HomeNetworkOffsetX,
-                                       topHeadOriginY + G.Layout.HomeNetworkOffsetY);
-                symbols.Add(new ControlSymbolInstance(ControlSymbolKind.HomeNetwork, netCenter,
-                    new Dictionary<string, string>()));
-                double trunkX = netCenter.X;
-                double topTapY = headCat6Taps[0].Y;
-                double trunkTop = netCenter.Y - G.Layout.HomeNetworkHeight / 2.0;
-                double trunkBot = headCat6Taps[headCat6Taps.Count - 1].Y;
-                Wire(new XY(trunkX, trunkTop), new XY(trunkX, trunkBot), dashed: true);
-                Mark(new XY(trunkX, (trunkTop + topTapY) / 2.0), ControlWireType.Cat6);
-                foreach (var tap in headCat6Taps)
-                    Wire(new XY(trunkX, tap.Y), tap, dashed: true);   // trunk → head bottom-left
-            }
+                // Re-point the accumulators at THIS page's buckets (the drawing helpers close over them).
+                panelNodes = new List<ControlPanelNode>();
+                shadeNodes = new List<ControlShadeNode>();
+                wires = new List<ControlWireSegment>();
+                markers = new List<ControlMarker>();
+                notes = new List<ControlNote>();
 
-            var page = new ControlOneLineDrawing(1, 1, panelNodes, shadeNodes, symbols, wires, markers, notes,
-                Array.Empty<ControlContinuation>());
-            return new[] { page };
+                foreach (var enc in enclosures)
+                    if (enc.Page == pg) DrawEnclosure(enc);
+
+                drawings.Add(new ControlOneLineDrawing(pg, pageCount, panelNodes, shadeNodes, wires,
+                    markers, notes));
+            }
+            return drawings;
+        }
+
+        /// <summary>One physical processor enclosure resolved in phase 0: its head render data, its LIVE links
+        /// (rule-#5 ordered downstream already computed), and the row span it occupies. The pager (phase 1) sets
+        /// <see cref="Page"/> + <see cref="PageRowStart"/>; the drawer (phase 2) reads them. A PD8 = 1 group = up
+        /// to 2 rows; an LV21 = 2 same-named groups merged = up to 4 rows.</summary>
+        private sealed class Enclosure
+        {
+            public string? Name;
+            public ControlPanelRenderData HeadRd = default!;
+            public double HeadH;
+            public List<LinkPlan> Live = new List<LinkPlan>();
+            public int RowCount;         // rows this enclosure occupies = max(1, Live.Count)
+            public int Page;             // 1-based page assignment (phase 1)
+            public int PageRowStart;     // first row index WITHIN its page (0..3) (phase 1)
         }
 
         /// <summary>Per-link layout scratch for one enclosure's fan: the packed link, its pinned row, and the

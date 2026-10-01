@@ -132,7 +132,8 @@ its QS links off its **right edge** as separate, crossing-free **dogleg lanes** 
 lowest exit) across a widened head→column-1 gap, each dropping into its row's spine; a completely **dead (0/0)
 link is dropped** so live rows stay consecutive; each row a QS **spine 1' below the panels with a caret up to
 each panel origin**, panels 10' center-to-center; **bottom-aligned shades** with a top **`n MOTORS`** tap;
-rule-#5 node order; keypad + wireless stubs; shared HOME NETWORK + CAT6 tapping each head's bottom-left), and
+rule-#5 node order; keypad + wireless stubs; each head draws its own **Ethernet-to-Home-Network stub** out its
+left edge — Lutron-style, no shared switch node), and
 `ControlRenderDataFactory` (PanelResult + BrandConfig →
 per-panel render data; module tiles **bottom-up**, part-number-labeled). The packer exposes per-link
 composition via `PackedLink.Units` (Section 2a). `Shim/Zones/Services/ControlOneLineService.cs` replays it
@@ -142,11 +143,13 @@ node's `EnclosureRole`: `ControlPanelDetail` PD8/PD9, `ControlLv21Detail`) fille
 `ControlWireMarkAnnotation` markers. A **missing family warns-and-skips** (no box-and-text fallback — the
 families are authored, so a missing one is a config error to surface, not a look-alike to draw).
 
-The renderer-drawn head-end glyphs follow the firm's sheet style: the HOME NETWORK box matches a module-tile
-footprint and anchors off the top head's origin, and the 120 V feed draws as a Lutron-style **L to a terminus
-square** (a plain glyph, **not** a wire marker/legend key). Prominent labels (HOME NETWORK, 120V, keypad /
-wireless / motor stubs) render in the firm `AL_Annotation_4.5"` text style, resolved by name and falling back
-to the generic note type when absent (`ControlNote.TextTypeName`).
+The renderer-drawn head-end glyphs follow the firm's sheet style: each processor head draws its own
+**Ethernet-to-Home-Network stub** — a CAT6 run LEFT out of its left edge (inline with the bottom-row exit) with
+a two-line label + a CAT6 marker (Lutron Screenshot_601), **no shared switch node or trunk** so nothing ties
+heads together or crosses a page — and the 120 V feed draws as a Lutron-style **L to a terminus square** (a
+plain glyph, **not** a wire marker/legend key). Prominent labels (Ethernet-link, 120V, keypad / wireless /
+motor stubs) render in the firm `AL_Annotation_4.5"` text style, resolved by name and falling back to the
+generic note type when absent (`ControlNote.TextTypeName`).
 
 **Family-authoring convention:** all power panels are the one fixed **9-rung** 59″ enclosure — PD9 = 9 modules
 (never hosts a processor), PD8 = 8 modules + the LV compartment on the **bottom rung**; the 9-rung fixed height
@@ -161,10 +164,12 @@ a centered glyph.
 
 **Status:** the 6 families are authored, the box fallback is removed, and the measured family geometry (outer
 sizes, rung anchor offsets incl. the LV21's) is transcribed into `ControlOneLineGeometry`; spine/caret,
-bottom-aligned shades, the row-per-link 28' layout, and the **head-panel dogleg fan + one-head LV21 placement**
-(name-identified head, dead-link row compaction, LV21 tile offsets) are in. Remaining (see the Section 2 plan):
-42×30 **pagination** (>4 links → next sheet), the **wire legend** (dense per-job numbering + its own view),
-connection-point fine-tune, and cross-session ViewId persistence + experimental-gating before release.
+bottom-aligned shades, the row-per-link 28' layout, the **head-panel dogleg fan + one-head LV21 placement**
+(name-identified head, dead-link row compaction, LV21 tile offsets), per-head **Ethernet stubs**, and **42×30
+pagination** are in. Pagination packs whole processor enclosures onto pages (**indivisible, ≤4 rows each**,
+greedy in packer order) and prunes orphaned sheets on shrink; every tie is enclosure-local, so there are **no
+continuation bubbles**. Remaining (see the Section 2 plan): the **wire legend** (dense per-job numbering + its
+own view), connection-point fine-tune, and cross-session ViewId persistence + experimental-gating before release.
 
 ## Dependencies
 

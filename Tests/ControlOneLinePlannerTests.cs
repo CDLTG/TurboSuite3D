@@ -140,10 +140,11 @@ namespace TurboSuite.Tests.Zones
             Assert.DoesNotContain(page.Notes, n => n.Text.Contains("ALL KEYPADS"));
         }
 
-        /// <summary>Multi-processor: each bay's head sits at the left column on its own row, and one shared
-        /// HOME NETWORK node feeds CAT6 to every processor.</summary>
+        /// <summary>Multi-processor: each bay's head sits at the left column on its own row, and each head draws
+        /// its OWN Ethernet-to-Home-Network stub (a CAT6 marker + a labeled note) out its left edge — there is no
+        /// shared switch node tying the heads together (Lutron Screenshot_601).</summary>
         [Fact]
-        public void SharedHomeNetworkFeedsCat6ToEachProcessor()
+        public void EachProcessorDrawsItsOwnEthernetStub()
         {
             var pack = Pack(
                 Group(Qs(U("1-A", LinkCategory.Modules, 8)), EmptyQs(), location: 1),
@@ -156,8 +157,9 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(2, heads.Count);
             Assert.All(heads, h => Assert.Equal(ControlOneLineGeometry.Layout.ProcessorColumnX, h.Center.X, 3));
             Assert.NotEqual(heads[0].Center.Y, heads[1].Center.Y);
-            Assert.Single(page.Symbols, s => s.Kind == ControlSymbolKind.HomeNetwork);
-            Assert.Contains(page.Markers, m => m.Type == ControlWireType.Cat6);
+            // One Ethernet stub per head: a CAT6 marker + a labeled note each.
+            Assert.Equal(2, page.Markers.Count(m => m.Type == ControlWireType.Cat6));
+            Assert.Equal(2, page.Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
         }
 
         /// <summary>An LV21's two processor compartments arrive as two same-named <see cref="ProcessorGroup"/>s.
@@ -183,6 +185,81 @@ namespace TurboSuite.Tests.Zones
             // Both compartments' dimmers draw downstream, to the head's right.
             Assert.Contains(page.Panels, p => p.Name == "1-B" && p.Center.X > head.Center.X);
             Assert.Contains(page.Panels, p => p.Name == "1-C" && p.Center.X > head.Center.X);
+        }
+
+        // A 4-link LV21 with three LIVE QS links (link1+link2 of compartment 1, link1 of compartment 2) = 3 rows.
+        private static ProcessorGroup[] Lv21ThreeRows(string enc, string a, string b, string c)
+            => new[]
+            {
+                GroupNamed(enc, Qs(U(a, LinkCategory.Modules, 6)), Qs(U(b, LinkCategory.Modules, 6))),
+                GroupNamed(enc, Qs(U(c, LinkCategory.Modules, 6)), EmptyQs()),
+            };
+
+        /// <summary>Two 3-row LV21s (6 rows) don't co-fit on one 4-row page, and an enclosure is indivisible, so
+        /// each lands on its own sheet. Rows re-base per page (both heads bottom-align to row 0 → identical Y),
+        /// and HOME NETWORK is repeated on each sheet so no wire crosses the page boundary.</summary>
+        [Fact]
+        public void TwoFullEnclosuresThatDoNotCoFitPaginateOnePerSheet()
+        {
+            var groups = Lv21ThreeRows("1-A", "1-B", "1-C", "1-D")
+                .Concat(Lv21ThreeRows("2-A", "2-B", "2-C", "2-D")).ToArray();
+            var pack = Pack(groups);
+            var panels = new Dictionary<string, ControlPanelRenderData>
+            {
+                ["1-A"] = Lv21("1-A"), ["1-B"] = Dimmer("1-B"), ["1-C"] = Dimmer("1-C"), ["1-D"] = Dimmer("1-D"),
+                ["2-A"] = Lv21("2-A"), ["2-B"] = Dimmer("2-B"), ["2-C"] = Dimmer("2-C"), ["2-D"] = Dimmer("2-D"),
+            };
+
+            var pages = ControlOneLinePlanner.Build(pack, panels, "TurboControl");
+
+            Assert.Equal(2, pages.Count);
+            Assert.All(pages, p => Assert.Equal(2, p.PageCount));
+            Assert.Equal(1, pages[0].PageIndex);
+            Assert.Equal(2, pages[1].PageIndex);
+
+            var head1 = Assert.Single(pages[0].Panels, p => p.HostsProcessor);
+            var head2 = Assert.Single(pages[1].Panels, p => p.HostsProcessor);
+            Assert.Equal("1-A", head1.Name);
+            Assert.Equal("2-A", head2.Name);
+            // Indivisible: each enclosure's own three dimmers live wholly on its sheet, none leak to the other.
+            Assert.All(new[] { "1-B", "1-C", "1-D" }, n => Assert.Contains(pages[0].Panels, p => p.Name == n));
+            Assert.All(new[] { "1-B", "1-C", "1-D" }, n => Assert.DoesNotContain(pages[1].Panels, p => p.Name == n));
+            Assert.All(new[] { "2-B", "2-C", "2-D" }, n => Assert.Contains(pages[1].Panels, p => p.Name == n));
+            // Per-page row re-basing: both heads sit at the same Y band (row 0), not 28' apart down a shared sheet.
+            Assert.Equal(head1.Center.Y, head2.Center.Y, 3);
+            // Each sheet's head draws its own Ethernet stub — self-contained, nothing crosses the page break.
+            Assert.Single(pages[0].Notes, n => n.Text.Contains("ETHERNET LINK"));
+            Assert.Single(pages[1].Notes, n => n.Text.Contains("ETHERNET LINK"));
+        }
+
+        /// <summary>Greedy in-order pack: three 2-row PD8s (6 rows) fill a sheet with the FIRST TWO (4 rows), then
+        /// spill the third to a second sheet — proving enclosures share a page up to the 4-row cap before breaking.</summary>
+        [Fact]
+        public void EnclosuresShareASheetUntilTheFourRowCapThenSpill()
+        {
+            // Each PD8: link1 = head + a dimmer (live), link2 = a dimmer (live) ⇒ 2 live rows.
+            ProcessorGroup Pd8(string h, string d1, string d2)
+                => Group(Qs(U(h, LinkCategory.Modules, 8), U(d1, LinkCategory.Modules, 6)),
+                         Qs(U(d2, LinkCategory.Modules, 6)));
+            var pack = Pack(Pd8("A", "A2", "A3"), Pd8("B", "B2", "B3"), Pd8("C", "C2", "C3"));
+            var panels = new Dictionary<string, ControlPanelRenderData>
+            {
+                ["A"] = Proc("A"), ["A2"] = Dimmer("A2"), ["A3"] = Dimmer("A3"),
+                ["B"] = Proc("B"), ["B2"] = Dimmer("B2"), ["B3"] = Dimmer("B3"),
+                ["C"] = Proc("C"), ["C2"] = Dimmer("C2"), ["C3"] = Dimmer("C3"),
+            };
+
+            var pages = ControlOneLinePlanner.Build(pack, panels, "TurboControl");
+
+            Assert.Equal(2, pages.Count);
+            // Page 1 packs TWO heads (A + B = 4 rows, the cap); page 2 holds the third (C).
+            var page1Heads = pages[0].Panels.Where(p => p.HostsProcessor).Select(p => p.Name).OrderBy(n => n).ToList();
+            var page2Heads = pages[1].Panels.Where(p => p.HostsProcessor).Select(p => p.Name).OrderBy(n => n).ToList();
+            Assert.Equal(new[] { "A", "B" }, page1Heads);
+            Assert.Equal(new[] { "C" }, page2Heads);
+            // Ethernet stubs are per head: page 1 has two heads (two stubs), page 2 one.
+            Assert.Equal(2, pages[0].Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
+            Assert.Single(pages[1].Notes, n => n.Text.Contains("ETHERNET LINK"));
         }
     }
 }
