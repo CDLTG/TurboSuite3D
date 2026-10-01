@@ -169,7 +169,7 @@ bottom-aligned shades, the row-per-link 28' layout, the **head-panel dogleg fan 
 pagination** are in. Pagination packs whole processor enclosures onto pages (**indivisible, ≤4 rows each**,
 greedy in packer order) and prunes orphaned sheets on shrink; every tie is enclosure-local, so there are **no
 continuation bubbles**. Remaining (see the Section 2 plan): the **wire legend** (dense per-job numbering + its
-own view), connection-point fine-tune, and cross-session ViewId persistence + experimental-gating before release.
+own view) and cross-session ViewId persistence + experimental-gating before release.
 
 ## Dependencies
 
