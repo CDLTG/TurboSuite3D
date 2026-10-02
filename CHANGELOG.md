@@ -7,6 +7,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.5.4] — 2026-10-02
+
+### Added
+- TurboZones: Lutron control one-line diagram (Section 2) — discrete-symbol renderer with per-head panel routing, 42" × 30" pagination, per-head Ethernet stubs, and a wire legend.
+- TurboDocs: Counts Worksheet freeform per-row Notes column.
+
+### Changed
+- TurboDocs: Load Schedule "Driver" column renamed to "Supply".
+- TurboSchedule/TurboDocs: Data Sheet URL opens local and UNC paths like native Revit.
+- TurboName: auto-generate warns before under-seeding a multi-building view, and refuses actions issued from a view other than the launch view.
+
+### Fixed
+- TurboDocs: Freight is excluded from the Counts Quote client markup.
+
 ## [1.5.3] — 2026-09-23
 
 ### Added
@@ -290,6 +304,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.5.4]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.4
 [1.5.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.3
 [1.5.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.2
 [1.5.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.1
