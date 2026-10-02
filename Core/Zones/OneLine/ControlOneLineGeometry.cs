@@ -303,6 +303,13 @@ namespace TurboSuite.Zones.OneLine
             /// <see cref="LastRowExitAboveOrigin"/> + 3× this.</summary>
             public const double HeadExitPitch = 18.0 / 12.0;       // 1'-6"
 
+            /// <summary>Distance off the head edge at which every HEAD-SOURCED wire marker sits — QS/wireless
+            /// links on their RIGHT-edge exit segment, the CAT6 feed on its LEFT-edge stub — so the markers line
+            /// up in a consistent column at the head instead of scattering mid-run. 10 13/16" = the midpoint of
+            /// the SHORTEST exit segment off a 4-link LV21 head, so a marker always lands ON its segment. (The
+            /// shade-link marker is NOT head-sourced — it stays on the shade motor stub.)</summary>
+            public const double MarkerExitOffset = (10.0 + 13.0 / 16.0) / 12.0;   // 0'-10 13/16"
+
             /// <summary><b>KNOB 3.</b> X of link lane <paramref name="laneFromLeft"/> of
             /// <paramref name="laneCount"/>, evenly distributed across the head→column-1 gap
             /// [<paramref name="gapStartX"/>, <paramref name="gapEndX"/>] (endpoints excluded). Lane 0 = leftmost =
@@ -332,7 +339,7 @@ namespace TurboSuite.Zones.OneLine
             public const double Feed120VLegDx = -18.0 / 12.0;            // vertical leg, 1'-6" left of the node center
             public const double Feed120VRise = 12.0 / 12.0;             // vertical leg height above the node top edge
             public const double Feed120VRun = 24.0 / 12.0;             // horizontal run LEFT to the terminus square
-            public const double Feed120VSquare = 7.0 / 12.0;          // terminus square side (plain glyph)
+            public const double Feed120VSquare = 6.0 / 12.0;          // terminus square side (plain glyph)
             public const double Feed120VLabelDx = (2.0 + 1.0 / 2.0) / 12.0;          // "120V" X: 2 1/2" right of the square's right edge
             public const double Feed120VLabelAboveCorner = (7.0 + 3.0 / 4.0) / 12.0;  // "120V" insertion Y: 7 3/4" above the L corner
 
@@ -368,13 +375,71 @@ namespace TurboSuite.Zones.OneLine
         /// </summary>
         public static class Legend
         {
+            /// <summary>Circled-number column center X (the list origin).</summary>
             public const double MarkerX = 0.0;
-            public const double LabelX = 4.5 / 12.0;
-            public const double RowPitch = 7.0 / 12.0;
-            public const double TitleGap = 12.0 / 12.0;
+
+            /// <summary>Label text left X — clear of the circle, with breathing room between symbol and text.</summary>
+            public const double LabelX = 6.0 / 12.0;    // 0'-6"
+
+            /// <summary>Center-to-center between legend rows.</summary>
+            public const double RowPitch = 9.0 / 12.0;  // 0'-9"
+
+            /// <summary>Drop from the "WIRE LEGEND" title down to the first row.</summary>
+            public const double TitleGap = 12.0 / 12.0; // 1'-0"
+
+            /// <summary>Drop below the last NUMBERED row to the first line-style (RF / WIRED) key, to set the
+            /// unnumbered style keys apart from the numbered cable rows. Defined as 1.5× <see cref="RowPitch"/>
+            /// so this larger gap scales automatically when the row pitch is retuned.</summary>
+            public const double StyleKeyGap = RowPitch * 1.5;   // 1.5 × 9" ⇒ 1'-1 1/2"
+
+            /// <summary>Half-length of an RF / WIRED sample-line key (a short segment centered on the marker
+            /// column, where the circled numbers sit). The whole key line is 2× this; clear of the label at
+            /// <see cref="LabelX"/>.</summary>
+            public const double SampleLineHalfLen = 2.25 / 12.0;   // 0'-2 1/4" half ⇒ 0'-4 1/2" line
+
+            /// <summary>Vertical offset applied to the SYMBOL column only (circled numbers + sample-line keys),
+            /// NOT the text, to line the glyphs up with their labels. Negative = down. Tuned in-Revit.</summary>
+            public const double SymbolDy = -(1.0 + 5.0 / 16.0) / 12.0;   // 0'-1 5/16" DOWN (1 1/2" − 3/16")
+
+            /// <summary>Row-label paper text height — the firm's <see cref="LargeTextTypeName"/> (4.5" model @
+            /// 1:48 ⇒ 3/32" paper), the sheet-wide baseline. The title alone is larger (see
+            /// <see cref="TitleTextTypeName"/>).</summary>
+            public const double RowTextHeightFt = (3.0 / 32.0) / 12.0;
+
+            /// <summary>Upward nudge on a row label's insertion Y so its glyph midline lands on the circled
+            /// marker's center. A <c>TextNote</c> anchors at its top edge (no vertical-alignment API) while the
+            /// marker family is center-anchored, so raise the label by half the model-space cap height =
+            /// <see cref="RowTextHeightFt"/> × <see cref="ViewScale"/> / 2. <see cref="SymbolDy"/> is the
+            /// measured per-glyph correction on top of this.</summary>
+            public const double LabelMidlineNudge = RowTextHeightFt * ViewScale / 2.0;
+
             public const string Title = "WIRE LEGEND";
-            public const double TitleTextHeightFt = (3.0 / 32.0) / 12.0;
-            public const double BorderOffset = 3.0 / 12.0;
+
+            /// <summary>The firm text style the title renders in — LARGER than the 4.5" body rows so the header
+            /// stands out, by the same 1.5× ratio the DMX legend uses (title ÷ body = 3/32" ÷ 1/16"). 1.5 × 4.5"
+            /// = 6.75" model @ 1:48. Resolved by NAME in the shim; if the project lacks it, the shim falls back
+            /// to a type at <see cref="TitleTextHeightFt"/>, then the default. Add this style in the project
+            /// (6.75" model ⇒ 9/64" paper) to get the intended title size.</summary>
+            public const string TitleTextTypeName = "AL_Annotation_6.75\"";
+
+            /// <summary>Title paper text height — 1.5× the body rows (the DMX title/body ratio) ⇒ 6.75" model @
+            /// 1:48 (9/64" paper). The size-fallback for <see cref="TitleTextTypeName"/>.</summary>
+            public const double TitleTextHeightFt = RowTextHeightFt * 1.5;
+
+            /// <summary>Breathing room above the header: the title sits this far ABOVE the row block's datum
+            /// (y=0), and — because the border hugs the union of drawn elements — the rectangle's top line
+            /// follows it up by the same amount, so the larger title is not cramped against the first row.
+            /// Scaled to the amount the title grew over the body ((title − body) cap height, in model feet), so
+            /// it tracks the title/body size gap.</summary>
+            public const double TitleHeadroom = (TitleTextHeightFt - RowTextHeightFt) * ViewScale;
+
+            /// <summary>Outward gap from the row/title extents to the enclosing border rectangle (model feet).</summary>
+            public const double BorderOffset = 3.0 / 12.0;   // 0'-3"
+
+            /// <summary>Downward trim on the border's top edge only — a TextNote's view bounding box carries
+            /// extra headroom above the glyph cap, so the raw top extent sits too high; pull the top line down
+            /// to hug the title. Tuned in-Revit for this font.</summary>
+            public const double BorderTopTrim = 1.25 / 12.0;   // 0'-1 1/4"
         }
     }
 }

@@ -110,10 +110,12 @@ namespace TurboSuite.Tests.Zones
             Assert.DoesNotContain(page.Panels, p => p.Name == "Keypads");
         }
 
-        /// <summary>The text-block case: Link 1 QS carries modules + shade + keypads; Link 2 is Clear Connect.
-        /// The keypad stub lands on the QS link, the wireless stub on the CC leg, and nothing draws on CC.</summary>
+        /// <summary>The text-block case: Link 1 QS carries modules + shade + keypads; Link 2 is the wireless
+        /// ("RF") link. The keypad stub lands on the QS link, the wireless stub on the RF leg. The RF leg is QS
+        /// WIRE to a repeater (abstracted today), so it carries a QS marker — never a Clear Connect marker
+        /// (there is no CC cable).</summary>
         [Fact]
-        public void ClearConnectLinkDrawsWirelessStubAndNoNodes()
+        public void WirelessLinkDrawsWirelessStubAsQsWireNotClearConnect()
         {
             var pack = Pack(Group(
                 Qs(U("1-A", LinkCategory.Modules, 8), ShadeUnit("1-D", 10), U("Keypads", LinkCategory.Keypads, 10)),
@@ -124,7 +126,8 @@ namespace TurboSuite.Tests.Zones
 
             Assert.Contains(page.Notes, n => n.Text.Contains("WIRELESS KEYPADS"));
             Assert.Contains(page.Notes, n => n.Text.Contains("ALL KEYPADS"));
-            Assert.Contains(page.Markers, m => m.Type == ControlWireType.ClearConnect);
+            Assert.DoesNotContain(page.Markers, m => m.Type == ControlWireType.ClearConnect);
+            Assert.Contains(page.Markers, m => m.Type == ControlWireType.QsControlLink);
             Assert.Contains(page.Shades, s => s.Name == "1-D");
         }
 

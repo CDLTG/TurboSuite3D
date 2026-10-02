@@ -66,6 +66,9 @@ namespace TurboSuite.Zones.ViewModels
         // to finding them by deterministic name), and the mid-draw latch.
         private readonly IControlOneLineService _oneLineService;
         private readonly Dictionary<int, long> _oneLineViewIds = new Dictionary<int, long>();
+        // The per-job wire legend's own owned view id (one per job, not per page). In-session today, like the
+        // page registry above — cross-session ES persistence is the follow-up pass.
+        private long _wireLegendViewId;
         private bool _drawingOneLine;
 
         public PanelBreakdownTabViewModel(List<ZonesCircuitData> circuits,
@@ -457,14 +460,20 @@ namespace TurboSuite.Zones.ViewModels
             var pages = ControlOneLinePlanner.Build(pack, panels, SystemName);
             if (pages.Count == 0) return;
 
+            // The per-job wire legend, off the SAME pack (pure + cheap to rebuild here) — its dense numbers match
+            // the markers the planner stamped on the pages, so the legend view and the sheets stay 1:1.
+            var legendDrawing = ControlWireLegendPlanner.Build(ControlWireLegend.ForPack(pack));
+
             _drawingOneLine = true;
             CommandManager.InvalidateRequerySuggested();
 
+            // Draw the pages first, then CHAIN the single legend view in the completion callback (the work queue
+            // picks up work enqueued from within a callback in the same drain pass; never raise two at once). The
+            // mid-draw latch clears only after BOTH complete, so the button can't re-fire mid-sequence.
             _workQueue.Enqueue(
                 () => _oneLineService.Draw(pages, SystemName, _oneLineViewIds),
                 result =>
                 {
-                    _drawingOneLine = false;
                     if (result is IReadOnlyList<ControlOneLineResult> results)
                         foreach (var r in results)
                             if (r.Ok) _oneLineViewIds[r.PageIndex] = r.ViewId;
@@ -472,7 +481,15 @@ namespace TurboSuite.Zones.ViewModels
                     // service deleted those views). Keeps a stale id from being reused on the next draw.
                     foreach (var staleKey in _oneLineViewIds.Keys.Where(k => k > pages.Count).ToList())
                         _oneLineViewIds.Remove(staleKey);
-                    CommandManager.InvalidateRequerySuggested();
+
+                    _workQueue.Enqueue(
+                        () => _oneLineService.DrawWireLegend(legendDrawing, SystemName, _wireLegendViewId),
+                        legendResult =>
+                        {
+                            _drawingOneLine = false;
+                            if (legendResult is ControlWireLegendResult lr && lr.Ok) _wireLegendViewId = lr.ViewId;
+                            CommandManager.InvalidateRequerySuggested();
+                        });
                 });
         }
 

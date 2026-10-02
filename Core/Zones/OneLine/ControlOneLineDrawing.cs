@@ -99,8 +99,9 @@ namespace TurboSuite.Zones.OneLine
         public int MotorCount { get; }
     }
 
-    /// <summary>One drawn wire segment (a <c>DetailCurve</c>): endpoints + solid/dashed. Power = solid,
-    /// control (QS/CAT6/Clear Connect) = dashed.</summary>
+    /// <summary>One drawn wire segment (a <c>DetailCurve</c>): endpoints + solid/dashed, per the Lutron
+    /// line-style convention — <b>dashed = RF (wireless), solid = WIRED</b>. The wire's cable TYPE is carried by
+    /// its circled marker number, not the style, so the style is free to mean wired-vs-RF.</summary>
     public sealed class ControlWireSegment
     {
         public ControlWireSegment(XY start, XY end, bool dashed)
@@ -113,8 +114,9 @@ namespace TurboSuite.Zones.OneLine
         public XY Start { get; }
         public XY End { get; }
 
-        /// <summary>Dashed = the control wires (QS spine, CAT6, Clear Connect), drawn with the dashed line
-        /// style; solid = power (120 V feeds), drawn "Wiring".</summary>
+        /// <summary>Dashed = an RF (wireless) connection; solid = a WIRED run (QS, CAT6, shade link, 120 V —
+        /// every cable). The repeater→keypad RF tail is the only dashed segment, and it is deferred to the
+        /// keypad-location expansion, so nothing is dashed today — every drawn segment is solid.</summary>
         public bool Dashed { get; }
     }
 

@@ -59,8 +59,12 @@ namespace TurboSuite.Zones.Services
                         var marker = ResolveSymbol(Roles.ControlWireMarkAnnotation);
                         if (marker == null)
                             result.Warnings.Add($"No {Roles.Label(Roles.ControlWireMarkAnnotation)} loaded — markers skipped.");
-                        var dashed = ResolveLineStyle(new[] { "Wiring (CAT6)", "Dash", "Dashed", "Hidden", "<Hidden>" });
-                        var solid = ResolveLineStyle(new[] { "Lighting Fixture", "<Solid>", "Solid", "Medium Lines", "Thin Lines" });
+                        // Lutron line-style convention: dashed = RF (the "Wiring (CAT6)" dashed style), solid =
+                        // wired = the Revit default line style — which is named "<Medium Lines>" (angle-bracketed)
+                        // in OST_Lines.SubCategories; the unbracketed "Medium Lines" is a Detail Items style, not
+                        // a line style. Every segment is wired/solid today. (Confirmed by TurboSpike.)
+                        var dashed = ResolveLineStyle(new[] { "Wiring (CAT6)", "Dash", "Dashed", "<Hidden>", "Hidden" });
+                        var solid = ResolveLineStyle(new[] { "<Medium Lines>", "<Thin Lines>", "<Wide Lines>", "Lighting Fixture", "<Solid>", "Solid" });
                         var textType = ResolveTextType();
 
                         // Node families are the only path — a missing one warns once (deduped) and skips its
@@ -111,6 +115,135 @@ namespace TurboSuite.Zones.Services
             ReportWarnings(allWarnings);
             return results;
         }
+
+        public ControlWireLegendResult DrawWireLegend(ControlWireLegendDrawing drawing, string systemName,
+            long existingViewId)
+        {
+            var result = new ControlWireLegendResult();
+            if (drawing == null) { result.Warnings.Add("No solved wire legend to draw."); ReportWarnings(result.Warnings); return result; }
+            if (string.IsNullOrWhiteSpace(systemName)) systemName = "TurboControl";
+
+            View opened = null;
+            using (var tx = new Transaction(_doc, "TurboZones — Wire legend"))
+            {
+                tx.Start();
+                try
+                {
+                    var marker = ResolveSymbol(Roles.ControlWireMarkAnnotation);
+                    if (marker == null)
+                        result.Warnings.Add($"No {Roles.Label(Roles.ControlWireMarkAnnotation)} loaded — numbers skipped.");
+                    var textType = ResolveTextType();
+                    // Same dashed (RF) / solid (wired) styles the one-line uses, so the RF/WIRED sample keys match
+                    // the sheet; the border rides the solid style. Solid = the bracketed "<Medium Lines>".
+                    var dashed = ResolveLineStyle(new[] { "Wiring (CAT6)", "Dash", "Dashed", "<Hidden>", "Hidden" });
+                    var solid = ResolveLineStyle(new[] { "<Medium Lines>", "<Thin Lines>", "<Wide Lines>", "Lighting Fixture", "<Solid>", "Solid" });
+
+                    var view = FindOrCreateViewByIdOrName(drawing.ViewName(systemName), existingViewId, result.Warnings, out bool created);
+                    if (view == null) { tx.RollBack(); ReportWarnings(result.Warnings); return result; }
+                    result.Created = created;
+
+                    _doc.Regenerate();   // a just-created view / duplicated text type must be a valid draw target
+                    if (!created) WipeView(view);
+
+                    DrawNotes(view, drawing.Notes, textType, result.Warnings);
+                    result.Rows += DrawMarkers(view, drawing.Markers, marker);
+                    DrawWires(view, drawing.SampleLines, dashed, solid);   // the RF/WIRED line-style key samples
+
+                    // Center the title over the rendered row block, then enclose everything in a border.
+                    _doc.Regenerate();
+                    DrawTitleCentered(view, drawing.Title, textType, result.Warnings);
+                    _doc.Regenerate();
+                    DrawLegendBorder(view, solid);
+
+                    result.ViewId = view.Id.ToRef().Value;
+                    opened = view;
+                    tx.Commit();
+                }
+                catch (Exception ex)
+                {
+                    result.Warnings.Add($"Wire-legend draw failed — {ex.Message}");
+                    if (tx.HasStarted()) tx.RollBack();
+                    result.ViewId = 0L;
+                }
+            }
+
+            if (opened != null)
+            {
+                try { _uidoc.ActiveView = opened; } catch { /* non-fatal */ }
+            }
+            ReportWarnings(result.Warnings);
+            return result;
+        }
+
+        // Draw the legend title centered over the rendered row block (measured now on the page). The title
+        // carries the firm's named style; fall back to a size match, then the default type.
+        private void DrawTitleCentered(View view, ControlNote title, ElementId defaultType, List<string> warnings)
+        {
+            if (title == null) return;
+
+            double centerX = TryUnionViewBox(view, out var min, out var max)
+                ? (min.X + max.X) / 2.0
+                : title.Position.X;
+
+            var type = ElementId.InvalidElementId;
+            if (!string.IsNullOrEmpty(title.TextTypeName)) type = ResolveTextTypeByName(title.TextTypeName, warnings);
+            if (type == ElementId.InvalidElementId && title.TextHeightFt is double h) type = ResolveTextTypeBySize(h);
+            if (type == ElementId.InvalidElementId) type = defaultType;
+            if (type == ElementId.InvalidElementId) { warnings.Add("No text type — title skipped."); return; }
+
+            var opts = new TextNoteOptions(type) { HorizontalAlignment = HorizontalTextAlignment.Center, Rotation = 0.0 };
+            TextNote.Create(_doc, view.Id, new XYZ(centerX, title.Position.Y, 0.0), title.Text, opts);
+        }
+
+        // Rectangle hugging the combined legend extents, offset out by BorderOffset (top edge trimmed to absorb
+        // the TextNote bbox headroom). Verbatim from the DMX legend border.
+        private void DrawLegendBorder(View view, GraphicsStyle solid)
+        {
+            if (!TryUnionViewBox(view, out var min, out var max)) return;
+            double o = G.Legend.BorderOffset;
+            double topY = max.Y + o - G.Legend.BorderTopTrim;
+            var bl = new XYZ(min.X - o, min.Y - o, 0.0);
+            var br = new XYZ(max.X + o, min.Y - o, 0.0);
+            var tr = new XYZ(max.X + o, topY, 0.0);
+            var tl = new XYZ(min.X - o, topY, 0.0);
+            DrawSegment(view, bl, br, solid);
+            DrawSegment(view, br, tr, solid);
+            DrawSegment(view, tr, tl, solid);
+            DrawSegment(view, tl, bl, solid);
+        }
+
+        private void DrawSegment(View view, XYZ a, XYZ b, GraphicsStyle style)
+        {
+            var dc = _doc.Create.NewDetailCurve(view, Line.CreateBound(a, b));
+            if (style != null) { try { dc.LineStyle = style; } catch { /* style not applicable — leave default */ } }
+        }
+
+        // Union of every non-type element's view bounding box; false if the view has nothing to bound.
+        private bool TryUnionViewBox(View view, out XYZ min, out XYZ max)
+        {
+            double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+            bool any = false;
+            foreach (var id in new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType().ToElementIds())
+            {
+                var bb = _doc.GetElement(id)?.get_BoundingBox(view);
+                if (bb == null) continue;
+                any = true;
+                minX = Math.Min(minX, bb.Min.X); minY = Math.Min(minY, bb.Min.Y);
+                maxX = Math.Max(maxX, bb.Max.X); maxY = Math.Max(maxY, bb.Max.Y);
+            }
+            min = new XYZ(minX, minY, 0.0);
+            max = new XYZ(maxX, maxY, 0.0);
+            return any;
+        }
+
+        // First existing TextNoteType at the given paper size (feet), or Invalid if the project has none.
+        private ElementId ResolveTextTypeBySize(double sizeFt) =>
+            new FilteredElementCollector(_doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>()
+                .FirstOrDefault(t =>
+                {
+                    var p = t.get_Parameter(BuiltInParameter.TEXT_SIZE);
+                    return p != null && Math.Abs(p.AsDouble() - sizeFt) < 1e-4;
+                })?.Id ?? ElementId.InvalidElementId;
 
         // ── Node drawing (family-composed — no renderer-drawn fallback) ──────────────────────────────
         // A panel = enclosure family (chosen by the node's EnclosureRole) + one module-tile family per filled

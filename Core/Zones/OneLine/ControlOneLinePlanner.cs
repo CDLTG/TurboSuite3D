@@ -55,6 +55,11 @@ namespace TurboSuite.Zones.OneLine
             var groups = pack?.Processors ?? Array.Empty<ProcessorGroup>();
             if (groups.Count == 0) return Array.Empty<ControlOneLineDrawing>();
 
+            // The per-job wire legend owns the dense marker numbering — built off the SAME pack the markers are
+            // stamped from (QS + CAT6 always; Shade / Clear Connect by presence), so the stamped numbers and the
+            // legend view stay 1:1. The VM rebuilds this cheaply (pure) to draw the legend view.
+            var legend = ControlWireLegend.ForPack(pack);
+
             // Per-PAGE accumulators — the drawing helpers below close over these variables, and the page loop
             // (phase 2) re-points them at a fresh set per page, so every helper targets the page being built.
             var panelNodes = new List<ControlPanelNode>();
@@ -65,8 +70,12 @@ namespace TurboSuite.Zones.OneLine
 
             var natural = new NaturalStringComparer();
 
+            // Line-style convention (Lutron 609): dashed = RF (wireless), solid = WIRED. Every cable here —
+            // QS, CAT6, shade link, 120 V — is a WIRED run, so it draws SOLID (dashed: false); the only dashed
+            // segment is the repeater→keypad RF tail, which is deferred to the keypad-location expansion (so
+            // nothing is dashed today). The wire TYPE is carried by the circled marker number, not the style.
             void Wire(XY a, XY b, bool dashed) => wires.Add(new ControlWireSegment(a, b, dashed));
-            void Mark(XY at, ControlWireType t) => markers.Add(new ControlMarker(at, t, NumberFor(t)));
+            void Mark(XY at, ControlWireType t) => markers.Add(new ControlMarker(at, t, legend.NumberFor(t)));
             void Note(XY at, string text, ControlTextAlign align, string? typeName = null)
                 => notes.Add(new ControlNote(at, text, align, textTypeName: typeName));
 
@@ -88,7 +97,7 @@ namespace TurboSuite.Zones.OneLine
                 double legX = center.X + G.Layout.Feed120VLegDx;
                 double cornerY = topY + G.Layout.Feed120VRise;
                 double termX = legX - G.Layout.Feed120VRun;   // horizontal run terminus = the square's right edge
-                Wire(new XY(legX, topY), new XY(legX, cornerY), dashed: false);        // up from the panel top (solid = power)
+                Wire(new XY(legX, topY), new XY(legX, cornerY), dashed: false);        // up from the panel top (wired → solid)
                 Wire(new XY(legX, cornerY), new XY(termX, cornerY), dashed: false);    // left to the terminus
                 Square(new XY(termX - G.Layout.Feed120VSquare / 2.0, cornerY), G.Layout.Feed120VSquare);
                 Note(new XY(termX + G.Layout.Feed120VLabelDx, cornerY + G.Layout.Feed120VLabelAboveCorner),
@@ -112,8 +121,8 @@ namespace TurboSuite.Zones.OneLine
                 double y = headBottomY + G.Layout.EthernetStubAboveOrigin;      // inline with the bottom-row exit
                 var a = new XY(headLeftX, y);                                   // start at the head's left edge
                 var b = new XY(headLeftX - G.Layout.EthernetStubLen, y);        // run 6' LEFT
-                Wire(a, b, dashed: true);
-                Mark(new XY((a.X + b.X) / 2.0, y), ControlWireType.Cat6);
+                Wire(a, b, dashed: false);   // CAT6 is a wired run → solid
+                Mark(new XY(headLeftX - G.Layout.MarkerExitOffset, y), ControlWireType.Cat6);   // fixed offset off the head LEFT edge
                 Note(new XY(colX + G.Layout.EthernetLabelDx, headBottomY + G.Layout.EthernetLabelDy),
                     "ETHERNET LINK TO\rHOME NETWORK", ControlTextAlign.Center, G.LargeTextTypeName);
             }
@@ -260,14 +269,19 @@ namespace TurboSuite.Zones.OneLine
 
                     // Dogleg out of the head: right edge → lane (the bend X, in the gap). The drop to the row happens
                     // per-branch below (a QS link drops to its spine; an RF link drops to the row center).
-                    Wire(new XY(headRightX, ey), new XY(lx, ey), dashed: true);   // exit horizontal
+                    Wire(new XY(headRightX, ey), new XY(lx, ey), dashed: false);   // exit horizontal
 
                     if (pl.IsCC)
                     {
-                        Wire(new XY(lx, ey), new XY(lx, y), dashed: true);        // drop to the row
+                        // The "RF link" is QS WIRE from the processor to a Hybrid Repeater — there is no Clear
+                        // Connect cable (the wireless devices reach the repeater over RF). So the drawn leg is a
+                        // QS wire carrying a QS marker, treated like the wired-keypad tail: a stub to a
+                        // "WIRELESS KEYPADS" note. The repeater node + the per-keypad RF fan off it arrive with
+                        // the keypad-location expansion (Future direction); today the repeater is abstracted.
+                        Wire(new XY(lx, ey), new XY(lx, y), dashed: false);        // drop to the row
                         var b = new XY(lx + ControlOnePlannerConstants.WirelessStubLen, y);
-                        Wire(new XY(lx, y), b, dashed: true);
-                        Mark(new XY((lx + b.X) / 2.0, y), ControlWireType.ClearConnect);
+                        Wire(new XY(lx, y), b, dashed: false);
+                        Mark(new XY(headRightX + G.Layout.MarkerExitOffset, ey), ControlWireType.QsControlLink);   // at the head RIGHT-edge exit
                         Tick(wires, b, G.Layout.KeypadTickHalf);
                         Note(b.Offset(ControlOnePlannerConstants.NoteDx, G.Layout.WirelessLabelDy),
                             "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName);
@@ -283,8 +297,8 @@ namespace TurboSuite.Zones.OneLine
 
                     // Drop the lane to the spine (bend at lane X), then the spine runs right through the gap into
                     // column 1.
-                    Wire(new XY(lx, ey), new XY(lx, spineY), dashed: true);
-                    Mark(new XY(lx, (ey + spineY) / 2.0), ControlWireType.QsControlLink);
+                    Wire(new XY(lx, ey), new XY(lx, spineY), dashed: false);
+                    Mark(new XY(headRightX + G.Layout.MarkerExitOffset, ey), ControlWireType.QsControlLink);   // at the head RIGHT-edge exit
 
                     double cursorX = col1LeftX - G.Layout.NodeGap;   // so the first node lands at col1LeftX + w/2
                     double spineFromX = lx;                          // spine starts at the lane drop
@@ -294,11 +308,11 @@ namespace TurboSuite.Zones.OneLine
                     void Caret(double cxAt, bool leftHalfOnly)
                     {
                         double leftFoot = cxAt - G.Layout.CaretHalfWidth;
-                        Wire(new XY(spineFromX, spineY), new XY(leftFoot, spineY), dashed: true);
-                        Wire(new XY(leftFoot, spineY), new XY(cxAt, panelBottomY), dashed: true);
+                        Wire(new XY(spineFromX, spineY), new XY(leftFoot, spineY), dashed: false);
+                        Wire(new XY(leftFoot, spineY), new XY(cxAt, panelBottomY), dashed: false);
                         if (leftHalfOnly) { spineFromX = cxAt; return; }
                         double rightFoot = cxAt + G.Layout.CaretHalfWidth;
-                        Wire(new XY(cxAt, panelBottomY), new XY(rightFoot, spineY), dashed: true);
+                        Wire(new XY(cxAt, panelBottomY), new XY(rightFoot, spineY), dashed: false);
                         spineFromX = rightFoot;
                     }
 
@@ -322,7 +336,7 @@ namespace TurboSuite.Zones.OneLine
                             Add120V(c, G.ShadePanel.Height);   // same feed as a power panel (shared helper → stays in sync)
                             var m0 = c.Plus(G.ShadePanel.MotorTap);
                             var m1 = m0.Offset(0, G.Layout.FeedStubLength);
-                            Wire(m0, m1, dashed: true);
+                            Wire(m0, m1, dashed: false);
                             Mark(new XY(m0.X, (m0.Y + m1.Y) / 2.0), ControlWireType.ShadeLink);
                             Note(m1.Offset(ControlOnePlannerConstants.NoteDx, ControlOnePlannerConstants.NoteDy),
                                 $"{motors} MOTORS", ControlTextAlign.Left, G.LargeTextTypeName);
@@ -339,7 +353,7 @@ namespace TurboSuite.Zones.OneLine
                     if (pl.HasKeypads)
                     {
                         double kx = cursorX + G.Layout.KeypadTailGap;
-                        Wire(new XY(spineFromX, spineY), new XY(kx, spineY), dashed: true);
+                        Wire(new XY(spineFromX, spineY), new XY(kx, spineY), dashed: false);
                         Tick(wires, new XY(kx, spineY), G.Layout.KeypadTickHalf);
                         Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY + G.Layout.KeypadLine1Dy),
                             "ALL KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName);
@@ -421,20 +435,6 @@ namespace TurboSuite.Zones.OneLine
             LinkCategory.Interface => 2,
             LinkCategory.Keypads => 3,
             _ => 4,
-        };
-
-        /// <summary>Canonical wire-type number (placeholder until <c>ControlWireLegend</c>, #5, owns the
-        /// per-job dense numbering). Matches the mockup legend.</summary>
-        internal static int NumberFor(ControlWireType t) => t switch
-        {
-            ControlWireType.QsControlLink => 1,
-            ControlWireType.PanelControlLink => 2,
-            ControlWireType.ClearConnect => 3,
-            ControlWireType.Input120V => 4,
-            ControlWireType.ShadeLink => 5,
-            ControlWireType.Cat6 => 6,
-            ControlWireType.DaliLoop => 7,
-            _ => 0,
         };
 
         private static double PanelHeight(ControlPanelRenderData rd)

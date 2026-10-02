@@ -162,14 +162,29 @@ anchors are per-panel-relative (no diagram-wide rung grid);
 cross-panel alignment among power panels is emergent from their identical fixed height. The wire marker stays
 a centered glyph.
 
+**Wire legend + wire styles.** A per-job **`ControlWireLegend`** (`Core/Zones/OneLine/`) draws into its own owned
+view (`TurboControl - Wire Legend`), chained after the pages on one Draw click, with a **marker-tied dense roster
+— numbered cables only: QS=1, CAT6=2, Shade=3** (Shade present only when the job has shade panels). The planner
+stamps every marker with `legend.NumberFor(t)`, so the legend and the sheet markers are 1:1 by construction.
+**Clear Connect is not a cable:** an RF link is QS wire to a Hybrid Repeater (abstracted until the keypad
+expansion), so the wireless leg draws as **QS wire with a QS marker**, and `ClearConnect` / `PanelControlLink` /
+`DaliLoop` stay **benched** `ControlWireType` members, never rostered (panel links are QS; DALI/DMX are never
+drawn here). Line style follows Lutron — **dashed = RF, solid = wired** (solid `<Medium Lines>`, dashed `Wiring
+(CAT6)`; the cable type is carried by the circled number, so the style is free to mean wired-vs-RF), with
+`RF CONNECTION` / `WIRED CONNECTION` sample keys in the legend; the shade row reads **"SHADE WIRING BY OTHERS"**
+(control context only). Head-sourced markers sit at `Layout.MarkerExitOffset` off the head edge — QS/wireless
+right, CAT6 left — while the shade-link marker stays on its motor stub. Legend title is the larger
+`AL_Annotation_6.75"` over 4.5" body rows.
+
 **Status:** the 6 families are authored, the box fallback is removed, and the measured family geometry (outer
 sizes, rung anchor offsets incl. the LV21's) is transcribed into `ControlOneLineGeometry`; spine/caret,
 bottom-aligned shades, the row-per-link 28' layout, the **head-panel dogleg fan + one-head LV21 placement**
-(name-identified head, dead-link row compaction, LV21 tile offsets), per-head **Ethernet stubs**, and **42×30
-pagination** are in. Pagination packs whole processor enclosures onto pages (**indivisible, ≤4 rows each**,
-greedy in packer order) and prunes orphaned sheets on shrink; every tie is enclosure-local, so there are **no
-continuation bubbles**. Remaining (see the Section 2 plan): the **wire legend** (dense per-job numbering + its
-own view) and cross-session ViewId persistence + experimental-gating before release.
+(name-identified head, dead-link row compaction, LV21 tile offsets), per-head **Ethernet stubs**, **42×30
+pagination**, and the **wire legend** are in. Pagination packs whole processor enclosures onto pages
+(**indivisible, ≤4 rows each**, greedy in packer order) and prunes orphaned sheets on shrink; every tie is
+enclosure-local, so there are **no continuation bubbles**. Remaining (see the Section 2 plan): **cross-session
+ViewId persistence** (per-page + the wire-legend view, a dedicated new ES schema) **+ experimental-gating** the
+Draw button before release.
 
 ## Dependencies
 

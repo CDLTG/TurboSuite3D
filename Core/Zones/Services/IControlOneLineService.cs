@@ -21,5 +21,16 @@ namespace TurboSuite.Zones.Services
         /// <returns>One result per page drawn, carrying the (created or re-used) view id to persist.</returns>
         IReadOnlyList<ControlOneLineResult> Draw(IReadOnlyList<ControlOneLineDrawing> pages, string systemName,
             IReadOnlyDictionary<int, long> viewRegistry);
+
+        /// <summary>Draw the single per-job wire legend into its own owned Drafting View — same
+        /// wipe-and-redraw ownership as the one-line, but one view per job (not per page). Its circled numbers
+        /// are the same job-wide numbers the pages stamp on every wire, so legend ↔ markers stay 1:1. Mirrors
+        /// <c>IDmxOneLineService.DrawWireLegend</c>.</summary>
+        /// <param name="drawing">The legend layout off the last solve's <see cref="ControlWireLegend"/>.</param>
+        /// <param name="systemName">The control-system label — seeds the owned view's deterministic name.</param>
+        /// <param name="existingViewId">The persisted legend view id (the Revit-free long), or 0 if never
+        /// drawn, so a re-draw finds the same view by id even if the user renamed it.</param>
+        ControlWireLegendResult DrawWireLegend(ControlWireLegendDrawing drawing, string systemName,
+            long existingViewId);
     }
 }
