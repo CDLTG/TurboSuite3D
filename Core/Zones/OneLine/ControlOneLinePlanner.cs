@@ -163,7 +163,10 @@ namespace TurboSuite.Zones.OneLine
                 //    scanning the links' units for a processor-hosting panel (a PD8 that is also a Modules unit —
                 //    the case the tests build without a name), else a P# stub. ──
                 ControlPanelRenderData? headRd = null;
-                if (!string.IsNullOrEmpty(encName) && panels.TryGetValue(encName, out var byName) && byName.HostsProcessor)
+                // `is { Length: > 0 }` (not IsNullOrEmpty) so net48 flow-analysis sees encName is non-null here —
+                // net48's BCL lacks the [NotNullWhen(false)] annotation that keeps net8 quiet, hence a CS8604
+                // false positive on the guarded TryGetValue otherwise.
+                if (encName is { Length: > 0 } && panels.TryGetValue(encName, out var byName) && byName.HostsProcessor)
                     headRd = byName;
                 if (headRd == null)
                     foreach (var pl in plans)
