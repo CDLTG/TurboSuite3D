@@ -47,7 +47,7 @@ namespace TurboSuite.Zones.Services
             }
             if (string.IsNullOrWhiteSpace(systemName)) systemName = "TurboControl";
 
-            View lastOpened = null;
+            View firstOpened = null;
             foreach (var page in pages)
             {
                 var result = new ControlOneLineResult { PageIndex = page.PageIndex };
@@ -90,7 +90,7 @@ namespace TurboSuite.Zones.Services
                         result.Markers += DrawMarkers(view, page.Markers, marker);
 
                         result.ViewId = view.Id.ToRef().Value;
-                        lastOpened = view;
+                        if (firstOpened == null) firstOpened = view;   // land on sheet 1, the start of the diagram
                         tx.Commit();
                     }
                     catch (Exception ex)
@@ -104,9 +104,9 @@ namespace TurboSuite.Zones.Services
                 allWarnings.AddRange(result.Warnings);
             }
 
-            if (lastOpened != null)
+            if (firstOpened != null)
             {
-                try { _uidoc.ActiveView = lastOpened; } catch { /* non-fatal: leave the user where they are */ }
+                try { _uidoc.ActiveView = firstOpened; } catch { /* non-fatal: leave the user where they are */ }
             }
             // A rebuild with FEWER pages than a prior run leaves higher-numbered owned sheets orphaned — delete
             // them (done AFTER the active-view switch above, so a stale sheet is never the active view being
@@ -123,7 +123,6 @@ namespace TurboSuite.Zones.Services
             if (drawing == null) { result.Warnings.Add("No solved wire legend to draw."); ReportWarnings(result.Warnings); return result; }
             if (string.IsNullOrWhiteSpace(systemName)) systemName = "TurboControl";
 
-            View opened = null;
             using (var tx = new Transaction(_doc, "TurboZones — Wire legend"))
             {
                 tx.Start();
@@ -156,7 +155,6 @@ namespace TurboSuite.Zones.Services
                     DrawLegendBorder(view, solid);
 
                     result.ViewId = view.Id.ToRef().Value;
-                    opened = view;
                     tx.Commit();
                 }
                 catch (Exception ex)
@@ -167,10 +165,8 @@ namespace TurboSuite.Zones.Services
                 }
             }
 
-            if (opened != null)
-            {
-                try { _uidoc.ActiveView = opened; } catch { /* non-fatal */ }
-            }
+            // Deliberately do NOT switch the active view to the legend: this is always chained AFTER the pages
+            // in the same Draw, so the user should be left on the diagram (sheet 1), not the legend.
             ReportWarnings(result.Warnings);
             return result;
         }
