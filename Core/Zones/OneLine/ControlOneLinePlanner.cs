@@ -19,7 +19,7 @@ namespace TurboSuite.Zones.OneLine
     /// <see cref="ControlPanelRenderData.HostsProcessor"/>), drawn once and BOTTOM-ALIGNED to its first (top)
     /// row's baseline in the left column. Its QS links leave the head's RIGHT edge and <b>dogleg</b> through the
     /// head→column-1 gap as a fan of separate lanes — one per link, nested crossing-free (deepest row = leftmost
-    /// lane + lowest exit) — dropping to each row's spine (Screenshot_593 / 582). Downstream panels/shades hang
+    /// lane + lowest exit) — dropping to each row's spine (matching the Lutron reference sheets). Downstream panels/shades hang
     /// along each QS row in rule-#5 order (Modules → Shades → Keypads, natural-name within a category); keypads
     /// collapse to one tail stub; a Clear Connect link doglegs to its row and draws a wireless stub. Each head
     /// draws its own Ethernet-to-Home-Network stub out its left edge (Lutron-style — no shared switch node).</para>
@@ -89,7 +89,7 @@ namespace TurboSuite.Zones.OneLine
                 Wire(new XY(x0, y1), new XY(x0, y0), dashed: false);
             }
 
-            // 120 V feed, Lutron-style (Screenshot_599): up from the panel top edge, LEFT to a terminus square,
+            // 120 V feed, following the Lutron reference sheet: up from the panel top edge, LEFT to a terminus square,
             // with "120V" (firm style) above it. All renderer-drawn; the square is a plain glyph, not a legend key.
             void Add120V(XY center, double height)
             {
@@ -114,7 +114,7 @@ namespace TurboSuite.Zones.OneLine
             double RowCenterY(int r) => -r * G.Layout.RowPitch;
 
             // Ethernet-to-Home-Network stub: a CAT6 run LEFT out of the head's left edge, with a two-line label
-            // and a CAT6 wire marker (the legend key, #5), per Lutron Screenshot_601. Per head — there is NO
+            // and a CAT6 wire marker (the legend key, #5), per the Lutron reference sheet. Per head — there is NO
             // shared switch node or trunk, so nothing ties heads together or crosses a page boundary.
             void AddEthernet(double headBottomY)
             {
@@ -129,7 +129,7 @@ namespace TurboSuite.Zones.OneLine
 
             // ── Phase 0: resolve every physical enclosure (NO drawing yet). Walk the groups MERGING consecutive
             //    groups that share a processor panel name into one enclosure: an LV21 = two processor compartments
-            //    = two same-named groups = ONE head with up to 4 link rows (Screenshot_593). Groups with no name
+            //    = two same-named groups = ONE head with up to 4 link rows (per the Lutron reference sheet). Groups with no name
             //    (tests / legacy) each stand alone, the head then found by scanning link units (the PD8 that is
             //    also a Modules unit). Resolving here — before any drawing — lets the pager below know each
             //    enclosure's row count so it can assign pages. ──
@@ -243,7 +243,7 @@ namespace TurboSuite.Zones.OneLine
                     live[idx].Y = RowCenterY(rowStart + idx);
                 }
 
-                // Head is BOTTOM-ALIGNED to its first (top) row's baseline, in the left column (Screenshot_593).
+                // Head is BOTTOM-ALIGNED to its first (top) row's baseline, in the left column (per the Lutron reference sheet).
                 // headBottomY is the head's ORIGIN Y (center-bottom of the artwork) — the datum link exits anchor to.
                 double headBottomY = RowCenterY(rowStart) - G.Panel.PowerPanelHeight / 2.0;
                 var headCenter = new XY(colX, headBottomY + headH / 2.0);
@@ -293,7 +293,7 @@ namespace TurboSuite.Zones.OneLine
 
                     // The QS daisy (spine) runs LinkSpineDropFt BELOW the shared bottom-origin baseline; every
                     // child node — dimmer AND shade, both bottom-aligned — taps it with a caret whose apex sits ON
-                    // its origin (Screenshot_582/591/592). The LAST node on a link that ends here (no keypad tail
+                    // its origin (per the Lutron reference sheets). The LAST node on a link that ends here (no keypad tail
                     // after it) draws only the LEFT half of its caret, so no half-caret dangles past it.
                     double panelBottomY = y - G.Panel.PowerPanelHeight / 2.0;
                     double spineY = panelBottomY - G.Layout.LinkSpineDropFt;

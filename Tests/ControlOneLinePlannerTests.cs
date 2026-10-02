@@ -145,7 +145,7 @@ namespace TurboSuite.Tests.Zones
 
         /// <summary>Multi-processor: each bay's head sits at the left column on its own row, and each head draws
         /// its OWN Ethernet-to-Home-Network stub (a CAT6 marker + a labeled note) out its left edge — there is no
-        /// shared switch node tying the heads together (Lutron Screenshot_601).</summary>
+        /// shared switch node tying the heads together (per the Lutron reference sheet).</summary>
         [Fact]
         public void EachProcessorDrawsItsOwnEthernetStub()
         {

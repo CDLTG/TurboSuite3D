@@ -145,7 +145,7 @@ families are authored, so a missing one is a config error to surface, not a look
 
 The renderer-drawn head-end glyphs follow the firm's sheet style: each processor head draws its own
 **Ethernet-to-Home-Network stub** — a CAT6 run LEFT out of its left edge (inline with the bottom-row exit) with
-a two-line label + a CAT6 marker (Lutron Screenshot_601), **no shared switch node or trunk** so nothing ties
+a two-line label + a CAT6 marker (per the Lutron reference sheet), **no shared switch node or trunk** so nothing ties
 heads together or crosses a page — and the 120 V feed draws as a Lutron-style **L to a terminus square** (a
 plain glyph, **not** a wire marker/legend key). Prominent labels (Ethernet-link, 120V, keypad / wireless /
 motor stubs) render in the firm `AL_Annotation_4.5"` text style, resolved by name and falling back to the

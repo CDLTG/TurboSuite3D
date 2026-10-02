@@ -281,7 +281,7 @@ namespace TurboSuite.Zones.OneLine
             public const double ProcessorColumnX = 0.0;
 
             // ── Head → column-1 link fan (the head's QS links exit its RIGHT edge, dogleg through this gap in
-            //    separate lanes, and drop to each row's spine — Screenshot_593 / 582). KNOBS the user tunes:
+            //    separate lanes, and drop to each row's spine — matching the Lutron reference sheets). KNOBS the user tunes:
             //    (1) the head↔column-1 gap; (2) the exit points on the head's right edge; (3) the lane (bend) X. ──
             /// <summary><b>KNOB 1.</b> Head-column center to column-1 center. Wider than
             /// <see cref="PanelCenterToCenter"/> (the inter-panel spacing) so the fan of separate QS link lanes
@@ -319,9 +319,9 @@ namespace TurboSuite.Zones.OneLine
 
             // The CAT6 tap enters the head bottom-left IN-LINE with the bottom (deepest-row) link exit on the right
             // edge — it reuses <see cref="LastRowExitAboveOrigin"/> as its height so the two stay aligned by
-            // construction (clear of the QS fan on the right and the 120 V feed on top; Screenshot_582).
+            // construction (clear of the QS fan on the right and the 120 V feed on top; per the Lutron reference sheet).
 
-            // ── Ethernet-to-Home-Network stub (per processor head, Lutron-style — Screenshot_601). NO shared
+            // ── Ethernet-to-Home-Network stub (per processor head, following the Lutron reference sheet). NO shared
             //    switch node / trunk: each head gets its own CAT6 stub LEFT out of its left edge with a two-line
             //    "ETHERNET LINK TO HOME NETWORK" label and a CAT6 wire marker (the legend key, #5). Nothing ties
             //    heads together, so nothing crosses a page boundary. ──
