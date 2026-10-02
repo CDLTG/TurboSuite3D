@@ -182,9 +182,13 @@ bottom-aligned shades, the row-per-link 28' layout, the **head-panel dogleg fan 
 (name-identified head, dead-link row compaction, LV21 tile offsets), per-head **Ethernet stubs**, **42×30
 pagination**, and the **wire legend** are in. Pagination packs whole processor enclosures onto pages
 (**indivisible, ≤4 rows each**, greedy in packer order) and prunes orphaned sheets on shrink; every tie is
-enclosure-local, so there are **no continuation bubbles**. Remaining (see the Section 2 plan): **cross-session
-ViewId persistence** (per-page + the wire-legend view, a dedicated new ES schema) **+ experimental-gating** the
-Draw button before release.
+enclosure-local, so there are **no continuation bubbles**. **Cross-session ViewId persistence** is now in:
+the per-page one-line view ids + the wire-legend view id are stored in a **dedicated** ES schema
+(`ZonesOneLineViewStorageService`, `OneLineViewState` — its own GUID, not the panel-settings schema, so it
+never re-bumps that one), read at window open and written on Draw via the work queue; redraws still also find
+views by deterministic name, so the persistence is a restart-surviving fast path, not a correctness
+dependency. The **Draw One-Line button is experimental-gated** (`PanelTab.ShowDrawOneLine` = Lutron **and**
+`ExperimentalCommandsEnabled`), so it is dev-visible-only until release.
 
 ## Dependencies
 

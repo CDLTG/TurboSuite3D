@@ -25,12 +25,15 @@ namespace TurboSuite.Zones.ViewModels
             IReadOnlyList<ShadeLocationTally> shadeLocations = null,
             List<ZonesCircuitData> shadeCircuits = null,
             ILoadNameWriter shadeLoadNameWriter = null,
-            IControlOneLineService oneLineService = null)
+            IControlOneLineService oneLineService = null,
+            IOneLineViewStore oneLineViewStore = null,
+            OneLineViewState savedOneLineViews = null,
+            bool oneLineEnabled = true)
         {
             PanelTab = new PanelBreakdownTabViewModel(circuits,
                 keypadCounts, hybridRepeaters,
                 savedSettings, workQueue, panelSettingsStore, subsystemDemands, daliModulesByZone,
-                shadeLocations, oneLineService);
+                shadeLocations, oneLineService, oneLineViewStore, savedOneLineViews, oneLineEnabled);
             LoadNameTab = new LoadNameTabViewModel(circuits, workQueue, loadNameWriter, circuitSelector);
 
             // Shade Names — the same Load-Names grid fed shade circuits and the shade override store.

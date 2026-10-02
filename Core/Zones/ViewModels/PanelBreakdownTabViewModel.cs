@@ -61,15 +61,19 @@ namespace TurboSuite.Zones.ViewModels
         private bool _savePending;
         private bool _saveDirty;
 
-        // Section 2 one-line: the shim renderer (null ⇒ the Draw button stays disabled), an in-session
-        // page-index → owned-view-id registry (so redraws reuse the same views; a fresh session falls back
-        // to finding them by deterministic name), and the mid-draw latch.
+        // Section 2 one-line: the shim renderer (null ⇒ the Draw button stays disabled), a page-index →
+        // owned-view-id registry (so redraws reuse the same views; a fresh session falls back to finding them
+        // by deterministic name), the per-job wire-legend view id, and the mid-draw latch. The registry +
+        // legend id are seeded from the persisted OneLineViewState at window open and written back on Draw via
+        // _viewStore (ES, its own schema) so the id-keyed fast path survives a Revit restart.
         private readonly IControlOneLineService _oneLineService;
+        private readonly IOneLineViewStore _viewStore;
         private readonly Dictionary<int, long> _oneLineViewIds = new Dictionary<int, long>();
-        // The per-job wire legend's own owned view id (one per job, not per page). In-session today, like the
-        // page registry above — cross-session ES persistence is the follow-up pass.
         private long _wireLegendViewId;
         private bool _drawingOneLine;
+        // Experimental gate: TurboZones ships, but the one-line stays dev-visible-only until release
+        // (ExperimentalCommandsEnabled, threaded in by the shim). Gates ShowDrawOneLine.
+        private readonly bool _oneLineEnabled;
 
         public PanelBreakdownTabViewModel(List<ZonesCircuitData> circuits,
             KeypadCounts keypadCounts,
@@ -79,11 +83,24 @@ namespace TurboSuite.Zones.ViewModels
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
             IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
             IReadOnlyList<ShadeLocationTally> shadeLocations = null,
-            IControlOneLineService oneLineService = null)
+            IControlOneLineService oneLineService = null,
+            IOneLineViewStore viewStore = null,
+            OneLineViewState savedViewState = null,
+            bool oneLineEnabled = true)
         {
             _workQueue = workQueue;
             _settingsStore = settingsStore;
             _oneLineService = oneLineService;
+            _viewStore = viewStore;
+            _oneLineEnabled = oneLineEnabled;
+            // Seed the owned-view registry from the persisted state so the first redraw of this session reuses
+            // the same views by id (redraws also find them by name, so an empty/null state is harmless).
+            if (savedViewState != null)
+            {
+                foreach (var kvp in savedViewState.PageViewIds)
+                    _oneLineViewIds[kvp.Key] = kvp.Value;
+                _wireLegendViewId = savedViewState.WireLegendViewId;
+            }
             DrawOneLineCommand = new RelayCommand(DrawOneLine, CanDrawOneLine);
             _subsystemDemands = subsystemDemands;
             _daliModulesByZone = daliModulesByZone;
@@ -118,6 +135,7 @@ namespace TurboSuite.Zones.ViewModels
                 if (SetProperty(ref _selectedBrandName, value))
                 {
                     OnPropertyChanged(nameof(IsLutronSelected));
+                    OnPropertyChanged(nameof(ShowDrawOneLine));
                     // Clear panel size overrides when brand changes (sizes differ)
                     _panelSizeOverrides.Clear();
                     BuildPanelBreakdown();
@@ -126,6 +144,10 @@ namespace TurboSuite.Zones.ViewModels
         }
 
         public bool IsLutronSelected => string.Equals(_selectedBrandName, "Lutron", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Visibility of the Draw One-Line button: Lutron-only (CC-A/QS is Lutron-specific) AND the
+        /// experimental gate is open (the one-line is dev-visible-only until release). Bound in the view.</summary>
+        public bool ShowDrawOneLine => _oneLineEnabled && IsLutronSelected;
 
         public bool UseDedicatedRelayModule
         {
@@ -489,8 +511,25 @@ namespace TurboSuite.Zones.ViewModels
                             _drawingOneLine = false;
                             if (legendResult is ControlWireLegendResult lr && lr.Ok) _wireLegendViewId = lr.ViewId;
                             CommandManager.InvalidateRequerySuggested();
+                            // Persist the final registry + legend id so a Revit restart keeps the id-keyed fast
+                            // path. Enqueued (ES write needs the API thread + its own transaction); drawing is
+                            // latched, so there is no concurrent draw to coalesce against.
+                            PersistViewIds();
                         });
                 });
+        }
+
+        /// <summary>Write the current page registry + wire-legend view id to ES (its own schema) on the API
+        /// thread. No-op without a store. Snapshots on the WPF thread, then enqueues the write.</summary>
+        private void PersistViewIds()
+        {
+            if (_viewStore == null) return;
+
+            var state = new OneLineViewState { WireLegendViewId = _wireLegendViewId };
+            foreach (var kvp in _oneLineViewIds)
+                state.PageViewIds[kvp.Key] = kvp.Value;
+
+            _workQueue.Enqueue(() => { _viewStore.Save(state); return null; }, null);
         }
 
         private void RebuildLinkAssignments()

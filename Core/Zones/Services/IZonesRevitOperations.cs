@@ -25,6 +25,14 @@ namespace TurboSuite.Zones.Services
         void Save(PanelSettings settings);
     }
 
+    /// <summary>Persists the control one-line + wire-legend owned-view ids (<see cref="OneLineViewState"/>)
+    /// to ExtensibleStorage in their OWN schema (not the panel-settings schema). Written on Draw via the
+    /// work queue; the state is read back shim-side at window open.</summary>
+    public interface IOneLineViewStore
+    {
+        void Save(OneLineViewState state);
+    }
+
     /// <summary>Selects + reveals a circuit in the active project; returns false if the
     /// element no longer exists.</summary>
     public interface ICircuitSelector

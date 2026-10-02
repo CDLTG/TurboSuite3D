@@ -70,6 +70,11 @@ namespace TurboSuite.Zones
                 // Load persisted panel settings shim-side (a Core ctor cannot read Revit synchronously).
                 var savedSettings = ZonesPanelSettingsStorageService.Load(doc);
 
+                // Persisted control one-line / wire-legend owned-view ids (its own ES schema, separate from
+                // panel settings). Seeds the id-keyed redraw fast path; redraws also find views by name, so an
+                // empty state is harmless.
+                var savedOneLineViews = ZonesOneLineViewStorageService.Load(doc);
+
                 // Work-queue + Revit-free operation impls — both tabs are Core VMs now.
                 var workQueue = new RevitWorkQueue("TurboZones Error", "TurboZones Work Queue");
                 var loadNameWriter = new LoadNameWriter(doc, new LoadNameService());
@@ -109,7 +114,10 @@ namespace TurboSuite.Zones
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
                     subsystemDemands, daliModulesByZone, shadeLocations,
                     shadeCircuits, shadeLoadNameWriter,
-                    new ControlOneLineService(uidoc));   // Section 2 one-line renderer
+                    new ControlOneLineService(uidoc),    // Section 2 one-line renderer
+                    new OneLineViewStore(doc),           // cross-session owned-view id persistence
+                    savedOneLineViews,
+                    App.TurboSuiteApplication.ExperimentalCommandsEnabled);  // dev-visible-only until release
 
                 var window = new TurboZonesWindow
                 {
