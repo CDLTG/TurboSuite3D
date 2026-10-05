@@ -11,9 +11,9 @@ namespace TurboSuite.Tests.Dmx
     public class AddresserTests
     {
         [Fact]
-        public void FoyerCove_RgbThenWhite_AreContiguous_LikeScreenshot195()
+        public void FoyerCove_RgbThenWhite_AreContiguous_PerReferenceOneLine()
         {
-            // 195 shows 9-6 "cove-rgb" on ch 8/9/10 and 9-7 "cove-white" on ch 11.
+            // The reference one-line shows 9-6 "cove-rgb" on ch 8/9/10 and 9-7 "cove-white" on ch 11.
             var zones = new[] { new ZoneInput("Foyer Cove", channels: 4, decoderCount: 3) };
 
             var addressed = Addresser.Assign(zones, startAddress: 8);

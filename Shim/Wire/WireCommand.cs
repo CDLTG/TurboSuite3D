@@ -526,7 +526,7 @@ public class WireCommand : IExternalCommand
             arcDirection = 1;
         }
 
-        // Linear end-to-end routing (Screenshot_518/526): relocate each fixture's effective wiring
+        // Linear end-to-end routing: relocate each fixture's effective wiring
         // point from its connector to a chosen END when the fixture is linear, then let the SAME
         // routing decision below (off-axis corner/S-spline, else on-axis arc) draw the wire between
         // those points — so an end-to-end run picks its own shape instead of a forced arc. A

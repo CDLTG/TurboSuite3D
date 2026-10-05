@@ -3443,7 +3443,7 @@ public static class CountsWorkbookService
     }
 
     /// <summary>Writes the header row — bold, no fill, Thin #808080 border per cell, bottom-aligned,
-    /// row height 32 to match the screenshot.</summary>
+    /// row height 32 to match the print-sheet layout.</summary>
     private static void WritePrintSheetHeaders(IXLWorksheet ws, int headerRow, string[] headers)
     {
         for (int i = 0; i < headers.Length; i++)
