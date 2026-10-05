@@ -17,6 +17,26 @@ public static class ParameterNames
     public const string Angle = "Angle";
 
     /// <summary>
+    /// Line-based "Fixture" families carry these: the model-space length and width of the plan
+    /// footprint (the nested masking-region graphic is driven by them, mapped to its own
+    /// <c>Symbol Length 1/4"</c> / <c>Symbol Width 1/4"</c> paper-scale params). TurboMask reads the
+    /// <b>base</b> pair to redraw the footprint as detail lines at true model size — their presence is
+    /// also what distinguishes a boxed "Fixture" from a centerline-only "Tape" run (which lacks a
+    /// usable <see cref="SymbolWidth"/>). <c>Symbol Length</c> typically formula-tracks the built-in
+    /// instance Length; read instance-first, then the type symbol.
+    /// </summary>
+    public const string SymbolLength = "Symbol Length";
+    public const string SymbolWidth = "Symbol Width";
+
+    /// <summary>
+    /// Line-based "Tape" families: the distance from the family origin, along the stretch axis, to the
+    /// connector symbol (both the nested connector annotation and the real electrical connector ride
+    /// the same reference plane). TurboMask prefers the actual connector origin and uses this only as a
+    /// fallback when no electrical connector is present.
+    /// </summary>
+    public const string ConnectorOffset = "Connector Offset";
+
+    /// <summary>
     /// Yes/No: this device talks over RF rather than the wired link, so it rides a Clear Connect
     /// Type A link and consumes that link's device budget instead of a QS link's.
     ///

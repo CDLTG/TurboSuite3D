@@ -6,6 +6,15 @@ Existing TurboMask stamps/regions covering the same fixtures are cleaned up befo
 
 The stamp is resolved **per fixture type**, not per family. A multi-type family whose types show different footprints (e.g. a receptacle with duplex / duplex-hot / quadruplex / quadruplex-hot) type-swaps its nested annotation via a `<Family Type>` family parameter; `LoadFamily` brings *all* the nested symbol types into `Stamp_<Family>`, and `StampFamilyService` reads the family's `fixtureType → nested-symbol-type` map (`FamilyManager.Types` + `FamilyType.AsElementId`, discovering the driving parameter structurally — the `ElementId` param whose per-type values resolve into the nested annotation's own symbols — never by name) to place the right one for each type. Single-graphic families skip that read. An unmapped type falls back to the first symbol and is reported.
 
+## Line-based families (tape / linear fixtures)
+
+A point stamp can't stand in for a line-based family: its plan graphic is authored as **stretchable symbolic lines**, which Revit does **not** return from `get_Geometry` on a placed instance, and a single symbol dropped at the midpoint loses the whole run (a tape's connector circle floating alone in the mask; a fixture's rectangle frozen at the nested family's default size, since extracting the nested annotation severs the host→nested parameter mapping that sized it). So line-based families (`Location is LocationCurve`) skip the stamp and **reconstruct the footprint as detail lines** on top of the mask — model-space geometry, so it tracks the crop with no angle compensation. The two shapes are told apart purely by parameters (`ClassifyLineBased`), no role or naming needed:
+
+- **Fixture** — carries a usable `Symbol Length` + `Symbol Width` (its nested masking-region graphic is sized by them; the `… 1/4"` variants are the family's own paper-scale ÷48 and are ignored). Redrawn as a **solid rectangle** of that size, centered on the LocationCurve midpoint and oriented along the curve, in the **`Lighting Fixture`** line style.
+- **Tape** — no usable `Symbol Width`. Redrawn as a **dashed centerline** along the full LocationCurve plus a **2" end-cap bar** perpendicular to the run at each end, both in the **`Symbolic Tape`** line style, plus the nested connector symbol stamped at the **real connector location** (`GeometryHelper.GetElectricalConnector().Origin`; falls back to the `Connector Offset` distance from the curve start, then the midpoint).
+
+Both line styles resolve by Lines subcategory name and fall back to the view default if absent. The detail lines join the `TurboMask N` group, so refresh/ungroup cleans them up like the stamps and wire overlays.
+
 ## Dependencies
 
 | Category | Role |

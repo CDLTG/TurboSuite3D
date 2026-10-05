@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Mask.Helpers;
 using TurboSuite.Mask.Services;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
 
@@ -15,6 +16,13 @@ namespace TurboSuite.Mask;
 /// TurboMask — places a project-level masking region under the selected elements and overlays a
 /// view-level "stamp" (extracted from each fixture family's nested Generic Annotation) at every
 /// selected fixture so the visible footprint graphics survive the mask.
+///
+/// Line-based families are a special case: their plan graphic is authored as stretchable symbolic
+/// lines (not extractable from the instance), so a single point stamp can't represent them. Instead
+/// the footprint is <b>reconstructed as detail lines</b> on top of the mask — a "Fixture" (carrying
+/// <see cref="ParameterNames.SymbolLength"/>/<see cref="ParameterNames.SymbolWidth"/>) becomes a
+/// solid rectangle of that size; a "Tape" becomes a dashed centerline along its LocationCurve plus
+/// the connector symbol at the real connector location. See <see cref="ClassifyLineBased"/>.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class MaskCommand : IExternalCommand
@@ -67,11 +75,20 @@ public class MaskCommand : IExternalCommand
             var stampService = new StampFamilyService(doc);
             var failures = new List<string>();
             var fixtureToSymbol = new Dictionary<ElementId, FamilySymbol>();
+            var fixtureKind = new Dictionary<ElementId, LineBasedKind>();
 
             foreach (var fixture in fixtures)
             {
                 var fixtureType = fixture.Symbol;
                 if (fixtureType == null) continue;
+
+                var kind = ClassifyLineBased(fixture);
+                fixtureKind[fixture.Id] = kind;
+
+                // A "Fixture" is redrawn entirely from its Symbol Length/Width params — no stamp. A
+                // point family ("None") and a "Tape" both still need the nested annotation: the whole
+                // footprint for the former, the connector symbol for the latter.
+                if (kind == LineBasedKind.Fixture) continue;
 
                 var symbol = stampService.ResolveStamp(fixtureType, failures);
                 if (symbol != null)
@@ -120,6 +137,11 @@ public class MaskCommand : IExternalCommand
 
                 var groupMemberIds = new List<ElementId> { region.Id };
 
+                // Line-based footprint overlays draw in model space, so these resolve once. The solid
+                // "Lighting Fixture" style doubles as the region boundary style above.
+                var fixtureLineStyle = boundaryStyle ?? FindLineStyle(doc, MaskBoundaryLineStyleName);
+                var tapeLineStyle = FindLineStyle(doc, TapeLineStyleName);
+
                 // A stamp is a Generic Annotation, whose on-screen angle is view-relative (rotation
                 // 0 renders horizontal no matter the crop). Rotating it to the fixture's model angle
                 // therefore leaves it cropAngle off the fixture in a rotated crop. Subtract the crop
@@ -129,13 +151,30 @@ public class MaskCommand : IExternalCommand
 
                 foreach (var fixture in fixtures)
                 {
+                    var kind = fixtureKind.TryGetValue(fixture.Id, out var k) ? k : LineBasedKind.None;
+
+                    // A boxed line-based fixture is fully reconstructed from its params — a solid
+                    // rectangle, no stamp. Tape still gets the connector symbol stamped below.
+                    if (kind == LineBasedKind.Fixture)
+                    {
+                        DrawFixtureRectangle(doc, activeView, fixture, fixtureLineStyle, groupMemberIds);
+                        continue;
+                    }
+
+                    if (kind == LineBasedKind.Tape)
+                        DrawTapeCenterline(doc, activeView, fixture, tapeLineStyle, groupMemberIds);
+
                     if (!fixtureToSymbol.TryGetValue(fixture.Id, out var stampSymbol))
                         continue;
 
                     if (!stampSymbol.IsActive)
                         stampSymbol.Activate();
 
-                    var insertPoint = GetFixturePoint(fixture);
+                    // Point families stamp the whole footprint at the fixture point; tape stamps only
+                    // its connector symbol, pinned to the real connector location (not the midpoint).
+                    var insertPoint = kind == LineBasedKind.Tape
+                        ? GetTapeConnectorPoint(fixture)
+                        : GetFixturePoint(fixture);
                     if (insertPoint == null) continue;
 
                     var stampInstance = doc.Create.NewFamilyInstance(insertPoint, stampSymbol, activeView);
@@ -317,6 +356,7 @@ public class MaskCommand : IExternalCommand
     }
 
     private const string MaskBoundaryLineStyleName = "Lighting Fixture";
+    private const string TapeLineStyleName = "Symbolic Tape";
 
     private static void ApplyBoundaryLineStyle(Document doc, FilledRegion region, GraphicsStyle style)
     {
@@ -332,13 +372,20 @@ public class MaskCommand : IExternalCommand
     }
 
     private static GraphicsStyle? FindLightingFixturesLineStyle(Document doc)
+        => FindLineStyle(doc, MaskBoundaryLineStyleName);
+
+    /// <summary>
+    /// Returns the projection GraphicsStyle of the named Lines subcategory, or null if absent (callers
+    /// fall back to the view's default line style).
+    /// </summary>
+    private static GraphicsStyle? FindLineStyle(Document doc, string subcategoryName)
     {
         var linesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
         if (linesCategory == null) return null;
 
         foreach (Category sub in linesCategory.SubCategories)
         {
-            if (sub.Name.Equals(MaskBoundaryLineStyleName, StringComparison.OrdinalIgnoreCase))
+            if (sub.Name.Equals(subcategoryName, StringComparison.OrdinalIgnoreCase))
                 return sub.GetGraphicsStyle(GraphicsStyleType.Projection);
         }
         return null;
@@ -580,15 +627,143 @@ public class MaskCommand : IExternalCommand
     /// overlays use the view's default line style.
     /// </summary>
     private static GraphicsStyle? FindWireLineStyle(Document doc)
-    {
-        var linesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
-        if (linesCategory == null) return null;
+        => FindLineStyle(doc, WireLineStyleName);
 
-        foreach (Category sub in linesCategory.SubCategories)
+    // ── Line-based family footprint reconstruction ────────────────────────────────────────────────
+
+    /// <summary>
+    /// How a selected family's plan footprint should be reproduced on top of the mask. Line-based
+    /// families author their graphic as stretchable symbolic lines, which aren't returned by
+    /// <c>get_Geometry</c> on the instance, so a point stamp can't stand in for them — they're redrawn
+    /// as detail lines instead. The two line-based shapes are told apart purely by parameters: a
+    /// "Fixture" carries a usable <see cref="ParameterNames.SymbolWidth"/> (its nested masking-region
+    /// graphic is sized by Symbol Length/Width); a "Tape" doesn't.
+    /// </summary>
+    private enum LineBasedKind { None, Tape, Fixture }
+
+    private static LineBasedKind ClassifyLineBased(FamilyInstance fixture)
+    {
+        if (fixture.Location is not LocationCurve) return LineBasedKind.None;
+
+        double? width = ReadLengthParam(fixture, ParameterNames.SymbolWidth);
+        double? length = ReadLengthParam(fixture, ParameterNames.SymbolLength);
+        if (width is > 0 && length is > 0)
+            return LineBasedKind.Fixture;
+        return LineBasedKind.Tape;
+    }
+
+    /// <summary>
+    /// Reads a length-valued (Double, internal feet) parameter, instance first then the type symbol,
+    /// returning null when absent or unset.
+    /// </summary>
+    private static double? ReadLengthParam(FamilyInstance fixture, string name)
+    {
+        foreach (var p in new[] { fixture.LookupParameter(name), fixture.Symbol?.LookupParameter(name) })
         {
-            if (sub.Name.Equals(WireLineStyleName, StringComparison.OrdinalIgnoreCase))
-                return sub.GetGraphicsStyle(GraphicsStyleType.Projection);
+            if (p != null && p.StorageType == StorageType.Double && p.HasValue)
+                return p.AsDouble();
         }
         return null;
+    }
+
+    /// <summary>
+    /// Draws the solid rectangular footprint of a line-based "Fixture" — Symbol Length × Symbol Width,
+    /// centered on the LocationCurve midpoint and oriented along the curve — as four detail lines on
+    /// top of the mask. Model-space geometry, so it tracks the crop without angle compensation.
+    /// </summary>
+    private static void DrawFixtureRectangle(Document doc, View view, FamilyInstance fixture,
+        GraphicsStyle? style, List<ElementId> groupMemberIds)
+    {
+        double? length = ReadLengthParam(fixture, ParameterNames.SymbolLength);
+        double? width = ReadLengthParam(fixture, ParameterNames.SymbolWidth);
+        if (length is not > 0 || width is not > 0) return;
+        if (fixture.Location is not LocationCurve lc || lc.Curve == null) return;
+
+        var curve = lc.Curve;
+        XYZ center = curve.Evaluate(0.5, true);
+        XYZ longDir = (curve.GetEndPoint(1) - curve.GetEndPoint(0)).Normalize();
+        XYZ perpDir = new XYZ(-longDir.Y, longDir.X, 0);
+
+        XYZ halfLong = longDir * (length.Value / 2.0);
+        XYZ halfPerp = perpDir * (width.Value / 2.0);
+
+        XYZ c1 = center + halfLong + halfPerp;
+        XYZ c2 = center + halfLong - halfPerp;
+        XYZ c3 = center - halfLong - halfPerp;
+        XYZ c4 = center - halfLong + halfPerp;
+
+        AddDetailLine(doc, view, c1, c2, style, groupMemberIds);
+        AddDetailLine(doc, view, c2, c3, style, groupMemberIds);
+        AddDetailLine(doc, view, c3, c4, style, groupMemberIds);
+        AddDetailLine(doc, view, c4, c1, style, groupMemberIds);
+    }
+
+    /// <summary>Total length of a tape end-cap bar, in feet (2").</summary>
+    private const double TapeEndCapLengthFt = 2.0 / 12.0;
+
+    /// <summary>
+    /// Draws a line-based "Tape" run's centerline as a detail curve along its full LocationCurve, plus
+    /// a 2" end-cap bar perpendicular to the run at each end, on top of the mask. The connector symbol
+    /// is placed separately by the stamp loop.
+    /// </summary>
+    private static void DrawTapeCenterline(Document doc, View view, FamilyInstance fixture,
+        GraphicsStyle? style, List<ElementId> groupMemberIds)
+    {
+        if (fixture.Location is not LocationCurve lc || lc.Curve == null) return;
+
+        var curve = lc.Curve;
+        AddDetailCurve(doc, view, curve, style, groupMemberIds);
+
+        XYZ start = curve.GetEndPoint(0);
+        XYZ end = curve.GetEndPoint(1);
+        XYZ dir = (end - start).Normalize();
+        XYZ halfCap = new XYZ(-dir.Y, dir.X, 0) * (TapeEndCapLengthFt / 2.0);
+        AddDetailLine(doc, view, start - halfCap, start + halfCap, style, groupMemberIds);
+        AddDetailLine(doc, view, end - halfCap, end + halfCap, style, groupMemberIds);
+    }
+
+    /// <summary>
+    /// The location to stamp a tape family's connector symbol: the real electrical connector origin
+    /// (both the symbol and the connector ride the same reference plane). Falls back to the
+    /// <see cref="ParameterNames.ConnectorOffset"/> distance from the curve start, then the midpoint.
+    /// </summary>
+    private static XYZ? GetTapeConnectorPoint(FamilyInstance fixture)
+    {
+        var connector = GeometryHelper.GetElectricalConnector(fixture);
+        if (connector != null)
+        {
+            try { return connector.Origin; } catch { }
+        }
+
+        double? offset = ReadLengthParam(fixture, ParameterNames.ConnectorOffset);
+        if (offset.HasValue && fixture.Location is LocationCurve lc && lc.Curve != null)
+        {
+            XYZ start = lc.Curve.GetEndPoint(0);
+            XYZ dir = (lc.Curve.GetEndPoint(1) - start).Normalize();
+            return start + dir * offset.Value;
+        }
+
+        return GetFixturePoint(fixture);
+    }
+
+    private static void AddDetailLine(Document doc, View view, XYZ a, XYZ b,
+        GraphicsStyle? style, List<ElementId> ids)
+    {
+        if (a.DistanceTo(b) < doc.Application.ShortCurveTolerance) return;
+        AddDetailCurve(doc, view, Line.CreateBound(a, b), style, ids);
+    }
+
+    private static void AddDetailCurve(Document doc, View view, Curve curve,
+        GraphicsStyle? style, List<ElementId> ids)
+    {
+        DetailCurve detail;
+        try { detail = doc.Create.NewDetailCurve(view, curve); }
+        catch { return; } // non-planar or degenerate segment — skip
+        if (detail == null) return;
+
+        if (style != null)
+            detail.LineStyle = style;
+
+        ids.Add(detail.Id);
     }
 }
