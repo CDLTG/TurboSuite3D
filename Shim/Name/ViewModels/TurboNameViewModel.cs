@@ -328,7 +328,7 @@ public class TurboNameViewModel : ViewModelBase
 
         IsPicking = true;
         IsHidePicking = true;
-        PickingHint = "Click CAD geometry to hide its layer. Escape to finish.";
+        PickingHint = "Click CAD geometry to hide its layer. Escape (in the Revit view) to finish.";
 
         var request = new HideLayerPickRequest { HideableSubIds = hideable };
         request.OnComplete = result =>

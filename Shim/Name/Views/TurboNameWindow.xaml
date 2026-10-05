@@ -531,20 +531,39 @@
                         <TextBlock Text="{Binding StatusText}" Foreground="#888888" FontSize="9.5"
                                    TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="30"/>
 
-                        <!-- Picking hint (visible while a pick loop is live) -->
-                        <TextBlock Text="{Binding PickingHint}" Foreground="#555555" FontSize="11" Margin="0,4,0,0"
-                                   TextWrapping="Wrap"
-                                   Visibility="{Binding IsPicking, Converter={StaticResource BoolToVis}}"/>
-
-                        <!-- Action buttons (hidden while picking). Left = the naming pass, right = the three
-                             region-drawing modes, so the row reads in workflow order: draw regions → name them. -->
+                        <!-- The picking callout and the action-button row never show together (callout iff a pick
+                             loop is live, buttons iff not), so they share one slot: each reserves the other's
+                             footprint with Visibility="Hidden", keeping the window a constant height whether or
+                             not a pick is live (SizeToContent="Height" would otherwise jump on the taller one). -->
                         <Grid Margin="0,8,0,0">
+                            <!-- Picking hint callout — red ties it to the lit pick button so it can't get lost
+                                 under the grey diagnostic line, and it carries the view-scoped-Escape cue for
+                                 every pick loop, not just Hide-by-picking. -->
+                            <Border Padding="8,5" Background="#FDECEA" BorderBrush="#D01E1E" BorderThickness="1"
+                                    VerticalAlignment="Top">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Hidden"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsPicking}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding PickingHint}" Foreground="#8E1414" FontSize="12"
+                                           FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            </Border>
+
+                            <!-- Action buttons (hidden while picking). Left = the naming pass, right = the three
+                                 region-drawing modes, so the row reads in workflow order: draw regions → name them. -->
+                            <Grid VerticalAlignment="Top">
                             <Grid.Style>
                                 <Style TargetType="Grid">
                                     <Setter Property="Visibility" Value="Visible"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsPicking}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Setter Property="Visibility" Value="Hidden"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -567,6 +586,7 @@
                                         Command="{Binding PolygonCommand}"
                                         ToolTip="Trace regions corner by corner. Escape closes the current shape; Escape again finishes."/>
                             </StackPanel>
+                            </Grid>
                         </Grid>
                     </StackPanel>
                 </GroupBox>
