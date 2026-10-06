@@ -18,11 +18,13 @@ public class CatalogRow
 /// </summary>
 public class FixtureTypeSpec : ViewModelBase
 {
-    public FixtureTypeSpec(string typeMark, PageKind kind, IReadOnlyList<SpecField> fields)
+    public FixtureTypeSpec(string typeMark, PageKind kind, IReadOnlyList<SpecField> fields,
+        string familyName = null)
     {
         TypeMark = typeMark;
         Kind = kind;
         AllFields = fields;
+        FamilyName = familyName ?? "";
 
         foreach (var f in fields)
             f.DirtyChanged += _ => RaiseDirty();
@@ -49,6 +51,11 @@ public class FixtureTypeSpec : ViewModelBase
 
     public string TypeMark { get; }
     public PageKind Kind { get; }
+
+    /// <summary>Read-only reference: the Revit family name(s) backing this Type Mark group. Usually a
+    /// single family; if the group's symbols span several families they're joined with ", ". Display-only
+    /// (shown in the header), never written back.</summary>
+    public string FamilyName { get; }
     public IReadOnlyList<SpecField> AllFields { get; }
 
     public List<SpecField> IdentityFields { get; }

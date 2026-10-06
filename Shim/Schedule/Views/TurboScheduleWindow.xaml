@@ -248,6 +248,15 @@
             <TextBlock Grid.Column="4" Text="{Binding PagePositionText}" VerticalAlignment="Center"
                        Foreground="{StaticResource TextSecondaryBrush}"/>
 
+            <!-- Read-only reference: the family backing the current Type Mark. Display-only, never
+                 written back; trimmed so a long family name can't push the Copy/Paste controls. -->
+            <TextBlock Grid.Column="5" VerticalAlignment="Center" Margin="16,0,16,0"
+                       TextTrimming="CharacterEllipsis" Foreground="{StaticResource TextSecondaryBrush}"
+                       ToolTip="{Binding CurrentPage.FamilyName}">
+                <Run Text="Family:" FontWeight="SemiBold"/>
+                <Run Text="{Binding CurrentPage.FamilyName, Mode=OneWay}"/>
+            </TextBlock>
+
             <Menu Grid.Column="6" Background="Transparent" VerticalAlignment="Center" Margin="0,0,6,0">
                 <MenuItem Header="Copy ▾" Height="24">
                     <MenuItem Header="Copy Type" Command="{Binding CopyTypeCommand}"/>

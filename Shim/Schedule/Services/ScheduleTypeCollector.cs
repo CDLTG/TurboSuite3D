@@ -33,7 +33,15 @@ public static class ScheduleTypeCollector
                     .Where(d => d.AppliesTo(kind))
                     .Select(d => BuildField(d, group.Value))
                     .ToList();
-                pages.Add(new FixtureTypeSpec(group.Key, kind, fields));
+
+                // Read-only reference only: the family name(s) under this Type Mark. Usually one
+                // family; joined when a Type Mark's symbols span several.
+                var familyName = string.Join(", ", group.Value
+                    .Select(s => s.FamilyName)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct(StringComparer.OrdinalIgnoreCase));
+
+                pages.Add(new FixtureTypeSpec(group.Key, kind, fields, familyName));
             }
         }
 

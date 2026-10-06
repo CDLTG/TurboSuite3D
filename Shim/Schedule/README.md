@@ -6,7 +6,7 @@ Instead of scrolling a wide schedule grid, it shows **one Type Mark per page** w
 
 ## Behavior
 
-Pick a Type Mark from the **Type** dropdown or step with ◀ ▶; edit in place. A blue dot marks a field (and its page) with unsaved edits. **Save** flushes every dirty page in one transaction; **Discard** drops all unsaved edits. Close (footer / ✕ / Esc) prompts if edits are pending. Reopening within the same Revit session returns to the last type; a since-removed type falls back to the first page.
+Pick a Type Mark from the **Type** dropdown or step with ◀ ▶; edit in place. The header shows the current type's **family name** beside the page position — read-only reference only, never written back (joined with `, ` in the rare case a Type Mark spans several families). A blue dot marks a field (and its page) with unsaved edits. **Save** flushes every dirty page in one transaction; **Discard** drops all unsaved edits. Close (footer / ✕ / Esc) prompts if edits are pending. Reopening within the same Revit session returns to the last type; a since-removed type falls back to the first page.
 
 ## Field states
 
