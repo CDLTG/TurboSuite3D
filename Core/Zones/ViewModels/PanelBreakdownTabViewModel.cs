@@ -34,6 +34,7 @@ namespace TurboSuite.Zones.ViewModels
         private readonly int _twoGangKeypadCount;
         private readonly int _wirelessDeviceCount;
         private readonly IReadOnlyList<ControlDeviceTally> _keypadTallies;
+        private readonly IReadOnlyList<KeypadRecord> _keypadRecords;
         private readonly ControlDeviceGroup _hybridRepeaters;
 
         /// <summary>What the control subsystems (TurboDMX today) reported at window open. Read once —
@@ -110,6 +111,7 @@ namespace TurboSuite.Zones.ViewModels
             _twoGangKeypadCount = keypadCounts.TwoGang;
             _wirelessDeviceCount = keypadCounts.WirelessDevices;
             _keypadTallies = keypadCounts.Tallies;
+            _keypadRecords = keypadCounts.Records;
             _hybridRepeaters = hybridRepeaters;
 
             Circuits = new ObservableCollection<ZonesCircuitViewModel>(
@@ -453,6 +455,7 @@ namespace TurboSuite.Zones.ViewModels
             TwoGangKeypadCount = _twoGangKeypadCount,
             WirelessDeviceCount = _wirelessDeviceCount,
             KeypadTallies = _keypadTallies,
+            KeypadRecords = _keypadRecords,
             HybridRepeaters = _hybridRepeaters,
             SubsystemDemands = _subsystemDemands,
             Audience = BomAudience.DesignSurface

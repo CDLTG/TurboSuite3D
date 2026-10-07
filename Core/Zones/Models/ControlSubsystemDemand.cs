@@ -94,12 +94,14 @@ namespace TurboSuite.Zones.Models
     /// </summary>
     public sealed class DemandLinkUnit
     {
-        public DemandLinkUnit(string name, int location, int devices, int loads)
+        public DemandLinkUnit(string name, int location, int devices, int loads,
+            IReadOnlyList<ShadeMotorRecord>? motors = null)
         {
             Name = name;
             Location = location;
             Devices = devices;
             Loads = loads;
+            Motors = motors ?? System.Array.Empty<ShadeMotorRecord>();
         }
 
         /// <summary>What it is, for the packed link's contents list — e.g. the shade panel's location
@@ -112,6 +114,10 @@ namespace TurboSuite.Zones.Models
 
         public int Devices { get; }
         public int Loads { get; }
+
+        /// <summary>Per-motor records for a shade panel unit (Phase E) — one per motor, in order, for the
+        /// one-line's motor list. Empty for non-shade units and when no per-motor identity is carried.</summary>
+        public IReadOnlyList<ShadeMotorRecord> Motors { get; }
     }
 
     /// <summary>One part a subsystem needs, already counted.</summary>

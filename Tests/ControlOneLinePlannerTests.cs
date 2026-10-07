@@ -27,6 +27,15 @@ namespace TurboSuite.Tests.Zones
 
         private static PackedLink EmptyQs() => new PackedLink(ProcessorLink.QsLinkType, 0, 0, Array.Empty<string>());
 
+        // A QS link carrying located keypads: the "Keypads" synthetic unit (what sets HasKeypads) plus the
+        // per-keypad records the located list draws — the shape ControlLinkPacker.ToQsLink produces.
+        private static PackedLink QsKeypads(KeypadRecord[] recs, params PackedLinkUnit[] units)
+        {
+            var all = units.Append(new PackedLinkUnit("Keypads", LinkCategory.Keypads, recs.Sum(r => r.Devices), 0)).ToArray();
+            return new PackedLink(ProcessorLink.QsLinkType, all.Sum(u => u.Devices), all.Sum(u => u.Loads),
+                all.Select(u => u.Name).ToArray(), units: all, keypadRecords: recs);
+        }
+
         private static PackedLink Cca(int devices = 5)
             => new PackedLink(ProcessorLink.ClearConnectLinkType, devices, 0, Array.Empty<string>());
 
@@ -61,6 +70,11 @@ namespace TurboSuite.Tests.Zones
         // A shade unit carries its motor count as Loads (ShadeSolver: devices = fill+1, loads = fill).
         private static PackedLinkUnit ShadeUnit(string name, int motors)
             => new PackedLinkUnit(name, LinkCategory.Shades, motors + 1, motors);
+
+        // A shade unit carrying per-motor records (Phase E) — the shape ShadeSolver now produces.
+        private static PackedLinkUnit ShadeUnitWithMotors(string name, params string[] circuits)
+            => new PackedLinkUnit(name, LinkCategory.Shades, circuits.Length + 1, circuits.Length,
+                circuits.Select(c => new ShadeMotorRecord(c, $"motor {c}")).ToList());
 
         private static ControlOneLineDrawing BuildOne(LinkPackResult pack,
             IReadOnlyDictionary<string, ControlPanelRenderData> panels)
@@ -108,6 +122,72 @@ namespace TurboSuite.Tests.Zones
             // keypads are a stub, not a node
             Assert.Contains(page.Notes, n => n.Text.Contains("ALL KEYPADS"));
             Assert.DoesNotContain(page.Panels, p => p.Name == "Keypads");
+        }
+
+        /// <summary>Phase D: a link whose keypads carry per-keypad records draws the located list — one
+        /// note per keypad ("[Switch ID] · Room · Type") — instead of the "ALL KEYPADS" stub. The homerun
+        /// wiring note stays, and keypads are still never drawn as a node.</summary>
+        [Fact]
+        public void LocatedKeypads_DrawPerKeypadRows_NotTheStub()
+        {
+            var recs = new[]
+            {
+                new KeypadRecord("K1", "ENTRY", "seeTouch", location: 1),
+                new KeypadRecord("K2", "GYM", "seeTouch", location: 1),
+            };
+            var pack = Pack(Group(QsKeypads(recs, U("1-A", LinkCategory.Modules, 8)), EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.Contains(page.Notes, n => n.Text.Contains("[K1] ENTRY"));
+            Assert.Contains(page.Notes, n => n.Text.Contains("[K2] GYM"));
+            Assert.DoesNotContain(page.Notes, n => n.Text.Contains("ALL KEYPADS"));
+            Assert.Contains(page.Notes, n => n.Text.Contains("MAX 10 PER HOMERUN"));   // homerun note stays
+            Assert.DoesNotContain(page.Panels, p => p.Name == "Keypads");
+        }
+
+        /// <summary>Phase E: a shade unit carrying per-motor records draws the motor list — one note per
+        /// motor ("&lt;circuit&gt; · &lt;load name&gt;") rising from the tap — instead of the "n MOTORS" stub.</summary>
+        [Fact]
+        public void ShadeMotors_DrawPerMotorRows_NotTheStub()
+        {
+            var link = Qs(U("1-A", LinkCategory.Modules, 8), ShadeUnitWithMotors("2-D", "M01", "M02", "M03"));
+            var pack = Pack(Group(link, EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.Contains(page.Notes, n => n.Text.Contains("[M01] motor M01"));
+            Assert.Contains(page.Notes, n => n.Text.Contains("[M03] motor M03"));
+            Assert.DoesNotContain(page.Notes, n => n.Text.Contains("MOTORS"));   // count stub replaced
+        }
+
+        /// <summary>A shade unit with no per-motor records keeps the "n MOTORS" count stub (count-only path).</summary>
+        [Fact]
+        public void ShadeWithoutMotorRecords_KeepsTheCountStub()
+        {
+            var link = Qs(U("1-A", LinkCategory.Modules, 8), ShadeUnit("2-D", 3));
+            var pack = Pack(Group(link, EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.Contains(page.Notes, n => n.Text.Contains("3 MOTORS"));
+        }
+
+        /// <summary>Location-less keypads (a unit but no records) keep the legacy stub — the fallback the
+        /// plan specifies when a link's keypads have no mapped location.</summary>
+        [Fact]
+        public void LocationLessKeypads_KeepTheLegacyStub()
+        {
+            var link = Qs(U("1-A", LinkCategory.Modules, 8), U("Keypads", LinkCategory.Keypads, 5));
+            var pack = Pack(Group(link, EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.Contains(page.Notes, n => n.Text.Contains("ALL KEYPADS"));
         }
 
         /// <summary>The text-block case: Link 1 QS carries modules + shade + keypads; Link 2 is the wireless

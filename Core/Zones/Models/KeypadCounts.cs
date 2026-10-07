@@ -34,5 +34,14 @@ namespace TurboSuite.Zones.Models
         /// part. Produced together so they cannot disagree about the job.
         /// </summary>
         public IReadOnlyList<ControlDeviceTally> Tallies { get; set; } = new List<ControlDeviceTally>();
+
+        /// <summary>
+        /// Per-keypad records for the control one-line's located list (Phase C) — one per physical
+        /// <b>wired</b> keypad, carrying its Switch ID, room, type, and resolved location. The source
+        /// of truth the location-affinity pour assigns to links; the <see cref="Regular"/>/
+        /// <see cref="TwoGang"/> counts above still drive the capacity math. Wireless keypads are
+        /// absent here (they stay the <see cref="WirelessDevices"/> Clear Connect aggregate).
+        /// </summary>
+        public IReadOnlyList<KeypadRecord> Records { get; set; } = new List<KeypadRecord>();
     }
 }

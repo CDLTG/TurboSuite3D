@@ -151,6 +151,20 @@ plain glyph, **not** a wire marker/legend key). Prominent labels (Ethernet-link,
 motor stubs) render in the firm `AL_Annotation_4.5"` text style, resolved by name and falling back to the
 generic note type when absent (`ControlNote.TextTypeName`).
 
+**Located keypad & per-motor lists.** The `ALL KEYPADS` / `n MOTORS` stubs become itemized lists when the
+data exists. Keypads carry a **location** from a room→location map edited in the **TurboNumber** sidebar
+(auto-seeded from circuits + DALI, explicit picks persisted in `RoomLocationStorageService`); `ControlLinkPacker`
+pours a location's keypads onto *its own* links (location-affinity — the processor/link **count is unchanged**,
+only the distribution) and tags each `KeypadRecord` to the link it lands on (`PackedLink.KeypadRecords`). The
+planner draws one row per keypad — `[Switch ID] Room - Model`, a ▽ glyph — in a **bottom-up, column-wrapped**
+list (homeruns of 10, three stacked per column with a break) off the keypad tail; a link whose keypads have no
+mapped location (or are wireless) keeps the legacy stub. Shades carry per-motor records the same way
+(`ShadeSolver` slices a location's circuits into each QSPS-10PNL → `PackedLinkUnit.Motors`), drawn one row per
+motor — `[circuit #] <load name>`, a shade-symbol glyph — rising from a lengthened motor tap offset left to
+align with the 120V label so it clears the keypad columns. Both lists share one pure renderer
+(`Core/Zones/OneLine/ControlListLayout.cs`) and the `[number] Room - Description` label format; text aligns to
+geometry via `ControlNote.VAlign` (Middle), not nudge offsets.
+
 **Family-authoring convention:** all power panels are the one fixed **9-rung** 59″ enclosure — PD9 = 9 modules
 (never hosts a processor), PD8 = 8 modules + the LV compartment on the **bottom rung**; the 9-rung fixed height
 falls out of the data model (`ModuleTiles.Count == PanelCapacity`), so a single `ControlPanelDetail` serves both.

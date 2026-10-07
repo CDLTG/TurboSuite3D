@@ -192,7 +192,10 @@ namespace TurboSuite.Zones.Services
 
             // 3) Keypads (QS-only) pour last, isolated onto a located-unit-free QS link where one exists,
             //    else collapsing onto shared gaps (the text-block case). Never a Clear Connect link.
-            PourKeypads(demand.FloatingDevices, qsBins, demand.FloatingDevicePdu);
+            //    Located keypads pour by location (its links first); location-less ones + any
+            //    compartment-less subsystem devices pour job-wide — byte-identical to the old single pour
+            //    when nothing is located, so the location-data-free baselines are unchanged.
+            PourKeypadDevices(demand.FloatingDevices, demand.FloatingDevicePdu, demand.KeypadRecords, qsBins);
             PourKeypads(demand.FloatingLoads, qsBins, totalPdu: 0, asDevices: false);
 
             // 4) Clear Connect links, assigned back to their carved trailing slots.
@@ -246,11 +249,20 @@ namespace TurboSuite.Zones.Services
                     ? u.WithLocation(host)
                     : u;
 
+            // Keypad records follow the same orphan→host relabel, so a keypad in a processor-less
+            // location pools onto its host location's links like the units do — and, critically, the
+            // records survive the rebuild (dropping them here was what fell back to the ALL KEYPADS stub).
+            KeypadRecord RelabelRecord(KeypadRecord r) =>
+                r.Location > 0 && orphanToHost.TryGetValue(r.Location, out int host) && host != r.Location
+                    ? new KeypadRecord(r.SwitchId, r.Room, r.Model, host, r.Devices)
+                    : r;
+
             return new LinkDemand(
                 demand.PinnedUnits.Select(Relabel).ToList(),
                 demand.FloatingUnits.Select(Relabel).ToList(),
                 demand.FloatingDevices, demand.FloatingLoads,
-                demand.RepeaterCount, demand.WirelessDevices, demand.FloatingDevicePdu);
+                demand.RepeaterCount, demand.WirelessDevices, demand.FloatingDevicePdu,
+                demand.KeypadRecords.Select(RelabelRecord).ToList());
         }
 
         /// <summary>
@@ -339,7 +351,7 @@ namespace TurboSuite.Zones.Services
                         var category = CategoryForSubsystem(demand.Subsystem);
                         foreach (var u in demand.LinkUnits)
                             subsystemUnits.Add(new LinkUnit(
-                                u.Name, u.Devices, u.Loads, pdu: 0, category, u.Location));
+                                u.Name, u.Devices, u.Loads, pdu: 0, category, u.Location, u.Motors));
                         continue;
                     }
 
@@ -399,7 +411,8 @@ namespace TurboSuite.Zones.Services
             pinned.AddRange(subsystemUnits);
 
             return new LinkDemand(pinned, floatingUnits, floatingDevices, floatingLoads,
-                extras.HybridRepeaterCount, extras.WirelessDeviceCount, floatingDevicePdu);
+                extras.HybridRepeaterCount, extras.WirelessDeviceCount, floatingDevicePdu,
+                extras.KeypadRecords);
         }
 
         /// <summary>Compartment slots across all panels holding the named device, in panel order.</summary>
@@ -665,6 +678,149 @@ namespace TurboSuite.Zones.Services
                     LinkCategory.Keypads);
         }
 
+        /// <summary>
+        /// The keypad <b>device</b> pour, made location-aware (Phase C). Located keypads pour by location
+        /// (ascending): each location's devices fill <b>that location's</b> QS links first — isolation-free
+        /// links first (rule #2), then its shared links — spilling to every other QS link only when its own
+        /// are full, so a location normally rides ONE link (⇒ one clean list) and splits into honest per-link
+        /// fragments only past a link's cap. Location-less keypads (and any compartment-less subsystem
+        /// devices folded into <paramref name="totalDevices"/>) pour job-wide afterward, exactly as before.
+        ///
+        /// Invariant: with no located records this is <b>byte-identical</b> to the old single
+        /// <see cref="PourKeypads"/> device call — same bin order, same takes, same PDU — so the frozen
+        /// location-data-free baselines stay green. The link COUNT never moves: bins are pre-created, this
+        /// only redistributes within them. One shared <see cref="PduDistributor"/> spans the whole pour so
+        /// the total V+ draw still distributes exactly as the uniform per-device rate.
+        /// </summary>
+        private static void PourKeypadDevices(int totalDevices, int totalPdu,
+            IReadOnlyList<KeypadRecord> records, List<Bin> qsBins)
+        {
+            if (totalDevices <= 0 || qsBins.Count == 0) return;
+
+            var pdu = new PduDistributor(totalDevices, totalPdu);
+            int located = 0;
+
+            if (records != null && records.Count > 0)
+            {
+                var byLocation = records.Where(r => r.Location > 0)
+                    .GroupBy(r => r.Location)
+                    .OrderBy(g => g.Key);
+                foreach (var group in byLocation)
+                {
+                    // Switch-ID order within a location (numbered first, then unnumbered) so a rare split
+                    // across the location's links is deterministic; the renderer does the final sort.
+                    var ordered = group
+                        .OrderBy(r => string.IsNullOrEmpty(r.SwitchId))
+                        .ThenBy(r => r.SwitchId, StringComparer.Ordinal)
+                        .ToList();
+                    located += ordered.Sum(r => r.Devices);
+                    PourRecordsInto(ordered, LocationPreferenceOrder(group.Key, qsBins), qsBins, pdu);
+                }
+            }
+
+            int remaining = totalDevices - located;
+            if (remaining > 0)
+                PourDevicesInto(remaining, JobWideOrder(qsBins), qsBins, pdu);
+        }
+
+        /// <summary>Assigns whole located keypads (records) into <paramref name="targets"/> in order,
+        /// filling each link before the next. A keypad never splits across a link boundary: one that does
+        /// not fit the current link's remaining device room rolls <b>wholly</b> to the next (a two-gang's
+        /// two devices move together). Any keypads past all QS capacity land on the emptiest link (visible
+        /// over-capacity). Device/PDU accounting matches the count pour; the records ride alongside for the
+        /// one-line's list.</summary>
+        private static void PourRecordsInto(IReadOnlyList<KeypadRecord> records, List<Bin> targets,
+            List<Bin> allQsBins, PduDistributor pdu)
+        {
+            int i = 0;
+            foreach (var bin in targets)
+            {
+                while (i < records.Count && records[i].Devices <= bin.DeviceRoom)
+                {
+                    bin.AddKeypadRecord(records[i], pdu.Take(records[i].Devices));
+                    i++;
+                }
+                if (i >= records.Count) return;
+            }
+
+            // Leftover past every QS link's capacity — pile the rest on the emptiest (over-capacity).
+            var overflow = Emptiest(allQsBins);
+            for (; i < records.Count; i++)
+                overflow.AddKeypadRecord(records[i], pdu.Take(records[i].Devices));
+        }
+
+        /// <summary>Pours <paramref name="amount"/> keypad devices into <paramref name="targets"/> in order,
+        /// filling each link's device room before the next; any leftover past all QS capacity lands on the
+        /// emptiest (visible over-capacity). Mirrors <see cref="PourKeypads"/>'s device path exactly.</summary>
+        private static void PourDevicesInto(int amount, List<Bin> targets, List<Bin> allQsBins, PduDistributor pdu)
+        {
+            foreach (var bin in targets)
+            {
+                if (amount <= 0) break;
+                int room = bin.DeviceRoom;
+                if (room <= 0) continue;
+                int take = Math.Min(room, amount);
+                bin.Add(take, 0, pdu.Take(take), LinkCategory.Keypads);
+                amount -= take;
+            }
+
+            if (amount > 0)
+                Emptiest(allQsBins).Add(amount, 0, pdu.Take(amount), LinkCategory.Keypads);
+        }
+
+        /// <summary>Job-wide target order: isolation-free QS links first (rule #2), then shared links —
+        /// the exact order the old single keypad pour used.</summary>
+        private static List<Bin> JobWideOrder(List<Bin> qsBins)
+        {
+            var ordered = qsBins.OrderBy(b => b.ProcIndex).ThenBy(b => b.LinkNumber).ToList();
+            return ordered.Where(b => b.LocatedUnits == 0)
+                          .Concat(ordered.Where(b => b.LocatedUnits > 0))
+                          .ToList();
+        }
+
+        /// <summary>Target order for one location's keypads: its own links first (isolation-free, then
+        /// shared), then a spill over every other QS link (isolation-free, then shared) — reached only
+        /// when the location's own links are full or it is an orphan location with no links.</summary>
+        private static List<Bin> LocationPreferenceOrder(int location, List<Bin> qsBins)
+        {
+            var ordered = qsBins.OrderBy(b => b.ProcIndex).ThenBy(b => b.LinkNumber).ToList();
+            var local = ordered.Where(b => b.Location == location).ToList();
+            var other = ordered.Where(b => b.Location != location).ToList();
+            return local.Where(b => b.LocatedUnits == 0)
+                        .Concat(local.Where(b => b.LocatedUnits > 0))
+                        .Concat(other.Where(b => b.LocatedUnits == 0))
+                        .Concat(other.Where(b => b.LocatedUnits > 0))
+                        .ToList();
+        }
+
+        /// <summary>Distributes a signed PDU total across keypad devices as they land, at the uniform
+        /// per-device rate, summing back to the total exactly (same integer math the inline
+        /// <c>PduFor</c> in <see cref="PourKeypads"/> uses — shared here so a pour split across several
+        /// locations still totals correctly).</summary>
+        private sealed class PduDistributor
+        {
+            private readonly int _totalDevices;
+            private readonly int _totalPdu;
+            private int _placed;
+            private int _placedPdu;
+
+            public PduDistributor(int totalDevices, int totalPdu)
+            {
+                _totalDevices = totalDevices;
+                _totalPdu = totalPdu;
+            }
+
+            public int Take(int devices)
+            {
+                if (_totalPdu == 0 || _totalDevices == 0) return 0;
+                _placed += devices;
+                int target = (int)((long)_totalPdu * _placed / _totalDevices);
+                int chunk = target - _placedPdu;
+                _placedPdu = target;
+                return chunk;
+            }
+        }
+
         /// <summary>Splits a total into <paramref name="parts"/> whole shares that sum back to it
         /// exactly — largest remainder, so the leftover lands on the first shares rather than
         /// vanishing to rounding.</summary>
@@ -712,6 +868,12 @@ namespace TurboSuite.Zones.Services
             /// pours still shows one keypad node carrying its device share.</summary>
             public int KeypadDevices;
 
+            /// <summary>The LOCATED keypads (whole records) that landed on this link, for the one-line's
+            /// located list (Phase C). One entry per physical keypad; a two-gang is one record of two
+            /// devices and never splits across links. Location-less keypads pour by count and are not
+            /// tracked here — their link renders the legacy aggregate stub.</summary>
+            public readonly List<KeypadRecord> KeypadRecordsLanded = new List<KeypadRecord>();
+
             // Identity, set only by the pooling overload: which processor and link this bin is, and the
             // processor's location. The flat overload leaves these at their defaults.
             public int ProcIndex = -1;
@@ -737,7 +899,7 @@ namespace TurboSuite.Zones.Services
                 // Parallel ledger for the one-line (Section 2a): record the unit as it lands. Named only —
                 // an unnamed/padding unit has nothing to join to a render node.
                 if (!string.IsNullOrEmpty(unit.Name))
-                    Units.Add(new PackedLinkUnit(unit.Name!, unit.Category, unit.Devices, unit.Loads));
+                    Units.Add(new PackedLinkUnit(unit.Name!, unit.Category, unit.Devices, unit.Loads, unit.Motors));
             }
 
             public void Add(int devices, int loads, int pdu = 0, LinkCategory category = LinkCategory.None)
@@ -753,6 +915,19 @@ namespace TurboSuite.Zones.Services
                     KeypadDevices += devices;
             }
 
+            /// <summary>Lands one whole LOCATED keypad on this link: its device weight (never split) plus
+            /// its PDU share, and the record itself for the one-line's list. The device/PDU accounting is
+            /// identical to the count pour's <see cref="Add(int,int,int,LinkCategory)"/> — the record just
+            /// rides alongside.</summary>
+            public void AddKeypadRecord(KeypadRecord record, int pdu)
+            {
+                Devices += record.Devices;
+                Pdu += pdu;
+                Categories.Add(LinkCategory.Keypads);
+                KeypadDevices += record.Devices;
+                KeypadRecordsLanded.Add(record);
+            }
+
             public PackedLink ToQsLink()
             {
                 var units = new List<PackedLinkUnit>(Units);
@@ -760,7 +935,8 @@ namespace TurboSuite.Zones.Services
                     units.Add(new PackedLinkUnit("Keypads", LinkCategory.Keypads, KeypadDevices, 0));
                 return new PackedLink(
                     ProcessorLink.QsLinkType, Devices, Loads, UnitNames, consumedPdu: Pdu,
-                    categories: Categories.ToList(), units: units);
+                    categories: Categories.ToList(), units: units,
+                    keypadRecords: KeypadRecordsLanded);
             }
         }
     }
@@ -782,7 +958,8 @@ namespace TurboSuite.Zones.Services
             int floatingLoads = 0,
             int repeaterCount = 0,
             int wirelessDevices = 0,
-            int floatingDevicePdu = 0)
+            int floatingDevicePdu = 0,
+            IReadOnlyList<KeypadRecord>? keypadRecords = null)
         {
             PinnedUnits = pinnedUnits ?? new List<LinkUnit>();
             FloatingUnits = floatingUnits ?? new List<LinkUnit>();
@@ -791,6 +968,7 @@ namespace TurboSuite.Zones.Services
             RepeaterCount = repeaterCount;
             WirelessDevices = wirelessDevices;
             FloatingDevicePdu = floatingDevicePdu;
+            KeypadRecords = keypadRecords ?? new List<KeypadRecord>();
         }
 
         /// <summary>Indivisible and already sited — panels, with whatever is in their compartments.</summary>
@@ -820,13 +998,19 @@ namespace TurboSuite.Zones.Services
         /// (−1 each). Distributed across the links the keypads land on, exactly under that uniform rate.
         /// The pinned/floating <i>units</i> carry their own <see cref="LinkUnit.Pdu"/> instead.</summary>
         public int FloatingDevicePdu { get; }
+
+        /// <summary>Per-keypad records (wired QS only) the location-affinity pour assigns to links, and
+        /// the one-line's located list draws (Phase C). Rides alongside <see cref="FloatingDevices"/>:
+        /// the count drives capacity, the records drive the list. Empty keeps the plain job-wide pour.</summary>
+        public IReadOnlyList<KeypadRecord> KeypadRecords { get; }
     }
 
     /// <summary>One indivisible thing that must fit on a single link.</summary>
     public sealed class LinkUnit
     {
         public LinkUnit(string? name, int devices, int loads, int pdu = 0,
-            LinkCategory category = LinkCategory.None, int location = 0)
+            LinkCategory category = LinkCategory.None, int location = 0,
+            IReadOnlyList<ShadeMotorRecord>? motors = null)
         {
             Name = name;
             Devices = devices;
@@ -834,6 +1018,7 @@ namespace TurboSuite.Zones.Services
             Pdu = pdu;
             Category = category;
             Location = location;
+            Motors = motors ?? System.Array.Empty<ShadeMotorRecord>();
         }
 
         /// <summary>What it is, for the packed link's contents list — a panel name, or an interface.</summary>
@@ -854,11 +1039,15 @@ namespace TurboSuite.Zones.Services
         /// (a floating interface); such a unit places into spare capacity with no pooling preference.</summary>
         public int Location { get; }
 
+        /// <summary>Per-motor records for a shade panel unit (Phase E), carried through to the packed link
+        /// for the one-line's motor list. Empty for non-shade units.</summary>
+        public IReadOnlyList<ShadeMotorRecord> Motors { get; }
+
         /// <summary>A copy of this unit relabelled onto a different pool — the orphan-assignment pre-pass
         /// (item 5), which rewrites an orphan unit's <see cref="Location"/> before the pack so the packer
         /// only ever knows "prefer a matching location", never the concept of "orphan".</summary>
         public LinkUnit WithLocation(int location)
-            => new LinkUnit(Name, Devices, Loads, Pdu, Category, location);
+            => new LinkUnit(Name, Devices, Loads, Pdu, Category, location, Motors);
     }
 
     /// <summary>A processor's two links after the pooling pack — positional to the input
@@ -950,18 +1139,24 @@ namespace TurboSuite.Zones.Services
     /// </summary>
     public sealed class PackedLinkUnit
     {
-        public PackedLinkUnit(string name, LinkCategory category, int devices, int loads)
+        public PackedLinkUnit(string name, LinkCategory category, int devices, int loads,
+            IReadOnlyList<ShadeMotorRecord>? motors = null)
         {
             Name = name;
             Category = category;
             Devices = devices;
             Loads = loads;
+            Motors = motors ?? System.Array.Empty<ShadeMotorRecord>();
         }
 
         public string Name { get; }
         public LinkCategory Category { get; }
         public int Devices { get; }
         public int Loads { get; }
+
+        /// <summary>A shade unit's per-motor records (Phase E), for the one-line's motor list — one per
+        /// motor, in order. Empty for non-shade units.</summary>
+        public IReadOnlyList<ShadeMotorRecord> Motors { get; }
     }
 
     /// <summary>One link's contents after packing.</summary>
@@ -969,7 +1164,8 @@ namespace TurboSuite.Zones.Services
     {
         public PackedLink(string linkType, int devices, int loads, IReadOnlyList<string> unitNames,
             int repeaters = 0, int consumedPdu = 0, IReadOnlyList<LinkCategory>? categories = null,
-            IReadOnlyList<PackedLinkUnit>? units = null)
+            IReadOnlyList<PackedLinkUnit>? units = null,
+            IReadOnlyList<KeypadRecord>? keypadRecords = null)
         {
             LinkType = linkType;
             Devices = devices;
@@ -979,6 +1175,7 @@ namespace TurboSuite.Zones.Services
             ConsumedPdu = consumedPdu;
             Categories = categories ?? System.Array.Empty<LinkCategory>();
             Units = units ?? System.Array.Empty<PackedLinkUnit>();
+            KeypadRecords = keypadRecords ?? System.Array.Empty<KeypadRecord>();
         }
 
         public string LinkType { get; }
@@ -1009,6 +1206,11 @@ namespace TurboSuite.Zones.Services
         /// one synthetic unit. Empty on a Clear Connect link and on a link that recorded none. The one-line
         /// planner consumes this (via <see cref="LinkPackResult.Processors"/>), not <see cref="UnitNames"/>.</summary>
         public IReadOnlyList<PackedLinkUnit> Units { get; }
+
+        /// <summary>The LOCATED keypads that landed on this link (Phase C) — one entry per physical
+        /// keypad, in landing order, for the one-line's located list. Empty on a link that carries only
+        /// location-less keypads (it renders the legacy aggregate stub) or none.</summary>
+        public IReadOnlyList<KeypadRecord> KeypadRecords { get; }
 
         public bool IsClearConnect
             => string.Equals(LinkType, ProcessorLink.ClearConnectLinkType, StringComparison.OrdinalIgnoreCase);

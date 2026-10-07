@@ -8,6 +8,7 @@ using TurboSuite.Number.Services;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
 using TurboSuite.Shared.ViewModels;
+using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Number.ViewModels
 {
@@ -43,7 +44,18 @@ namespace TurboSuite.Number.ViewModels
             // Sort by Room is the keypad default: on unless this project has explicitly
             // turned it off (a stored false); a never-saved project (null) starts sorted.
             var keypadRoomSorted = CircuitNamingStorageService.LoadKeypadRoomSorted(doc) ?? true;
-            RoomOrder = new RoomOrderViewModel(allRoomNames, savedRoomOrder, workQueue, roomOrderStore);
+
+            // Per-room location (Phase A): explicit designer picks persisted separately, plus the
+            // auto-seed derived live from the room's control signals. Keypad-bearing rooms drive the
+            // sidebar's only active prompt, so collect their room names from the keypad rows.
+            var savedRoomLocations = RoomLocationStorageService.Load(doc);
+            var roomSeeds = new RoomLocationCollector().Collect(doc);
+            var keypadRoomNames = keypads
+                .Select(k => k.RoomName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToList();
+            RoomOrder = new RoomOrderViewModel(allRoomNames, savedRoomOrder, savedRoomLocations,
+                roomSeeds, keypadRoomNames, workQueue, roomOrderStore);
 
             var panelSettings = BuildPanelSettings(doc, circuits);
             CircuitTab = new CircuitNumberTabViewModel(circuits, panelSettings,

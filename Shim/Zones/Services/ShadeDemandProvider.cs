@@ -59,6 +59,7 @@ namespace TurboSuite.Zones.Services
         internal static List<ShadeLocationTally> CollectLocations(Document doc)
         {
             var byLocation = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var motorsByLocation = new Dictionary<string, List<ShadeMotorRecord>>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
             var circuits = new FilteredElementCollector(doc)
@@ -75,12 +76,27 @@ namespace TurboSuite.Zones.Services
                 if (!byLocation.ContainsKey(location))
                 {
                     byLocation[location] = 0;
+                    motorsByLocation[location] = new List<ShadeMotorRecord>();
                     order.Add(location);
                 }
                 byLocation[location] += shades;
+
+                // Per-motor records for the one-line's motor list (Phase E): circuit # + its load name,
+                // repeated per motor so the record count tracks the shade count (one output = one motor
+                // by convention ⇒ one record normally).
+                string circuitNumber = ParameterHelper.GetCircuitNumber(circuit) ?? string.Empty;
+                string loadName = ParameterHelper.GetLoadName(circuit) ?? string.Empty;
+                for (int i = 0; i < shades; i++)
+                    motorsByLocation[location].Add(new ShadeMotorRecord(circuitNumber, loadName));
             }
 
-            return order.Select(loc => new ShadeLocationTally(loc, byLocation[loc])).ToList();
+            // Circuit-number order within each location (natural), so a QSPS-10PNL carries a contiguous,
+            // sorted motor chunk and its list reads in order.
+            var natural = new NaturalStringComparer();
+            return order.Select(loc => new ShadeLocationTally(
+                loc,
+                byLocation[loc],
+                motorsByLocation[loc].OrderBy(m => m.Circuit, natural).ToList())).ToList();
         }
 
         private static string LocationOf(ElectricalSystem circuit)

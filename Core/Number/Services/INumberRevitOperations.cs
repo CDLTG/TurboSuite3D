@@ -36,6 +36,11 @@ namespace TurboSuite.Number.Services
     {
         void SaveRoomOrder(IReadOnlyList<(string Name, int ClickOrder)> roomOrder);
         void SaveKeypadRoomSorted(bool isSorted);
+
+        /// <summary>Persists the sidebar's explicit room→location picks to the parallel
+        /// <c>RoomLocationStorageService</c> (its own schema GUID). Sparse — only rooms with a
+        /// positive pick; auto-seeds are re-derived at runtime and never written.</summary>
+        void SaveRoomLocations(IReadOnlyList<(string Name, int Location)> roomLocations);
     }
 
     /// <summary>

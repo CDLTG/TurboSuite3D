@@ -354,14 +354,50 @@ namespace TurboSuite.Zones.OneLine
             // ── Keypad tail zone (v1 = one REFER-TO-PLAN stub; v2 expands into a compact column-wrapped list) ──
             /// <summary>Horizontal gap from the last node's right edge to the keypad-tail anchor.</summary>
             public const double KeypadTailGap = NodeGap;
-            /// <summary>Half-height of the terminal tick drawn at the keypad-tail anchor.</summary>
-            public const double KeypadTickHalf = 6.5 / 12.0;
-            /// <summary>"ALL KEYPADS" (line 1) insertion Y above the spine.</summary>
-            public const double KeypadLine1Dy = 7.0 / 12.0;              // 0'-7"
-            /// <summary>"(MAX 10 KEYPADS PER HOMERUN)" (line 2) insertion Y above the spine.</summary>
-            public const double KeypadLine2Dy = (1.0 / 4.0) / 12.0;      // 0'-0 1/4"
-            /// <summary>"WIRELESS KEYPADS" insertion Y above the CC-A stub (2" base + 1.55" nudge).</summary>
-            public const double WirelessLabelDy = 3.55 / 12.0;          // ≈ 0'-3.55"
+            /// <summary>Half-height of the terminal tick drawn at the keypad-tail anchor (full tick = 9").</summary>
+            public const double KeypadTickHalf = 4.5 / 12.0;
+
+            // ── Located keypad list (Phase D). A compact column-wrapped list replaces the "ALL KEYPADS"
+            //    stub when the link carries located keypads: one row per keypad, filling a column BOTTOM-UP
+            //    and wrapping RIGHT. Text is LargeTextTypeName (4.5" model tall at this 48 scale), so these
+            //    starter values keep ~1/2-line gaps — all tunable in-Revit. ──
+            /// <summary>Rows per homerun — the daisy-chain cap ("MAX 10 KEYPADS PER HOMERUN"). Firm.</summary>
+            public const int KeypadListHomerunSize = 10;
+            /// <summary>Homeruns stacked per column before wrapping right. 3 fills the row band's vertical
+            /// headroom below the spine (measured in-Revit), trading a little daisy-chain intuitiveness for
+            /// far less horizontal spread — a visible break between stacked homeruns keeps them legible.</summary>
+            public const int KeypadListHomerunsPerColumn = 3;
+            /// <summary>Rows a column holds before wrapping right (= homeruns-per-column × homerun size).</summary>
+            public const int KeypadListRowsPerColumn = KeypadListHomerunSize * KeypadListHomerunsPerColumn;
+            /// <summary>Extra vertical gap between stacked homeruns within a column — the visible break.</summary>
+            public const double KeypadListHomerunGap = 6.0 / 12.0;       // 0'-6"
+            /// <summary>Vertical pitch between list rows (bottom-up).</summary>
+            public const double KeypadListRowPitch = 9.0 / 12.0;         // 0'-9"
+            /// <summary>Approximate model width of one label character in <see cref="LargeTextTypeName"/> —
+            /// used to size each column to its content (the column width is the longest label in the list,
+            /// so columns never overlap). Tune if labels clip or columns run too wide.</summary>
+            public const double KeypadListCharWidth = 3.5 / 12.0;        // ≈ 0'-3 1/2" per char
+            /// <summary>Clear gap between a column's longest label and the next column's glyph.</summary>
+            public const double KeypadListColumnPadding = 12.0 / 12.0;   // 1'-0"
+            /// <summary>Horizontal gap from the terminus tick to the keypad block (its glyph column and the
+            /// "KEYPADS…" terminus note, kept aligned) — breathing room off the link wire.</summary>
+            public const double KeypadTailBlockDx = 4.5 / 12.0;          // 0'-4 1/2"
+            /// <summary>Row-0 (bottom) baseline Y above the spine — clears the terminus note + tick.</summary>
+            public const double KeypadListAnchorDy = 11.5 / 12.0;        // 0'-11 1/2"
+            /// <summary>Glyph-center → label gap (label sits to the glyph's right).</summary>
+            public const double KeypadListTextDx = 6.0 / 12.0;           // 0'-6"
+            /// <summary>Keypad glyph (▽ down-triangle) side length — matches the row text height.</summary>
+            public const double KeypadGlyphSize = 4.5 / 12.0;            // 0'-4 1/2"
+            /// <summary>Motor list (Phase E) row-0 (bottom) baseline Y above the motor-tap terminus —
+            /// clears it. The motor list reuses the keypad row pitch / glyph size / char width; it is
+            /// always one column (≤10 motors per QSPS-10PNL), so it needs no homerun/column knobs. The block
+            /// is offset LEFT to align its text with the shade's 120V label (see the planner), so it rises
+            /// clear of the keypad columns to the right instead of plowing through them.</summary>
+            public const double MotorListAnchorDy = 6.0 / 12.0;          // 0'-6"
+            /// <summary>Motor-tap stub length — the vertical leg from the shade top up to its terminus.</summary>
+            public const double MotorTapStubLength = (27.0 + 1.0 / 4.0) / 12.0;   // 2'-3 1/4"
+            /// <summary>Half-length of the horizontal terminus line at the top of the motor-tap stub (9" full).</summary>
+            public const double MotorTerminusHalf = 4.5 / 12.0;          // → 0'-9" full
 
             /// <summary>Boilerplate note block origin (top-left of the page content), model feet from page origin.</summary>
             public static readonly XY BoilerplateOrigin = XY.In(0, 0);

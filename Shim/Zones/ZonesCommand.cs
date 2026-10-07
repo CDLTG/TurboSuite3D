@@ -64,7 +64,11 @@ namespace TurboSuite.Zones
                     return Result.Cancelled;
                 }
 
-                var keypadCounts = collectorService.GetKeypadCounts(doc);
+                // Keypad locations (Phase C): the room→location map (explicit picks folded over
+                // auto-seeds), the same value TurboNumber's sidebar shows. Feeds the per-keypad records
+                // the one-line's located list draws; location-less keypads keep the plain job-wide pour.
+                var keypadLocations = new RoomLocationCollector().ResolveLocations(doc);
+                var keypadCounts = collectorService.GetKeypadCounts(doc, keypadLocations);
                 var hybridRepeaters = collectorService.GetHybridRepeaters(doc);
 
                 // Load persisted panel settings shim-side (a Core ctor cannot read Revit synchronously).

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Mechanical;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
@@ -150,7 +151,10 @@ namespace TurboSuite.Zones.Services
         /// than summed here. See <see cref="ParameterNames.Wireless"/>: absent reads as wired, which
         /// is the behaviour that shipped before the parameter existed.
         /// </summary>
-        public KeypadCounts GetKeypadCounts(Document doc)
+        /// <param name="locations">The resolved room→location map (picks folded over auto-seeds) from
+        /// <see cref="RoomLocationCollector.ResolveLocations"/>. Null/empty ⇒ every keypad is
+        /// location-less (record location 0), which keeps the plain job-wide pour.</param>
+        public KeypadCounts GetKeypadCounts(Document doc, IReadOnlyDictionary<string, int> locations = null)
         {
             var counts = new KeypadCounts();
 
@@ -163,6 +167,11 @@ namespace TurboSuite.Zones.Services
 
             counts.Tallies = TallyCatalogSlots(keypads);
 
+            // Per-keypad records for the one-line's located list — wired keypads only (Phase C).
+            var regionFallback = new RegionRoomLookupService(doc);
+            var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
+            var records = new List<KeypadRecord>();
+
             foreach (var fi in keypads)
             {
                 Parameter twoGangParam = fi.LookupParameter(ParameterNames.TwoGang)
@@ -172,20 +181,38 @@ namespace TurboSuite.Zones.Services
                 if (IsWireless(fi))
                 {
                     // Gang still doubles the device count — a two-gang wireless keypad is two devices
-                    // on the Clear Connect link, same as it is two on a QS link.
+                    // on the Clear Connect link, same as it is two on a QS link. No record: wireless
+                    // keypads stay the Clear Connect aggregate, off the located QS list.
                     counts.WirelessDevices += isTwoGang ? 2 : 1;
+                    continue;
                 }
-                else if (isTwoGang)
-                {
+
+                if (isTwoGang)
                     counts.TwoGang++;
-                }
                 else
-                {
                     counts.Regular++;
-                }
+
+                // One record per physical wired keypad (two-gang is a Type attribute, not two rows).
+                string room = ResolveRoomName(fi, roomCache);
+                int location = (locations != null && !string.IsNullOrEmpty(room) &&
+                                locations.TryGetValue(room, out int loc)) ? loc : 0;
+                records.Add(new KeypadRecord(
+                    ParameterHelper.GetSwitchID(fi) ?? string.Empty,
+                    room,
+                    fi.Symbol?.get_Parameter(BuiltInParameter.ALL_MODEL_MODEL)?.AsString() ?? string.Empty,
+                    location,
+                    devices: isTwoGang ? 2 : 1));
             }
 
+            counts.Records = records;
             return counts;
+        }
+
+        private static string ResolveRoomName(FamilyInstance fi, SpaceRoomFinderService.SpaceLookupCache roomCache)
+        {
+            Space space = roomCache.FindSpace(fi);
+            if (space != null) return SpaceRoomFinderService.ReadSpaceName(space);
+            return roomCache.FindRoomName(fi) ?? string.Empty;
         }
 
         /// <summary>Instance value wins where a family exposes one; otherwise the type's, since wired

@@ -563,6 +563,12 @@ namespace TurboSuite.Zones.Services
         /// device but not an order line, and radio decides which link but not which part.</summary>
         public IReadOnlyList<ControlDeviceTally> KeypadTallies { get; set; }
 
+        /// <summary>Per-keypad records for the one-line's located list (Phase C) — one per physical wired
+        /// keypad, carrying Switch ID / room / type / resolved location. The location-affinity pour
+        /// assigns these to links; the <see cref="KeypadCount"/>/<see cref="TwoGangKeypadCount"/> counts
+        /// still drive the capacity math. Null/empty keeps the plain job-wide keypad pour.</summary>
+        public IReadOnlyList<KeypadRecord> KeypadRecords { get; set; }
+
         /// <summary>Hybrid Repeaters: devices on the link, and the parts to order for them.</summary>
         public ControlDeviceGroup HybridRepeaters { get; set; }
 

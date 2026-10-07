@@ -25,6 +25,37 @@ namespace TurboSuite.Tests.Zones
             => ShadeSolver.Solve(locations.ToList());
 
         [Fact]
+        public void Motors_SliceIntoPanelChunks_PerQsps10Pnl()
+        {
+            // 13 shades at location 1 → PanelFills 10,3 → two QSPS-10PNL units carrying the first 10
+            // and last 3 motors, in circuit order (Phase E — the one-line's motor list source).
+            var circuits = Enumerable.Range(1, 13).Select(i => $"M{i:00}").ToArray();
+            var tally = new ShadeLocationTally("SHADE 1", circuits.Length,
+                circuits.Select(c => new ShadeMotorRecord(c, $"load {c}")).ToList());
+
+            var units = ShadeSolver.Solve(new[] { tally }.ToList()).LinkUnits;
+
+            Assert.Equal(2, units.Count);
+            Assert.Equal(10, units[0].Motors.Count);
+            Assert.Equal(3, units[1].Motors.Count);
+            Assert.Equal("M01", units[0].Motors.First().Circuit);
+            Assert.Equal("M10", units[0].Motors.Last().Circuit);
+            Assert.Equal("M11", units[1].Motors.First().Circuit);
+            // The motor fill still drives the count — records just ride alongside.
+            Assert.Equal(10, units[0].Loads);
+            Assert.Equal(3, units[1].Loads);
+        }
+
+        [Fact]
+        public void NoMotorRecords_SolvesCountOnly_EmptyMotors()
+        {
+            var units = Solve(Loc(5)).LinkUnits;   // count-only tally (no records)
+            Assert.Single(units);
+            Assert.Empty(units[0].Motors);
+            Assert.Equal(5, units[0].Loads);
+        }
+
+        [Fact]
         public void NoLocations_IsACleanNothing()
         {
             var d = ShadeSolver.Solve(new List<ShadeLocationTally>());

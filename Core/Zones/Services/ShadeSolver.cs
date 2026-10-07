@@ -60,9 +60,18 @@ namespace TurboSuite.Zones.Services
                     // its motors' switch legs, tagged with the location it pools on. Same total as the
                     // aggregate below (Σ fill = assignedShades, Σ (fill+1) = assignedShades + panels), so
                     // the count is unchanged — only the divisibility, which the one-line depends on.
+                    // Slice the location's per-motor records into the same panel chunks the fills
+                    // describe (first 10 → panel 1, …), so each QSPS-10PNL unit carries its own motors
+                    // for the one-line's motor list. Graceful when Motors is empty (count-only path).
+                    int motorIdx = 0;
                     foreach (int fill in PanelFills(l.ShadeCount))
+                    {
+                        var panelMotors = new List<ShadeMotorRecord>(fill);
+                        for (int k = 0; k < fill && motorIdx < l.Motors.Count; k++)
+                            panelMotors.Add(l.Motors[motorIdx++]);
                         units.Add(new DemandLinkUnit(
-                            l.LocationName, locationNumber, devices: fill + 1, loads: fill));
+                            l.LocationName, locationNumber, devices: fill + 1, loads: fill, motors: panelMotors));
+                    }
                 }
                 else
                 {

@@ -364,7 +364,12 @@ namespace TurboSuite.Zones.Services
                         namedCache[n.TextTypeName] = typeId;
                     }
                 }
-                var opts = new TextNoteOptions(typeId) { HorizontalAlignment = Align(n.Align), Rotation = 0.0 };
+                var opts = new TextNoteOptions(typeId)
+                {
+                    HorizontalAlignment = Align(n.Align),
+                    VerticalAlignment = VAlign(n.VAlign),
+                    Rotation = 0.0
+                };
                 TextNote.Create(_doc, view.Id, Pt(n.Position), n.Text, opts);
                 drawn++;
             }
@@ -521,6 +526,13 @@ namespace TurboSuite.Zones.Services
             ControlTextAlign.Right => HorizontalTextAlignment.Right,
             ControlTextAlign.Center => HorizontalTextAlignment.Center,
             _ => HorizontalTextAlignment.Left,
+        };
+
+        private static VerticalTextAlignment VAlign(ControlVerticalAlign a) => a switch
+        {
+            ControlVerticalAlign.Middle => VerticalTextAlignment.Middle,
+            ControlVerticalAlign.Bottom => VerticalTextAlignment.Bottom,
+            _ => VerticalTextAlignment.Top,
         };
 
         private static XYZ Pt(XY p) => new XYZ(p.X, p.Y, 0.0);

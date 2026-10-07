@@ -6,6 +6,11 @@ namespace TurboSuite.Zones.OneLine
     /// <summary>Horizontal alignment for a generator-drawn <see cref="ControlNote"/>.</summary>
     public enum ControlTextAlign { Left, Center, Right }
 
+    /// <summary>Vertical alignment for a generator-drawn <see cref="ControlNote"/> relative to its
+    /// insertion point. <see cref="Top"/> is the renderer default (text hangs below the point); the
+    /// located-list rows use <see cref="Middle"/> so the text centers on the point its glyph sits on.</summary>
+    public enum ControlVerticalAlign { Top, Middle, Bottom }
+
     /// <summary>
     /// The wire types the control one-line draws + names in its legend. Mirrors <c>DmxWireType</c>, but a
     /// plain enum — control wires have no conductor-count variants. Presence + numbering + labels live in
@@ -141,18 +146,23 @@ namespace TurboSuite.Zones.OneLine
     public sealed class ControlNote
     {
         public ControlNote(XY position, string text, ControlTextAlign align, double? textHeightFt = null,
-            string? textTypeName = null)
+            string? textTypeName = null, ControlVerticalAlign vAlign = ControlVerticalAlign.Top)
         {
             Position = position;
             Text = text;
             Align = align;
             TextHeightFt = textHeightFt;
             TextTypeName = textTypeName;
+            VAlign = vAlign;
         }
 
         public XY Position { get; }
         public string Text { get; }
         public ControlTextAlign Align { get; }
+
+        /// <summary>Vertical alignment relative to <see cref="Position"/>; Top is the default so existing
+        /// notes are unchanged.</summary>
+        public ControlVerticalAlign VAlign { get; }
 
         /// <summary>Paper text height override (feet); null ⇒ the renderer's default note type (1/16").</summary>
         public double? TextHeightFt { get; }

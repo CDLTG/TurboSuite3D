@@ -76,8 +76,9 @@ namespace TurboSuite.Zones.OneLine
             // nothing is dashed today). The wire TYPE is carried by the circled marker number, not the style.
             void Wire(XY a, XY b, bool dashed) => wires.Add(new ControlWireSegment(a, b, dashed));
             void Mark(XY at, ControlWireType t) => markers.Add(new ControlMarker(at, t, legend.NumberFor(t)));
-            void Note(XY at, string text, ControlTextAlign align, string? typeName = null)
-                => notes.Add(new ControlNote(at, text, align, textTypeName: typeName));
+            void Note(XY at, string text, ControlTextAlign align, string? typeName = null,
+                ControlVerticalAlign vAlign = ControlVerticalAlign.Top)
+                => notes.Add(new ControlNote(at, text, align, textTypeName: typeName, vAlign: vAlign));
 
             // A plain hollow square as 4 solid segments (renderer glyph — NOT a marker / legend key).
             void Square(XY c, double s)
@@ -87,6 +88,40 @@ namespace TurboSuite.Zones.OneLine
                 Wire(new XY(x1, y0), new XY(x1, y1), dashed: false);
                 Wire(new XY(x1, y1), new XY(x0, y1), dashed: false);
                 Wire(new XY(x0, y1), new XY(x0, y0), dashed: false);
+            }
+
+            // A hollow DOWN-pointing triangle (▽) centered on c — flat top edge, apex below — matching the
+            // project's keypad plan symbol. The keypad-list row glyph.
+            void DownTriangle(XY c, double s)
+            {
+                double h = s / 2.0;
+                var topLeft = new XY(c.X - h, c.Y + h);
+                var topRight = new XY(c.X + h, c.Y + h);
+                var apex = new XY(c.X, c.Y - h);
+                Wire(topLeft, topRight, dashed: false);
+                Wire(topRight, apex, dashed: false);
+                Wire(apex, topLeft, dashed: false);
+            }
+
+            // A little shade symbol — the motor-list row glyph, distinct from the keypad ▽. In the same
+            // glyph box as the keypad: the bottom-left and top-right corners are squished inward 1.25" to
+            // lean it into a parallelogram (slanted top/bottom, vertical sides), then the slanted top edge
+            // is copied straight down 0.75" for the shade "header".
+            void ShadeGlyph(XY c, double s)
+            {
+                const double squish = 1.25 / 12.0;
+                const double header = 0.75 / 12.0;
+                double h = s / 2.0;
+                double left = c.X - h, right = c.X + h, top = c.Y + h, bottom = c.Y - h;
+                var tl = new XY(left, top);
+                var tr = new XY(right, top - squish);
+                var br = new XY(right, bottom);
+                var bl = new XY(left, bottom + squish);
+                Wire(tl, tr, dashed: false);   // slanted top edge
+                Wire(tr, br, dashed: false);   // right edge (vertical)
+                Wire(br, bl, dashed: false);   // slanted bottom edge
+                Wire(bl, tl, dashed: false);   // left edge (vertical)
+                Wire(new XY(left, top - header), new XY(right, top - squish - header), dashed: false);  // header
             }
 
             // 120 V feed, following the Lutron reference sheet: up from the panel top edge, LEFT to a terminus square,
@@ -286,8 +321,9 @@ namespace TurboSuite.Zones.OneLine
                         Wire(new XY(lx, y), b, dashed: false);
                         Mark(new XY(headRightX + G.Layout.MarkerExitOffset, ey), ControlWireType.QsControlLink);   // at the head RIGHT-edge exit
                         Tick(wires, b, G.Layout.KeypadTickHalf);
-                        Note(b.Offset(ControlOnePlannerConstants.NoteDx, G.Layout.WirelessLabelDy),
-                            "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName);
+                        Note(b.Offset(ControlOnePlannerConstants.NoteDx, 0),
+                            "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName,
+                            ControlVerticalAlign.Middle);
                         continue;
                     }
 
@@ -338,11 +374,44 @@ namespace TurboSuite.Zones.OneLine
                                 $"{motors}/{ShadeSolver.ShadesPerPanel}", motors));
                             Add120V(c, G.ShadePanel.Height);   // same feed as a power panel (shared helper → stays in sync)
                             var m0 = c.Plus(G.ShadePanel.MotorTap);
-                            var m1 = m0.Offset(0, G.Layout.FeedStubLength);
-                            Wire(m0, m1, dashed: false);
-                            Mark(new XY(m0.X, (m0.Y + m1.Y) / 2.0), ControlWireType.ShadeLink);
-                            Note(m1.Offset(ControlOnePlannerConstants.NoteDx, ControlOnePlannerConstants.NoteDy),
-                                $"{motors} MOTORS", ControlTextAlign.Left, G.LargeTextTypeName);
+
+                            var motorRecs = u.Motors;
+                            if (motorRecs.Count > 0)
+                            {
+                                // Per-motor list (Phase E): a lengthened tap stub to a horizontal terminus,
+                                // then the list block offset LEFT so its row text left-aligns with the shade's
+                                // 120V label — clearing the keypad columns to the right. ≤10 motors per
+                                // QSPS-10PNL ⇒ always one column rising from the terminus.
+                                var m1 = m0.Offset(0, G.Layout.MotorTapStubLength);
+                                Wire(m0, m1, dashed: false);
+                                Mark(new XY(m0.X, (m0.Y + m1.Y) / 2.0), ControlWireType.ShadeLink);
+                                Wire(m1.Offset(-G.Layout.MotorTerminusHalf, 0),
+                                     m1.Offset(G.Layout.MotorTerminusHalf, 0), dashed: false);   // 9" terminus
+
+                                var motorLabels = motorRecs.Select(ControlListLayout.MotorRowLabel).ToList();
+                                // Align row text left with the 120V label; the glyph sits one TextDx to its left.
+                                double term120X = c.X + G.Layout.Feed120VLegDx - G.Layout.Feed120VRun;
+                                double anchorX = term120X + G.Layout.Feed120VLabelDx - G.Layout.KeypadListTextDx;
+                                var mAnchor = new XY(anchorX, m1.Y + G.Layout.MotorListAnchorDy);
+                                var mPos = ControlListLayout.Layout(motorLabels.Count, mAnchor,
+                                    ShadeSolver.ShadesPerPanel, G.Layout.KeypadListRowPitch, columnWidth: 0.0);
+                                for (int mi = 0; mi < mPos.Count; mi++)
+                                {
+                                    XY p = mPos[mi].Anchor;
+                                    ShadeGlyph(p, G.Layout.KeypadGlyphSize);   // motor glyph (shade symbol)
+                                    Note(p.Offset(G.Layout.KeypadListTextDx, 0), motorLabels[mi],
+                                        ControlTextAlign.Left, G.LargeTextTypeName, ControlVerticalAlign.Middle);
+                                }
+                            }
+                            else
+                            {
+                                // Legacy stub: no per-motor records (count-only path) — short tap + n MOTORS.
+                                var m1 = m0.Offset(0, G.Layout.FeedStubLength);
+                                Wire(m0, m1, dashed: false);
+                                Mark(new XY(m0.X, (m0.Y + m1.Y) / 2.0), ControlWireType.ShadeLink);
+                                Note(m1.Offset(ControlOnePlannerConstants.NoteDx, ControlOnePlannerConstants.NoteDy),
+                                    $"{motors} MOTORS", ControlTextAlign.Left, G.LargeTextTypeName);
+                            }
                         }
                         else if (panels.TryGetValue(u.Name, out var prd))
                         {
@@ -358,10 +427,53 @@ namespace TurboSuite.Zones.OneLine
                         double kx = cursorX + G.Layout.KeypadTailGap;
                         Wire(new XY(spineFromX, spineY), new XY(kx, spineY), dashed: false);
                         Tick(wires, new XY(kx, spineY), G.Layout.KeypadTickHalf);
-                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY + G.Layout.KeypadLine1Dy),
-                            "ALL KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName);
-                        Note(new XY(kx + ControlOnePlannerConstants.NoteDx, spineY + G.Layout.KeypadLine2Dy),
-                            "(MAX 10 KEYPADS PER HOMERUN)", ControlTextAlign.Left, G.LargeTextTypeName);
+
+                        var keypadRecs = pl.Link.KeypadRecords;
+                        if (keypadRecs.Count > 0)
+                        {
+                            // Located list (Phase D): one row per keypad, bottom-up columns wrapping right,
+                            // replacing the "ALL KEYPADS" stub. Switch-ID order, unnumbered rows last.
+                            var sorted = keypadRecs
+                                .OrderBy(r => string.IsNullOrEmpty(r.SwitchId))
+                                .ThenBy(r => r.SwitchId, natural)
+                                .ToList();
+                            var labels = sorted.Select(ControlListLayout.KeypadRowLabel).ToList();
+
+                            // Column width is dynamic — the longest label in the list — so a column never
+                            // overlaps the next regardless of room-name length.
+                            int maxChars = labels.Count > 0 ? labels.Max(l => l.Length) : 0;
+                            double columnWidth = G.Layout.KeypadListTextDx
+                                + maxChars * G.Layout.KeypadListCharWidth
+                                + G.Layout.KeypadListColumnPadding;
+
+                            var anchor = new XY(kx + G.Layout.KeypadTailBlockDx,
+                                spineY + G.Layout.KeypadListAnchorDy);
+                            var positions = ControlListLayout.Layout(labels.Count, anchor,
+                                G.Layout.KeypadListRowsPerColumn, G.Layout.KeypadListRowPitch,
+                                columnWidth,
+                                G.Layout.KeypadListHomerunSize, G.Layout.KeypadListHomerunGap);
+                            for (int i = 0; i < positions.Count; i++)
+                            {
+                                XY p = positions[i].Anchor;
+                                DownTriangle(p, G.Layout.KeypadGlyphSize);   // keypad glyph (▽, plan symbol)
+                                // Middle vertical-align so the text centers on the glyph's point (the row
+                                // notes default to Top otherwise, hanging the text below the glyph).
+                                Note(p.Offset(G.Layout.KeypadListTextDx, 0), labels[i],
+                                    ControlTextAlign.Left, G.LargeTextTypeName, ControlVerticalAlign.Middle);
+                            }
+                            // The homerun wiring rule, centered on the spine terminus wire.
+                            Note(new XY(kx + G.Layout.KeypadTailBlockDx, spineY),
+                                "KEYPADS (MAX 10 PER HOMERUN)", ControlTextAlign.Left, G.LargeTextTypeName,
+                                ControlVerticalAlign.Middle);
+                        }
+                        else
+                        {
+                            // Legacy stub: location-less keypads (room unmapped), or no records. Two-line
+                            // note, centered on the spine terminus wire (same trick as the located note).
+                            Note(new XY(kx + G.Layout.KeypadTailBlockDx, spineY),
+                                "ALL KEYPADS\r(MAX 10 KEYPADS PER HOMERUN)",
+                                ControlTextAlign.Left, G.LargeTextTypeName, ControlVerticalAlign.Middle);
+                        }
                     }
                 }
             }
