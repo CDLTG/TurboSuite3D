@@ -41,7 +41,7 @@ public static class CircuitInfoService
     /// </summary>
     public static CircuitInfoResult PromptAndApply(
         Document doc, IReadOnlyList<ElectricalSystem> circuits, string caption,
-        bool shadePanels = false)
+        PanelKind kind = PanelKind.Lighting)
     {
         if (!GeneralSettingsCache.Get(doc).ShowCircuitCommentsDialog)
             return CircuitInfoResult.Skipped;
@@ -57,26 +57,31 @@ public static class CircuitInfoService
             .Where(n => !string.IsNullOrEmpty(n)));
 
         var existingComments = CircuitService.GetExistingComments(doc);
-        // Shade mode lists only shade (35 V) locations; lighting lists everything else. The
-        // dropdown label ("Zone") and every other field are identical either way.
-        var panels = shadePanels
-            ? CircuitService.GetShadePanels(doc)
-            : CircuitService.GetAllPanels(doc);
+        // The picker lists only the panels of this kind: shade → 35 V locations, control → hybrid
+        // repeaters, lighting → everything else. The dropdown label ("Zone") and every other field
+        // are identical across kinds.
+        var panels = CircuitService.GetPanelsFor(doc, kind);
         // Default the panel dropdown to the last circuit's choice — a real panel, or <None>
         // when the previous circuit was deliberately left unassigned. Exclude the circuits
         // being handled now so they reflect the prior state, not themselves.
         var (autoPanel, preferNone) = CircuitService.FindLastPanelChoice(
-            doc, targets.Select(c => c.Id).ToList(), shadePanels);
+            doc, targets.Select(c => c.Id).ToList(), kind);
 
         // Resolve each circuit's live base room (owned Spaces, region fallback in 2D) the same
         // way TurboZones does — first lighting/electrical fixture on the circuit.
         var regionFallback = new RegionRoomLookupService(doc);
         var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
         // Shade circuits keep their overrides in a separate store (its own schema GUID) so the two
-        // Load-Names tabs' full-overwrite Applies never prune each other's — route by mode.
-        var existingOverrides = shadePanels
-            ? ShadeRoomOverrideStorageService.Load(doc)
-            : RoomOverrideStorageService.Load(doc);
+        // Load-Names tabs' full-overwrite Applies never prune each other's — route by mode. Control
+        // (keypad→repeater) circuits take no override store: the keypad fan reads each keypad
+        // fixture's own room, so a circuit override would be inert, and no store means no pruning
+        // risk. The field is still shown for parity but its edit is a no-op (see the persist guard).
+        var existingOverrides = kind switch
+        {
+            PanelKind.Shade => ShadeRoomOverrideStorageService.Load(doc),
+            PanelKind.Control => new Dictionary<string, string>(),
+            _ => RoomOverrideStorageService.Load(doc)
+        };
 
         var states = targets
             .Select(c => new CircuitRoomState(
@@ -117,12 +122,14 @@ public static class CircuitInfoService
         // Room override: pure decision (untouched → no-op; typed text equal to a circuit's base
         // room clears it; else stored). See Core/Circuits/CircuitRoomOverride.
         var decision = CircuitRoomOverride.Decide(states, roomPrefill, dialog.RoomOverrideText);
-        if (decision.ShouldPersist)
+        // Control circuits have no override store (the keypad fan reads the fixture's own room), so
+        // their override edit is intentionally inert — persist only for lighting/shade.
+        if (decision.ShouldPersist && kind != PanelKind.Control)
         {
             using var t = new Transaction(doc, "Circuit room override");
             t.Start();
             var changes = decision.Changes.ToDictionary(kv => kv.Key, kv => kv.Value);
-            if (shadePanels)
+            if (kind == PanelKind.Shade)
                 ShadeRoomOverrideStorageService.Upsert(doc, changes);
             else
                 RoomOverrideStorageService.Upsert(doc, changes);

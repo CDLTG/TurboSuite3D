@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
+using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Filters;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
@@ -56,10 +57,11 @@ public class WireCommand : IExternalCommand
                 }
 
                 // Circuit-info dialog for every pre-selected circuit that was wired (switched
-                // circuits are filtered out inside the service). Setting-gated. When the whole
-                // batch is shade circuits, the picker offers shade (35 V) locations instead.
-                bool shadeCircuits = preSelectedCircuits.All(ShadeCircuitClassifier.IsShadeCircuit);
-                if (CircuitInfoService.PromptAndApply(doc, preSelectedCircuits, "TurboWire", shadeCircuits)
+                // circuits are filtered out inside the service). Setting-gated. The picker offers
+                // the matching panel kind: shade (35 V) locations for an all-shade batch, hybrid
+                // repeaters for an all-Controls batch, lighting boards otherwise.
+                PanelKind circuitKind = DetermineCircuitKind(preSelectedCircuits);
+                if (CircuitInfoService.PromptAndApply(doc, preSelectedCircuits, "TurboWire", circuitKind)
                     == CircuitInfoResult.Cancelled)
                 {
                     txGroup.RollBack();
@@ -68,6 +70,24 @@ public class WireCommand : IExternalCommand
 
                 txGroup.Assimilate();
                 return Result.Succeeded;
+            }
+
+            // Wireless-keypad mode: a keypad carrying a Controls connector is circuited onto a
+            // hybrid-repeater "Control panel" — the same gesture as a shade, over a Controls circuit.
+            // Wired keypads have no such connector, so they're never collected here and fall through.
+            // Keypads are Lighting DEVICES (not the Lighting/Electrical Fixtures GetPreSelectedFixtures
+            // collects), so this must intercept before that path sends a lone keypad to the pick loop.
+            List<FamilyInstance> wirelessKeypads = GetPreSelectedWirelessKeypads(uiDoc);
+            if (wirelessKeypads.Count > 0)
+            {
+                if (wirelessKeypads.Count != 1 || uiDoc.Selection.GetElementIds().Count != 1)
+                {
+                    TaskDialog.Show("TurboWire",
+                        "Wireless keypads are wired one at a time. Select a single wireless keypad — " +
+                        "not several, and not mixed with other elements.");
+                    return Result.Cancelled;
+                }
+                return HandleSingleKeypad(uiDoc, doc, wirelessKeypads[0]);
             }
 
             List<FamilyInstance> preSelectedFixtures = GetPreSelectedFixtures(uiDoc);
@@ -214,7 +234,7 @@ public class WireCommand : IExternalCommand
         else
         {
             circuit = CircuitService.CreateCircuit(doc, new List<FamilyInstance> { shade },
-                assignPanel: true, shadePanels: true);
+                assignPanel: true, kind: PanelKind.Shade);
             if (circuit == null)
             {
                 txGroup.RollBack();
@@ -222,7 +242,61 @@ public class WireCommand : IExternalCommand
             }
         }
 
-        if (CircuitInfoService.PromptAndApply(doc, new[] { circuit }, "TurboWire", shadePanels: true)
+        if (CircuitInfoService.PromptAndApply(doc, new[] { circuit }, "TurboWire", PanelKind.Shade)
+            == CircuitInfoResult.Cancelled)
+        {
+            txGroup.RollBack();
+            return Result.Cancelled;
+        }
+
+        txGroup.Assimilate();
+        return Result.Succeeded;
+    }
+
+    /// <summary>
+    /// Keypad mode: one wireless keypad → one <c>Controls</c> circuit on a hybrid-repeater panel.
+    /// A near-identical twin of <see cref="HandleSingleShade"/> — no switch/wire-routing branch (a
+    /// lone keypad has nothing to route to), and the panel picker is filtered/defaulted to repeater
+    /// panels (<see cref="PanelKind.Control"/>). The circuit-info dialog is otherwise identical;
+    /// the Room Override field is shown but inert for control circuits (the keypad fan reads the
+    /// keypad fixture's own room). The Controls circuit is the explicit keypad→repeater
+    /// relationship TurboZones reads to place the keypad on its repeater's Clear Connect link.
+    /// </summary>
+    private static Result HandleSingleKeypad(UIDocument uiDoc, Document doc, FamilyInstance keypad)
+    {
+        var analysis = CircuitService.AnalyzeFixtures(new List<FamilyInstance> { keypad });
+
+        // Already circuited with a comment → nothing to do, same as the lighting/shade single path.
+        if (analysis.SingleCircuit)
+        {
+            string existingComment = ParameterHelper.GetCircuitComments(analysis.SingleCircuitRef!);
+            if (!string.IsNullOrEmpty(existingComment))
+            {
+                uiDoc.Selection.SetElementIds(new List<ElementId>());
+                return Result.Succeeded;
+            }
+        }
+
+        using var txGroup = new TransactionGroup(doc, "TurboWire");
+        txGroup.Start();
+
+        ElectricalSystem? circuit;
+        if (analysis.SingleCircuit)
+        {
+            circuit = analysis.SingleCircuitRef!;
+        }
+        else
+        {
+            circuit = CircuitService.CreateCircuit(doc, new List<FamilyInstance> { keypad },
+                assignPanel: true, kind: PanelKind.Control);
+            if (circuit == null)
+            {
+                txGroup.RollBack();
+                return Result.Failed;
+            }
+        }
+
+        if (CircuitInfoService.PromptAndApply(doc, new[] { circuit }, "TurboWire", PanelKind.Control)
             == CircuitInfoResult.Cancelled)
         {
             txGroup.RollBack();
@@ -377,6 +451,50 @@ public class WireCommand : IExternalCommand
                          fi.Category?.BuiltInCategory == BuiltInCategory.OST_ElectricalFixtures))
             .Cast<FamilyInstance>()
             .ToList();
+    }
+
+    /// <summary>
+    /// Pre-selected wireless keypads: Lighting Devices with <c>Role=Keypad</c> that carry a
+    /// <c>Controls</c> connector. The connector is the wireless discriminator — a wired keypad has
+    /// none, so it is never collected here (and <c>ElectricalSystem.Create</c> would refuse it).
+    /// </summary>
+    private static List<FamilyInstance> GetPreSelectedWirelessKeypads(UIDocument uiDoc)
+    {
+        Document doc = uiDoc.Document;
+        return uiDoc.Selection.GetElementIds()
+            .Select(id => doc.GetElement(id))
+            .OfType<FamilyInstance>()
+            .Where(fi => fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingDevices &&
+                         string.Equals(ParameterHelper.GetRole(fi), Roles.Keypad,
+                             StringComparison.OrdinalIgnoreCase) &&
+                         HasControlsConnector(fi))
+            .ToList();
+    }
+
+    /// <summary>True when a family instance exposes an electrical connector of the <c>Controls</c>
+    /// system type — the mark of a wireless keypad (or a repeater panel).</summary>
+    private static bool HasControlsConnector(FamilyInstance fi)
+    {
+        ConnectorManager? cm = fi.MEPModel?.ConnectorManager;
+        if (cm == null) return false;
+        foreach (Connector c in cm.Connectors)
+        {
+            if (c.Domain == Domain.DomainElectrical &&
+                c.ElectricalSystemType == ElectricalSystemType.Controls)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>The panel kind a batch of pre-selected circuits belongs to: Control when every
+    /// circuit is a Controls system, Shade when every circuit is a shade circuit, else Lighting.</summary>
+    private static PanelKind DetermineCircuitKind(List<ElectricalSystem> circuits)
+    {
+        if (circuits.Count > 0 && circuits.All(c => c.SystemType == ElectricalSystemType.Controls))
+            return PanelKind.Control;
+        if (circuits.All(ShadeCircuitClassifier.IsShadeCircuit))
+            return PanelKind.Shade;
+        return PanelKind.Lighting;
     }
 
     private static Result WireMultipleFixtures(Document doc, List<FamilyInstance> fixtures, ref string message)
