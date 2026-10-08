@@ -31,7 +31,7 @@ namespace TurboSuite.Dali.ViewModels
     {
         private readonly IRevitWorkQueue _workQueue;
         private readonly IDaliLoopStore _store;
-        private IReadOnlyList<DaliZoneOption> _zoneOptions;
+        private IReadOnlyList<DaliLocationOption> _locationOptions;
 
         // Save coalescing — identical shape to the Panel Breakdown tab, so a burst of edits never drops the
         // latest snapshot to an in-flight write.
@@ -40,11 +40,11 @@ namespace TurboSuite.Dali.ViewModels
         private bool _loaded;   // suppress saves while the constructor builds the initial state
 
         /// <param name="availableZones">Control Zone values carrying DALI fixtures, with load counts.</param>
-        /// <param name="availablePanelZones">The ZONE N numbers discovered in the job, for the assign dropdown.</param>
+        /// <param name="availablePanelLocations">The location numbers discovered in the job, for the assign dropdown.</param>
         /// <param name="saved">The persisted DALI loops (may be empty / from a v1 payload).</param>
         public DaliTabViewModel(
             IReadOnlyList<DaliZoneItemViewModel> availableZones,
-            IReadOnlyList<int> availablePanelZones,
+            IReadOnlyList<int> availablePanelLocations,
             DaliModuleState saved,
             IRevitWorkQueue workQueue,
             IDaliLoopStore store)
@@ -52,7 +52,7 @@ namespace TurboSuite.Dali.ViewModels
             _workQueue = workQueue;
             _store = store;
 
-            _zoneOptions = BuildZoneOptions(availablePanelZones, saved);
+            _locationOptions = BuildLocationOptions(availablePanelLocations, saved);
             Pool = new ObservableCollection<DaliZoneItemViewModel>();
             Loops = new ObservableCollection<DaliLoopRowViewModel>();
 
@@ -69,19 +69,19 @@ namespace TurboSuite.Dali.ViewModels
         }
 
         /// <summary>Re-collect the tab from a fresh model read (the Refresh gesture) — rebuild the zone pool +
-        /// load counts + panel-ZONE options and reload the persisted loops, in place so the window's bindings
+        /// load counts + panel-location options and reload the persisted loops, in place so the window's bindings
         /// stay attached. Loops survive because every edit auto-saves, so the reloaded <paramref name="saved"/>
         /// already carries the designer's declarations; a zone since removed drops out and a new one appears
         /// in the pool. Saves are suppressed during the rebuild — Refresh reads, it never writes.</summary>
         public void Reseed(
             IReadOnlyList<DaliZoneItemViewModel> availableZones,
-            IReadOnlyList<int> availablePanelZones,
+            IReadOnlyList<int> availablePanelLocations,
             DaliModuleState saved)
         {
             _loaded = false;
             Pool.Clear();
             Loops.Clear();
-            _zoneOptions = BuildZoneOptions(availablePanelZones, saved);
+            _locationOptions = BuildLocationOptions(availablePanelLocations, saved);
             LoadState(availableZones, saved);
             Recompute();
             _loaded = true;
@@ -146,7 +146,7 @@ namespace TurboSuite.Dali.ViewModels
 
         private void AddLoop(bool fromSelection)
         {
-            var row = NewRow(Guid.NewGuid().ToString("N"), NextLoopName(), assignedZone: 0);
+            var row = NewRow(Guid.NewGuid().ToString("N"), NextLoopName(), assignedLocation: 0);
             Loops.Add(row);
 
             if (fromSelection)
@@ -156,10 +156,10 @@ namespace TurboSuite.Dali.ViewModels
             SaveSettings();
         }
 
-        private DaliLoopRowViewModel NewRow(string loopId, string name, int assignedZone,
+        private DaliLoopRowViewModel NewRow(string loopId, string name, int assignedLocation,
                                             IEnumerable<DaliZoneItemViewModel>? members = null)
         {
-            var row = new DaliLoopRowViewModel(loopId, name, assignedZone, _zoneOptions);
+            var row = new DaliLoopRowViewModel(loopId, name, assignedLocation, _locationOptions);
             row.Changed = () => { if (_loaded) { Recompute(); SaveSettings(); } };
             row.AddSelectedCommand = new RelayCommand(() => MoveSelectedInto(row),
                                                       () => Pool.Any(z => z.IsSelected));
@@ -242,7 +242,7 @@ namespace TurboSuite.Dali.ViewModels
                 // MUST survive a reload; only a pre-LoopId (blank) payload gets a fresh one.
                 Loops.Add(NewRow(string.IsNullOrWhiteSpace(dto.LoopId) ? Guid.NewGuid().ToString("N") : dto.LoopId,
                                  string.IsNullOrWhiteSpace(dto.Name) ? NextLoopName() : dto.Name,
-                                 dto.AssignedZone, members));
+                                 dto.AssignedLocation, members));
             }
 
             // Everything not claimed by a loop starts in the pool.
@@ -293,7 +293,7 @@ namespace TurboSuite.Dali.ViewModels
                     LoopId = row.LoopId,
                     Name = row.Name ?? "",
                     Order = order++,
-                    AssignedZone = row.AssignedZone,
+                    AssignedLocation = row.AssignedLocation,
                     ZoneValues = row.Zones.Select(z => z.ZoneName).ToList()
                 });
             }
@@ -324,18 +324,18 @@ namespace TurboSuite.Dali.ViewModels
                 });
         }
 
-        private static IReadOnlyList<DaliZoneOption> BuildZoneOptions(
-            IReadOnlyList<int> panelZones, DaliModuleState saved)
+        private static IReadOnlyList<DaliLocationOption> BuildLocationOptions(
+            IReadOnlyList<int> panelLocations, DaliModuleState saved)
         {
-            // Discovered zones ∪ any zone a persisted loop is already assigned to — so a loop assigned to a
-            // zone that has since lost its dimming circuits still shows its assignment rather than blank.
-            var zones = new SortedSet<int>((panelZones ?? Array.Empty<int>()).Where(z => z > 0));
+            // Discovered locations ∪ any location a persisted loop is already assigned to — so a loop assigned
+            // to a location that has since lost its dimming circuits still shows its assignment rather than blank.
+            var locations = new SortedSet<int>((panelLocations ?? Array.Empty<int>()).Where(loc => loc > 0));
             foreach (var loop in saved?.Loops ?? new List<DaliLoopDto>())
-                if (loop.AssignedZone > 0) zones.Add(loop.AssignedZone);
+                if (loop.AssignedLocation > 0) locations.Add(loop.AssignedLocation);
 
-            var options = new List<DaliZoneOption> { new DaliZoneOption(0, "<Unassigned>") };
-            foreach (int z in zones)
-                options.Add(new DaliZoneOption(z, $"ZONE {z}"));
+            var options = new List<DaliLocationOption> { new DaliLocationOption(0, "<Unassigned>") };
+            foreach (int loc in locations)
+                options.Add(new DaliLocationOption(loc, $"LOCATION {loc}"));
             return options;
         }
 

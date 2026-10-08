@@ -281,7 +281,7 @@ namespace TurboSuite.Dali.ViewModels
                 result =>
                 {
                     var inputs = (DaliTabInputs)result;
-                    DaliTab.Reseed(inputs.Zones, inputs.PanelZones, inputs.Saved);
+                    DaliTab.Reseed(inputs.Zones, inputs.PanelLocations, inputs.Saved);
                     // Re-sync the lock state from the fresh read — another session (or a re-open) may have
                     // locked/unlocked since this window opened.
                     _snapshot = inputs.Saved?.Snapshot;

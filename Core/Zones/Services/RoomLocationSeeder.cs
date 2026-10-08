@@ -56,7 +56,7 @@ namespace TurboSuite.Zones.Services
     /// <item><b>paneled lighting</b> — the room's lighting-circuit panel names →
     /// <see cref="PanelAllocationService.ParseLocationNumber"/> (the name-prefix, e.g. "1-A" → 1);</item>
     /// <item><b>DALI lighting</b> — the room's DALI fixtures' "Control Zone" values → the declared
-    /// loop whose <c>ZoneValues</c> contains the value → that loop's <c>AssignedZone</c> (already a
+    /// loop whose <c>ZoneValues</c> contains the value → that loop's <c>AssignedLocation</c> (already a
     /// location number). Needed because DALI fixtures are panel-less, so signal (1) misses them.</item>
     /// </list>
     /// The votes are classified by their distinct non-zero values: one → unanimous (auto-seed),
@@ -80,13 +80,13 @@ namespace TurboSuite.Zones.Services
 
         /// <summary>
         /// DALI votes: for each of a room's "Control Zone" values, the declared loop whose
-        /// <c>ZoneValues</c> contains that value contributes its <c>AssignedZone</c> (0 = not yet
-        /// zoned → no vote). Takes loops as plain tuples so Core/Zones stays free of the DALI
+        /// <c>ZoneValues</c> contains that value contributes its <c>AssignedLocation</c> (0 = not yet
+        /// assigned a location → no vote). Takes loops as plain tuples so Core/Zones stays free of the DALI
         /// persistence DTO; the shim adapts <c>DaliLoopDto</c> at the collection seam.
         /// </summary>
         public static IEnumerable<int> DaliVotes(
             IEnumerable<string> roomControlZoneValues,
-            IReadOnlyList<(IReadOnlyList<string> ZoneValues, int AssignedZone)> loops)
+            IReadOnlyList<(IReadOnlyList<string> ZoneValues, int AssignedLocation)> loops)
         {
             if (roomControlZoneValues == null || loops == null) yield break;
             foreach (var value in roomControlZoneValues)
@@ -94,10 +94,10 @@ namespace TurboSuite.Zones.Services
                 if (string.IsNullOrWhiteSpace(value)) continue;
                 foreach (var loop in loops)
                 {
-                    if (loop.AssignedZone <= 0 || loop.ZoneValues == null) continue;
+                    if (loop.AssignedLocation <= 0 || loop.ZoneValues == null) continue;
                     if (loop.ZoneValues.Any(z => string.Equals(z, value, System.StringComparison.OrdinalIgnoreCase)))
                     {
-                        yield return loop.AssignedZone;
+                        yield return loop.AssignedLocation;
                         break; // one vote per value; first owning loop wins
                     }
                 }

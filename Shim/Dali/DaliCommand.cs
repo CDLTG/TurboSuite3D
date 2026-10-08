@@ -21,8 +21,8 @@ namespace TurboSuite.Dali
     /// TurboZones DALI tab has been removed, so DALI loop declaration is dev-only until this command ungates.
     ///
     /// INDEPENDENT COLLECTION: TurboDALI reads its own inputs from the doc — DALI fixtures/zones,
-    /// and the model-derived panel-ZONE list via <c>PanelAllocationService.DiscoverPanelZones</c> — so it has
-    /// no read/write dependency on TurboZones' persisted state.
+    /// and the model-derived panel-location list via <c>PanelAllocationService.DiscoverPanelLocations</c> — so
+    /// it has no read/write dependency on TurboZones' persisted state.
     ///
     /// MODELESS (TurboZones/TurboDMX pattern): the read + state load happen here before the window opens; the
     /// coalesced state save routes through the shared <see cref="RevitWorkQueue"/> so its transaction runs on
@@ -66,7 +66,7 @@ namespace TurboSuite.Dali
                 var workQueue = new RevitWorkQueue("TurboDALI Error", "TurboDALI Work Queue");
                 var store = new DaliLoopStore(doc);   // TurboDALI is the sole writer of the DALI schema
 
-                var tab = new DaliTabViewModel(inputs.Zones, inputs.PanelZones, inputs.Saved, workQueue, store);
+                var tab = new DaliTabViewModel(inputs.Zones, inputs.PanelLocations, inputs.Saved, workQueue, store);
 
                 // Addressing seams: read the model, write the "DALI Address" param, color the
                 // active-view zones — all routed through the work queue by the ViewModel.

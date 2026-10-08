@@ -189,7 +189,7 @@
                                     <DataTemplate>
                                         <Border Style="{StaticResource LoopCard}">
                                             <StackPanel>
-                                                <!-- Row header: name, zone assignment, remove -->
+                                                <!-- Row header: name, location assignment, remove -->
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -200,9 +200,9 @@
                                                              Height="24" VerticalContentAlignment="Center" Margin="0,0,8,0"/>
                                                     <ComboBox Grid.Column="1" Width="130" Height="24"
                                                               VerticalContentAlignment="Center"
-                                                              ItemsSource="{Binding ZoneOptions}"
+                                                              ItemsSource="{Binding LocationOptions}"
                                                               DisplayMemberPath="Label" SelectedValuePath="Value"
-                                                              SelectedValue="{Binding AssignedZone}"/>
+                                                              SelectedValue="{Binding AssignedLocation}"/>
                                                     <Button Grid.Column="2" Content="🗑" Style="{StaticResource IconButton}"
                                                             Margin="8,0,0,0" Command="{Binding RemoveCommand}"
                                                             ToolTip="Delete this loop — its zones return to the pool."/>

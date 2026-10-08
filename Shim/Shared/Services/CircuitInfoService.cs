@@ -58,7 +58,7 @@ public static class CircuitInfoService
 
         var existingComments = CircuitService.GetExistingComments(doc);
         // The picker lists only the panels of this kind: shade → 35 V locations, control → hybrid
-        // repeaters, lighting → everything else. The dropdown label ("Zone") and every other field
+        // repeaters, lighting → everything else. The dropdown label ("Location") and every other field
         // are identical across kinds.
         var panels = CircuitService.GetPanelsFor(doc, kind);
         // Default the panel dropdown to the last circuit's choice — a real panel, or <None>

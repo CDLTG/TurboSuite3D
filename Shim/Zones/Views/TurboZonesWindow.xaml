@@ -112,7 +112,7 @@
 
         <!-- Blue header bar -->
         <Border Grid.Row="0" Background="{StaticResource HeaderBlueBrush}" Padding="15,10">
-            <TextBlock Text="TurboZones - Zone &amp; Panel Manager"
+            <TextBlock Text="TurboZones - Circuit &amp; Panel Manager"
                        Foreground="White" FontSize="16" FontWeight="SemiBold"/>
         </Border>
 
@@ -451,7 +451,7 @@
                                 BorderBrush="{StaticResource SeparatorBrush}">
                             <Grid>
                                 <!-- Placeholder when no panels assigned -->
-                                <TextBlock Text="No circuits are assigned to zones in this project"
+                                <TextBlock Text="No circuits are assigned to locations in this project"
                                            VerticalAlignment="Center" HorizontalAlignment="Center"
                                            Foreground="{StaticResource TextSecondaryBrush}"
                                            Visibility="{Binding PanelTab.ShowPlaceholder, Converter={StaticResource BoolToVisibility}}"/>

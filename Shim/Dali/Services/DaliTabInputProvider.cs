@@ -29,11 +29,11 @@ namespace TurboSuite.Dali.Services
                 .ToList();
 
             var circuits = new ZonesCollectorService().GetCircuits(_doc);
-            var panelZones = PanelAllocationService.DiscoverPanelZones(circuits);
+            var panelLocations = PanelAllocationService.DiscoverPanelLocations(circuits);
 
             var saved = DaliStorageService.Load(_doc);
 
-            return new DaliTabInputs(zones, panelZones, saved);
+            return new DaliTabInputs(zones, panelLocations, saved);
         }
     }
 }

@@ -40,7 +40,7 @@ namespace TurboSuite.Dali.Persistence
     {
         /// <summary>Payload-shape version for forward migration without a new ES schema GUID. Bump when a
         /// DTO below changes shape; readers upgrade old payloads in code.
-        /// <para>v2: <see cref="DaliLoopDto.AssignedZone"/> added. A v1 payload deserializes it
+        /// <para>v2: <see cref="DaliLoopDto.AssignedLocation"/> added. A v1 payload deserializes it
         /// to 0 = unassigned, which is the safe default — the loop is still ordered job-wide, just not
         /// placed in a panel, and it surfaces as an "unassigned loop" warning rather than silently vanishing.</para>
         /// <para>v3: <see cref="Snapshot"/> added — the addressing numbering-lock flag + frozen
@@ -113,11 +113,11 @@ namespace TurboSuite.Dali.Persistence
         /// <summary>The Control Zone VALUES grouped into this loop (the native param values).</summary>
         public List<string> ZoneValues { get; set; } = new List<string>();
 
-        /// <summary>The ZONE N (panel LocationNumber) the designer assigned this loop's module to.
+        /// <summary>The panel LocationNumber the designer assigned this loop's module to.
         /// <b>0 = unassigned</b>: the loop is still ordered by the job-wide DALI demand, but has
         /// no panel to sit in, so TurboDALI warns and the allocator places no slot for it.
         /// Placement is display-only — a loop's fixtures are all within one zone, but DALI circuits are
-        /// created unassigned (like DMX), so the zone can't be derived and the designer must pick it.</summary>
-        public int AssignedZone { get; set; }
+        /// created unassigned (like DMX), so the location can't be derived and the designer must pick it.</summary>
+        public int AssignedLocation { get; set; }
     }
 }

@@ -35,7 +35,7 @@ namespace TurboSuite.Dali.Input
         /// shared rules — order by declared Order, drop a zone no longer in the model, single membership
         /// (first loop wins a contested zone), skip a loop left with no live zones — and returns each
         /// surviving loop paired with the DTO it came from, so a caller that needs more than the name +
-        /// zones (placement needs the loop's <see cref="DaliLoopDto.AssignedZone"/>) can reach it.
+        /// zones (placement needs the loop's <see cref="DaliLoopDto.AssignedLocation"/>) can reach it.
         /// </summary>
         internal static List<ReconciledLoop> Reconcile(
             IEnumerable<DaliLoopDto>? loops, IEnumerable<string>? existingZoneNames)

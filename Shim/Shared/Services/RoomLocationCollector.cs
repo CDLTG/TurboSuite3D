@@ -18,7 +18,7 @@ namespace TurboSuite.Shared.Services
     /// <item><b>paneled lighting</b> — every lighting fixture's power-circuit panel name (the
     /// name-prefix "1-A" → Location 1);</item>
     /// <item><b>DALI lighting</b> — every DALI fixture's "Control Zone" value, matched to the declared
-    /// loop that owns it (loops + their <c>AssignedZone</c> come from <c>DaliStorageService</c>).</item>
+    /// loop that owns it (loops + their <c>AssignedLocation</c> come from <c>DaliStorageService</c>).</item>
     /// </list>
     /// Fixture-grain: each lighting fixture in a room contributes one vote per signal. Because the
     /// classification is on the <i>distinct</i> non-zero votes, fixture-grain yields the same
@@ -40,11 +40,11 @@ namespace TurboSuite.Shared.Services
             var regionFallback = new RegionRoomLookupService(doc);
             var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
 
-            // DALI loops as plain tuples (ZoneValues → AssignedZone), so Core/Zones stays DTO-free.
+            // DALI loops as plain tuples (ZoneValues → AssignedLocation), so Core/Zones stays DTO-free.
             // Load is total; a job that never ran TurboDALI yields no loops → the DALI signal is silent.
             var daliState = DaliStorageService.Load(doc);
             var loops = (daliState?.Loops ?? new List<Dali.Persistence.DaliLoopDto>())
-                .Select(l => ((IReadOnlyList<string>)(l.ZoneValues ?? new List<string>()), l.AssignedZone))
+                .Select(l => ((IReadOnlyList<string>)(l.ZoneValues ?? new List<string>()), l.AssignedLocation))
                 .ToList();
 
             var panelNamesByRoom = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);

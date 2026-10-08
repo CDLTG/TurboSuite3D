@@ -78,7 +78,7 @@ namespace TurboSuite.Tests.Dali
                 Loops = new List<DaliLoopDto>
                 {
                     new DaliLoopDto { LoopId = "loopA", Name = "Loop 1", Order = 0,
-                                      AssignedZone = 1, ZoneValues = new List<string> { "Kitchen" } },
+                                      AssignedLocation = 1, ZoneValues = new List<string> { "Kitchen" } },
                 },
             };
             var zones = new List<DaliZoneItemViewModel> { new DaliZoneItemViewModel("Kitchen", 2) };

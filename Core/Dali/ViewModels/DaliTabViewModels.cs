@@ -36,11 +36,11 @@ namespace TurboSuite.Dali.ViewModels
         public string Display => $"{ZoneName}  ({LoadCount})";
     }
 
-    /// <summary>A ZONE N choice in a loop's assignment dropdown. Value 0 is the "&lt;Unassigned&gt;" sentinel;
-    /// any positive value is a panel ZONE N discovered in the job.</summary>
-    public sealed class DaliZoneOption
+    /// <summary>A location choice in a loop's assignment dropdown. Value 0 is the "&lt;Unassigned&gt;" sentinel;
+    /// any positive value is a panel location number discovered in the job.</summary>
+    public sealed class DaliLocationOption
     {
-        public DaliZoneOption(int value, string label)
+        public DaliLocationOption(int value, string label)
         {
             Value = value;
             Label = label;
@@ -57,7 +57,7 @@ namespace TurboSuite.Dali.ViewModels
     /// solve/one-line surface belongs to a future TurboDALI.
     ///
     /// The load count is the sum of its member zones' loads (one leg each); over 64 the loop can't fit on
-    /// one bus and is flagged (a warning, never an auto-split). Unassigned (<see cref="AssignedZone"/> 0)
+    /// one bus and is flagged (a warning, never an auto-split). Unassigned (<see cref="AssignedLocation"/> 0)
     /// with loads means the module is ordered job-wide but has no panel to sit in — also flagged.
     /// </summary>
     public sealed class DaliLoopRowViewModel : ViewModelBase
@@ -67,16 +67,16 @@ namespace TurboSuite.Dali.ViewModels
         public const int MaxLoadsPerBus = 64;
 
         private string _name;
-        private int _assignedZone;
+        private int _assignedLocation;
         private bool _isZonesExpanded = true;
 
-        public DaliLoopRowViewModel(string loopId, string name, int assignedZone,
-                                    IReadOnlyList<DaliZoneOption> zoneOptions)
+        public DaliLoopRowViewModel(string loopId, string name, int assignedLocation,
+                                    IReadOnlyList<DaliLocationOption> locationOptions)
         {
             LoopId = loopId;
             _name = name;
-            _assignedZone = assignedZone;
-            ZoneOptions = zoneOptions;
+            _assignedLocation = assignedLocation;
+            LocationOptions = locationOptions;
             Zones = new ObservableCollection<DaliZoneItemViewModel>();
             Zones.CollectionChanged += OnZonesChanged;
         }
@@ -108,16 +108,16 @@ namespace TurboSuite.Dali.ViewModels
             set => SetProperty(ref _isZonesExpanded, value);
         }
 
-        /// <summary>The ZONE N options for the assignment dropdown (0 = unassigned, then each discovered zone).</summary>
-        public IReadOnlyList<DaliZoneOption> ZoneOptions { get; }
+        /// <summary>The location options for the assignment dropdown (0 = unassigned, then each discovered location).</summary>
+        public IReadOnlyList<DaliLocationOption> LocationOptions { get; }
 
-        /// <summary>The ZONE N this loop's module is placed in; 0 = unassigned (ordered, not placed).</summary>
-        public int AssignedZone
+        /// <summary>The location this loop's module is placed in; 0 = unassigned (ordered, not placed).</summary>
+        public int AssignedLocation
         {
-            get => _assignedZone;
+            get => _assignedLocation;
             set
             {
-                if (SetProperty(ref _assignedZone, value))
+                if (SetProperty(ref _assignedLocation, value))
                 {
                     OnPropertyChanged(nameof(IsUnassigned));
                     OnPropertyChanged(nameof(StatusText));
@@ -131,8 +131,8 @@ namespace TurboSuite.Dali.ViewModels
         /// <summary>Over the one-bus cap — can't fit on its single module; the fix is to split its zones.</summary>
         public bool IsOverCap => LoadCount > MaxLoadsPerBus;
 
-        /// <summary>Has loads but no ZONE N — ordered by the job-wide demand, placed nowhere.</summary>
-        public bool IsUnassigned => LoadCount > 0 && AssignedZone <= 0;
+        /// <summary>Has loads but no location — ordered by the job-wide demand, placed nowhere.</summary>
+        public bool IsUnassigned => LoadCount > 0 && AssignedLocation <= 0;
 
         /// <summary>A <c>used/64</c> bus meter (a loop = one DALI bus). Zero-padded to two digits to match the
         /// address short-address slots (00–63), so the 64-cap is legible at a glance instead of hiding behind
@@ -144,7 +144,7 @@ namespace TurboSuite.Dali.ViewModels
                 if (Zones.Count == 0) return "empty";
                 string meter = $"{LoadCount:00}/{MaxLoadsPerBus}";
                 if (IsOverCap) return $"{meter} — over bus limit, split this loop";
-                if (IsUnassigned) return $"{meter} — no zone, not placed";
+                if (IsUnassigned) return $"{meter} — no location, not placed";
                 return meter;
             }
         }

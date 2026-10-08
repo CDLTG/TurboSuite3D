@@ -81,7 +81,7 @@ namespace TurboSuite.Tests.Zones
         [Fact]
         public void DaliOnly_Seeds_PanelLessRoom()
         {
-            // A panel-less DALI room: its Control Zone "ZN-A" belongs to a loop assigned to ZONE 5.
+            // A panel-less DALI room: its Control Zone "ZN-A" belongs to a loop assigned to location 5.
             var loops = new List<(IReadOnlyList<string>, int)>
             {
                 (new[] { "ZN-A", "ZN-B" }, 5),
@@ -96,7 +96,7 @@ namespace TurboSuite.Tests.Zones
         [Fact]
         public void DaliVote_NotYetZonedLoop_ContributesNothing()
         {
-            // AssignedZone 0 = loop declared but not zoned in TurboDALI → graceful no-vote.
+            // AssignedLocation 0 = loop declared but not assigned a location in TurboDALI → graceful no-vote.
             var loops = new List<(IReadOnlyList<string>, int)> { (new[] { "ZN-A" }, 0) };
             Assert.Empty(RoomLocationSeeder.DaliVotes(new[] { "ZN-A" }, loops));
         }

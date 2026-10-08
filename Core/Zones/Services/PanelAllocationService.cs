@@ -558,21 +558,21 @@ namespace TurboSuite.Zones.Services
             => module.SlotModuleTypes.Count(p =>
                 !string.IsNullOrWhiteSpace(p) && p.IndexOf("RELAY", StringComparison.OrdinalIgnoreCase) >= 0);
 
-        /// <summary>The distinct, valid ZONE N numbers present across these circuits' panels — the roster
-        /// TurboDALI offers when the designer assigns a loop to a zone. Reuses the same
-        /// <see cref="ParseLocationNumber"/> the allocator groups by, so an assignable zone is exactly a zone
-        /// the breakdown can place a panel in. DUMMY and unparseable panels are excluded.</summary>
-        public static IReadOnlyList<int> DiscoverPanelZones(IEnumerable<ZonesCircuitData> circuits)
+        /// <summary>The distinct, valid location numbers present across these circuits' panels — the roster
+        /// TurboDALI offers when the designer assigns a loop to a location. Reuses the same
+        /// <see cref="ParseLocationNumber"/> the allocator groups by, so an assignable location is exactly a
+        /// location the breakdown can place a panel in. DUMMY and unparseable panels are excluded.</summary>
+        public static IReadOnlyList<int> DiscoverPanelLocations(IEnumerable<ZonesCircuitData> circuits)
         {
-            var zones = new SortedSet<int>();
+            var locations = new SortedSet<int>();
             foreach (var c in circuits ?? Enumerable.Empty<ZonesCircuitData>())
             {
                 if (string.IsNullOrWhiteSpace(c.PanelName)) continue;
                 if (string.Equals(c.PanelName, "DUMMY", StringComparison.OrdinalIgnoreCase)) continue;
-                int zone = ParseLocationNumber(c.PanelName);
-                if (zone > 0) zones.Add(zone);
+                int location = ParseLocationNumber(c.PanelName);
+                if (location > 0) locations.Add(location);
             }
-            return zones.ToList();
+            return locations.ToList();
         }
 
         /// <summary>

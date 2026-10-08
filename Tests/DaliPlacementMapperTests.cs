@@ -9,20 +9,20 @@ namespace TurboSuite.Tests.Dali
     /// <summary>
     /// Oracles for <see cref="DaliPlacementMapper"/> — the persisted-loops → panel-placement boundary.
     /// Pins the placement/order split: an assigned loop lands in its ZONE N with a load count
-    /// summed over its zones, an unassigned loop (AssignedZone 0) is warned-not-placed, and a zero-load loop
+    /// summed over its zones, an unassigned loop (AssignedLocation 0) is warned-not-placed, and a zero-load loop
     /// is dropped from both (it orders no module, so there is nothing to place or warn). Reconciliation is
     /// the same shared pass DaliStateMapper runs, so the load-affecting rules (renamed zone dropped,
     /// contested zone first-wins) show through here too.
     /// </summary>
     public class DaliPlacementMapperTests
     {
-        private static DaliLoopDto Loop(string name, int order, int assignedZone, params string[] zones) =>
+        private static DaliLoopDto Loop(string name, int order, int assignedLocation, params string[] zones) =>
             new DaliLoopDto
             {
                 LoopId = name,
                 Name = name,
                 Order = order,
-                AssignedZone = assignedZone,
+                AssignedLocation = assignedLocation,
                 ZoneValues = zones.ToList()
             };
 
@@ -40,7 +40,7 @@ namespace TurboSuite.Tests.Dali
         [Fact]
         public void AssignedLoop_LandsInItsZone_WithSummedLoadCount()
         {
-            var loops = new[] { Loop("Kitchen", 1, assignedZone: 2, "K1", "K2") };
+            var loops = new[] { Loop("Kitchen", 1, assignedLocation: 2, "K1", "K2") };
             var loads = Loads(("K1", 3), ("K2", 5));
 
             var p = DaliPlacementMapper.Build(loops, loads);
@@ -58,8 +58,8 @@ namespace TurboSuite.Tests.Dali
         {
             var loops = new[]
             {
-                Loop("A", 1, assignedZone: 1, "Za"),
-                Loop("B", 2, assignedZone: 1, "Zb"),
+                Loop("A", 1, assignedLocation: 1, "Za"),
+                Loop("B", 2, assignedLocation: 1, "Zb"),
             };
             var loads = Loads(("Za", 2), ("Zb", 4));
 
@@ -73,7 +73,7 @@ namespace TurboSuite.Tests.Dali
         [Fact]
         public void UnassignedLoopWithLoads_IsWarnedNotPlaced()
         {
-            var loops = new[] { Loop("Orphan", 1, assignedZone: 0, "Z") };
+            var loops = new[] { Loop("Orphan", 1, assignedLocation: 0, "Z") };
             var loads = Loads(("Z", 6));
 
             var p = DaliPlacementMapper.Build(loops, loads);
@@ -88,7 +88,7 @@ namespace TurboSuite.Tests.Dali
         public void ZeroLoadLoop_IsDroppedFromBoth()
         {
             // The loop's zone exists (so it survives reconciliation) but carries no DALI fixtures.
-            var loops = new[] { Loop("Empty", 1, assignedZone: 3, "Z") };
+            var loops = new[] { Loop("Empty", 1, assignedLocation: 3, "Z") };
             var loads = Loads(("Z", 0));
 
             var p = DaliPlacementMapper.Build(loops, loads);
@@ -100,7 +100,7 @@ namespace TurboSuite.Tests.Dali
         [Fact]
         public void RenamedZone_DropsFromTheLoadSum()
         {
-            var loops = new[] { Loop("Kitchen", 1, assignedZone: 1, "Live", "Renamed") };
+            var loops = new[] { Loop("Kitchen", 1, assignedLocation: 1, "Live", "Renamed") };
             var loads = Loads(("Live", 4));   // "Renamed" is not a current zone
 
             var p = DaliPlacementMapper.Build(loops, loads);
@@ -114,8 +114,8 @@ namespace TurboSuite.Tests.Dali
         {
             var loops = new[]
             {
-                Loop("First", 1, assignedZone: 1, "Shared"),
-                Loop("Second", 2, assignedZone: 2, "Shared", "Own"),
+                Loop("First", 1, assignedLocation: 1, "Shared"),
+                Loop("Second", 2, assignedLocation: 2, "Shared", "Own"),
             };
             var loads = Loads(("Shared", 10), ("Own", 3));
 
@@ -128,7 +128,7 @@ namespace TurboSuite.Tests.Dali
         [Fact]
         public void NegativeZone_IsTreatedAsUnassigned()
         {
-            var loops = new[] { Loop("Weird", 1, assignedZone: -1, "Z") };
+            var loops = new[] { Loop("Weird", 1, assignedLocation: -1, "Z") };
             var p = DaliPlacementMapper.Build(loops, Loads(("Z", 2)));
 
             Assert.Empty(p.ByZone);

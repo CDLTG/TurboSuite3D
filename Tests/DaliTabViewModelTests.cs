@@ -41,17 +41,17 @@ namespace TurboSuite.Tests.Dali
             new DaliZoneItemViewModel(name, loads);
 
         private static DaliLoopDto Dto(string name, int order, int zone, params string[] zones) =>
-            new DaliLoopDto { LoopId = name, Name = name, Order = order, AssignedZone = zone,
+            new DaliLoopDto { LoopId = name, Name = name, Order = order, AssignedLocation = zone,
                               ZoneValues = zones.ToList() };
 
         private static DaliTabViewModel Build(
             IReadOnlyList<DaliZoneItemViewModel> zones,
-            IReadOnlyList<int> panelZones,
+            IReadOnlyList<int> panelLocations,
             DaliModuleState? saved,
             out CapturingStore store)
         {
             store = new CapturingStore();
-            return new DaliTabViewModel(zones, panelZones, saved ?? new DaliModuleState(),
+            return new DaliTabViewModel(zones, panelLocations, saved ?? new DaliModuleState(),
                                         new SyncWorkQueue(), store);
         }
 
@@ -65,7 +65,7 @@ namespace TurboSuite.Tests.Dali
 
             var loop = Assert.Single(vm.Loops);
             Assert.Equal("L1", loop.Name);
-            Assert.Equal(5, loop.AssignedZone);
+            Assert.Equal(5, loop.AssignedLocation);
             Assert.Equal(new[] { "A" }, loop.Zones.Select(z => z.ZoneName));
             Assert.Equal(2, loop.LoadCount);
             Assert.Equal(new[] { "B", "C" }, vm.Pool.Select(z => z.ZoneName));   // remainder pooled
@@ -134,7 +134,7 @@ namespace TurboSuite.Tests.Dali
             Assert.Equal(1, vm.UnassignedLoopCount);
 
             // Assigning a zone clears it.
-            vm.Loops[0].AssignedZone = 1;
+            vm.Loops[0].AssignedLocation = 1;
             Assert.False(vm.HasUnassignedLoops);
         }
 
@@ -165,12 +165,12 @@ namespace TurboSuite.Tests.Dali
             foreach (var z in vm.Pool) z.IsSelected = true;
             vm.NewLoopFromSelectionCommand.Execute(null);
             vm.Loops[0].Name = "Kitchen";
-            vm.Loops[0].AssignedZone = 7;
+            vm.Loops[0].AssignedLocation = 7;
 
             Assert.Equal(2, store.Last.PayloadVersion);
             var dto = Assert.Single(store.Last.Loops);
             Assert.Equal("Kitchen", dto.Name);
-            Assert.Equal(7, dto.AssignedZone);
+            Assert.Equal(7, dto.AssignedLocation);
             Assert.Equal(new[] { "A" }, dto.ZoneValues);
         }
 

@@ -40,7 +40,7 @@ namespace TurboSuite.Dali.Input
                 if (loadCount == 0) continue;   // orders no module ⇒ nothing to place or warn
 
                 var module = new DaliPanelModule(loop.Dto.Name, loadCount);
-                int zone = loop.Dto.AssignedZone;
+                int zone = loop.Dto.AssignedLocation;
                 if (zone <= 0)
                 {
                     unassigned.Add(module);     // ordered by the job-wide demand, but has no panel to sit in

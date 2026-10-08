@@ -205,7 +205,7 @@ public class WireCommand : IExternalCommand
     /// Shade mode: one shade → one circuit on a shade (35 V) location. Mirrors
     /// <see cref="HandleSingleFixture"/> minus the switch and wire-routing branches (a lone shade
     /// has nothing to route to), and defaults/filters the panel picker to shade locations. The
-    /// circuit-info dialog is otherwise identical — Comment, "Zone", and Room Override (the last
+    /// circuit-info dialog is otherwise identical — Comment, "Location", and Room Override (the last
     /// captured for a future Lutron export, though nothing in TurboSuite reads it for shades yet).
     /// </summary>
     private static Result HandleSingleShade(UIDocument uiDoc, Document doc, FamilyInstance shade)

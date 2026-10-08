@@ -27,7 +27,7 @@ namespace TurboSuite.Tests.Dali
         public void FreshStateHasSensibleDefaults()
         {
             var state = new DaliModuleState();
-            Assert.Equal(2, state.PayloadVersion);   // v2: DaliLoopDto.AssignedZone
+            Assert.Equal(2, state.PayloadVersion);   // v2: DaliLoopDto.AssignedLocation
             Assert.Empty(state.Loops);
         }
 
@@ -39,7 +39,7 @@ namespace TurboSuite.Tests.Dali
                 PayloadVersion = 1,
                 Loops = new List<DaliLoopDto>
                 {
-                    new DaliLoopDto { LoopId = "l1", Name = "North", Order = 1, AssignedZone = 4,
+                    new DaliLoopDto { LoopId = "l1", Name = "North", Order = 1, AssignedLocation = 4,
                                       ZoneValues = new List<string> { "Kitchen", "Hall" } },
                     new DaliLoopDto { LoopId = "l2", Name = "South", Order = 2,
                                       ZoneValues = new List<string> { "Bath" } },
@@ -52,17 +52,17 @@ namespace TurboSuite.Tests.Dali
             Assert.Equal("North", back.Loops[0].Name);
             Assert.Equal("l1", back.Loops[0].LoopId);
             Assert.Equal(1, back.Loops[0].Order);
-            Assert.Equal(4, back.Loops[0].AssignedZone);
+            Assert.Equal(4, back.Loops[0].AssignedLocation);
             Assert.Equal(new[] { "Kitchen", "Hall" }, back.Loops[0].ZoneValues);
             Assert.Equal("South", back.Loops[1].Name);
-            Assert.Equal(0, back.Loops[1].AssignedZone);   // never assigned ⇒ unassigned
+            Assert.Equal(0, back.Loops[1].AssignedLocation);   // never assigned ⇒ unassigned
             Assert.Equal(new[] { "Bath" }, back.Loops[1].ZoneValues);
         }
 
         [Fact]
-        public void V1Payload_DefaultsAssignedZoneToUnassigned()
+        public void V1Payload_DefaultsAssignedLocationToUnassigned()
         {
-            // A loop persisted before the AssignedZone field carries none; it must read as 0 (unassigned),
+            // A loop persisted before the AssignedLocation field carries none; it must read as 0 (unassigned),
             // so an older job's loops are ordered-but-warned rather than mis-placed into ZONE 0.
             const string json =
                 "{\"payloadVersion\":1,\"loops\":[{\"loopId\":\"x\",\"name\":\"L\",\"order\":1," +
@@ -70,7 +70,7 @@ namespace TurboSuite.Tests.Dali
 
             var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options)!;
 
-            Assert.Equal(0, Assert.Single(state.Loops).AssignedZone);
+            Assert.Equal(0, Assert.Single(state.Loops).AssignedLocation);
         }
 
         [Fact]
@@ -112,7 +112,7 @@ namespace TurboSuite.Tests.Dali
                 PayloadVersion = 4,
                 Loops = new List<DaliLoopDto>
                 {
-                    new DaliLoopDto { LoopId = "l1", Name = "Kitchen", Order = 1, AssignedZone = 3,
+                    new DaliLoopDto { LoopId = "l1", Name = "Kitchen", Order = 1, AssignedLocation = 3,
                                       ZoneValues = new List<string> { "Kitchen" } },
                 },
                 Snapshot = new DaliSnapshotDto
@@ -185,12 +185,12 @@ namespace TurboSuite.Tests.Dali
             // A pre-TurboDALI payload carries no snapshot ⇒ null = Unlocked/unaddressed, the safe default.
             const string json =
                 "{\"payloadVersion\":2,\"loops\":[{\"loopId\":\"x\",\"name\":\"L\",\"order\":1," +
-                "\"zoneValues\":[\"Z\"],\"assignedZone\":4}]}";
+                "\"zoneValues\":[\"Z\"],\"assignedLocation\":4}]}";
 
             var state = JsonSerializer.Deserialize<DaliModuleState>(json, Options)!;
 
             Assert.Null(state.Snapshot);
-            Assert.Equal(4, Assert.Single(state.Loops).AssignedZone);
+            Assert.Equal(4, Assert.Single(state.Loops).AssignedLocation);
         }
 
         [Fact]
@@ -201,7 +201,7 @@ namespace TurboSuite.Tests.Dali
             // with tolerant read (unknown/unused fields dropped, loops preserved).
             const string json =
                 "{\"payloadVersion\":3,\"loops\":[{\"loopId\":\"l1\",\"name\":\"Kitchen\",\"order\":1," +
-                "\"zoneValues\":[\"Kitchen\"],\"assignedZone\":3}]," +
+                "\"zoneValues\":[\"Kitchen\"],\"assignedLocation\":3}]," +
                 "\"snapshot\":{\"numberingState\":\"Locked\"," +
                 "\"loops\":[{\"loopId\":\"l1\",\"loopNumber\":1}]," +
                 "\"circuits\":[{\"circuitKey\":\"u-1\",\"loopId\":\"l1\",\"loopNumber\":1," +
@@ -211,7 +211,7 @@ namespace TurboSuite.Tests.Dali
 
             var loop = Assert.Single(state.Loops);
             Assert.Equal("Kitchen", loop.Name);
-            Assert.Equal(3, loop.AssignedZone);
+            Assert.Equal(3, loop.AssignedLocation);
             Assert.Equal(new[] { "Kitchen" }, loop.ZoneValues);
         }
     }
