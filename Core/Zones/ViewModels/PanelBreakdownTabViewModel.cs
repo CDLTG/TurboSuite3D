@@ -491,7 +491,14 @@ namespace TurboSuite.Zones.ViewModels
             var pack = LinkAssignmentService.PackForOneLine(
                 _allocationResult.AllPanels, BuildBomExtras(), _currentBrand, _orphanAssignments);
             var panels = ControlRenderDataFactory.BuildPanels(_allocationResult.AllPanels, _currentBrand);
-            var pages = ControlOneLinePlanner.Build(pack, panels, SystemName);
+            // The dominant repeater catalog stamps the CC-A chain nodes (one job-wide value today — the
+            // family carries PartNumber only). Null/empty when no repeaters are modelled.
+            string repeaterPartNumber = _hybridRepeaters?.Tallies?
+                .Where(t => t != null && t.HasCatalogNumber)
+                .OrderByDescending(t => t.Quantity)
+                .Select(t => t.CatalogNumber)
+                .FirstOrDefault();
+            var pages = ControlOneLinePlanner.Build(pack, panels, SystemName, repeaterPartNumber);
             if (pages.Count == 0) return;
 
             // The per-job wire legend, off the SAME pack (pure + cheap to rebuild here) — its dense numbers match

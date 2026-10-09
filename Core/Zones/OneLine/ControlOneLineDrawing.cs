@@ -104,6 +104,25 @@ namespace TurboSuite.Zones.OneLine
         public int MotorCount { get; }
     }
 
+    /// <summary>
+    /// A hybrid-repeater stamp (<c>ControlRepeaterDetail</c>) on a Clear Connect link (F4) — up to four chain
+    /// along the link's solid QS leg. Carries only its catalog <see cref="PartNumber"/> (a repeater is not a
+    /// located panel, so no name/fill). <see cref="Center"/> is the band center; the renderer places it with
+    /// <c>PlaceFamilyGrowUp</c> (bottom-center origin, art grows up), like the shade node. The per-keypad RF
+    /// fan off each repeater is deferred — the keypads keep the WIRELESS KEYPADS stub.
+    /// </summary>
+    public sealed class ControlRepeaterNode
+    {
+        public ControlRepeaterNode(XY center, string partNumber)
+        {
+            Center = center;
+            PartNumber = partNumber;
+        }
+
+        public XY Center { get; }
+        public string PartNumber { get; }
+    }
+
     /// <summary>One drawn wire segment (a <c>DetailCurve</c>): endpoints + solid/dashed, per the Lutron
     /// line-style convention — <b>dashed = RF (wireless), solid = WIRED</b>. The wire's cable TYPE is carried by
     /// its circled marker number, not the style, so the style is free to mean wired-vs-RF.</summary>
@@ -188,7 +207,8 @@ namespace TurboSuite.Zones.OneLine
             IReadOnlyList<ControlShadeNode> shades,
             IReadOnlyList<ControlWireSegment> wires,
             IReadOnlyList<ControlMarker> markers,
-            IReadOnlyList<ControlNote> notes)
+            IReadOnlyList<ControlNote> notes,
+            IReadOnlyList<ControlRepeaterNode>? repeaters = null)
         {
             PageIndex = pageIndex;
             PageCount = pageCount;
@@ -197,6 +217,7 @@ namespace TurboSuite.Zones.OneLine
             Wires = wires;
             Markers = markers;
             Notes = notes;
+            Repeaters = repeaters ?? System.Array.Empty<ControlRepeaterNode>();
         }
 
         /// <summary>1-based page number — the stable key the owned view is registered under.</summary>
@@ -207,6 +228,11 @@ namespace TurboSuite.Zones.OneLine
 
         public IReadOnlyList<ControlPanelNode> Panels { get; }
         public IReadOnlyList<ControlShadeNode> Shades { get; }
+
+        /// <summary>The hybrid-repeater stamps on this page's Clear Connect links (F4). Empty on a page with
+        /// no wireless.</summary>
+        public IReadOnlyList<ControlRepeaterNode> Repeaters { get; }
+
         public IReadOnlyList<ControlWireSegment> Wires { get; }
         public IReadOnlyList<ControlMarker> Markers { get; }
         public IReadOnlyList<ControlNote> Notes { get; }

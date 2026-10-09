@@ -47,10 +47,14 @@ namespace TurboSuite.Zones.OneLine
         /// nodes need no lookup — they render straight off their <see cref="PackedLinkUnit"/> (a shade unit
         /// carries its motor count as <see cref="PackedLinkUnit.Loads"/>).</param>
         /// <param name="systemName">Prefix for the owned view name (e.g. "TurboControl").</param>
+        /// <param name="repeaterPartNumber">The hybrid-repeater catalog number stamped on each CC-A chain
+        /// node (<c>ControlRepeaterDetail</c>'s only label). Null/empty ⇒ the stamp draws with a blank part
+        /// number. One job-wide value today (the dominant repeater model); per-link catalogs can come later.</param>
         public static IReadOnlyList<ControlOneLineDrawing> Build(
             LinkPackResult pack,
             IReadOnlyDictionary<string, ControlPanelRenderData> panels,
-            string systemName)
+            string systemName,
+            string? repeaterPartNumber = null)
         {
             var groups = pack?.Processors ?? Array.Empty<ProcessorGroup>();
             if (groups.Count == 0) return Array.Empty<ControlOneLineDrawing>();
@@ -64,6 +68,7 @@ namespace TurboSuite.Zones.OneLine
             // (phase 2) re-points them at a fresh set per page, so every helper targets the page being built.
             var panelNodes = new List<ControlPanelNode>();
             var shadeNodes = new List<ControlShadeNode>();
+            var repeaterNodes = new List<ControlRepeaterNode>();
             var wires = new List<ControlWireSegment>();
             var markers = new List<ControlMarker>();
             var notes = new List<ControlNote>();
@@ -305,45 +310,25 @@ namespace TurboSuite.Zones.OneLine
                     double lx = pl.LaneX;
                     double ey = pl.ExitY;
 
-                    // Dogleg out of the head: right edge → lane (the bend X, in the gap). The drop to the row happens
-                    // per-branch below (a QS link drops to its spine; an RF link drops to the row center).
+                    // Dogleg out of the head: right edge → lane (the bend X, in the gap), then DROP the lane to
+                    // the link's spine. The spine + carets below are IDENTICAL for a QS link and a CC-A (RF)
+                    // link: a node hangs off a caret whose apex sits on its bottom origin, so swapping a
+                    // repeater for a dimmer/shade along the link changes only what is drawn ABOVE the caret,
+                    // never the link itself.
                     Wire(new XY(headRightX, ey), new XY(lx, ey), dashed: false);   // exit horizontal
 
-                    if (pl.IsCC)
-                    {
-                        // The "RF link" is QS WIRE from the processor to a Hybrid Repeater — there is no Clear
-                        // Connect cable (the wireless devices reach the repeater over RF). So the drawn leg is a
-                        // QS wire carrying a QS marker, treated like the wired-keypad tail: a stub to a
-                        // "WIRELESS KEYPADS" note. The repeater node + the per-keypad RF fan off it arrive with
-                        // the keypad-location expansion (Future direction); today the repeater is abstracted.
-                        Wire(new XY(lx, ey), new XY(lx, y), dashed: false);        // drop to the row
-                        var b = new XY(lx + ControlOnePlannerConstants.WirelessStubLen, y);
-                        Wire(new XY(lx, y), b, dashed: false);
-                        Mark(new XY(headRightX + G.Layout.MarkerExitOffset, ey), ControlWireType.QsControlLink);   // at the head RIGHT-edge exit
-                        Tick(wires, b, G.Layout.KeypadTickHalf);
-                        Note(b.Offset(ControlOnePlannerConstants.NoteDx, 0),
-                            "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName,
-                            ControlVerticalAlign.Middle);
-                        continue;
-                    }
-
-                    // The QS daisy (spine) runs LinkSpineDropFt BELOW the shared bottom-origin baseline; every
-                    // child node — dimmer AND shade, both bottom-aligned — taps it with a caret whose apex sits ON
-                    // its origin (per the Lutron reference sheets). The LAST node on a link that ends here (no keypad tail
-                    // after it) draws only the LEFT half of its caret, so no half-caret dangles past it.
+                    // The spine runs LinkSpineDropFt BELOW the shared bottom-origin baseline; every child node
+                    // (dimmer, shade, OR repeater — all bottom-aligned) taps it with a caret whose apex sits ON
+                    // its origin (per the Lutron reference sheets). A terminal node with nothing after it draws
+                    // only the LEFT half of its caret, so no half-caret dangles past it.
                     double panelBottomY = y - G.Panel.PowerPanelHeight / 2.0;
                     double spineY = panelBottomY - G.Layout.LinkSpineDropFt;
-
-                    // Drop the lane to the spine (bend at lane X), then the spine runs right through the gap into
-                    // column 1.
-                    Wire(new XY(lx, ey), new XY(lx, spineY), dashed: false);
+                    Wire(new XY(lx, ey), new XY(lx, spineY), dashed: false);       // drop the lane to the spine
                     Mark(new XY(headRightX + G.Layout.MarkerExitOffset, ey), ControlWireType.QsControlLink);   // at the head RIGHT-edge exit
 
-                    double cursorX = col1LeftX - G.Layout.NodeGap;   // so the first node lands at col1LeftX + w/2
+                    double cursorX = col1LeftX - G.Layout.NodeGap;   // so the first QS node lands at col1LeftX + w/2
                     double spineFromX = lx;                          // spine starts at the lane drop
 
-                    // Caret from the spine up to a node's bottom origin at cxAt. leftHalfOnly = a terminal node
-                    // with nothing after it: draw spine→leftFoot→apex and stop, so no right half dangles.
                     void Caret(double cxAt, bool leftHalfOnly)
                     {
                         double leftFoot = cxAt - G.Layout.CaretHalfWidth;
@@ -353,6 +338,41 @@ namespace TurboSuite.Zones.OneLine
                         double rightFoot = cxAt + G.Layout.CaretHalfWidth;
                         Wire(new XY(cxAt, panelBottomY), new XY(rightFoot, spineY), dashed: false);
                         spineFromX = rightFoot;
+                    }
+
+                    if (pl.IsCC)
+                    {
+                        // A CC-A (RF) link is QS WIRE from the processor to each Hybrid Repeater — the wireless
+                        // devices reach the repeater over RF, there is no Clear Connect cable — so it draws on the
+                        // SAME spine + carets as a QS link. Each repeater (≤4) hangs off a caret as a
+                        // bottom-aligned stamp, spaced by the link's own CENTER-TO-CENTER values (so a repeater
+                        // sits where a panel would): the first at the head→column-1 c-c off the head center, then
+                        // the inter-panel c-c between repeaters. The WIRELESS KEYPADS stub always tails the spine
+                        // (so no repeater caret is ever terminal); the per-keypad RF fan is deferred.
+                        int reps = System.Math.Max(0, pl.Link.Repeaters);
+                        double lastCx = double.NaN;
+                        for (int r = 0; r < reps; r++)
+                        {
+                            double cx = colX + G.Layout.HeadColumnCenterToCenter + r * G.Layout.PanelCenterToCenter;
+                            Caret(cx, leftHalfOnly: false);
+                            repeaterNodes.Add(new ControlRepeaterNode(
+                                new XY(cx, panelBottomY + G.Repeater.Height / 2.0), repeaterPartNumber ?? string.Empty));
+                            lastCx = cx;
+                        }
+
+                        // Keypad tail — spine terminus + tick + note, the same edge+gap shape as the QS keypad
+                        // tail (located fan deferred, so only the stub draws). With no repeater modelled (a 0/4
+                        // link) the stub lands at the first-node column so it still sits on the link.
+                        double tailFromX = double.IsNaN(lastCx)
+                            ? colX + G.Layout.HeadColumnCenterToCenter
+                            : lastCx + G.Repeater.Width / 2.0;
+                        double kxCc = tailFromX + G.Layout.KeypadTailGap;
+                        Wire(new XY(spineFromX, spineY), new XY(kxCc, spineY), dashed: false);
+                        Tick(wires, new XY(kxCc, spineY), G.Layout.KeypadTickHalf);
+                        Note(new XY(kxCc + G.Layout.KeypadTailBlockDx, spineY),
+                            "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName,
+                            ControlVerticalAlign.Middle);
+                        continue;
                     }
 
                     var loc = pl.Located;
@@ -488,6 +508,7 @@ namespace TurboSuite.Zones.OneLine
                 // Re-point the accumulators at THIS page's buckets (the drawing helpers close over them).
                 panelNodes = new List<ControlPanelNode>();
                 shadeNodes = new List<ControlShadeNode>();
+                repeaterNodes = new List<ControlRepeaterNode>();
                 wires = new List<ControlWireSegment>();
                 markers = new List<ControlMarker>();
                 notes = new List<ControlNote>();
@@ -496,7 +517,7 @@ namespace TurboSuite.Zones.OneLine
                     if (enc.Page == pg) DrawEnclosure(enc);
 
                 drawings.Add(new ControlOneLineDrawing(pg, pageCount, panelNodes, shadeNodes, wires,
-                    markers, notes));
+                    markers, notes, repeaterNodes));
             }
             return drawings;
         }

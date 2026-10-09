@@ -148,9 +148,10 @@ per-panel render data; module tiles **bottom-up**, part-number-labeled). The pac
 composition via `PackedLink.Units` (Section 2a). `Shim/Zones/Services/ControlOneLineService.cs` replays it
 into per-page owned views: panels are **family-composed** — a branded enclosure family (resolved by the
 node's `EnclosureRole`: `ControlPanelDetail` PD8/PD9, `ControlLv21Detail`) filled with the shared
-`ControlModuleDetail` + `ControlLvSlotDetail` tiles, plus `ControlSmartPanelDetail` shades and
-`ControlWireMarkAnnotation` markers. A **missing family warns-and-skips** (no box-and-text fallback — the
-families are authored, so a missing one is a config error to surface, not a look-alike to draw).
+`ControlModuleDetail` + `ControlLvSlotDetail` tiles, plus `ControlSmartPanelDetail` shades,
+`ControlRepeaterDetail` hybrid-repeater stamps (CC-A chain), and `ControlWireMarkAnnotation` markers. A
+**missing family warns-and-skips** (no box-and-text fallback — the families are authored, so a missing one
+is a config error to surface, not a look-alike to draw).
 
 The renderer-drawn head-end glyphs follow the firm's sheet style: each processor head draws its own
 **Ethernet-to-Home-Network stub** — a CAT6 run LEFT out of its left edge (inline with the bottom-row exit) with
@@ -178,8 +179,11 @@ geometry via `ControlNote.VAlign` (Middle), not nudge offsets.
 (never hosts a processor), PD8 = 8 modules + the LV compartment on the **bottom rung**; the 9-rung fixed height
 falls out of the data model (`ModuleTiles.Count == PanelCapacity`), so a single `ControlPanelDetail` serves both.
 Families are authored with a **bottom-center origin, artwork expanding upward**; the renderer places each at its
-band bottom (`ControlOneLineService.PlaceFamilyGrowUp` for enclosures/shades) while the planner/geometry keep
-reasoning in band centers. Tiles anchor their origin to authored per-rung Y offsets (`Panel.RungOffsets` for power panels,
+band bottom (`ControlOneLineService.PlaceFamilyGrowUp` for enclosures/shades/repeater stamps) while the
+planner/geometry keep reasoning in band centers. The repeater stamp (`ControlRepeaterDetail`, measured
+3'-8 1/16" × 4'-9 3/8", `PartNumber`-only) follows the same convention and hangs off the link's carets like
+a panel, spaced by the link's own center-to-centers — the first at `Layout.HeadColumnCenterToCenter` (15'-0")
+off the head, then `Layout.PanelCenterToCenter` (10'-0") between repeaters. Tiles anchor their origin to authored per-rung Y offsets (`Panel.RungOffsets` for power panels,
 `Panel.Lv21RungOffsets` for the LV21, measured up from the enclosure bottom origin, picked by tile count), so
 anchors are per-panel-relative (no diagram-wide rung grid);
 cross-panel alignment among power panels is emergent from their identical fixed height. The wire marker stays
@@ -189,8 +193,12 @@ a centered glyph.
 view (`TurboControl - Wire Legend`), chained after the pages on one Draw click, with a **marker-tied dense roster
 — numbered cables only: QS=1, CAT6=2, Shade=3** (Shade present only when the job has shade panels). The planner
 stamps every marker with `legend.NumberFor(t)`, so the legend and the sheet markers are 1:1 by construction.
-**Clear Connect is not a cable:** an RF link is QS wire to a Hybrid Repeater (abstracted until the keypad
-expansion), so the wireless leg draws as **QS wire with a QS marker**, and `ClearConnect` / `PanelControlLink` /
+**Clear Connect is not a cable:** an RF link is QS wire to a Hybrid Repeater, so the wireless leg draws as
+**QS wire with a QS marker** on the **same spine + carets as a QS link** — each repeater (≤4) hangs off a
+caret as a bottom-aligned `ControlRepeaterDetail` stamp (labeled with the job's repeater catalog), the
+`WIRELESS KEYPADS` stub tailing the spine. Swapping a repeater for a dimmer/shade along the link changes
+only what is drawn **above the caret**, never the link. The **per-keypad RF fan off each repeater is
+deferred**. `ClearConnect` / `PanelControlLink` /
 `DaliLoop` stay **benched** `ControlWireType` members, never rostered (panel links are QS; DALI/DMX are never
 drawn here). Line style follows Lutron — **dashed = RF, solid = wired** (solid `<Medium Lines>`, dashed `Wiring
 (CAT6)`; the cable type is carried by the circled number, so the style is free to mean wired-vs-RF), with
@@ -199,7 +207,8 @@ drawn here). Line style follows Lutron — **dashed = RF, solid = wired** (solid
 right, CAT6 left — while the shade-link marker stays on its motor stub. Legend title is the larger
 `AL_Annotation_6.75"` over 4.5" body rows.
 
-**Status:** the 6 families are authored, the box fallback is removed, and the measured family geometry (outer
+**Status:** the 7 families are authored (the 6 panel/tile/shade/marker families + the `ControlRepeaterDetail`
+repeater stamp), the box fallback is removed, and the measured family geometry (outer
 sizes, rung anchor offsets incl. the LV21's) is transcribed into `ControlOneLineGeometry`; spine/caret,
 bottom-aligned shades, the row-per-link 28' layout, the **head-panel dogleg fan + one-head LV21 placement**
 (name-identified head, dead-link row compaction, LV21 tile offsets), per-head **Ethernet stubs**, **42×30

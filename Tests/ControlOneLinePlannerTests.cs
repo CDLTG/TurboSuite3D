@@ -211,6 +211,51 @@ namespace TurboSuite.Tests.Zones
             Assert.Contains(page.Shades, s => s.Name == "1-D");
         }
 
+        /// <summary>F4 — a CC-A link carrying repeaters chains one <c>ControlRepeaterDetail</c> stamp per
+        /// repeater, each labeled with the job's repeater catalog, and still hangs the WIRELESS KEYPADS stub
+        /// at the tail (the per-keypad fan is deferred). The stamps sit left→right at the repeater
+        /// center-to-center pitch, non-overlapping.</summary>
+        [Fact]
+        public void ClearConnectLinkChainsARepeaterStampPerRepeater()
+        {
+            var pack = Pack(Group(
+                Qs(U("1-A", LinkCategory.Modules, 8)),
+                new PackedLink(ProcessorLink.ClearConnectLinkType, 3, 0, Array.Empty<string>(), repeaters: 3)));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = Assert.Single(
+                ControlOneLinePlanner.Build(pack, panels, "TurboControl", "HQR-REP-120"));
+
+            Assert.Equal(3, page.Repeaters.Count);
+            Assert.All(page.Repeaters, r => Assert.Equal("HQR-REP-120", r.PartNumber));
+
+            var xs = page.Repeaters.Select(r => r.Center.X).ToList();
+            Assert.Equal(xs.OrderBy(x => x).ToList(), xs);                 // left→right
+            // First stamp at the head→column-1 c-c off the head center (15'-0"), then the inter-panel c-c
+            // (10'-0") between repeaters — a repeater sits exactly where a panel would on the link.
+            Assert.Equal(
+                ControlOneLineGeometry.Layout.ProcessorColumnX + ControlOneLineGeometry.Layout.HeadColumnCenterToCenter,
+                xs[0], 3);
+            for (int i = 1; i < xs.Count; i++)
+                Assert.Equal(ControlOneLineGeometry.Layout.PanelCenterToCenter, xs[i] - xs[i - 1], 3);
+
+            Assert.Contains(page.Notes, n => n.Text.Contains("WIRELESS KEYPADS"));
+        }
+
+        /// <summary>A wireless link with no repeater modelled (a 0/4 bar) draws no stamp, but still the
+        /// WIRELESS KEYPADS stub — the wireless devices have to live somewhere.</summary>
+        [Fact]
+        public void ClearConnectLinkWithNoRepeaterDrawsTheStubWithNoStamp()
+        {
+            var pack = Pack(Group(Qs(U("1-A", LinkCategory.Modules, 8)), Cca(devices: 2)));   // repeaters: 0
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.Empty(page.Repeaters);
+            Assert.Contains(page.Notes, n => n.Text.Contains("WIRELESS KEYPADS"));
+        }
+
         /// <summary>A link with no keypad unit gets no keypad stub.</summary>
         [Fact]
         public void NoKeypadStubWhenLinkHasNoKeypads()

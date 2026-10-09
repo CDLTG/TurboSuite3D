@@ -21,6 +21,7 @@ namespace TurboSuite.Zones.OneLine
 
         public int Panels { get; set; }
         public int Shades { get; set; }
+        public int Repeaters { get; set; }
         public int Wires { get; set; }
         public int Notes { get; set; }
         public int Markers { get; set; }
@@ -32,7 +33,7 @@ namespace TurboSuite.Zones.OneLine
         public string Summary =>
             (Ok ? (Created ? "Drew " : "Redrew ") : "Failed to draw ")
             + $"one-line sheet {PageIndex}"
-            + (Ok ? $": {Panels} panel(s), {Shades} shade(s), {Wires} wire(s), {Markers} marker(s), {Notes} note(s)" : "")
+            + (Ok ? $": {Panels} panel(s), {Shades} shade(s), {Repeaters} repeater(s), {Wires} wire(s), {Markers} marker(s), {Notes} note(s)" : "")
             + (Warnings.Count > 0 ? $" ({Warnings.Count} warning(s))" : "") + ".";
     }
 }

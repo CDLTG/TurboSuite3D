@@ -210,6 +210,68 @@ namespace TurboSuite.Tests.Zones
             Assert.Contains("2-A", packed.Processors[1].Link1.UnitNames);
             Assert.Empty(packed.Processors[1].Link2.UnitNames);
         }
+
+        /// <summary>F4 item 5 — located CC-A slot placement. Two processors, one at each location, with
+        /// repeaters located at BOTH (loc 1: 2 repeaters; loc 2: 3). Each location's CC-A link must land
+        /// on a Link-2 slot of ITS OWN processor — loc 1's two repeaters on processor 0's Link 2, loc 2's
+        /// three on processor 1's Link 2 — not both carved off the globally-trailing slots (which put loc
+        /// 1's CC-A on processor 1 and spilled that processor's QS). Each Link 1 stays QS with its own
+        /// panel; nothing is over capacity.</summary>
+        [Fact]
+        public void LocatedClearConnectLinksLandOnTheirOwnLocationLink2()
+        {
+            var panels = new List<PanelResult> { Panel("1-A", modules: 4), Panel("2-A", modules: 4) };
+            var extras = new BomExtras
+            {
+                HybridRepeaters = Tally.Repeaters(5),
+                RepeaterLocations = new List<RepeaterLocationTally>
+                {
+                    Tally.Loc("1-REP1", repeaters: 2, Tally.Keypad("K1", 1)),
+                    Tally.Loc("2-REP1", repeaters: 3, Tally.Keypad("K2", 2))
+                }
+            };
+
+            var packed = PackPooled(panels, Slots(1, 2), extras);
+
+            Assert.Equal(2, packed.ClearConnectLinkCount);
+            Assert.All(packed.Links, l => Assert.False(l.IsOverCapacity));
+
+            // Processor 0 (loc 1): Link 1 keeps its own panel as QS; Link 2 is loc 1's CC-A.
+            Assert.Contains("1-A", packed.Processors[0].Link1.UnitNames);
+            Assert.Equal(ProcessorLink.QsLinkType, packed.Processors[0].Link1.LinkType);
+            Assert.Equal(ProcessorLink.ClearConnectLinkType, packed.Processors[0].Link2.LinkType);
+            Assert.Equal(2, packed.Processors[0].Link2.Repeaters);
+            Assert.Equal(new[] { "K1" }, packed.Processors[0].Link2.WirelessKeypadRecords.Select(k => k.SwitchId));
+
+            // Processor 1 (loc 2): same shape, with loc 2's own repeaters/keypad.
+            Assert.Contains("2-A", packed.Processors[1].Link1.UnitNames);
+            Assert.Equal(ProcessorLink.QsLinkType, packed.Processors[1].Link1.LinkType);
+            Assert.Equal(ProcessorLink.ClearConnectLinkType, packed.Processors[1].Link2.LinkType);
+            Assert.Equal(3, packed.Processors[1].Link2.Repeaters);
+            Assert.Equal(new[] { "K2" }, packed.Processors[1].Link2.WirelessKeypadRecords.Select(k => k.SwitchId));
+        }
+
+        /// <summary>A repeater location with no processor of its own (loc 3, where only loc 1 and loc 2 are
+        /// placed) cannot pin to an own-location slot, so its CC-A spills to the trailing slot — processor
+        /// 1's Link 2 — the global fallback. Both located panels keep their QS links untouched.</summary>
+        [Fact]
+        public void ProcessorlessRepeaterLocationSpillsToTheTrailingSlot()
+        {
+            var panels = new List<PanelResult> { Panel("1-A", modules: 4), Panel("2-A", modules: 4) };
+            var extras = new BomExtras
+            {
+                HybridRepeaters = Tally.Repeaters(2),
+                RepeaterLocations = new List<RepeaterLocationTally> { Tally.Loc("3-REP1", repeaters: 2) }
+            };
+
+            var packed = PackPooled(panels, Slots(1, 2), extras);
+
+            Assert.Equal(1, packed.ClearConnectLinkCount);
+            Assert.Equal(ProcessorLink.ClearConnectLinkType, packed.Processors[1].Link2.LinkType);
+            Assert.Equal(2, packed.Processors[1].Link2.Repeaters);
+            Assert.Contains("1-A", packed.Processors[0].Link1.UnitNames);
+            Assert.Contains("2-A", packed.Processors[1].Link1.UnitNames);
+        }
     }
 
     /// <summary>Shades as indivisible, located QSPS-10PNL units (item 2a) — the physical truth the

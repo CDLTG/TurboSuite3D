@@ -67,6 +67,7 @@ public static class Roles
     public const string ControlModuleDetail = "ControlModuleDetail";      // module tile (shared)
     public const string ControlLvSlotDetail = "ControlLvSlotDetail";      // LV-compartment tile (shared)
     public const string ControlWireMarkAnnotation = "ControlWireMarkAnnotation";
+    public const string ControlRepeaterDetail = "ControlRepeaterDetail";  // hybrid-repeater stamp (CC-A chain)
 
     /// <summary>
     /// A human-facing phrase for a finder role, used in "not found" messages — deliberately decoupled
@@ -104,6 +105,7 @@ public static class Roles
             [ControlModuleDetail] = "Control Module tile detail",
             [ControlLvSlotDetail] = "Control LV Slot tile detail",
             [ControlWireMarkAnnotation] = "Control Wire Mark annotation",
+            [ControlRepeaterDetail] = "Control Hybrid Repeater detail",
         };
 
     /// <summary>Every recognized role, keyed case-insensitively to its canonical spelling.</summary>
@@ -117,7 +119,7 @@ public static class Roles
             LinearFeedTag, LinearFeedDetail, DmxDecoderDetail, DmxDriverDetail, DmxInterfaceDetail,
             DmxProcessorDetail, DmxTerminatorDetail, DmxWireMarkAnnotation,
             ControlPanelDetail, ControlLv21Detail, ControlSmartPanelDetail, ControlModuleDetail,
-            ControlLvSlotDetail, ControlWireMarkAnnotation,
+            ControlLvSlotDetail, ControlWireMarkAnnotation, ControlRepeaterDetail,
         });
 
     /// <summary>

@@ -74,6 +74,7 @@ namespace TurboSuite.Zones.Services
                         var moduleFam = ResolveSymbol(Roles.ControlModuleDetail);
                         var lvFam = ResolveSymbol(Roles.ControlLvSlotDetail);
                         var shadeFam = ResolveSymbol(Roles.ControlSmartPanelDetail);
+                        var repeaterFam = ResolveSymbol(Roles.ControlRepeaterDetail);
 
                         long vid = viewRegistry != null && viewRegistry.TryGetValue(page.PageIndex, out long v) ? v : 0L;
                         var view = FindOrCreateViewByIdOrName(page.ViewName(systemName), vid, result.Warnings, out bool created);
@@ -85,6 +86,7 @@ namespace TurboSuite.Zones.Services
 
                         foreach (var p in page.Panels) { DrawPanelNode(view, p, moduleFam, lvFam, result.Warnings, warnedRoles); result.Panels++; }
                         foreach (var s in page.Shades) { DrawShadeNode(view, s, shadeFam, result.Warnings, warnedRoles); result.Shades++; }
+                        foreach (var rp in page.Repeaters) { DrawRepeaterNode(view, rp, repeaterFam, result.Warnings, warnedRoles); result.Repeaters++; }
                         result.Wires += DrawWires(view, page.Wires, dashed, solid);
                         result.Notes += DrawNotes(view, page.Notes, textType, result.Warnings);
                         result.Markers += DrawMarkers(view, page.Markers, marker);
@@ -301,6 +303,16 @@ namespace TurboSuite.Zones.Services
             if (shadeFam == null) { WarnMissing(Roles.ControlSmartPanelDetail, warnings, warnedRoles); return; }
             PlaceFamilyGrowUp(view, shadeFam, node.Center.X, node.Center.Y, G.ShadePanel.Height,
                 (G.ShadePanel.NameParam, node.Name), (G.ShadePanel.FillParam, node.FillText), (G.ShadePanel.PartNumberParam, node.PartNumber));
+        }
+
+        // A hybrid-repeater stamp on a CC-A chain (F4) — same bottom-origin grow-up placement as the shade
+        // node; the only label is its catalog part number. Missing family warns-and-skips like the others.
+        private void DrawRepeaterNode(View view, ControlRepeaterNode node, FamilySymbol repeaterFam,
+            List<string> warnings, HashSet<string> warnedRoles)
+        {
+            if (repeaterFam == null) { WarnMissing(Roles.ControlRepeaterDetail, warnings, warnedRoles); return; }
+            PlaceFamilyGrowUp(view, repeaterFam, node.Center.X, node.Center.Y, G.Repeater.Height,
+                (G.Repeater.PartNumberParam, node.PartNumber));
         }
 
         // Warn once per missing node-family role (deduped), so a job with an unloaded family reports it rather

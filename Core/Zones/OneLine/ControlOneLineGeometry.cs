@@ -249,6 +249,26 @@ namespace TurboSuite.Zones.OneLine
             public static readonly XY MotorTap = new XY(0, Height / 2.0);
         }
 
+        /// <summary>
+        /// A hybrid-repeater stamp (<c>ControlRepeaterDetail</c>) on a Clear Connect link (F4). The CC-A leg is
+        /// QS WIRE from the processor to the repeater (no Clear Connect cable — the wireless devices reach the
+        /// repeater over RF), so the drawn leg is solid QS; up to four repeater stamps chain along it, each
+        /// labeled with its catalog <c>PartNumber</c> only (no name/fill). Authored like the other control
+        /// node families — a Detail Item with a BOTTOM-CENTER origin, artwork growing UP — so the renderer
+        /// places it with <c>ControlOneLineService.PlaceFamilyGrowUp</c> on the link row, centered on the
+        /// band. The per-keypad RF fan off each repeater is deferred (the keypads keep the WIRELESS KEYPADS
+        /// stub); this is the stamp + chain only.
+        /// </summary>
+        public static class Repeater
+        {
+            public const double Width = (44.0 + 1.0 / 16.0) / 12.0;   // 3'-8 1/16" (measured authored family)
+            public const double Height = (57.0 + 3.0 / 8.0) / 12.0;   // 4'-9 3/8"  (measured authored family)
+
+            /// <summary>The only label param the renderer writes — the repeater catalog number (e.g.
+            /// "HQR-REP-120"). The stamp carries no name/fill (a repeater is not a located panel).</summary>
+            public const string PartNumberParam = "PartNumber";
+        }
+
         /// <summary>Wire-type marker — Generic Annotation placed ON a wire; <c>WireMark</c> = the per-job
         /// legend number (dense 1..N). Mirrors the DMX marker.</summary>
         public static class Marker

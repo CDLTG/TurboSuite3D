@@ -141,8 +141,7 @@ namespace TurboSuite.Zones.Services
 
             demand ??= new LinkDemand();
 
-            // The flat link-slot structure, processor-major. Clear Connect is carved off the TRAILING
-            // positions (Gap #9): the last ccaLinks slots go RF, the rest are QS.
+            // The flat link-slot structure, processor-major.
             var slots = new List<(int Proc, int LinkNumber, int Location)>();
             for (int p = 0; p < processors.Count; p++)
             {
@@ -158,13 +157,22 @@ namespace TurboSuite.Zones.Services
                              || demand.FloatingLoads > 0;
 
             int ccaLinks = ClearConnectLinksFor(demand, totalLinks, hasQsWork, unlimited: false);
-            int firstCcaSlot = totalLinks - ccaLinks;   // slots at or after this index go RF
 
-            // One QS bin per QS slot, carrying its processor/link identity for deterministic tiebreaks.
+            // Which specific slots carry Clear Connect, and the link on each (F4 item 5). A located
+            // repeater lands on a Link-2 slot of a processor in ITS OWN location, so Loc 1's CC-A no
+            // longer draws on Loc 2's processor (and no longer spills that processor's QS elsewhere); a
+            // processorless location, and the location-free global pour, fall back to the TRAILING slots —
+            // byte-identical to the old global carve when nothing is located (the frozen Gap #9 baselines).
+            var ccaBySlot = AssignClearConnectSlots(demand, slots, ccaLinks);
+            var ccaSlots = new HashSet<int>(ccaBySlot.Keys);
+
+            // One QS bin per NON-Clear-Connect slot, carrying its processor/link identity for the
+            // location pooling and deterministic tiebreaks.
             var qsBins = new List<Bin>();
             var binBySlot = new Dictionary<int, Bin>();
-            for (int s = 0; s < firstCcaSlot; s++)
+            for (int s = 0; s < totalLinks; s++)
             {
+                if (ccaSlots.Contains(s)) continue;
                 var bin = new Bin { ProcIndex = slots[s].Proc, LinkNumber = slots[s].LinkNumber, Location = slots[s].Location };
                 qsBins.Add(bin);
                 binBySlot[s] = bin;
@@ -196,14 +204,11 @@ namespace TurboSuite.Zones.Services
             PourKeypadDevices(demand.FloatingDevices, demand.FloatingDevicePdu, demand.KeypadRecords, qsBins);
             PourKeypads(demand.FloatingLoads, qsBins, totalPdu: 0, asDevices: false);
 
-            // 4) Clear Connect links, assigned back to their carved trailing slots.
-            var ccaList = PackWireless(demand, ccaLinks).ToList();
-
+            // 4) Materialise each slot: the Clear Connect slots carry the links assigned above, the rest
+            //    carry their QS bin.
             var bySlot = new PackedLink[totalLinks];
-            for (int s = 0; s < firstCcaSlot; s++)
-                bySlot[s] = binBySlot[s].ToQsLink();
-            for (int i = 0; i < ccaList.Count; i++)
-                bySlot[firstCcaSlot + i] = ccaList[i];
+            for (int s = 0; s < totalLinks; s++)
+                bySlot[s] = ccaSlots.Contains(s) ? ccaBySlot[s] : binBySlot[s].ToQsLink();
 
             // Per-processor grouping, positional to the input list.
             var groups = new List<ProcessorGroup>();
@@ -218,12 +223,107 @@ namespace TurboSuite.Zones.Services
             }
 
             // Flat list: QS first, Clear Connect last — the shape the flat overload produces, so counting
-            // and any positional back-compat are unchanged.
+            // and any positional back-compat are unchanged. The CC-A slots are no longer contiguous at the
+            // tail (F4 item 5), so gather by link type rather than by a single split index.
             var flat = new List<PackedLink>();
-            for (int s = 0; s < firstCcaSlot; s++) flat.Add(bySlot[s]);
-            flat.AddRange(ccaList);
+            for (int s = 0; s < totalLinks; s++)
+                if (!ccaSlots.Contains(s)) flat.Add(bySlot[s]);
+            for (int s = 0; s < totalLinks; s++)
+                if (ccaSlots.Contains(s)) flat.Add(bySlot[s]);
 
             return new LinkPackResult(flat, qsBins.Count, ccaLinks, groups);
+        }
+
+        /// <summary>
+        /// Decides which processor-link slots carry the Clear Connect links and renders each (F4 item 5).
+        /// A located repeater prefers a Link-2 slot of a processor in its OWN location — so a job with two
+        /// located processors keeps each location's CC-A on that location's own Link 2 instead of carving
+        /// both off the globally-trailing slots (which also spilled a processor's QS to another location).
+        /// A location with no processor of its own, a mixed-location collapse, and the location-free global
+        /// pour all fall back to the trailing slots — byte-identical to the old carve when nothing is
+        /// located.
+        ///
+        /// Fit-preserving: assigns exactly <paramref name="ccaLinks"/> slots, so the QS budget left is
+        /// always <c>totalLinks - ccaLinks</c> regardless of WHICH slots. The "reserve ≥1 QS link when
+        /// there is QS work" guarantee lives in <see cref="ClearConnectLinksFor"/>'s count, not here.
+        /// </summary>
+        private static Dictionary<int, PackedLink> AssignClearConnectSlots(
+            LinkDemand demand, List<(int Proc, int LinkNumber, int Location)> slots, int ccaLinks)
+        {
+            var bySlot = new Dictionary<int, PackedLink>();
+            if (ccaLinks <= 0) return bySlot;
+
+            // No located repeater data ⇒ no location to honour: carve off the trailing slots exactly as
+            // before (the last ccaLinks positions), so the global-pooling baselines stay byte-identical.
+            if (demand.RepeaterLocations.Count == 0)
+            {
+                var globalList = PackWirelessGlobal(
+                    demand.RepeaterCount, demand.WirelessDevices, ccaLinks).ToList();
+                int firstCcaSlot = slots.Count - ccaLinks;
+                for (int i = 0; i < globalList.Count; i++)
+                    bySlot[firstCcaSlot + i] = globalList[i];
+                return bySlot;
+            }
+
+            // Located: one kept plan per CC-A link, each carrying its location. Pass 1 pins a plan with a
+            // real location to a free Link-2 slot of a processor in that location (falling back to any free
+            // slot there); pass 2 spills the rest — a processorless location, or a mixed-location collapse
+            // (Location 0) — to the trailing free slots.
+            var kept = CollapseToKept(PlanClearConnectByLocation(demand.RepeaterLocations), ccaLinks);
+            var used = new HashSet<int>();
+            var deferred = new List<CcaLinkPlan>();
+
+            foreach (var plan in kept)
+            {
+                int slot = PickOwnLocationSlot(plan.Location, slots, used);
+                if (slot >= 0)
+                {
+                    used.Add(slot);
+                    bySlot[slot] = MaterializeCca(plan);
+                }
+                else deferred.Add(plan);
+            }
+
+            int cursor = slots.Count - 1;
+            foreach (var plan in deferred)
+            {
+                while (cursor >= 0 && used.Contains(cursor)) cursor--;
+                if (cursor < 0) break;   // unreachable: ccaLinks ≤ totalLinks guarantees a free slot
+                used.Add(cursor);
+                bySlot[cursor] = MaterializeCca(plan);
+                cursor--;
+            }
+
+            return bySlot;
+        }
+
+        /// <summary>A free slot in <paramref name="location"/> for a located CC-A link: a Link-2-or-higher
+        /// slot first — the convention that Link 1 stays QS for the location's panels and keypads — then
+        /// any free slot there, deterministically the trailing-most so the location's lead link stays
+        /// available for QS. −1 when the location has no free slot (processorless ⇒ trailing spill) or is
+        /// 0 (a mixed-location collapse, likewise spilled).</summary>
+        private static int PickOwnLocationSlot(
+            int location, List<(int Proc, int LinkNumber, int Location)> slots, HashSet<int> used)
+        {
+            if (location <= 0) return -1;
+
+            int best = -1;
+            bool bestIsSecondary = false;
+            for (int s = 0; s < slots.Count; s++)
+            {
+                if (used.Contains(s) || slots[s].Location != location) continue;
+                bool secondary = slots[s].LinkNumber >= 2;
+                // Prefer a secondary (Link ≥ 2) slot over a Link-1 slot; within the same tier, the
+                // trailing-most (highest index), so a location's lead processor/link stays free for QS.
+                if (best < 0
+                    || (secondary && !bestIsSecondary)
+                    || (secondary == bestIsSecondary && s > best))
+                {
+                    best = s;
+                    bestIsSecondary = secondary;
+                }
+            }
+            return best;
         }
 
         private static PackedLink EmptyQsLink()
@@ -535,6 +635,12 @@ namespace TurboSuite.Zones.Services
             public int KeypadDevices;
             public readonly List<KeypadRecord> Keypads = new List<KeypadRecord>();
             public int Devices => Repeaters + KeypadDevices;
+
+            /// <summary>The repeater location this link serves (F4 slot placement) — so the constrained
+            /// pack can land the link on a Link-2 slot of a processor in that same location rather than
+            /// carving it off the globally-trailing slot. 0 when the plan is a collapse of several
+            /// locations onto one kept link (over-budget) — it then falls back to the trailing spill.</summary>
+            public int Location;
         }
 
         /// <summary>
@@ -577,7 +683,7 @@ namespace TurboSuite.Zones.Services
                 int linksHere = Math.Max(1, Math.Max(byRepeaters, byDevices));
 
                 var here = new List<CcaLinkPlan>(linksHere);
-                for (int i = 0; i < linksHere; i++) here.Add(new CcaLinkPlan());
+                for (int i = 0; i < linksHere; i++) here.Add(new CcaLinkPlan { Location = group.Key });
 
                 // Repeaters first, four per link (the tighter cap, and what makes a link CC-A at all).
                 int remRep = repeaters;
@@ -621,10 +727,20 @@ namespace TurboSuite.Zones.Services
         /// of the global pour's "pile the rest on the last one".</summary>
         private static IEnumerable<PackedLink> PackWirelessByLocation(
             List<CcaLinkPlan> plans, int ccaLinks)
-        {
-            if (ccaLinks <= 0) yield break;
+            => CollapseToKept(plans, ccaLinks).Select(MaterializeCca);
 
+        /// <summary>Collapses the per-location plans into exactly <paramref name="ccaLinks"/> kept plans:
+        /// when the budget is tighter than the plan (constrained mode) the surplus plans fold onto the
+        /// last kept link so the overflow shows as over-capacity rather than vanishing — the located
+        /// analog of the global pour's "pile the rest on the last one". A kept link that absorbs a
+        /// <i>different</i> location's plan loses its single <see cref="CcaLinkPlan.Location"/> (→ 0), so
+        /// F4 slot placement treats it as unplaceable and spills it to a trailing slot rather than
+        /// pinning a mixed-location link to one location's processor.</summary>
+        private static List<CcaLinkPlan> CollapseToKept(List<CcaLinkPlan> plans, int ccaLinks)
+        {
             var kept = new List<CcaLinkPlan>();
+            if (ccaLinks <= 0) return kept;
+
             for (int i = 0; i < plans.Count; i++)
             {
                 if (i < ccaLinks) { kept.Add(plans[i]); continue; }
@@ -632,14 +748,18 @@ namespace TurboSuite.Zones.Services
                 last.Repeaters += plans[i].Repeaters;
                 last.KeypadDevices += plans[i].KeypadDevices;
                 last.Keypads.AddRange(plans[i].Keypads);
+                if (last.Location != plans[i].Location) last.Location = 0;
             }
             while (kept.Count < ccaLinks) kept.Add(new CcaLinkPlan());
-
-            foreach (var p in kept)
-                yield return new PackedLink(
-                    ProcessorLink.ClearConnectLinkType, p.Devices, 0, System.Array.Empty<string>(),
-                    repeaters: p.Repeaters, wirelessKeypadRecords: p.Keypads);
+            return kept;
         }
+
+        /// <summary>Renders one kept plan as its Clear Connect link — identical whether reached through
+        /// the flat overload's pour or the constrained overload's slot placement.</summary>
+        private static PackedLink MaterializeCca(CcaLinkPlan p)
+            => new PackedLink(
+                ProcessorLink.ClearConnectLinkType, p.Devices, 0, System.Array.Empty<string>(),
+                repeaters: p.Repeaters, wirelessKeypadRecords: p.Keypads);
 
         private static IEnumerable<PackedLink> PackWirelessGlobal(
             int repeaters, int wirelessDevices, int ccaLinks)
