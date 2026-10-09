@@ -44,6 +44,7 @@ public static class BomCollectorService
 
         var keypadCounts = collector.GetKeypadCounts(doc);
         var hybridRepeaters = collector.GetHybridRepeaters(doc);
+        var repeaterLocations = ControlsCircuitDemandProvider.CollectLocations(doc);
 
         // Same builder the TurboZones window uses, so the issued PDF and the live panel breakdown
         // cannot disagree about what to order. The audience is what differs: this is a purchasing
@@ -55,6 +56,8 @@ public static class BomCollectorService
             WirelessDeviceCount = keypadCounts.WirelessDevices,
             KeypadTallies = keypadCounts.Tallies,
             HybridRepeaters = hybridRepeaters,
+            RepeaterLocations = repeaterLocations,
+            OrphanToHost = panelSettings?.OrphanLocationAssignments,
             SubsystemDemands = subsystemDemands,
             Audience = BomAudience.IssuedDocument
         });

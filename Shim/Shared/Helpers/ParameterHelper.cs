@@ -192,6 +192,27 @@ namespace TurboSuite.Shared.Helpers
         }
 
         /// <summary>
+        /// True when a family instance exposes an electrical connector of the <c>Controls</c> system
+        /// type — the mark of a wireless keypad (and of a hybrid-repeater panel). This connector is the
+        /// wireless discriminator: wired keypads carry none, which is what keeps TurboWire from biting
+        /// them and what makes <c>ElectricalSystem.Create</c> refuse them. It replaces the retired
+        /// "Wireless" shared yes/no parameter. Shared by TurboWire's keypad pre-selection and
+        /// TurboZones' keypad counting so both read one identity.
+        /// </summary>
+        public static bool HasControlsConnector(FamilyInstance instance)
+        {
+            ConnectorManager cm = instance?.MEPModel?.ConnectorManager;
+            if (cm == null) return false;
+            foreach (Connector c in cm.Connectors)
+            {
+                if (c.Domain == Domain.DomainElectrical &&
+                    c.ElectricalSystemType == ElectricalSystemType.Controls)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Find THE family symbol in a category carrying a given finder <see cref="Roles"/> value — the
         /// Role-keyed replacement for name-based tag/detail/annotation lookup. Returns the first match
         /// (the authoring convention is one family per finder-role per category, enforced by the audit

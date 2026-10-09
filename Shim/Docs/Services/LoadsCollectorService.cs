@@ -41,6 +41,12 @@ public static class LoadsCollectorService
                 // Same drop TurboZones' lighting collector makes (ZonesCollectorService).
                 if (ShadeCircuitClassifier.IsShadeCircuit(circuit)) continue;
 
+                // Controls circuits (wireless keypad → hybrid repeater, from TurboWire) carry no
+                // lighting load — their members are Lighting Devices, not fixtures — so they would
+                // land as zero-load phantom rows. Owned by the control subsystem, off the Load
+                // Schedule, same as the shade drop above.
+                if (circuit.SystemType == ElectricalSystemType.Controls) continue;
+
                 var fixtureGroups = new List<LoadsFixtureGroup>();
                 var driverSwitchIds = new List<string>();
                 var fixtureProtocols = new List<string>();

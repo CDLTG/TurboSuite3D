@@ -440,7 +440,9 @@ namespace TurboSuite.Zones.Services
         public static int CalculateRecommendedProcessors(
             List<PanelResult> allPanels, BomExtras extras, BrandConfig brand = null)
             => ControlLinkPacker.RecommendProcessors(
-                ControlLinkPacker.BuildDemand(allPanels, extras, brand));
+                ControlLinkPacker.RelabelLocations(
+                    ControlLinkPacker.BuildDemand(allPanels, extras, brand),
+                    extras?.OrphanToHost));
 
         /// <summary>
         /// How many QS-link power supplies (QSPS-DH-1-75-H) the job needs, and whether the placed
@@ -586,10 +588,31 @@ namespace TurboSuite.Zones.Services
         /// pair of two exactly as the repeaters' do.</summary>
         public int WirelessDeviceCount { get; set; }
 
+        /// <summary>
+        /// Repeaters (and the wireless keypads circuited to them) grouped by location, for
+        /// <b>per-location</b> Clear Connect sizing — <c>Σ_loc ceil(repeaters_loc / 4)</c>, each
+        /// location indivisible at four repeaters/link, mirroring located shade panels (Gap #9). Read
+        /// off the repeater panel names (<c>{Location}-REP{N}</c>) and the Controls circuits by
+        /// <c>ControlsCircuitDemandProvider</c>. Null/empty keeps the global pooling on
+        /// <see cref="HybridRepeaterCount"/>/<see cref="WirelessDeviceCount"/>, byte-identical to
+        /// before — a job with no located repeater data behaves exactly as it did.
+        /// </summary>
+        public IReadOnlyList<RepeaterLocationTally> RepeaterLocations { get; set; }
+
         /// <summary>What the control subsystems report they need — DMX today, DALI later. Null or empty
         /// means nothing to add, which is the shape a job with no subsystem hardware produces and the
         /// shape a caller that has no provider wired up produces; both are correct.</summary>
         public IReadOnlyList<ControlSubsystemDemand> SubsystemDemands { get; set; }
+
+        /// <summary>
+        /// The designer's orphan-location → host-location assignments (location number → location
+        /// number), so the processor <b>recommendation</b> folds an orphaned location's repeaters into
+        /// its host's Clear Connect pool the same way the capacity bars do (the bars already relabel via
+        /// <c>LinkAssignmentService</c>). Without this the recommendation would size each location's
+        /// CC-A links separately while the bars pooled them — the one divergence the single packer
+        /// exists to prevent. Null/empty ⇒ no orphan folding, which is correct for a job with none.
+        /// </summary>
+        public IReadOnlyDictionary<int, int> OrphanToHost { get; set; }
 
         /// <summary>Who the BOM is being built for. Defaults to <see cref="BomAudience.IssuedDocument"/>
         /// — the conservative choice, since design-state commentary leaking onto a purchasing

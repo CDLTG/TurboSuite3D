@@ -43,6 +43,8 @@ namespace TurboSuite.Number.Services
         /// <item><b>Switched</b> circuits — TurboWire local switch legs, &lt;unnamed&gt; by design.</item>
         /// <item><b>DMX / DALI</b> zone circuits — owned by the control subsystem, unpaneled by design;
         /// detected by any member fixture's <c>Dimming Protocol</c>.</item>
+        /// <item><b>Controls</b> circuits — wireless keypad→hybrid-repeater circuits (TurboWire), which
+        /// share the number "1" per repeater; listing them flags false red duplicates.</item>
         /// </list>
         /// A genuinely overlooked (forgotten-unpaneled) circuit carries none of these signals, so it
         /// still shows as &lt;unnamed&gt; — the point of keeping that surface.
@@ -55,6 +57,9 @@ namespace TurboSuite.Number.Services
                 return true;
 
             if (CircuitService.IsSwitchedCircuit(circuit))
+                return true;
+
+            if (circuit.SystemType == ElectricalSystemType.Controls)
                 return true;
 
             if (IsControlSubsystemCircuit(circuit))

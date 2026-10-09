@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using TurboSuite.Zones.Models;
+using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Tests.Zones
 {
@@ -23,6 +24,21 @@ namespace TurboSuite.Tests.Zones
                 DeviceCount = count,
                 Tallies = count <= 0 ? new List<ControlDeviceTally>() : Of((catalog, count))
             };
+
+        /// <summary>A repeater-location tally for the per-location Clear Connect sizing tests:
+        /// <paramref name="repeaters"/> repeaters at <paramref name="locationName"/> (e.g. "1-REP1",
+        /// whose <c>ParseLocationNumber</c> reads 1), with any wireless keypads circuited there. The
+        /// location number is parsed the same way the shim provider does, so the tests exercise the
+        /// real <see cref="RepeaterLocationTally.Location"/> field the packer groups on.</summary>
+        public static RepeaterLocationTally Loc(
+            string locationName, int repeaters, params KeypadRecord[] wirelessKeypads)
+            => new RepeaterLocationTally(locationName,
+                PanelAllocationService.ParseLocationNumber(locationName), repeaters, wirelessKeypads);
+
+        /// <summary>A wireless keypad record at <paramref name="location"/>, <paramref name="devices"/>
+        /// device weight (2 = two-gang).</summary>
+        public static KeypadRecord Keypad(string switchId, int location, int devices = 1)
+            => new KeypadRecord(switchId, room: "", model: "", location, devices);
 
         /// <summary>A repeater fleet whose order rows deliberately do not match its device count —
         /// the shape that catches anyone summing parts to size a link.</summary>

@@ -467,23 +467,8 @@ public class WireCommand : IExternalCommand
             .Where(fi => fi.Category?.BuiltInCategory == BuiltInCategory.OST_LightingDevices &&
                          string.Equals(ParameterHelper.GetRole(fi), Roles.Keypad,
                              StringComparison.OrdinalIgnoreCase) &&
-                         HasControlsConnector(fi))
+                         ParameterHelper.HasControlsConnector(fi))
             .ToList();
-    }
-
-    /// <summary>True when a family instance exposes an electrical connector of the <c>Controls</c>
-    /// system type — the mark of a wireless keypad (or a repeater panel).</summary>
-    private static bool HasControlsConnector(FamilyInstance fi)
-    {
-        ConnectorManager? cm = fi.MEPModel?.ConnectorManager;
-        if (cm == null) return false;
-        foreach (Connector c in cm.Connectors)
-        {
-            if (c.Domain == Domain.DomainElectrical &&
-                c.ElectricalSystemType == ElectricalSystemType.Controls)
-                return true;
-        }
-        return false;
     }
 
     /// <summary>The panel kind a batch of pre-selected circuits belongs to: Control when every

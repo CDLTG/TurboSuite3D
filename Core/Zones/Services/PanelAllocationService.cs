@@ -582,7 +582,9 @@ namespace TurboSuite.Zones.Services
         /// resolves to it. The older "ZONE N" / "SHADE N" forms (case-insensitive) are still accepted.
         /// Returns 0 if the panel name matches none of these.
         /// </summary>
-        internal static int ParseLocationNumber(string panelName)
+        /// <remarks>Public so the shim's <c>ControlsCircuitDemandProvider</c> can parse a repeater's
+        /// location the same way the allocator and the packer do — one parse, no drift.</remarks>
+        public static int ParseLocationNumber(string panelName)
         {
             if (string.IsNullOrEmpty(panelName))
                 return 0;

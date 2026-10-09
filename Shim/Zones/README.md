@@ -102,11 +102,20 @@ drives** are counted through the shades subsystem above (one leg + one device ea
 QSPS-10PNL panels) rather than this nameplate table — a shade's leg rides its circuit, not a fixed
 per-device count.
 
-**Wireless takes whole links.** One repeater converts a link to Clear Connect, so a job that would run
-on one processor can need two purely to carry wireless — five repeaters is two CC-A links, which is a
-processor. Wireless devices ride those links and consume their device budget; wired keypads never do.
-When the link budget is fixed, CC-A stops one link short of consuming every link that has QS work, so
-the overflow shows as an over-capacity bar rather than hiding the panels.
+**Wireless takes whole links, sized per location.** One repeater converts a link to Clear Connect, so a
+job that would run on one processor can need two purely to carry wireless. CC-A links are budgeted **per
+repeater-location** — `Σ_loc ceil(repeaters_loc / 4)` with the 99-device cap as the backstop — the same
+located grain as shade/dimmer panels, so two repeaters in location 1 and two in location 2 are **two**
+links, not one (a repeater cannot share a link across locations). A location orphaned to another's
+processor (the orphan→host assignment) **folds** its repeaters into that host's pool, so it does not force
+an extra link. Wireless keypads ride their repeater's location's links and consume the device budget;
+wired keypads never do. A job with no located repeater data falls back to global pooling, byte-identical
+to before. The reader is `ControlsCircuitDemandProvider` (repeaters by `{Location}-REP{N}` panel name,
+wireless keypads by their `Controls` circuit); the sizing is `ControlLinkPacker.PlanClearConnectByLocation`.
+When the link budget is fixed, CC-A stops one link short of consuming every link that has QS work, so the
+overflow shows as an over-capacity bar rather than hiding the panels. *(CC-A **slot placement** — pinning
+each link to its own location's processor Link 2 — is the remaining piece, deferred with the keypad
+expansion's render work; the link count and BOM are already correct.)*
 
 **Packing is over indivisible units.** A panel is one unit — its modules plus any compartment device
 sited in it all ride the same link, and it can never be split across two. In sizing mode this is plain
@@ -228,18 +237,23 @@ Protocols fall into three categories:
 
 A circuit whose fixtures declare more than one protocol resolves to one module type (first in sorted order, so it does not depend on Revit's element enumeration order).
 
-**On Keypad families (Lighting Devices) and Hybrid Repeaters (Electrical Fixtures):**
+**On Keypad families (Lighting Devices) and Hybrid Repeaters (Electrical Equipment, `Role=HybridRepeater`):**
 
 | Parameter | Type | Purpose |
 |-----------|------|---------|
 | `Two Gang` | Yes/No (Integer) | **Link math only.** A two-gang keypad is two addressed devices in one backbox, so it counts twice against a link's 99. It does *not* split the BOM — see below |
-| `Wireless` | Yes/No (Integer) | Rides a Clear Connect link instead of a QS link, consuming that link's device budget. Read type-first with instance override, like `Two Gang`. **Absent reads as wired**, which is the behaviour that shipped before it existed |
 | `Catalog Number1`–`6` | Text | The parts to order. One device is often several: base unit + button kits + faceplate |
 | `Catalog Qty1`–`6` | Text | How many of that slot per device — blank ⇒ 1 each, `N` ⇒ N each, `1/N` ⇒ 1 per N, `N @type` ⇒ N per type |
 | `Description`, `Description2` | Text | Words for `Catalog Number1` and `Catalog Number2` respectively |
 
+**Wireless vs wired is a `Controls` connector, not a parameter.** A keypad is wireless iff it carries an
+electrical connector of the `Controls` system type (`ParameterHelper.HasControlsConnector`) — the same
+connector that lets it circuit to a hybrid repeater in TurboWire. This replaced the retired `Wireless`
+yes/no param. A wireless keypad rides its repeater's Clear Connect link and consumes that link's device
+budget; a wired keypad (no `Controls` connector) never does.
+
 **A type answers two independent questions, and neither derives from the other.** How many *devices*
-it occupies on a link (`Two Gang`, `Wireless`, instance count) and what it *costs to buy* (the catalog
+it occupies on a link (`Two Gang`, the wireless `Controls` connector, instance count) and what it *costs to buy* (the catalog
 slots). "Button kit qty 2" is not "2 gangs"; "2 gangs" is not "2 of everything". So the BOM groups
 purely by catalog number — a two-gang keypad is a different model with its own number, and the lines
 separate on their own — while the link math never sums order rows to get a device count.

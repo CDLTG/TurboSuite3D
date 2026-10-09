@@ -72,8 +72,7 @@ namespace TurboSuite.Zones.Services
                              || demand.FloatingDevices > 0
                              || demand.FloatingLoads > 0;
 
-            int ccaLinks = ClearConnectLinksFor(
-                demand.RepeaterCount, demand.WirelessDevices, budget, hasQsWork, unlimited);
+            int ccaLinks = ClearConnectLinksFor(demand, budget, hasQsWork, unlimited);
             int qsLinks = unlimited ? 0 : Math.Max(0, budget - ccaLinks);
 
             var qsBins = new List<Bin>();
@@ -98,7 +97,7 @@ namespace TurboSuite.Zones.Services
             Pour(demand.FloatingLoads, qsBins, unlimited, asDevices: false);
 
             var links = qsBins.Select(b => b.ToQsLink()).ToList();
-            links.AddRange(PackWireless(demand.RepeaterCount, demand.WirelessDevices, ccaLinks));
+            links.AddRange(PackWireless(demand, ccaLinks));
 
             return new LinkPackResult(links, qsBins.Count, ccaLinks);
         }
@@ -158,8 +157,7 @@ namespace TurboSuite.Zones.Services
                              || demand.FloatingDevices > 0
                              || demand.FloatingLoads > 0;
 
-            int ccaLinks = ClearConnectLinksFor(
-                demand.RepeaterCount, demand.WirelessDevices, totalLinks, hasQsWork, unlimited: false);
+            int ccaLinks = ClearConnectLinksFor(demand, totalLinks, hasQsWork, unlimited: false);
             int firstCcaSlot = totalLinks - ccaLinks;   // slots at or after this index go RF
 
             // One QS bin per QS slot, carrying its processor/link identity for deterministic tiebreaks.
@@ -199,7 +197,7 @@ namespace TurboSuite.Zones.Services
             PourKeypads(demand.FloatingLoads, qsBins, totalPdu: 0, asDevices: false);
 
             // 4) Clear Connect links, assigned back to their carved trailing slots.
-            var ccaList = PackWireless(demand.RepeaterCount, demand.WirelessDevices, ccaLinks).ToList();
+            var ccaList = PackWireless(demand, ccaLinks).ToList();
 
             var bySlot = new PackedLink[totalLinks];
             for (int s = 0; s < firstCcaSlot; s++)
@@ -257,12 +255,24 @@ namespace TurboSuite.Zones.Services
                     ? new KeypadRecord(r.SwitchId, r.Room, r.Model, host, r.Devices)
                     : r;
 
+            // Repeater locations follow the SAME orphan→host relabel as the panels: an orphaned
+            // location's repeaters are served by the host's processor, so they join the host's Clear
+            // Connect pool (PlanClearConnectByLocation groups by location, so two tallies now sharing a
+            // location size as one — ceil((a+b)/4), never more than the separate ceil(a/4)+ceil(b/4)).
+            // This is what makes "orphan Loc 3 to Loc 2" put Loc 3's repeater on Loc 2's CC-A link
+            // instead of forcing a second one.
+            RepeaterLocationTally RelabelRepeater(RepeaterLocationTally t) =>
+                t.Location > 0 && orphanToHost.TryGetValue(t.Location, out int host) && host != t.Location
+                    ? new RepeaterLocationTally(t.LocationName, host, t.RepeaterCount, t.WirelessKeypads)
+                    : t;
+
             return new LinkDemand(
                 demand.PinnedUnits.Select(Relabel).ToList(),
                 demand.FloatingUnits.Select(Relabel).ToList(),
                 demand.FloatingDevices, demand.FloatingLoads,
                 demand.RepeaterCount, demand.WirelessDevices, demand.FloatingDevicePdu,
-                demand.KeypadRecords.Select(RelabelRecord).ToList());
+                demand.KeypadRecords.Select(RelabelRecord).ToList(),
+                demand.RepeaterLocations.Select(RelabelRepeater).ToList());
         }
 
         /// <summary>
@@ -410,9 +420,17 @@ namespace TurboSuite.Zones.Services
             // dimmer panels do.
             pinned.AddRange(subsystemUnits);
 
+            // Located repeater tallies (per-location CC-A sizing) when the shim read them off the
+            // repeater panel names + Controls circuits; empty keeps the global pooling on the two
+            // scalars above. Only location-bearing tallies drive links — an unlocated repeater is a
+            // warning upstream, mirroring an unassigned shade, so it is dropped here.
+            var repeaterLocations = (extras.RepeaterLocations ?? System.Array.Empty<RepeaterLocationTally>())
+                .Where(r => r != null && r.Location > 0)
+                .ToList();
+
             return new LinkDemand(pinned, floatingUnits, floatingDevices, floatingLoads,
                 extras.HybridRepeaterCount, extras.WirelessDeviceCount, floatingDevicePdu,
-                extras.KeypadRecords);
+                extras.KeypadRecords, repeaterLocations);
         }
 
         /// <summary>Compartment slots across all panels holding the named device, in panel order.</summary>
@@ -478,23 +496,152 @@ namespace TurboSuite.Zones.Services
         /// unconstrained, says exactly that.
         /// </summary>
         private static int ClearConnectLinksFor(
-            int repeaters, int wirelessDevices, int budget, bool hasQsWork, bool unlimited)
+            LinkDemand demand, int budget, bool hasQsWork, bool unlimited)
         {
-            if (repeaters <= 0 && wirelessDevices <= 0) return 0;
+            // Located path (Gap #9): one CC-A budget per repeater-location, indivisible at four
+            // repeaters/link — Σ_loc ceil(repeaters_loc / 4), with the 99-device cap as the backstop.
+            // Empty ⇒ the global pooling below, byte-identical to before (frozen baselines).
+            int needed = demand.RepeaterLocations.Count > 0
+                ? PlanClearConnectByLocation(demand.RepeaterLocations).Count
+                : GlobalClearConnectNeeded(demand.RepeaterCount, demand.WirelessDevices);
+            if (needed <= 0) return 0;
 
-            int byRepeaters = (int)Math.Ceiling(
-                (double)repeaters / ProcessorLink.MaxRepeatersPerClearConnectLink);
-            int byDevices = (int)Math.Ceiling(
-                (double)(repeaters + wirelessDevices) / ProcessorLink.MaxDevices);
-
-            int needed = Math.Max(1, Math.Max(byRepeaters, byDevices));
             if (unlimited) return needed;
 
             int allowed = hasQsWork ? budget - 1 : budget;
             return Math.Max(0, Math.Min(needed, allowed));
         }
 
-        private static IEnumerable<PackedLink> PackWireless(
+        /// <summary>The global (location-free) CC-A link count: the repeater cap and the device cap,
+        /// whichever binds. One link minimum once there is any wireless at all — a wireless device with
+        /// no repeater still has to live somewhere.</summary>
+        private static int GlobalClearConnectNeeded(int repeaters, int wirelessDevices)
+        {
+            if (repeaters <= 0 && wirelessDevices <= 0) return 0;
+            int byRepeaters = (int)Math.Ceiling(
+                (double)repeaters / ProcessorLink.MaxRepeatersPerClearConnectLink);
+            int byDevices = (int)Math.Ceiling(
+                (double)(repeaters + wirelessDevices) / ProcessorLink.MaxDevices);
+            return Math.Max(1, Math.Max(byRepeaters, byDevices));
+        }
+
+        /// <summary>One planned Clear Connect link's contents — a throwaway builder shared by the link
+        /// COUNT (<see cref="ClearConnectLinksFor"/>) and the materialised links
+        /// (<see cref="PackWireless"/>), so the two can never disagree about the wireless side exactly
+        /// as <c>ShadeSolver.PanelFills</c> keeps the shade count and tiles in lockstep.</summary>
+        private sealed class CcaLinkPlan
+        {
+            public int Repeaters;
+            public int KeypadDevices;
+            public readonly List<KeypadRecord> Keypads = new List<KeypadRecord>();
+            public int Devices => Repeaters + KeypadDevices;
+        }
+
+        /// <summary>
+        /// Plans the Clear Connect links location by location: each location's repeaters fill whole
+        /// four-repeater links, its wireless keypads then fill the device room left (whole keypads,
+        /// never split), and a location needing more device room than its repeater-links give opens
+        /// another — <c>max(ceil(repeaters/4), ceil((repeaters + keypadDevices)/99))</c> links per
+        /// location. Locations are walked in ascending location number so the link order is stable.
+        /// A location is indivisible: two <i>distinct</i> locations never merge (two repeaters in loc 1
+        /// + two in loc 2 ⇒ 2 links, not 1). But an orphaned location relabelled onto its host
+        /// (<see cref="RelabelLocations"/>) now shares the host's location number, so the group-by here
+        /// pools them — the designer's "serve loc 3 from loc 2's processor" puts loc 3's repeater on
+        /// loc 2's link rather than forcing a second one.
+        /// </summary>
+        private static List<CcaLinkPlan> PlanClearConnectByLocation(
+            IReadOnlyList<RepeaterLocationTally> locations)
+        {
+            var plans = new List<CcaLinkPlan>();
+            // Group by location NUMBER, not by tally: the provider emits one tally per location, but
+            // the orphan→host relabel can leave two tallies sharing a location (the orphan folded onto
+            // its host), and they must size as one pool — ceil((a+b)/4), not ceil(a/4)+ceil(b/4).
+            foreach (var group in locations
+                .Where(l => l != null && l.Location > 0)
+                .GroupBy(l => l.Location)
+                .OrderBy(g => g.Key))
+            {
+                int repeaters = group.Sum(l => Math.Max(0, l.RepeaterCount));
+                var keypads = group
+                    .SelectMany(l => l.WirelessKeypads ?? (IReadOnlyList<KeypadRecord>)System.Array.Empty<KeypadRecord>())
+                    .OrderBy(k => string.IsNullOrEmpty(k.SwitchId))
+                    .ThenBy(k => k.SwitchId, StringComparer.Ordinal)
+                    .ToList();
+                int keypadDevices = keypads.Sum(k => k.Devices);
+                if (repeaters == 0 && keypadDevices == 0) continue;
+
+                int byRepeaters = (int)Math.Ceiling(
+                    (double)repeaters / ProcessorLink.MaxRepeatersPerClearConnectLink);
+                int byDevices = (int)Math.Ceiling(
+                    (double)(repeaters + keypadDevices) / ProcessorLink.MaxDevices);
+                int linksHere = Math.Max(1, Math.Max(byRepeaters, byDevices));
+
+                var here = new List<CcaLinkPlan>(linksHere);
+                for (int i = 0; i < linksHere; i++) here.Add(new CcaLinkPlan());
+
+                // Repeaters first, four per link (the tighter cap, and what makes a link CC-A at all).
+                int remRep = repeaters;
+                for (int i = 0; i < linksHere && remRep > 0; i++)
+                {
+                    int take = Math.Min(remRep, ProcessorLink.MaxRepeatersPerClearConnectLink);
+                    here[i].Repeaters = take;
+                    remRep -= take;
+                }
+                if (remRep > 0) here[linksHere - 1].Repeaters += remRep;
+
+                // Then the keypads this location's repeaters serve, filling device room — whole keypads
+                // (a two-gang's two devices move together), rolling to the next link when one is full.
+                int bin = 0;
+                foreach (var kp in keypads)
+                {
+                    while (bin < linksHere &&
+                           here[bin].Devices + kp.Devices > ProcessorLink.MaxDevices)
+                        bin++;
+                    if (bin >= linksHere) bin = linksHere - 1;   // over-capacity → visible on the last
+                    here[bin].Keypads.Add(kp);
+                    here[bin].KeypadDevices += kp.Devices;
+                }
+
+                plans.AddRange(here);
+            }
+            return plans;
+        }
+
+        /// <summary>Materialises the Clear Connect links into the <paramref name="ccaLinks"/> slots the
+        /// budget carved. Dispatches to the located plan when the demand carries repeater locations,
+        /// else the global pour — the two share nothing but this entry point.</summary>
+        private static IEnumerable<PackedLink> PackWireless(LinkDemand demand, int ccaLinks)
+            => demand.RepeaterLocations.Count > 0
+                ? PackWirelessByLocation(PlanClearConnectByLocation(demand.RepeaterLocations), ccaLinks)
+                : PackWirelessGlobal(demand.RepeaterCount, demand.WirelessDevices, ccaLinks);
+
+        /// <summary>Renders per-location plans into exactly <paramref name="ccaLinks"/> links. When the
+        /// budget is tighter than the plan (constrained mode), the surplus plans collapse onto the last
+        /// kept link so the overflow shows as over-capacity rather than vanishing — the located analog
+        /// of the global pour's "pile the rest on the last one".</summary>
+        private static IEnumerable<PackedLink> PackWirelessByLocation(
+            List<CcaLinkPlan> plans, int ccaLinks)
+        {
+            if (ccaLinks <= 0) yield break;
+
+            var kept = new List<CcaLinkPlan>();
+            for (int i = 0; i < plans.Count; i++)
+            {
+                if (i < ccaLinks) { kept.Add(plans[i]); continue; }
+                var last = kept[ccaLinks - 1];
+                last.Repeaters += plans[i].Repeaters;
+                last.KeypadDevices += plans[i].KeypadDevices;
+                last.Keypads.AddRange(plans[i].Keypads);
+            }
+            while (kept.Count < ccaLinks) kept.Add(new CcaLinkPlan());
+
+            foreach (var p in kept)
+                yield return new PackedLink(
+                    ProcessorLink.ClearConnectLinkType, p.Devices, 0, System.Array.Empty<string>(),
+                    repeaters: p.Repeaters, wirelessKeypadRecords: p.Keypads);
+        }
+
+        private static IEnumerable<PackedLink> PackWirelessGlobal(
             int repeaters, int wirelessDevices, int ccaLinks)
         {
             var bins = new List<Bin>();
@@ -959,7 +1106,8 @@ namespace TurboSuite.Zones.Services
             int repeaterCount = 0,
             int wirelessDevices = 0,
             int floatingDevicePdu = 0,
-            IReadOnlyList<KeypadRecord>? keypadRecords = null)
+            IReadOnlyList<KeypadRecord>? keypadRecords = null,
+            IReadOnlyList<RepeaterLocationTally>? repeaterLocations = null)
         {
             PinnedUnits = pinnedUnits ?? new List<LinkUnit>();
             FloatingUnits = floatingUnits ?? new List<LinkUnit>();
@@ -969,6 +1117,7 @@ namespace TurboSuite.Zones.Services
             WirelessDevices = wirelessDevices;
             FloatingDevicePdu = floatingDevicePdu;
             KeypadRecords = keypadRecords ?? new List<KeypadRecord>();
+            RepeaterLocations = repeaterLocations ?? System.Array.Empty<RepeaterLocationTally>();
         }
 
         /// <summary>Indivisible and already sited — panels, with whatever is in their compartments.</summary>
@@ -1003,6 +1152,17 @@ namespace TurboSuite.Zones.Services
         /// the one-line's located list draws (Phase C). Rides alongside <see cref="FloatingDevices"/>:
         /// the count drives capacity, the records drive the list. Empty keeps the plain job-wide pour.</summary>
         public IReadOnlyList<KeypadRecord> KeypadRecords { get; }
+
+        /// <summary>
+        /// Repeaters (and their wireless keypads) grouped by location, for <b>per-location</b> Clear
+        /// Connect sizing: <c>Σ_loc ceil(repeaters_loc / 4)</c>, each location indivisible at four
+        /// repeaters/link exactly as located shade panels are. Non-empty means the located path owns
+        /// the CC-A math and <see cref="RepeaterCount"/>/<see cref="WirelessDevices"/> are ignored;
+        /// <b>empty keeps the global pooling</b> off those two scalars, byte-identical to before — the
+        /// invariant the frozen baselines pin. Only location-bearing tallies belong here; unlocated
+        /// repeaters/keypads are a warning upstream, never a link.
+        /// </summary>
+        public IReadOnlyList<RepeaterLocationTally> RepeaterLocations { get; }
     }
 
     /// <summary>One indivisible thing that must fit on a single link.</summary>
@@ -1165,7 +1325,8 @@ namespace TurboSuite.Zones.Services
         public PackedLink(string linkType, int devices, int loads, IReadOnlyList<string> unitNames,
             int repeaters = 0, int consumedPdu = 0, IReadOnlyList<LinkCategory>? categories = null,
             IReadOnlyList<PackedLinkUnit>? units = null,
-            IReadOnlyList<KeypadRecord>? keypadRecords = null)
+            IReadOnlyList<KeypadRecord>? keypadRecords = null,
+            IReadOnlyList<KeypadRecord>? wirelessKeypadRecords = null)
         {
             LinkType = linkType;
             Devices = devices;
@@ -1176,6 +1337,7 @@ namespace TurboSuite.Zones.Services
             Categories = categories ?? System.Array.Empty<LinkCategory>();
             Units = units ?? System.Array.Empty<PackedLinkUnit>();
             KeypadRecords = keypadRecords ?? System.Array.Empty<KeypadRecord>();
+            WirelessKeypadRecords = wirelessKeypadRecords ?? System.Array.Empty<KeypadRecord>();
         }
 
         public string LinkType { get; }
@@ -1211,6 +1373,12 @@ namespace TurboSuite.Zones.Services
         /// keypad, in landing order, for the one-line's located list. Empty on a link that carries only
         /// location-less keypads (it renders the legacy aggregate stub) or none.</summary>
         public IReadOnlyList<KeypadRecord> KeypadRecords { get; }
+
+        /// <summary>The WIRELESS keypads riding this Clear Connect link (F4) — one entry per physical
+        /// keypad circuited to a repeater at this link's location, in Switch-ID order, for the
+        /// one-line's repeater fan. Empty on a QS link and on a CC-A link whose keypads are unlocated
+        /// (they render the <c>WIRELESS KEYPADS</c> stub instead).</summary>
+        public IReadOnlyList<KeypadRecord> WirelessKeypadRecords { get; }
 
         public bool IsClearConnect
             => string.Equals(LinkType, ProcessorLink.ClearConnectLinkType, StringComparison.OrdinalIgnoreCase);

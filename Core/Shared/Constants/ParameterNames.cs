@@ -37,21 +37,6 @@ public static class ParameterNames
     public const string ConnectorOffset = "Connector Offset";
 
     /// <summary>
-    /// Yes/No: this device talks over RF rather than the wired link, so it rides a Clear Connect
-    /// Type A link and consumes that link's device budget instead of a QS link's.
-    ///
-    /// Read type-first-with-instance-override, exactly like <see cref="TwoGang"/> — wired vs wireless
-    /// is a property of the model, so it belongs on the type, but a family may expose it per
-    /// instance. Deliberately generic rather than keypad-specific: visor receivers, shades and
-    /// sensors are the same question, and so is a repeater declaring itself instead of being matched
-    /// by family name.
-    ///
-    /// Absent reads as false, which is exactly the wired-everything behaviour that shipped before
-    /// this existed — so the read path is inert until the families carry the parameter.
-    /// </summary>
-    public const string Wireless = "Wireless";
-
-    /// <summary>
     /// The one designer-set instance parameter grouping fixtures into control zones for a zone/loop-based
     /// control subsystem (DMX today, DALI next). A blank value is "unassigned". Protocol-agnostic:
     /// <see cref="DimmingProtocol"/> routes which subsystem owns a fixture, and this names the zone

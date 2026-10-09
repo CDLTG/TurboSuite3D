@@ -110,13 +110,17 @@ namespace TurboSuite.Zones
                 // tallies the shade demand/BOM is built from — read once here (Core VM can't touch Revit).
                 var shadeLocations = ShadeDemandProvider.CollectLocations(doc);
 
+                // Per-location repeater + wireless-keypad tallies (F3) — same read-once rule, feeding
+                // the packer's per-location Clear Connect sizing. Empty keeps the global keypad pooling.
+                var repeaterLocations = ControlsCircuitDemandProvider.CollectLocations(doc);
+
                 // Shade circuits for the Shade Names tab — the mirror of the lighting Load Names grid.
                 var shadeCircuits = new ShadeCircuitCollectorService().GetShadeCircuits(doc);
 
                 var viewModel = new ZonesMainViewModel(circuits,
                     keypadCounts, hybridRepeaters,
                     savedSettings, workQueue, loadNameWriter, panelSettingsStore, circuitSelector,
-                    subsystemDemands, daliModulesByZone, shadeLocations,
+                    subsystemDemands, daliModulesByZone, shadeLocations, repeaterLocations,
                     shadeCircuits, shadeLoadNameWriter,
                     new ControlOneLineService(uidoc),    // Section 2 one-line renderer
                     new OneLineViewStore(doc),           // cross-session owned-view id persistence

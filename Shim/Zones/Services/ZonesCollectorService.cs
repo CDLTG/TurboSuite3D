@@ -148,8 +148,9 @@ namespace TurboSuite.Zones.Services
         ///
         /// A wireless keypad rides the processor's Clear Connect link rather than a QS link, so it
         /// consumes a different link's device budget — which is why the two are counted apart rather
-        /// than summed here. See <see cref="ParameterNames.Wireless"/>: absent reads as wired, which
-        /// is the behaviour that shipped before the parameter existed.
+        /// than summed here. Wireless is identified by a <c>Controls</c> connector
+        /// (<see cref="ParameterHelper.HasControlsConnector"/>); a keypad without one is wired, which
+        /// is the behaviour that shipped before the connector existed.
         /// </summary>
         /// <param name="locations">The resolved room→location map (picks folded over auto-seeds) from
         /// <see cref="RoomLocationCollector.ResolveLocations"/>. Null/empty ⇒ every keypad is
@@ -178,7 +179,7 @@ namespace TurboSuite.Zones.Services
                     ?? fi.Symbol?.LookupParameter(ParameterNames.TwoGang);
                 bool isTwoGang = twoGangParam != null && twoGangParam.AsInteger() == 1;
 
-                if (IsWireless(fi))
+                if (ParameterHelper.HasControlsConnector(fi))
                 {
                     // Gang still doubles the device count — a two-gang wireless keypad is two devices
                     // on the Clear Connect link, same as it is two on a QS link. No record: wireless
@@ -215,25 +216,19 @@ namespace TurboSuite.Zones.Services
             return roomCache.FindRoomName(fi) ?? string.Empty;
         }
 
-        /// <summary>Instance value wins where a family exposes one; otherwise the type's, since wired
-        /// vs wireless is normally a property of the model. Absent ⇒ wired.</summary>
-        private static bool IsWireless(FamilyInstance fi)
-        {
-            Parameter param = fi.LookupParameter(ParameterNames.Wireless)
-                ?? fi.Symbol?.LookupParameter(ParameterNames.Wireless);
-            return param != null && param.AsInteger() == 1;
-        }
-
         /// <summary>
         /// Hybrid Repeaters — how many devices are on the link, and what to order for them.
         ///
-        /// The part number used to be read off the <b>first instance only</b>, which ordered a
-        /// two-model job as however many of whichever model happened to be collected first.
+        /// Repeaters are Electrical <b>Equipment</b> (<c>Role=HybridRepeater</c>) — they are the
+        /// "panel" wireless keypads circuit onto, so they carry a panel name
+        /// (<c>{Location}-REP{N}</c>). The part number used to be read off the <b>first instance
+        /// only</b>, which ordered a two-model job as however many of whichever model happened to be
+        /// collected first.
         /// </summary>
         public ControlDeviceGroup GetHybridRepeaters(Document doc)
         {
             var repeaters = new FilteredElementCollector(doc)
-                .OfCategory(BuiltInCategory.OST_ElectricalFixtures)
+                .OfCategory(BuiltInCategory.OST_ElectricalEquipment)
                 .OfClass(typeof(FamilyInstance))
                 .Cast<FamilyInstance>()
                 .Where(fi => ParameterHelper.GetRole(fi) == Roles.HybridRepeater)

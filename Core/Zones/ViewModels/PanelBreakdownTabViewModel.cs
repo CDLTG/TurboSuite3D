@@ -51,6 +51,11 @@ namespace TurboSuite.Zones.ViewModels
         /// Breakdown draws shade panels per location from these; the shade BOM/link demand rides
         /// <see cref="_subsystemDemands"/>, both derived from the same ShadeSolver per-location count.</summary>
         private readonly IReadOnlyList<ShadeLocationTally> _shadeLocations;
+
+        /// <summary>Per-location repeater + wireless-keypad tallies read once at window open, feeding
+        /// the packer's per-location Clear Connect sizing (Gap #9). Empty keeps the global pooling on
+        /// the keypad counts, byte-identical to before.</summary>
+        private readonly IReadOnlyList<RepeaterLocationTally> _repeaterLocations;
         private readonly IRevitWorkQueue _workQueue;
         private readonly IPanelSettingsStore _settingsStore;
         private BrandConfig _currentBrand;
@@ -84,6 +89,7 @@ namespace TurboSuite.Zones.ViewModels
             IReadOnlyList<ControlSubsystemDemand> subsystemDemands = null,
             IReadOnlyDictionary<int, IReadOnlyList<DaliPanelModule>> daliModulesByZone = null,
             IReadOnlyList<ShadeLocationTally> shadeLocations = null,
+            IReadOnlyList<RepeaterLocationTally> repeaterLocations = null,
             IControlOneLineService oneLineService = null,
             IOneLineViewStore viewStore = null,
             OneLineViewState savedViewState = null,
@@ -106,6 +112,7 @@ namespace TurboSuite.Zones.ViewModels
             _subsystemDemands = subsystemDemands;
             _daliModulesByZone = daliModulesByZone;
             _shadeLocations = shadeLocations;
+            _repeaterLocations = repeaterLocations;
             keypadCounts ??= new KeypadCounts();
             _keypadCount = keypadCounts.Regular;
             _twoGangKeypadCount = keypadCounts.TwoGang;
@@ -457,6 +464,8 @@ namespace TurboSuite.Zones.ViewModels
             KeypadTallies = _keypadTallies,
             KeypadRecords = _keypadRecords,
             HybridRepeaters = _hybridRepeaters,
+            RepeaterLocations = _repeaterLocations,
+            OrphanToHost = _orphanAssignments,
             SubsystemDemands = _subsystemDemands,
             Audience = BomAudience.DesignSurface
         };
