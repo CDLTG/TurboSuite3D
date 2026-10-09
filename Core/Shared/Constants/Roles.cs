@@ -68,6 +68,11 @@ public static class Roles
     public const string ControlLvSlotDetail = "ControlLvSlotDetail";      // LV-compartment tile (shared)
     public const string ControlWireMarkAnnotation = "ControlWireMarkAnnotation";
     public const string ControlRepeaterDetail = "ControlRepeaterDetail";  // hybrid-repeater stamp (CC-A chain)
+    // Row glyphs — a 4.5" detail-item symbol placed per list row (and the wireless one at the fan tap),
+    // center-origin. Replaced the renderer-drawn figures so the shapes are authored, not code.
+    public const string ControlKeypadGlyph = "ControlKeypadGlyph";        // wired keypad row (▽)
+    public const string ControlShadeGlyph = "ControlShadeGlyph";          // shade motor row
+    public const string ControlWirelessGlyph = "ControlWirelessGlyph";    // wireless keypad row + fan tap (RF)
 
     /// <summary>
     /// A human-facing phrase for a finder role, used in "not found" messages — deliberately decoupled
@@ -106,6 +111,9 @@ public static class Roles
             [ControlLvSlotDetail] = "Control LV Slot tile detail",
             [ControlWireMarkAnnotation] = "Control Wire Mark annotation",
             [ControlRepeaterDetail] = "Control Hybrid Repeater detail",
+            [ControlKeypadGlyph] = "Control Keypad glyph",
+            [ControlShadeGlyph] = "Control Shade glyph",
+            [ControlWirelessGlyph] = "Control Wireless glyph",
         };
 
     /// <summary>Every recognized role, keyed case-insensitively to its canonical spelling.</summary>
@@ -120,6 +128,7 @@ public static class Roles
             DmxProcessorDetail, DmxTerminatorDetail, DmxWireMarkAnnotation,
             ControlPanelDetail, ControlLv21Detail, ControlSmartPanelDetail, ControlModuleDetail,
             ControlLvSlotDetail, ControlWireMarkAnnotation, ControlRepeaterDetail,
+            ControlKeypadGlyph, ControlShadeGlyph, ControlWirelessGlyph,
         });
 
     /// <summary>

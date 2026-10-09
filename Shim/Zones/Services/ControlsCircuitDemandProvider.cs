@@ -43,25 +43,26 @@ namespace TurboSuite.Zones.Services
         {
             if (doc == null) return new List<RepeaterLocationTally>();
 
-            // Keyed by the PARSED location number, not the repeater's full panel name — so two
-            // repeaters in one location ("2-REP1", "2-REP2") pool into one location (⇒ one CC-A link),
-            // not two. The display name is the first panel name seen for that location.
-            var repeatersByLocation = new Dictionary<int, int>();
-            var keypadsByLocation = new Dictionary<int, List<KeypadRecord>>();
-            var nameByLocation = new Dictionary<int, string>();
-            var order = new List<int>();
+            // Keyed by the repeater's PANEL NAME ("1-REP1"), so each repeater keeps its OWN keypads for the
+            // one-line fan (F4). Locations pool by parsed number only when the tallies are grouped at the
+            // end — two repeaters in one location ("2-REP1", "2-REP2") stay distinct records under one
+            // location tally (still one CC-A link, two stamps).
+            var repeaterByName = new Dictionary<string, RepeaterBuilder>(StringComparer.OrdinalIgnoreCase);
+            var order = new List<string>();
 
-            void Seen(int location, string name)
+            RepeaterBuilder Seen(string name)
             {
-                if (repeatersByLocation.ContainsKey(location)) return;
-                repeatersByLocation[location] = 0;
-                keypadsByLocation[location] = new List<KeypadRecord>();
-                nameByLocation[location] = name;
-                order.Add(location);
+                if (!repeaterByName.TryGetValue(name, out var b))
+                {
+                    b = new RepeaterBuilder(name, PanelAllocationService.ParseLocationNumber(name));
+                    repeaterByName[name] = b;
+                    order.Add(name);
+                }
+                return b;
             }
 
-            // 1) Every hybrid repeater, grouped by its own panel-name location — counts keypad-less
-            //    repeaters too, since each still needs a Clear Connect link.
+            // 1) Every hybrid repeater — one record each, keyed by its panel name; keypad-less repeaters
+            //    still get a record, since each needs a Clear Connect link.
             var repeaters = new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_ElectricalEquipment)
                 .OfClass(typeof(FamilyInstance))
@@ -70,15 +71,11 @@ namespace TurboSuite.Zones.Services
                     StringComparison.OrdinalIgnoreCase));
 
             foreach (var rep in repeaters)
-            {
-                string name = NameOrUnassigned(rep.Name);
-                int location = PanelAllocationService.ParseLocationNumber(name);
-                Seen(location, name);
-                repeatersByLocation[location]++;
-            }
+                Seen(NameOrUnassigned(rep.Name));
 
-            // 2) Wireless keypads via their Controls circuits — grouped by the circuit's panel (the
-            //    repeater), which resolves to the same location.
+            // 2) Wireless keypads via their Controls circuits — attached to the repeater the circuit's
+            //    panel names. A circuit whose panel is no collected repeater still seeds a record, so its
+            //    keypads are not lost.
             var regionFallback = new RegionRoomLookupService(doc);
             var roomCache = new SpaceRoomFinderService.SpaceLookupCache(doc, regionFallback);
 
@@ -90,9 +87,7 @@ namespace TurboSuite.Zones.Services
 
             foreach (var circuit in controlsCircuits)
             {
-                string name = NameOrUnassigned(ParameterHelper.GetPanelName(circuit));
-                int location = PanelAllocationService.ParseLocationNumber(name);
-                Seen(location, name);
+                var builder = Seen(NameOrUnassigned(ParameterHelper.GetPanelName(circuit)));
 
                 if (circuit.Elements == null) continue;
                 foreach (Element el in circuit.Elements)
@@ -107,26 +102,52 @@ namespace TurboSuite.Zones.Services
                         ?? fi.Symbol?.LookupParameter(ParameterNames.TwoGang);
                     bool isTwoGang = twoGang != null && twoGang.AsInteger() == 1;
 
-                    keypadsByLocation[location].Add(new KeypadRecord(
+                    builder.Keypads.Add(new KeypadRecord(
                         ParameterHelper.GetSwitchID(fi) ?? string.Empty,
                         ResolveRoomName(fi, roomCache),
                         fi.Symbol?.get_Parameter(BuiltInParameter.ALL_MODEL_MODEL)?.AsString() ?? string.Empty,
-                        location,
+                        builder.Location,
                         devices: isTwoGang ? 2 : 1));
                 }
             }
 
-            // Switch-ID order within each location (numbered first, then unnumbered), so the one-line's
-            // repeater fan reads in order — the same ordering the shade motor list uses.
+            // Group the repeater records by location (first-seen order), each record's keypads in Switch-ID
+            // order — the order the one-line's per-repeater fan reads, matching the shade motor list.
             var natural = new NaturalStringComparer();
-            return order.Select(loc => new RepeaterLocationTally(
-                nameByLocation[loc],
-                loc,
-                repeatersByLocation[loc],
-                keypadsByLocation[loc]
+            RepeaterRecord Build(RepeaterBuilder b) => new RepeaterRecord(
+                b.Name, b.Location,
+                b.Keypads
                     .OrderBy(k => string.IsNullOrEmpty(k.SwitchId))
                     .ThenBy(k => k.SwitchId, natural)
-                    .ToList())).ToList();
+                    .ToList());
+
+            var result = new List<RepeaterLocationTally>();
+            var locOrder = new List<int>();
+            var byLocation = new Dictionary<int, (string Name, List<RepeaterRecord> Reps)>();
+            foreach (string name in order)
+            {
+                var b = repeaterByName[name];
+                if (!byLocation.TryGetValue(b.Location, out var bucket))
+                {
+                    bucket = (name, new List<RepeaterRecord>());
+                    byLocation[b.Location] = bucket;
+                    locOrder.Add(b.Location);
+                }
+                bucket.Reps.Add(Build(b));
+            }
+            foreach (int loc in locOrder)
+                result.Add(new RepeaterLocationTally(byLocation[loc].Name, loc, byLocation[loc].Reps));
+            return result;
+        }
+
+        /// <summary>Accumulates one repeater's keypads while collecting, before it is frozen into a
+        /// <see cref="RepeaterRecord"/>.</summary>
+        private sealed class RepeaterBuilder
+        {
+            public RepeaterBuilder(string name, int location) { Name = name; Location = location; }
+            public string Name { get; }
+            public int Location { get; }
+            public List<KeypadRecord> Keypads { get; } = new List<KeypadRecord>();
         }
 
         private static string NameOrUnassigned(string? name) =>

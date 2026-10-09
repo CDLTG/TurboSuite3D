@@ -406,7 +406,9 @@ namespace TurboSuite.Zones.OneLine
             public const double KeypadListAnchorDy = 11.5 / 12.0;        // 0'-11 1/2"
             /// <summary>Glyph-center → label gap (label sits to the glyph's right).</summary>
             public const double KeypadListTextDx = 6.0 / 12.0;           // 0'-6"
-            /// <summary>Keypad glyph (▽ down-triangle) side length — matches the row text height.</summary>
+            /// <summary>The row-glyph box: the keypad / shade / wireless glyph families are all authored to
+            /// this 4.5" square, center-origin, so the renderer just drops each at its row point. Matches the
+            /// row text height. A spec reference — the shapes live in the families, not here.</summary>
             public const double KeypadGlyphSize = 4.5 / 12.0;            // 0'-4 1/2"
             /// <summary>Motor list (Phase E) row-0 (bottom) baseline Y above the motor-tap terminus —
             /// clears it. The motor list reuses the keypad row pitch / glyph size / char width; it is
@@ -418,6 +420,14 @@ namespace TurboSuite.Zones.OneLine
             public const double MotorTapStubLength = (27.0 + 1.0 / 4.0) / 12.0;   // 2'-3 1/4"
             /// <summary>Half-length of the horizontal terminus line at the top of the motor-tap stub (9" full).</summary>
             public const double MotorTerminusHalf = 4.5 / 12.0;          // → 0'-9" full
+
+            // ── Repeater fan tap gap (F4): unlike the shade motor tap, the repeater tap BREAKS around its
+            //    wireless glyph — a leg from the stamp top up to the low mark, then a clear gap the glyph sits
+            //    in, then the leg resumes at the high mark and continues to the terminus. ──
+            /// <summary>The lower leg of the repeater tap stops this far above the stamp top (gap starts here).</summary>
+            public const double RepeaterTapGapLow = 10.0 / 12.0;              // 0'-10"
+            /// <summary>The upper leg of the repeater tap resumes this far above the stamp top (gap ends here).</summary>
+            public const double RepeaterTapGapHigh = (17.0 + 1.0 / 4.0) / 12.0;  // 1'-5 1/4"
 
             /// <summary>Boilerplate note block origin (top-left of the page content), model feet from page origin.</summary>
             public static readonly XY BoilerplateOrigin = XY.In(0, 0);

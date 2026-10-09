@@ -149,9 +149,10 @@ composition via `PackedLink.Units` (Section 2a). `Shim/Zones/Services/ControlOne
 into per-page owned views: panels are **family-composed** — a branded enclosure family (resolved by the
 node's `EnclosureRole`: `ControlPanelDetail` PD8/PD9, `ControlLv21Detail`) filled with the shared
 `ControlModuleDetail` + `ControlLvSlotDetail` tiles, plus `ControlSmartPanelDetail` shades,
-`ControlRepeaterDetail` hybrid-repeater stamps (CC-A chain), and `ControlWireMarkAnnotation` markers. A
-**missing family warns-and-skips** (no box-and-text fallback — the families are authored, so a missing one
-is a config error to surface, not a look-alike to draw).
+`ControlRepeaterDetail` hybrid-repeater stamps (CC-A chain), the `ControlKeypadGlyph` / `ControlShadeGlyph`
+/ `ControlWirelessGlyph` row glyphs, and `ControlWireMarkAnnotation` markers. A **missing family
+warns-and-skips** (no box-and-text fallback — the families are authored, so a missing one is a config error
+to surface, not a look-alike to draw).
 
 The renderer-drawn head-end glyphs follow the firm's sheet style: each processor head draws its own
 **Ethernet-to-Home-Network stub** — a CAT6 run LEFT out of its left edge (inline with the bottom-row exit) with
@@ -166,14 +167,21 @@ data exists. Keypads carry a **location** from a room→location map edited in t
 (auto-seeded from circuits + DALI, explicit picks persisted in `RoomLocationStorageService`); `ControlLinkPacker`
 pours a location's keypads onto *its own* links (location-affinity — the processor/link **count is unchanged**,
 only the distribution) and tags each `KeypadRecord` to the link it lands on (`PackedLink.KeypadRecords`). The
-planner draws one row per keypad — `[Switch ID] Room - Model`, a ▽ glyph — in a **bottom-up, column-wrapped**
+planner draws one row per keypad — `[Switch ID] Room - Model`, a keypad glyph — in a **bottom-up, column-wrapped**
 list (homeruns of 10, three stacked per column with a break) off the keypad tail; a link whose keypads have no
 mapped location (or are wireless) keeps the legacy stub. Shades carry per-motor records the same way
 (`ShadeSolver` slices a location's circuits into each QSPS-10PNL → `PackedLinkUnit.Motors`), drawn one row per
-motor — `[circuit #] <load name>`, a shade-symbol glyph — rising from a lengthened motor tap offset left to
+motor — `[circuit #] <load name>`, a shade glyph — rising from a lengthened motor tap offset left to
 align with the 120V label so it clears the keypad columns. Both lists share one pure renderer
 (`Core/Zones/OneLine/ControlListLayout.cs`) and the `[number] Room - Description` label format; text aligns to
 geometry via `ControlNote.VAlign` (Middle), not nudge offsets.
+
+**Row glyphs are authored families.** The keypad (▽), shade, and wireless (Lutron RF) row symbols are
+**authored Detail Item families** (`ControlKeypadGlyph` / `ControlShadeGlyph` / `ControlWirelessGlyph`),
+each a **4.5" center-origin** stamp the renderer drops at a `ControlGlyphNode` point — not renderer-drawn
+line figures. This keeps every symbol on the sheet an authored family (like the enclosures, stamps, and
+wire marker), and let the curved RF glyph be drawn as geometry rather than code (no arc primitive). A
+missing glyph family warns-and-skips like the others; the row **text stays a `TextNote`** beside the glyph.
 
 **Family-authoring convention:** all power panels are the one fixed **9-rung** 59″ enclosure — PD9 = 9 modules
 (never hosts a processor), PD8 = 8 modules + the LV compartment on the **bottom rung**; the 9-rung fixed height
@@ -207,8 +215,8 @@ drawn here). Line style follows Lutron — **dashed = RF, solid = wired** (solid
 right, CAT6 left — while the shade-link marker stays on its motor stub. Legend title is the larger
 `AL_Annotation_6.75"` over 4.5" body rows.
 
-**Status:** the 7 families are authored (the 6 panel/tile/shade/marker families + the `ControlRepeaterDetail`
-repeater stamp), the box fallback is removed, and the measured family geometry (outer
+**Status:** the 10 families are authored (the 6 panel/tile/shade/marker families + the `ControlRepeaterDetail`
+repeater stamp + the 3 row glyphs), the box fallback is removed, and the measured family geometry (outer
 sizes, rung anchor offsets incl. the LV21's) is transcribed into `ControlOneLineGeometry`; spine/caret,
 bottom-aligned shades, the row-per-link 28' layout, the **head-panel dogleg fan + one-head LV21 placement**
 (name-identified head, dead-link row compaction, LV21 tile offsets), per-head **Ethernet stubs**, **42×30

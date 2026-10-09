@@ -32,8 +32,19 @@ namespace TurboSuite.Tests.Zones
         /// real <see cref="RepeaterLocationTally.Location"/> field the packer groups on.</summary>
         public static RepeaterLocationTally Loc(
             string locationName, int repeaters, params KeypadRecord[] wirelessKeypads)
-            => new RepeaterLocationTally(locationName,
-                PanelAllocationService.ParseLocationNumber(locationName), repeaters, wirelessKeypads);
+        {
+            int loc = PanelAllocationService.ParseLocationNumber(locationName);
+            // Build one RepeaterRecord per repeater; the keypads ride the FIRST record (the flat totals the
+            // sizing tests assert are the same whichever repeater holds them). A keypads-but-no-repeater
+            // edge still keeps a record so nothing is lost.
+            var recs = new List<RepeaterRecord>();
+            for (int i = 0; i < repeaters; i++)
+                recs.Add(new RepeaterRecord($"{locationName}#{i + 1}", loc,
+                    i == 0 ? (IReadOnlyList<KeypadRecord>)wirelessKeypads : System.Array.Empty<KeypadRecord>()));
+            if (repeaters == 0 && wirelessKeypads.Length > 0)
+                recs.Add(new RepeaterRecord(locationName, loc, wirelessKeypads));
+            return new RepeaterLocationTally(locationName, loc, recs);
+        }
 
         /// <summary>A wireless keypad record at <paramref name="location"/>, <paramref name="devices"/>
         /// device weight (2 = two-gang).</summary>

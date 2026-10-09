@@ -144,6 +144,24 @@ namespace TurboSuite.Zones.OneLine
         public bool Dashed { get; }
     }
 
+    /// <summary>One list-row glyph — a 4.5" center-origin detail-item family placed at <see cref="Center"/>,
+    /// chosen by <see cref="Role"/> (keypad ▽ / shade / wireless RF). Replaced the renderer-drawn figures
+    /// so the shapes are authored, not code; the row's text stays a <see cref="ControlNote"/> beside it.</summary>
+    public sealed class ControlGlyphNode
+    {
+        public ControlGlyphNode(XY center, string role)
+        {
+            Center = center;
+            Role = role;
+        }
+
+        public XY Center { get; }
+
+        /// <summary>The glyph family's TurboSuite Role (<c>Roles.ControlKeypadGlyph</c> / <c>ControlShadeGlyph</c>
+        /// / <c>ControlWirelessGlyph</c>).</summary>
+        public string Role { get; }
+    }
+
     /// <summary>One wire-type marker (the circled-number Generic Annotation) placed ON a wire. The
     /// <see cref="Number"/> is the per-job legend number resolved at plan time.</summary>
     public sealed class ControlMarker
@@ -208,7 +226,8 @@ namespace TurboSuite.Zones.OneLine
             IReadOnlyList<ControlWireSegment> wires,
             IReadOnlyList<ControlMarker> markers,
             IReadOnlyList<ControlNote> notes,
-            IReadOnlyList<ControlRepeaterNode>? repeaters = null)
+            IReadOnlyList<ControlRepeaterNode>? repeaters = null,
+            IReadOnlyList<ControlGlyphNode>? glyphs = null)
         {
             PageIndex = pageIndex;
             PageCount = pageCount;
@@ -218,6 +237,7 @@ namespace TurboSuite.Zones.OneLine
             Markers = markers;
             Notes = notes;
             Repeaters = repeaters ?? System.Array.Empty<ControlRepeaterNode>();
+            Glyphs = glyphs ?? System.Array.Empty<ControlGlyphNode>();
         }
 
         /// <summary>1-based page number — the stable key the owned view is registered under.</summary>
@@ -234,6 +254,10 @@ namespace TurboSuite.Zones.OneLine
         public IReadOnlyList<ControlRepeaterNode> Repeaters { get; }
 
         public IReadOnlyList<ControlWireSegment> Wires { get; }
+
+        /// <summary>List-row glyphs (keypad / shade / wireless), placed as authored detail-item families.</summary>
+        public IReadOnlyList<ControlGlyphNode> Glyphs { get; }
+
         public IReadOnlyList<ControlMarker> Markers { get; }
         public IReadOnlyList<ControlNote> Notes { get; }
 

@@ -256,6 +256,31 @@ namespace TurboSuite.Tests.Zones
             Assert.Contains(page.Notes, n => n.Text.Contains("WIRELESS KEYPADS"));
         }
 
+        /// <summary>F4 — when a CC-A link carries per-repeater RECORDS, each stamp fans ITS OWN keypads
+        /// (rising from the stamp) and the aggregate WIRELESS KEYPADS stub is gone. Two repeaters carrying
+        /// 2 + 1 keypads → two stamps, three fan rows, and a wireless glyph at each tap + row.</summary>
+        [Fact]
+        public void ClearConnectRepeatersFanTheirOwnKeypads()
+        {
+            KeypadRecord Kp(string id) => new KeypadRecord(id, "ENTRY", "Palladiom", location: 1);
+            var r1 = new RepeaterRecord("1-REP1", 1, new[] { Kp("K1"), Kp("K2") });
+            var r2 = new RepeaterRecord("1-REP2", 1, new[] { Kp("K3") });
+            var cca = new PackedLink(ProcessorLink.ClearConnectLinkType, 5, 0, Array.Empty<string>(),
+                repeaters: 2, repeaterRecords: new[] { r1, r2 });
+            var pack = Pack(Group(Qs(U("1-A", LinkCategory.Modules, 8)), cca));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = Assert.Single(
+                ControlOneLinePlanner.Build(pack, panels, "TurboControl", "HQR-REP-120"));
+
+            Assert.Equal(2, page.Repeaters.Count);                                        // two stamps
+            Assert.DoesNotContain(page.Notes, n => n.Text.Contains("WIRELESS KEYPADS"));  // stub replaced by fans
+            Assert.Equal(3, page.Notes.Count(n => n.Text.StartsWith("[K")));              // one fan row per keypad
+            // Wireless glyphs: one at each stamp's tap + one per keypad row (3 + 2 across the two fans).
+            Assert.Equal(5, page.Glyphs.Count);
+            Assert.All(page.Glyphs, g => Assert.Equal(Roles.ControlWirelessGlyph, g.Role));
+        }
+
         /// <summary>A link with no keypad unit gets no keypad stub.</summary>
         [Fact]
         public void NoKeypadStubWhenLinkHasNoKeypads()

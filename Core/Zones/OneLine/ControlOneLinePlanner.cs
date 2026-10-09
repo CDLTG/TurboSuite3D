@@ -70,6 +70,7 @@ namespace TurboSuite.Zones.OneLine
             var shadeNodes = new List<ControlShadeNode>();
             var repeaterNodes = new List<ControlRepeaterNode>();
             var wires = new List<ControlWireSegment>();
+            var glyphNodes = new List<ControlGlyphNode>();
             var markers = new List<ControlMarker>();
             var notes = new List<ControlNote>();
 
@@ -80,6 +81,9 @@ namespace TurboSuite.Zones.OneLine
             // segment is the repeater→keypad RF tail, which is deferred to the keypad-location expansion (so
             // nothing is dashed today). The wire TYPE is carried by the circled marker number, not the style.
             void Wire(XY a, XY b, bool dashed) => wires.Add(new ControlWireSegment(a, b, dashed));
+            // Place a list-row glyph family (keypad / shade / wireless) at a point — the shim resolves it by
+            // role and places the authored 4.5" symbol there.
+            void Glyph(XY at, string role) => glyphNodes.Add(new ControlGlyphNode(at, role));
             void Mark(XY at, ControlWireType t) => markers.Add(new ControlMarker(at, t, legend.NumberFor(t)));
             void Note(XY at, string text, ControlTextAlign align, string? typeName = null,
                 ControlVerticalAlign vAlign = ControlVerticalAlign.Top)
@@ -95,38 +99,46 @@ namespace TurboSuite.Zones.OneLine
                 Wire(new XY(x0, y1), new XY(x0, y0), dashed: false);
             }
 
-            // A hollow DOWN-pointing triangle (▽) centered on c — flat top edge, apex below — matching the
-            // project's keypad plan symbol. The keypad-list row glyph.
-            void DownTriangle(XY c, double s)
+            // One repeater's keypad fan (F4): rises from the TOP of the stamp, mirroring the shade motor
+            // list — a solid tap stub to a terminus (its "marker" slot carries the wireless glyph, not a
+            // circled number), then a single bottom-up column of [Switch ID] Room - Model rows, each with
+            // the wireless glyph. No RF line style / no legend entry — "wireless" is the glyph. Never wraps
+            // (a repeater never carries 20+ keypads).
+            void DrawRepeaterFan(double cx, double baseY, IReadOnlyList<KeypadRecord> keypads)
             {
-                double h = s / 2.0;
-                var topLeft = new XY(c.X - h, c.Y + h);
-                var topRight = new XY(c.X + h, c.Y + h);
-                var apex = new XY(c.X, c.Y - h);
-                Wire(topLeft, topRight, dashed: false);
-                Wire(topRight, apex, dashed: false);
-                Wire(apex, topLeft, dashed: false);
-            }
+                double stampTopY = baseY + G.Repeater.Height;      // origin at baseY, art rises to +Height
+                var t0 = new XY(cx, stampTopY);
+                var t1 = t0.Offset(0, G.Layout.MotorTapStubLength);
+                // The tap BREAKS around the wireless glyph (unlike the shade motor tap): a leg up to the gap
+                // low, then a clear gap the glyph sits in, then the leg resumes at the gap high to the terminus.
+                Wire(t0, t0.Offset(0, G.Layout.RepeaterTapGapLow), dashed: false);     // lower leg
+                Wire(t0.Offset(0, G.Layout.RepeaterTapGapHigh), t1, dashed: false);    // upper leg (past the gap)
+                Glyph(new XY(cx, t0.Y + (G.Layout.RepeaterTapGapLow + G.Layout.RepeaterTapGapHigh) / 2.0),
+                    Roles.ControlWirelessGlyph);                    // centered in the gap
+                Wire(t1.Offset(-G.Layout.MotorTerminusHalf, 0), t1.Offset(G.Layout.MotorTerminusHalf, 0),
+                    dashed: false);                                 // terminus
 
-            // A little shade symbol — the motor-list row glyph, distinct from the keypad ▽. In the same
-            // glyph box as the keypad: the bottom-left and top-right corners are squished inward 1.25" to
-            // lean it into a parallelogram (slanted top/bottom, vertical sides), then the slanted top edge
-            // is copied straight down 0.75" for the shade "header".
-            void ShadeGlyph(XY c, double s)
-            {
-                const double squish = 1.25 / 12.0;
-                const double header = 0.75 / 12.0;
-                double h = s / 2.0;
-                double left = c.X - h, right = c.X + h, top = c.Y + h, bottom = c.Y - h;
-                var tl = new XY(left, top);
-                var tr = new XY(right, top - squish);
-                var br = new XY(right, bottom);
-                var bl = new XY(left, bottom + squish);
-                Wire(tl, tr, dashed: false);   // slanted top edge
-                Wire(tr, br, dashed: false);   // right edge (vertical)
-                Wire(br, bl, dashed: false);   // slanted bottom edge
-                Wire(bl, tl, dashed: false);   // left edge (vertical)
-                Wire(new XY(left, top - header), new XY(right, top - squish - header), dashed: false);  // header
+                if (keypads.Count == 0) return;
+                var labels = keypads
+                    .OrderBy(k => string.IsNullOrEmpty(k.SwitchId))
+                    .ThenBy(k => k.SwitchId, natural)
+                    .Select(ControlListLayout.KeypadRowLabel)
+                    .ToList();
+                // Center the [glyph + text] block on the stamp. The shade list aligns its text to the 120V
+                // label instead, but the repeater is narrower than that offset, so a measured center keeps
+                // the fan over the stamp. Block runs glyph → text; shift the glyph left by half its width.
+                int maxChars = labels.Max(l => l.Length);
+                double contentWidth = G.Layout.KeypadListTextDx + maxChars * G.Layout.KeypadListCharWidth;
+                var anchor = new XY(cx - contentWidth / 2.0, t1.Y + G.Layout.MotorListAnchorDy);
+                var positions = ControlListLayout.Layout(labels.Count, anchor,
+                    rowsPerColumn: labels.Count + 1, G.Layout.KeypadListRowPitch, columnWidth: 0.0);
+                for (int i = 0; i < positions.Count; i++)
+                {
+                    XY p = positions[i].Anchor;
+                    Glyph(p, Roles.ControlWirelessGlyph);
+                    Note(p.Offset(G.Layout.KeypadListTextDx, 0), labels[i], ControlTextAlign.Left,
+                        G.LargeTextTypeName, ControlVerticalAlign.Middle);
+                }
             }
 
             // 120 V feed, following the Lutron reference sheet: up from the panel top edge, LEFT to a terminus square,
@@ -347,31 +359,43 @@ namespace TurboSuite.Zones.OneLine
                         // SAME spine + carets as a QS link. Each repeater (≤4) hangs off a caret as a
                         // bottom-aligned stamp, spaced by the link's own CENTER-TO-CENTER values (so a repeater
                         // sits where a panel would): the first at the head→column-1 c-c off the head center, then
-                        // the inter-panel c-c between repeaters. The WIRELESS KEYPADS stub always tails the spine
-                        // (so no repeater caret is ever terminal); the per-keypad RF fan is deferred.
-                        int reps = System.Math.Max(0, pl.Link.Repeaters);
+                        // the inter-panel c-c between repeaters.
+                        //
+                        // When the demand carries per-repeater RECORDS (located path), each stamp fans ITS OWN
+                        // keypads rising from the stamp top, and no tail stub is drawn (the last caret is
+                        // terminal). The location-free global pour knows only a repeater COUNT, so it draws plain
+                        // stamps and the aggregate WIRELESS KEYPADS stub (the keypad→repeater identity is unknown
+                        // there).
+                        var repRecords = pl.Link.RepeaterRecords;
+                        bool perRepeater = repRecords.Count > 0;
+                        int reps = perRepeater ? repRecords.Count : System.Math.Max(0, pl.Link.Repeaters);
                         double lastCx = double.NaN;
                         for (int r = 0; r < reps; r++)
                         {
                             double cx = colX + G.Layout.HeadColumnCenterToCenter + r * G.Layout.PanelCenterToCenter;
-                            Caret(cx, leftHalfOnly: false);
-                            repeaterNodes.Add(new ControlRepeaterNode(
-                                new XY(cx, panelBottomY + G.Repeater.Height / 2.0), repeaterPartNumber ?? string.Empty));
+                            Caret(cx, leftHalfOnly: perRepeater && r == reps - 1);   // records → no tail after last
+                            var stampCenter = new XY(cx, panelBottomY + G.Repeater.Height / 2.0);
+                            repeaterNodes.Add(new ControlRepeaterNode(stampCenter, repeaterPartNumber ?? string.Empty));
+                            Add120V(stampCenter, G.Repeater.Height);   // 120 V feed, same as every other node
+                            if (perRepeater) DrawRepeaterFan(cx, panelBottomY, repRecords[r].Keypads);
                             lastCx = cx;
                         }
 
-                        // Keypad tail — spine terminus + tick + note, the same edge+gap shape as the QS keypad
-                        // tail (located fan deferred, so only the stub draws). With no repeater modelled (a 0/4
-                        // link) the stub lands at the first-node column so it still sits on the link.
-                        double tailFromX = double.IsNaN(lastCx)
-                            ? colX + G.Layout.HeadColumnCenterToCenter
-                            : lastCx + G.Repeater.Width / 2.0;
-                        double kxCc = tailFromX + G.Layout.KeypadTailGap;
-                        Wire(new XY(spineFromX, spineY), new XY(kxCc, spineY), dashed: false);
-                        Tick(wires, new XY(kxCc, spineY), G.Layout.KeypadTickHalf);
-                        Note(new XY(kxCc + G.Layout.KeypadTailBlockDx, spineY),
-                            "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName,
-                            ControlVerticalAlign.Middle);
+                        if (!perRepeater)
+                        {
+                            // Aggregate WIRELESS KEYPADS stub — spine terminus + tick + note, the same edge+gap
+                            // shape as the QS keypad tail. With no repeater modelled (a 0/4 link) it lands at the
+                            // first-node column so it still sits on the link.
+                            double tailFromX = double.IsNaN(lastCx)
+                                ? colX + G.Layout.HeadColumnCenterToCenter
+                                : lastCx + G.Repeater.Width / 2.0;
+                            double kxCc = tailFromX + G.Layout.KeypadTailGap;
+                            Wire(new XY(spineFromX, spineY), new XY(kxCc, spineY), dashed: false);
+                            Tick(wires, new XY(kxCc, spineY), G.Layout.KeypadTickHalf);
+                            Note(new XY(kxCc + G.Layout.KeypadTailBlockDx, spineY),
+                                "WIRELESS KEYPADS", ControlTextAlign.Left, G.LargeTextTypeName,
+                                ControlVerticalAlign.Middle);
+                        }
                         continue;
                     }
 
@@ -418,7 +442,7 @@ namespace TurboSuite.Zones.OneLine
                                 for (int mi = 0; mi < mPos.Count; mi++)
                                 {
                                     XY p = mPos[mi].Anchor;
-                                    ShadeGlyph(p, G.Layout.KeypadGlyphSize);   // motor glyph (shade symbol)
+                                    Glyph(p, Roles.ControlShadeGlyph);   // motor glyph (shade symbol)
                                     Note(p.Offset(G.Layout.KeypadListTextDx, 0), motorLabels[mi],
                                         ControlTextAlign.Left, G.LargeTextTypeName, ControlVerticalAlign.Middle);
                                 }
@@ -475,7 +499,7 @@ namespace TurboSuite.Zones.OneLine
                             for (int i = 0; i < positions.Count; i++)
                             {
                                 XY p = positions[i].Anchor;
-                                DownTriangle(p, G.Layout.KeypadGlyphSize);   // keypad glyph (▽, plan symbol)
+                                Glyph(p, Roles.ControlKeypadGlyph);   // keypad glyph (▽, plan symbol)
                                 // Middle vertical-align so the text centers on the glyph's point (the row
                                 // notes default to Top otherwise, hanging the text below the glyph).
                                 Note(p.Offset(G.Layout.KeypadListTextDx, 0), labels[i],
@@ -510,6 +534,7 @@ namespace TurboSuite.Zones.OneLine
                 shadeNodes = new List<ControlShadeNode>();
                 repeaterNodes = new List<ControlRepeaterNode>();
                 wires = new List<ControlWireSegment>();
+                glyphNodes = new List<ControlGlyphNode>();
                 markers = new List<ControlMarker>();
                 notes = new List<ControlNote>();
 
@@ -517,7 +542,7 @@ namespace TurboSuite.Zones.OneLine
                     if (enc.Page == pg) DrawEnclosure(enc);
 
                 drawings.Add(new ControlOneLineDrawing(pg, pageCount, panelNodes, shadeNodes, wires,
-                    markers, notes, repeaterNodes));
+                    markers, notes, repeaterNodes, glyphNodes));
             }
             return drawings;
         }

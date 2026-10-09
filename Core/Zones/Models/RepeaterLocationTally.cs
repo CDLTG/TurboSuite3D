@@ -24,13 +24,12 @@ namespace TurboSuite.Zones.Models
     /// </summary>
     public sealed class RepeaterLocationTally
     {
-        public RepeaterLocationTally(string locationName, int location, int repeaterCount,
-            IReadOnlyList<KeypadRecord>? wirelessKeypads = null)
+        public RepeaterLocationTally(string locationName, int location,
+            IReadOnlyList<RepeaterRecord>? repeaters = null)
         {
             LocationName = locationName ?? string.Empty;
             Location = location;
-            RepeaterCount = repeaterCount;
-            WirelessKeypads = wirelessKeypads ?? Array.Empty<KeypadRecord>();
+            Repeaters = repeaters ?? Array.Empty<RepeaterRecord>();
         }
 
         /// <summary>A representative panel name for this location (e.g. "1-REP1"), for diagnostics and
@@ -45,16 +44,19 @@ namespace TurboSuite.Zones.Models
         /// </summary>
         public int Location { get; }
 
-        /// <summary>Physical hybrid repeaters at this location — the <c>ceil(/4)</c> numerator.</summary>
-        public int RepeaterCount { get; }
+        /// <summary>The repeaters at this location, each with its own circuited keypads (F4) — the grain
+        /// the one-line's per-repeater fan draws. Ordered by panel name for a stable stamp chain.</summary>
+        public IReadOnlyList<RepeaterRecord> Repeaters { get; }
 
-        /// <summary>The wireless keypads circuited to this location's repeaters, in Switch-ID order
-        /// (count aligns with <see cref="WirelessDeviceCount"/> once gang is expanded). Empty ⇒ the fan
-        /// falls back to the count/stub.</summary>
-        public IReadOnlyList<KeypadRecord> WirelessKeypads { get; }
+        /// <summary>Physical hybrid repeaters at this location — the <c>ceil(/4)</c> numerator.</summary>
+        public int RepeaterCount => Repeaters.Count;
+
+        /// <summary>The wireless keypads circuited to this location's repeaters, flattened across them in
+        /// Switch-ID order. Empty ⇒ the fan falls back to the count/stub.</summary>
+        public IReadOnlyList<KeypadRecord> WirelessKeypads => Repeaters.SelectMany(r => r.Keypads).ToList();
 
         /// <summary>Wireless keypad <b>devices</b> riding this location's links (a two-gang keypad is
         /// two), the second input to the 99-device cap backstop alongside the repeaters.</summary>
-        public int WirelessDeviceCount => WirelessKeypads.Sum(k => k.Devices);
+        public int WirelessDeviceCount => Repeaters.Sum(r => r.KeypadDeviceCount);
     }
 }

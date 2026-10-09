@@ -363,7 +363,8 @@ namespace TurboSuite.Zones.Services
             // instead of forcing a second one.
             RepeaterLocationTally RelabelRepeater(RepeaterLocationTally t) =>
                 t.Location > 0 && orphanToHost.TryGetValue(t.Location, out int host) && host != t.Location
-                    ? new RepeaterLocationTally(t.LocationName, host, t.RepeaterCount, t.WirelessKeypads)
+                    ? new RepeaterLocationTally(t.LocationName, host,
+                        t.Repeaters.Select(r => r.WithLocation(host)).ToList())
                     : t;
 
             return new LinkDemand(
@@ -631,10 +632,12 @@ namespace TurboSuite.Zones.Services
         /// as <c>ShadeSolver.PanelFills</c> keeps the shade count and tiles in lockstep.</summary>
         private sealed class CcaLinkPlan
         {
-            public int Repeaters;
-            public int KeypadDevices;
-            public readonly List<KeypadRecord> Keypads = new List<KeypadRecord>();
-            public int Devices => Repeaters + KeypadDevices;
+            /// <summary>The repeater RECORDS on this link (F4) — each keeps its own keypads so the one-line
+            /// fans them under the right stamp. Count ≤ 4 per link (the repeater cap).</summary>
+            public readonly List<RepeaterRecord> Repeaters = new List<RepeaterRecord>();
+            public int RepeaterCount => Repeaters.Count;
+            public int KeypadDevices => Repeaters.Sum(r => r.KeypadDeviceCount);
+            public int Devices => Repeaters.Sum(r => r.DeviceCount);
 
             /// <summary>The repeater location this link serves (F4 slot placement) — so the constrained
             /// pack can land the link on a Link-2 slot of a processor in that same location rather than
@@ -667,13 +670,14 @@ namespace TurboSuite.Zones.Services
                 .GroupBy(l => l.Location)
                 .OrderBy(g => g.Key))
             {
-                int repeaters = group.Sum(l => Math.Max(0, l.RepeaterCount));
-                var keypads = group
-                    .SelectMany(l => l.WirelessKeypads ?? (IReadOnlyList<KeypadRecord>)System.Array.Empty<KeypadRecord>())
-                    .OrderBy(k => string.IsNullOrEmpty(k.SwitchId))
-                    .ThenBy(k => k.SwitchId, StringComparer.Ordinal)
+                // The location's repeater RECORDS (each carries its own keypads), ordered by panel name for
+                // a stable stamp chain.
+                var reps = group
+                    .SelectMany(l => l.Repeaters ?? (IReadOnlyList<RepeaterRecord>)System.Array.Empty<RepeaterRecord>())
+                    .OrderBy(r => r.PanelName, StringComparer.Ordinal)
                     .ToList();
-                int keypadDevices = keypads.Sum(k => k.Devices);
+                int repeaters = reps.Count;
+                int keypadDevices = reps.Sum(r => r.KeypadDeviceCount);
                 if (repeaters == 0 && keypadDevices == 0) continue;
 
                 int byRepeaters = (int)Math.Ceiling(
@@ -685,27 +689,13 @@ namespace TurboSuite.Zones.Services
                 var here = new List<CcaLinkPlan>(linksHere);
                 for (int i = 0; i < linksHere; i++) here.Add(new CcaLinkPlan { Location = group.Key });
 
-                // Repeaters first, four per link (the tighter cap, and what makes a link CC-A at all).
-                int remRep = repeaters;
-                for (int i = 0; i < linksHere && remRep > 0; i++)
+                // Repeaters (whole records, keypads riding with each) four per link — the tighter cap, and
+                // what makes a link CC-A at all. A repeater's keypads can't leave it, so a link's device
+                // total is simply its ≤4 repeaters' totals; the rare >99 case shows as over-capacity.
+                for (int i = 0; i < reps.Count; i++)
                 {
-                    int take = Math.Min(remRep, ProcessorLink.MaxRepeatersPerClearConnectLink);
-                    here[i].Repeaters = take;
-                    remRep -= take;
-                }
-                if (remRep > 0) here[linksHere - 1].Repeaters += remRep;
-
-                // Then the keypads this location's repeaters serve, filling device room — whole keypads
-                // (a two-gang's two devices move together), rolling to the next link when one is full.
-                int bin = 0;
-                foreach (var kp in keypads)
-                {
-                    while (bin < linksHere &&
-                           here[bin].Devices + kp.Devices > ProcessorLink.MaxDevices)
-                        bin++;
-                    if (bin >= linksHere) bin = linksHere - 1;   // over-capacity → visible on the last
-                    here[bin].Keypads.Add(kp);
-                    here[bin].KeypadDevices += kp.Devices;
+                    int bin = Math.Min(i / ProcessorLink.MaxRepeatersPerClearConnectLink, linksHere - 1);
+                    here[bin].Repeaters.Add(reps[i]);
                 }
 
                 plans.AddRange(here);
@@ -745,9 +735,7 @@ namespace TurboSuite.Zones.Services
             {
                 if (i < ccaLinks) { kept.Add(plans[i]); continue; }
                 var last = kept[ccaLinks - 1];
-                last.Repeaters += plans[i].Repeaters;
-                last.KeypadDevices += plans[i].KeypadDevices;
-                last.Keypads.AddRange(plans[i].Keypads);
+                last.Repeaters.AddRange(plans[i].Repeaters);
                 if (last.Location != plans[i].Location) last.Location = 0;
             }
             while (kept.Count < ccaLinks) kept.Add(new CcaLinkPlan());
@@ -759,7 +747,9 @@ namespace TurboSuite.Zones.Services
         private static PackedLink MaterializeCca(CcaLinkPlan p)
             => new PackedLink(
                 ProcessorLink.ClearConnectLinkType, p.Devices, 0, System.Array.Empty<string>(),
-                repeaters: p.Repeaters, wirelessKeypadRecords: p.Keypads);
+                repeaters: p.RepeaterCount,
+                wirelessKeypadRecords: p.Repeaters.SelectMany(r => r.Keypads).ToList(),
+                repeaterRecords: p.Repeaters.ToList());
 
         private static IEnumerable<PackedLink> PackWirelessGlobal(
             int repeaters, int wirelessDevices, int ccaLinks)
@@ -1446,7 +1436,8 @@ namespace TurboSuite.Zones.Services
             int repeaters = 0, int consumedPdu = 0, IReadOnlyList<LinkCategory>? categories = null,
             IReadOnlyList<PackedLinkUnit>? units = null,
             IReadOnlyList<KeypadRecord>? keypadRecords = null,
-            IReadOnlyList<KeypadRecord>? wirelessKeypadRecords = null)
+            IReadOnlyList<KeypadRecord>? wirelessKeypadRecords = null,
+            IReadOnlyList<RepeaterRecord>? repeaterRecords = null)
         {
             LinkType = linkType;
             Devices = devices;
@@ -1458,6 +1449,7 @@ namespace TurboSuite.Zones.Services
             Units = units ?? System.Array.Empty<PackedLinkUnit>();
             KeypadRecords = keypadRecords ?? System.Array.Empty<KeypadRecord>();
             WirelessKeypadRecords = wirelessKeypadRecords ?? System.Array.Empty<KeypadRecord>();
+            RepeaterRecords = repeaterRecords ?? System.Array.Empty<RepeaterRecord>();
         }
 
         public string LinkType { get; }
@@ -1499,6 +1491,12 @@ namespace TurboSuite.Zones.Services
         /// one-line's repeater fan. Empty on a QS link and on a CC-A link whose keypads are unlocated
         /// (they render the <c>WIRELESS KEYPADS</c> stub instead).</summary>
         public IReadOnlyList<KeypadRecord> WirelessKeypadRecords { get; }
+
+        /// <summary>The repeaters on this Clear Connect link, each with its OWN circuited keypads (F4) —
+        /// the per-repeater grain the one-line fans under each stamp. One entry per repeater, in stamp
+        /// order. Empty on a QS link and on a CC-A link from the location-free global pour (which knows a
+        /// repeater count but no per-repeater keypads — it falls back to the stub).</summary>
+        public IReadOnlyList<RepeaterRecord> RepeaterRecords { get; }
 
         public bool IsClearConnect
             => string.Equals(LinkType, ProcessorLink.ClearConnectLinkType, StringComparison.OrdinalIgnoreCase);

@@ -75,6 +75,12 @@ namespace TurboSuite.Zones.Services
                         var lvFam = ResolveSymbol(Roles.ControlLvSlotDetail);
                         var shadeFam = ResolveSymbol(Roles.ControlSmartPanelDetail);
                         var repeaterFam = ResolveSymbol(Roles.ControlRepeaterDetail);
+                        var glyphFams = new Dictionary<string, FamilySymbol>
+                        {
+                            [Roles.ControlKeypadGlyph] = ResolveSymbol(Roles.ControlKeypadGlyph),
+                            [Roles.ControlShadeGlyph] = ResolveSymbol(Roles.ControlShadeGlyph),
+                            [Roles.ControlWirelessGlyph] = ResolveSymbol(Roles.ControlWirelessGlyph),
+                        };
 
                         long vid = viewRegistry != null && viewRegistry.TryGetValue(page.PageIndex, out long v) ? v : 0L;
                         var view = FindOrCreateViewByIdOrName(page.ViewName(systemName), vid, result.Warnings, out bool created);
@@ -88,6 +94,7 @@ namespace TurboSuite.Zones.Services
                         foreach (var s in page.Shades) { DrawShadeNode(view, s, shadeFam, result.Warnings, warnedRoles); result.Shades++; }
                         foreach (var rp in page.Repeaters) { DrawRepeaterNode(view, rp, repeaterFam, result.Warnings, warnedRoles); result.Repeaters++; }
                         result.Wires += DrawWires(view, page.Wires, dashed, solid);
+                        foreach (var g in page.Glyphs) DrawGlyphNode(view, g, glyphFams, result.Warnings, warnedRoles);
                         result.Notes += DrawNotes(view, page.Notes, textType, result.Warnings);
                         result.Markers += DrawMarkers(view, page.Markers, marker);
 
@@ -357,6 +364,19 @@ namespace TurboSuite.Zones.Services
                 drawn++;
             }
             return drawn;
+        }
+
+        // A list-row glyph (keypad / shade / wireless) placed as its authored center-origin detail-item
+        // family at the row point. Missing family warns-and-skips like the node families.
+        private void DrawGlyphNode(View view, ControlGlyphNode node,
+            IReadOnlyDictionary<string, FamilySymbol> fams, List<string> warnings, HashSet<string> warnedRoles)
+        {
+            if (!fams.TryGetValue(node.Role, out var fam) || fam == null)
+            {
+                WarnMissing(node.Role, warnings, warnedRoles);
+                return;
+            }
+            PlaceFamily(view, fam, node.Center);
         }
 
         private int DrawNotes(View view, IReadOnlyList<ControlNote> notes, ElementId textType, List<string> warnings)
