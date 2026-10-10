@@ -151,7 +151,7 @@ namespace TurboSuite.Zones.Services
         }
 
         private static string NameOrUnassigned(string? name) =>
-            string.IsNullOrWhiteSpace(name) ? Unassigned : name.Trim();
+            string.IsNullOrWhiteSpace(name) ? Unassigned : name!.Trim();
 
         private static string ResolveRoomName(FamilyInstance fi, SpaceRoomFinderService.SpaceLookupCache roomCache)
         {
