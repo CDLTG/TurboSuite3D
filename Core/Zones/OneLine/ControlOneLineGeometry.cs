@@ -358,7 +358,7 @@ namespace TurboSuite.Zones.OneLine
             //    All renderer-drawn; the square is a plain glyph — NOT tied to a marker or the wire legend. ──
             public const double Feed120VLegDx = -18.0 / 12.0;            // vertical leg, 1'-6" left of the node center
             public const double Feed120VRise = 12.0 / 12.0;             // vertical leg height above the node top edge
-            public const double Feed120VRun = 24.0 / 12.0;             // horizontal run LEFT to the terminus square
+            public const double Feed120VRun = 30.0 / 12.0;             // 2'-6" horizontal run LEFT to the terminus square
             public const double Feed120VSquare = 6.0 / 12.0;          // terminus square side (plain glyph)
             public const double Feed120VLabelDx = (2.0 + 1.0 / 2.0) / 12.0;          // "120V" X: 2 1/2" right of the square's right edge
             public const double Feed120VLabelAboveCorner = (7.0 + 3.0 / 4.0) / 12.0;  // "120V" insertion Y: 7 3/4" above the L corner
