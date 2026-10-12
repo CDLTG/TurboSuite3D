@@ -160,5 +160,19 @@ namespace TurboSuite.Number.Views
             }
             return null;
         }
+
+        // ── Location field: relock on re-picking the seed value from the dropdown ──────────────────
+        // The override field is transient when unlocked: committing the seed value (or a blank) re-locks
+        // (RoomOrderItem.ApplyUserLocation). The combo's TwoWay/LostFocus binding commits an actual edit
+        // (typing a different value, or clearing it) on blur, but selecting the already-shown value from
+        // the dropdown is not an "edit", so it would otherwise leave the row stuck unlocked. This handler
+        // force-commits the current text on dropdown close — re-locking when it equals the seed, and
+        // overriding when it differs.
+
+        private void LocationCombo_DropDownClosed(object sender, EventArgs e)
+        {
+            if (sender is ComboBox cb && cb.DataContext is RoomOrderItem item)
+                item.LocationEntry = cb.Text;
+        }
     }
 }

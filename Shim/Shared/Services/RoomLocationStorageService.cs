@@ -25,6 +25,13 @@ namespace TurboSuite.Shared.Services
     /// Both key by room name and self-heal from the live room enumeration each session.
     /// Only explicit picks live here; unanimous auto-seeds are re-derived at runtime by
     /// <c>RoomLocationSeeder</c> and never persisted.
+    ///
+    /// <para>Each entry is <c>Name|Location</c>, optionally suffixed <c>|O</c> to mark an
+    /// <b>acknowledged override</b> — a pick the designer deliberately set on a <i>unanimous</i>
+    /// room to route it against its own circuits (the rare mis-detection escape hatch). The flag
+    /// is what lets <c>RoomLocationSeeder.Resolve</c> tell a deliberate override (resurfaces, wins)
+    /// from an inert stale pick left on a since-gone-unanimous room (stays dormant). The suffix
+    /// rides the existing array-of-string field, so adding it needs <b>no new schema GUID</b>.</para>
     /// </summary>
     public static class RoomLocationStorageService
     {
@@ -47,18 +54,19 @@ namespace TurboSuite.Shared.Services
             return builder.Finish();
         }
 
-        /// <summary>Loads the persisted explicit room→location picks. Only rooms the designer
+        /// <summary>Loads the persisted explicit room→location picks, each with its acknowledged-override
+        /// flag (<c>true</c> only for a deliberate override of a unanimous room). Only rooms the designer
         /// picked appear; absent rooms are blank (resolved via auto-seed at runtime).</summary>
-        public static List<(string Name, int Location)> Load(Document doc)
+        public static List<(string Name, int Location, bool IsOverride)> Load(Document doc)
         {
             var schema = Schema.Lookup(SchemaGuid);
-            if (schema == null) return new List<(string, int)>();
+            if (schema == null) return new List<(string, int, bool)>();
 
             var storage = DataStorageHelper.FindDataStorage(doc, schema);
-            if (storage == null) return new List<(string, int)>();
+            if (storage == null) return new List<(string, int, bool)>();
 
             var entity = storage.GetEntity(schema);
-            if (!entity.IsValid()) return new List<(string, int)>();
+            if (!entity.IsValid()) return new List<(string, int, bool)>();
 
             var raw = entity.Get<IList<string>>(FieldName)?.ToList() ?? new List<string>();
             return raw.Select(ParseEntry)
@@ -66,24 +74,35 @@ namespace TurboSuite.Shared.Services
                       .ToList();
         }
 
-        private static (string Name, int Location) ParseEntry(string entry)
+        private static (string Name, int Location, bool IsOverride) ParseEntry(string entry)
         {
-            if (string.IsNullOrEmpty(entry)) return (entry, 0);
-            int sep = entry.LastIndexOf('|');
-            if (sep >= 0 && int.TryParse(entry.Substring(sep + 1), out int loc))
-                return (entry.Substring(0, sep), loc);
-            return (entry, 0);
+            if (string.IsNullOrEmpty(entry)) return (entry, 0, false);
+
+            // Trailing "|O" marks an acknowledged override; strip it before the Name|Location split.
+            bool isOverride = false;
+            string body = entry;
+            if (body.EndsWith("|O", StringComparison.Ordinal))
+            {
+                isOverride = true;
+                body = body.Substring(0, body.Length - 2);
+            }
+
+            int sep = body.LastIndexOf('|');
+            if (sep >= 0 && int.TryParse(body.Substring(sep + 1), out int loc))
+                return (body.Substring(0, sep), loc, isOverride);
+            return (body, 0, isOverride);
         }
 
         /// <summary>Persists the explicit picks. Entries with a non-positive location are
-        /// dropped, so clearing a pick (location → 0) removes it from the store.</summary>
-        public static void Save(Document doc, IReadOnlyList<(string Name, int Location)> roomLocations)
+        /// dropped, so clearing a pick (location → 0) removes it from the store. An entry flagged
+        /// <c>IsOverride</c> is suffixed <c>|O</c> so it survives as a deliberate override.</summary>
+        public static void Save(Document doc, IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
         {
             var schema = GetOrCreateSchema();
 
-            var encoded = (roomLocations ?? Array.Empty<(string, int)>())
+            var encoded = (roomLocations ?? Array.Empty<(string, int, bool)>())
                 .Where(r => r.Location > 0 && !string.IsNullOrEmpty(r.Name))
-                .Select(r => $"{r.Name}|{r.Location}")
+                .Select(r => r.IsOverride ? $"{r.Name}|{r.Location}|O" : $"{r.Name}|{r.Location}")
                 .ToList();
 
             using (var tx = new Transaction(doc, "TurboSuite - Save Room Locations"))

@@ -116,53 +116,93 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                     </Border>
-                                    <!-- Location: mixed-flag + editable combo (docked right). The combo
-                                         shows the resolved location (greyed when it's an auto-seed), and
-                                         editing it records an explicit pick. Dropdown = the project's known
-                                         locations, but typable for a new (e.g. orphan) location. -->
+                                    <!-- Location (docked right): a status-marker slot + a field that MORPHS by state.
+                                         A unanimous auto-seed is authoritative, so its row is LOCKED — a greyed value with
+                                         a lock button where the combo's chevron would be. Clicking the lock (UnlockCommand)
+                                         swaps in the editable combo; typing a location that differs from the seed records a
+                                         deliberate OVERRIDE (amber + a ⚠ marker) — the rare mis-detected-room escape hatch.
+                                         Seed-less rows (Mixed / None) show the combo directly. -->
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                                                 VerticalAlignment="Center" Margin="6,0,2,0">
-                                        <!-- Mixed-flag hint: signals disagree (usually a duplicate room name).
-                                             Fixed-width slot (reserved whether shown or not) so the combo stays
-                                             on a constant right-aligned column across all rows. -->
-                                        <TextBlock Text="!" Foreground="#C0392B" FontWeight="Bold" FontSize="12"
-                                                   Width="10" TextAlignment="Center"
-                                                   VerticalAlignment="Center" Margin="0,0,3,0"
-                                                   ToolTip="{Binding MixedHint, StringFormat='Signals disagree ({0}) — usually two rooms share a name in different locations; rename one, or pick a location here.'}">
+                                        <!-- Status marker slot: red "!" (signals disagree, unresolved) OR amber "⚠"
+                                             (override in effect). Fixed width (wide enough for the ⚠ glyph, with a gap
+                                             to the field) so nothing clips and the field stays on a constant column. -->
+                                        <TextBlock Width="16" TextAlignment="Center" FontWeight="Bold" FontSize="12"
+                                                   VerticalAlignment="Center" Margin="0,0,6,0">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Visibility" Value="Hidden"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsMixed}" Value="True">
+                                                            <Setter Property="Text" Value="!"/>
+                                                            <Setter Property="Foreground" Value="#C0392B"/>
                                                             <Setter Property="Visibility" Value="Visible"/>
+                                                            <Setter Property="ToolTip"
+                                                                    Value="{Binding MixedHint, StringFormat='Signals disagree ({0}) — usually two rooms share a name in different locations; rename one, or unlock and pick a location here.'}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsOverridden}" Value="True">
+                                                            <Setter Property="Text" Value="&#x26A0;"/>
+                                                            <Setter Property="Foreground" Value="#E67E22"/>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Setter Property="ToolTip" Value="{Binding OverrideHint}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <ComboBox IsEditable="True" Width="36" Height="20" Padding="2,0,0,0"
-                                                  VerticalContentAlignment="Center"
-                                                  Text="{Binding LocationEntry, UpdateSourceTrigger=LostFocus}"
-                                                  ItemsSource="{Binding DataContext.RoomOrder.KnownLocations, RelativeSource={RelativeSource AncestorType=ListBox}}">
-                                            <ComboBox.Style>
-                                                <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-                                                    <Setter Property="ToolTip" Value="Location this room's keypads route to"/>
-                                                    <Style.Triggers>
-                                                        <!-- Auto-seeded (no explicit pick): greyed, to read as derived -->
-                                                        <DataTrigger Binding="{Binding IsSeeded}" Value="True">
-                                                            <Setter Property="Foreground" Value="#8A8A8A"/>
-                                                        </DataTrigger>
-                                                        <!-- The one prompted state: a keypad room with no location -->
-                                                        <DataTrigger Binding="{Binding NeedsAssign}" Value="True">
-                                                            <Setter Property="BorderBrush" Value="#E67E22"/>
-                                                            <Setter Property="BorderThickness" Value="1.5"/>
-                                                            <Setter Property="ToolTip"
-                                                                    Value="Assign a location — this room has a keypad but no location to route it to."/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </ComboBox.Style>
-                                        </ComboBox>
+
+                                        <!-- The field slot: locked view and editable combo overlaid; exactly one shows. -->
+                                        <Grid Width="40" Height="20">
+                                            <!-- Locked view: greyed derived value + a lock button in the chevron's place. -->
+                                            <Border Visibility="{Binding IsLocked, Converter={StaticResource BoolToVisibility}}"
+                                                    BorderBrush="#CCCCCC" BorderThickness="1" Background="#F5F5F5">
+                                                <DockPanel LastChildFill="True">
+                                                    <Button DockPanel.Dock="Right" Command="{Binding UnlockCommand}"
+                                                            Style="{x:Null}" Background="Transparent" BorderThickness="0"
+                                                            Cursor="Hand" Padding="2,0"
+                                                            ToolTip="Derived from this room's circuits/DALI. Click the lock to override (rare — for a mis-detected room).">
+                                                        <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets"
+                                                                   FontSize="9" Foreground="#8A8A8A" VerticalAlignment="Center"/>
+                                                    </Button>
+                                                    <TextBlock Text="{Binding LocationDisplay}" Foreground="#8A8A8A"
+                                                               VerticalAlignment="Center" Margin="3,0,0,0"
+                                                               ToolTip="Derived from this room's circuits/DALI. Click the lock to override (rare — for a mis-detected room)."/>
+                                                </DockPanel>
+                                            </Border>
+
+                                            <!-- Editable view: the combo (text + chevron + known-locations dropdown). -->
+                                            <ComboBox IsEditable="True" Padding="2,0,0,0" VerticalContentAlignment="Center"
+                                                      HorizontalAlignment="Stretch"
+                                                      Visibility="{Binding CanEditLocation, Converter={StaticResource BoolToVisibility}}"
+                                                      Text="{Binding LocationEntry, UpdateSourceTrigger=LostFocus}"
+                                                      DropDownClosed="LocationCombo_DropDownClosed"
+                                                      ItemsSource="{Binding DataContext.RoomOrder.KnownLocations, RelativeSource={RelativeSource AncestorType=ListBox}}">
+                                                <ComboBox.Style>
+                                                    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                                        <Setter Property="ToolTip" Value="Location this room's keypads route to"/>
+                                                        <Style.Triggers>
+                                                            <!-- Unlocked unanimous row, not yet changed: still the derived
+                                                                 value, so keep it greyed until an override is typed. -->
+                                                            <DataTrigger Binding="{Binding IsSeeded}" Value="True">
+                                                                <Setter Property="Foreground" Value="#8A8A8A"/>
+                                                            </DataTrigger>
+                                                            <!-- Override in effect: routed against the seed — amber. -->
+                                                            <DataTrigger Binding="{Binding IsOverridden}" Value="True">
+                                                                <Setter Property="Foreground" Value="#E67E22"/>
+                                                                <Setter Property="ToolTip" Value="{Binding OverrideHint}"/>
+                                                            </DataTrigger>
+                                                            <!-- The one prompted state: a keypad room with no location. -->
+                                                            <DataTrigger Binding="{Binding NeedsAssign}" Value="True">
+                                                                <Setter Property="BorderBrush" Value="#E67E22"/>
+                                                                <Setter Property="BorderThickness" Value="1.5"/>
+                                                                <Setter Property="ToolTip"
+                                                                        Value="Assign a location — this room has a keypad but no location to route it to."/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ComboBox.Style>
+                                            </ComboBox>
+                                        </Grid>
                                     </StackPanel>
                                     <!-- Room name (fills remaining width) -->
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center"

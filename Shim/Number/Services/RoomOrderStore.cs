@@ -29,7 +29,7 @@ namespace TurboSuite.Number.Services
         public void SaveKeypadRoomSorted(bool isSorted)
             => CircuitNamingStorageService.SaveKeypadRoomSorted(_doc, isSorted);
 
-        public void SaveRoomLocations(IReadOnlyList<(string Name, int Location)> roomLocations)
+        public void SaveRoomLocations(IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
             => RoomLocationStorageService.Save(_doc, roomLocations);
     }
 }

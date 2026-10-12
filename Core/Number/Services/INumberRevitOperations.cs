@@ -39,8 +39,10 @@ namespace TurboSuite.Number.Services
 
         /// <summary>Persists the sidebar's explicit room→location picks to the parallel
         /// <c>RoomLocationStorageService</c> (its own schema GUID). Sparse — only rooms with a
-        /// positive pick; auto-seeds are re-derived at runtime and never written.</summary>
-        void SaveRoomLocations(IReadOnlyList<(string Name, int Location)> roomLocations);
+        /// positive pick; auto-seeds are re-derived at runtime and never written. <c>IsOverride</c>
+        /// flags a deliberate override of a unanimous room (the mis-detection escape hatch), so it
+        /// survives reload and wins over the seed; an ordinary gap-fill pick carries it <c>false</c>.</summary>
+        void SaveRoomLocations(IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations);
     }
 
     /// <summary>

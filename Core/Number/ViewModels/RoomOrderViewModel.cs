@@ -45,10 +45,14 @@ namespace TurboSuite.Number.ViewModels
         }
 
         // ── Location (Phase A: located keypads) ───────────────────────────────────────────────────
-        // A room's location drives where its keypads land on the control one-line. The value is
-        // resolved by a ladder: an explicit designer pick wins, else a unanimous auto-seed derived
-        // from the room's control signals, else blank (a valid state). Only the explicit pick is
-        // persisted; the seed is re-derived each session and injected at construction.
+        // A room's location drives where its keypads land on the control one-line, resolved by a
+        // ladder (see RoomLocationSeeder.Resolve): a UNANIMOUS auto-seed derived from the room's own
+        // circuits/DALI is authoritative — to move it, move the panel/zone assignments — and the row
+        // is LOCKED (shown greyed, read-only, with a lock button where the combo's chevron would be).
+        // For the seed-less states (Mixed / None) a hand-entered pick is the backstop. The one escape
+        // on a unanimous row is a deliberate OVERRIDE: click the lock to edit, type a different
+        // location, and it wins over the seed (the rare mis-detected-room fix). Only picks/overrides
+        // persist; seeds re-derive each session and inject at construction.
 
         private RoomLocationSeed _seed = RoomLocationSeeder.Classify(Array.Empty<int>());
 
@@ -61,30 +65,47 @@ namespace TurboSuite.Number.ViewModels
         public bool HasKeypad { get; private set; }
 
         private int _explicitLocation;
-        /// <summary>The designer's explicit location pick (0 = none). Editable; persisted. Setting it
-        /// re-fires every derived location property.</summary>
-        public int ExplicitLocation
-        {
-            get => _explicitLocation;
-            set
-            {
-                int v = value < 0 ? 0 : value;
-                if (SetProperty(ref _explicitLocation, v))
-                    RaiseLocationDerived();
-            }
-        }
+        private bool _isOverride;   // persisted: pick deliberately overriding a unanimous seed
+        private bool _unlocked;     // transient (session): lock clicked, combo editable, not yet changed
+
+        private bool IsUnanimous => _seed.Kind == RoomLocationSeedKind.Unanimous;
+
+        /// <summary>The designer's explicit location pick (0 = none). Read-only here — all user edits
+        /// run through <see cref="LocationEntry"/>/<see cref="UnlockCommand"/>; the VM reads it (with
+        /// <see cref="IsOverride"/>) to build the persisted snapshot.</summary>
+        public int ExplicitLocation => _explicitLocation;
+
+        /// <summary>Whether <see cref="ExplicitLocation"/> is an acknowledged override of a unanimous
+        /// seed (persisted as the <c>|O</c> flag). Distinguishes a deliberate override from an inert
+        /// stale pick left on a since-gone-unanimous room.</summary>
+        public bool IsOverride => _isOverride;
 
         /// <summary>The effective location after the resolution ladder (0 = blank).</summary>
-        public int ResolvedLocation => RoomLocationSeeder.Resolve(_explicitLocation, _seed);
+        public int ResolvedLocation => RoomLocationSeeder.Resolve(_explicitLocation, _isOverride, _seed);
 
-        /// <summary>True when the location comes from an explicit pick (shown normal, not greyed).</summary>
-        public bool IsExplicit => _explicitLocation > 0;
+        /// <summary>True when an acknowledged override is actually in effect — a unanimous row routed,
+        /// deliberately, against its own seed. Shown amber with a ⚠ marker.</summary>
+        public bool IsOverridden => IsUnanimous && _isOverride && _explicitLocation > 0;
 
-        /// <summary>True when the shown location is an un-overridden unanimous auto-seed (greyed).</summary>
-        public bool IsSeeded => !IsExplicit && _seed.Kind == RoomLocationSeedKind.Unanimous;
+        /// <summary>True when the row is a unanimous seed shown read-only (not yet unlocked, not
+        /// overridden). Drives the locked view: greyed value + a lock button in the chevron's place.
+        /// Clicking the lock (<see cref="UnlockCommand"/>) flips <see cref="CanEditLocation"/> true.</summary>
+        public bool IsLocked => IsUnanimous && !_unlocked && !IsOverridden;
 
-        /// <summary>True when the signals disagree and no pick resolves it (mixed-flag hint).</summary>
-        public bool IsMixed => !IsExplicit && _seed.Kind == RoomLocationSeedKind.Mixed;
+        /// <summary>True when the editable combo (text + chevron + dropdown) is shown instead of the
+        /// locked view — every seed-less row, plus an unlocked or overridden unanimous row.</summary>
+        public bool CanEditLocation => !IsLocked;
+
+        /// <summary>True when a plain explicit pick is in effect on a seed-less row (shown normal, not
+        /// greyed). Not an override — Mixed/None have no seed to override.</summary>
+        public bool IsExplicit => !IsUnanimous && _explicitLocation > 0;
+
+        /// <summary>True when a unanimous seed is the value in effect (greyed) — whether locked or
+        /// unlocked-but-unchanged. An override flips this off (it reads as an explicit amber value).</summary>
+        public bool IsSeeded => IsUnanimous && !IsOverridden;
+
+        /// <summary>True when the signals disagree and no pick resolves it (red "!" mixed-flag hint).</summary>
+        public bool IsMixed => _seed.Kind == RoomLocationSeedKind.Mixed && _explicitLocation == 0;
 
         /// <summary>The one actively-prompted state: a keypad-bearing room with nowhere to route.</summary>
         public bool NeedsAssign => HasKeypad && ResolvedLocation == 0;
@@ -92,19 +113,18 @@ namespace TurboSuite.Number.ViewModels
         /// <summary>The badge text — the resolved location, or empty when blank.</summary>
         public string LocationDisplay => ResolvedLocation > 0 ? ResolvedLocation.ToString() : string.Empty;
 
-        /// <summary>Two-way text for the editable location combo. Shows the resolved value (seed or
-        /// pick); setting it to a positive integer records an explicit pick, and clearing it (blank or
-        /// non-positive) drops the pick so the row reverts to its auto-seed (or blank).</summary>
+        /// <summary>Two-way text for the location combo. Shows the resolved value; committing a value
+        /// routes through <see cref="ApplyUserLocation"/> — on a unanimous row a value differing from
+        /// the seed becomes an acknowledged override (clearing it, or re-typing the seed value, drops
+        /// the override and re-locks), on a seed-less row it is an ordinary pick.</summary>
         public string LocationEntry
         {
             get => ResolvedLocation > 0 ? ResolvedLocation.ToString() : string.Empty;
             set
             {
-                if (!string.IsNullOrWhiteSpace(value) &&
-                    int.TryParse(value.Trim(), out int loc) && loc > 0)
-                    ExplicitLocation = loc;
-                else
-                    ExplicitLocation = 0;
+                int loc = (!string.IsNullOrWhiteSpace(value) &&
+                           int.TryParse(value.Trim(), out int v) && v > 0) ? v : 0;
+                ApplyUserLocation(loc);
             }
         }
 
@@ -112,25 +132,88 @@ namespace TurboSuite.Number.ViewModels
         public string MixedHint =>
             IsMixed && _seed.Candidates != null ? string.Join("/", _seed.Candidates) : string.Empty;
 
+        /// <summary>The override tooltip spelling out the disagreement, e.g. routing to 3 while the
+        /// room's circuits say 1 — empty unless an override is in effect.</summary>
+        public string OverrideHint => IsOverridden
+            ? $"Override — keypad routes to Location {_explicitLocation}, though this room's circuits say " +
+              $"Location {_seed.Location}. Fix the model's space detection if that's wrong."
+            : string.Empty;
+
+        /// <summary>Unlocks a locked (unanimous) row for a deliberate override: shows the editable
+        /// combo so the designer can type a different location. No-op on a seed-less row (already
+        /// editable). Transient — a row left unchanged re-locks on next open.</summary>
+        public ICommand UnlockCommand { get; }
+
         public RoomOrderItem(string name, int position)
         {
             Name = name;
             _position = position;
+            UnlockCommand = new RelayCommand(Unlock, () => IsLocked);
         }
 
-        /// <summary>Seeds the location state at construction (no save; the setter path is for user
-        /// edits only). Called by the VM factory after it resolves the room's seed and keypad flag.</summary>
-        internal void InitLocation(RoomLocationSeed seed, bool hasKeypad, int explicitLocation)
+        private void Unlock()
+        {
+            if (!IsLocked) return;
+            _unlocked = true;
+            RaiseLocationDerived();
+        }
+
+        /// <summary>Applies a user-committed location, deciding pick vs. override vs. re-lock. Raises
+        /// <see cref="ExplicitLocation"/> (the VM's save trigger) only when the persisted state changes.</summary>
+        private void ApplyUserLocation(int loc)
+        {
+            int newPick;
+            bool newOverride;
+
+            if (IsUnanimous)
+            {
+                if (loc > 0 && loc != _seed.Location)
+                {
+                    // A value differing from the derived seed → a deliberate, acknowledged override.
+                    newPick = loc;
+                    newOverride = true;
+                    _unlocked = true;
+                }
+                else
+                {
+                    // Seed value re-entered or cleared → drop any override and re-lock.
+                    newPick = 0;
+                    newOverride = false;
+                    _unlocked = false;
+                }
+            }
+            else
+            {
+                // Seed-less row (Mixed / None): an ordinary gap-fill pick, never an override.
+                newPick = loc;
+                newOverride = false;
+            }
+
+            bool changed = newPick != _explicitLocation || newOverride != _isOverride;
+            _explicitLocation = newPick;
+            _isOverride = newOverride;
+            RaiseLocationDerived();
+            if (changed) OnPropertyChanged(nameof(ExplicitLocation)); // VM save trigger
+        }
+
+        /// <summary>Seeds the location state at construction (no save; the edit path is for user edits
+        /// only). Called by the VM factory after it resolves the room's seed, keypad flag, and any
+        /// persisted pick + override flag.</summary>
+        internal void InitLocation(RoomLocationSeed seed, bool hasKeypad, int explicitLocation, bool isOverride)
         {
             _seed = seed;
             HasKeypad = hasKeypad;
             _explicitLocation = explicitLocation < 0 ? 0 : explicitLocation;
+            _isOverride = isOverride && _explicitLocation > 0;
             RaiseLocationDerived();
         }
 
         private void RaiseLocationDerived()
         {
             OnPropertyChanged(nameof(ResolvedLocation));
+            OnPropertyChanged(nameof(IsOverridden));
+            OnPropertyChanged(nameof(IsLocked));
+            OnPropertyChanged(nameof(CanEditLocation));
             OnPropertyChanged(nameof(IsExplicit));
             OnPropertyChanged(nameof(IsSeeded));
             OnPropertyChanged(nameof(IsMixed));
@@ -138,6 +221,8 @@ namespace TurboSuite.Number.ViewModels
             OnPropertyChanged(nameof(LocationDisplay));
             OnPropertyChanged(nameof(LocationEntry));
             OnPropertyChanged(nameof(MixedHint));
+            OnPropertyChanged(nameof(OverrideHint));
+            CommandManager.InvalidateRequerySuggested(); // re-query UnlockCommand.CanExecute
         }
     }
 
@@ -164,6 +249,7 @@ namespace TurboSuite.Number.ViewModels
         private readonly IReadOnlyList<string> _allRoomNames;
         private readonly Dictionary<string, RoomLocationSeed> _roomSeeds;
         private readonly Dictionary<string, int> _explicitLocations;
+        private readonly HashSet<string> _overrideRooms;
         private readonly HashSet<string> _keypadRooms;
         private readonly RoomLocationSeed _emptySeed = RoomLocationSeeder.Classify(Array.Empty<int>());
         private bool _isReordering;
@@ -230,7 +316,7 @@ namespace TurboSuite.Number.ViewModels
 
         public RoomOrderViewModel(IReadOnlyList<string> allRoomNames,
             IReadOnlyList<(string Name, int ClickOrder)> savedRoomOrder,
-            IReadOnlyList<(string Name, int Location)> savedRoomLocations,
+            IReadOnlyList<(string Name, int Location, bool IsOverride)> savedRoomLocations,
             IReadOnlyDictionary<string, RoomLocationSeed> roomSeeds,
             IReadOnlyCollection<string> keypadRoomNames,
             IRevitWorkQueue workQueue, IRoomOrderStore roomOrderStore)
@@ -244,9 +330,14 @@ namespace TurboSuite.Number.ViewModels
                 foreach (var kv in roomSeeds) _roomSeeds[kv.Key] = kv.Value;
 
             _explicitLocations = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            _overrideRooms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (savedRoomLocations != null)
-                foreach (var (name, loc) in savedRoomLocations)
-                    if (!string.IsNullOrEmpty(name) && loc > 0) _explicitLocations[name] = loc;
+                foreach (var (name, loc, isOverride) in savedRoomLocations)
+                {
+                    if (string.IsNullOrEmpty(name) || loc <= 0) continue;
+                    _explicitLocations[name] = loc;
+                    if (isOverride) _overrideRooms.Add(name);
+                }
 
             _keypadRooms = new HashSet<string>(
                 keypadRoomNames?.Where(n => !string.IsNullOrEmpty(n)) ?? Array.Empty<string>(),
@@ -292,7 +383,7 @@ namespace TurboSuite.Number.ViewModels
             var item = new RoomOrderItem(name, position);
             var seed = _roomSeeds.TryGetValue(name, out var s) ? s : _emptySeed;
             int pick = _explicitLocations.TryGetValue(name, out int p) ? p : 0;
-            item.InitLocation(seed, _keypadRooms.Contains(name), pick);
+            item.InitLocation(seed, _keypadRooms.Contains(name), pick, _overrideRooms.Contains(name));
             item.PropertyChanged += OnItemPropertyChanged;
             return item;
         }
@@ -492,13 +583,14 @@ namespace TurboSuite.Number.ViewModels
             _workQueue.Enqueue(() => { _roomOrderStore.SaveRoomOrder(snapshot); return null; }, null);
         }
 
-        /// <summary>Persists the sparse set of explicit location picks (rows with a positive
-        /// pick); auto-seeds are never written. Queued on the Revit API thread like the order save.</summary>
+        /// <summary>Persists the sparse set of explicit location picks (rows with a positive pick),
+        /// each carrying its acknowledged-override flag; auto-seeds are never written. Queued on the
+        /// Revit API thread like the order save.</summary>
         private void SaveRoomLocations()
         {
             var snapshot = RoomOrder
                 .Where(r => r.ExplicitLocation > 0)
-                .Select(r => (r.Name, r.ExplicitLocation))
+                .Select(r => (r.Name, r.ExplicitLocation, r.IsOverride))
                 .ToList();
             _workQueue.Enqueue(() =>
             {

@@ -30,13 +30,13 @@ namespace TurboSuite.Tests.Number
 
         private sealed class CapturingStore : IRoomOrderStore
         {
-            public IReadOnlyList<(string Name, int Location)> LastLocations { get; private set; }
+            public IReadOnlyList<(string Name, int Location, bool IsOverride)> LastLocations { get; private set; }
             public int SaveLocationsCalls { get; private set; }
 
             public void SaveRoomOrder(IReadOnlyList<(string Name, int ClickOrder)> roomOrder) { }
             public void SaveKeypadRoomSorted(bool isSorted) { }
 
-            public void SaveRoomLocations(IReadOnlyList<(string Name, int Location)> roomLocations)
+            public void SaveRoomLocations(IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
             {
                 SaveLocationsCalls++;
                 LastLocations = roomLocations;
@@ -48,19 +48,24 @@ namespace TurboSuite.Tests.Number
         private static (RoomOrderViewModel vm, CapturingStore store) Build(
             IEnumerable<string> rooms,
             IReadOnlyDictionary<string, RoomLocationSeed> seeds = null,
-            IEnumerable<(string, int)> picks = null,
+            IEnumerable<(string Name, int Location, bool IsOverride)> picks = null,
             IEnumerable<string> keypadRooms = null)
         {
             var store = new CapturingStore();
             var vm = new RoomOrderViewModel(
                 rooms.ToList(),
                 Array.Empty<(string, int)>(),                       // no saved order → alphabetical build
-                (picks ?? Enumerable.Empty<(string, int)>()).ToList(),
+                (picks ?? Enumerable.Empty<(string, int, bool)>()).ToList(),
                 seeds ?? new Dictionary<string, RoomLocationSeed>(),
                 (keypadRooms ?? Enumerable.Empty<string>()).ToList(),
                 new ImmediateWorkQueue(), store);
             return (vm, store);
         }
+
+        // Convenience: a plain (non-override) persisted pick.
+        private static (string, int, bool) Pick(string name, int loc) => (name, loc, false);
+        // Convenience: a persisted acknowledged override.
+        private static (string, int, bool) Override(string name, int loc) => (name, loc, true);
 
         private static RoomOrderItem Row(RoomOrderViewModel vm, string name) =>
             vm.RoomOrder.First(r => r.Name == name);
@@ -80,15 +85,45 @@ namespace TurboSuite.Tests.Number
         }
 
         [Fact]
-        public void ExplicitPick_OverridesSeed_AndIsNotGreyed()
+        public void UnanimousSeed_IsLocked_AndIgnoresStalePick()
         {
+            // A unanimous seed is authoritative: a stale pick on the row is inert (the seed wins), the
+            // row reads as a derived seed, and the combo is locked (CanEditLocation == false).
             var (vm, _) = Build(new[] { "KITCHEN" },
                 seeds: new Dictionary<string, RoomLocationSeed> { ["KITCHEN"] = Seed(1) },
-                picks: new[] { ("KITCHEN", 9) });
+                picks: new[] { Pick("KITCHEN", 9) });
 
             var row = Row(vm, "KITCHEN");
+            Assert.True(row.IsLocked);
+            Assert.False(row.CanEditLocation);
+            Assert.True(row.IsSeeded);
+            Assert.False(row.IsExplicit);
+            Assert.Equal(1, row.ResolvedLocation);   // the seed, not the stale pick
+        }
+
+        [Fact]
+        public void MixedAndNoneRows_StayEditable()
+        {
+            // The pick's two legitimate homes: Mixed (disagreeing signals) and None (no signal).
+            var (vm, _) = Build(new[] { "POWDER", "CLOSET" },
+                seeds: new Dictionary<string, RoomLocationSeed> { ["POWDER"] = Seed(1, 4) });
+
+            Assert.True(Row(vm, "POWDER").CanEditLocation);   // mixed
+            Assert.True(Row(vm, "CLOSET").CanEditLocation);   // no seed
+        }
+
+        [Fact]
+        public void ExplicitPick_OnMixedRow_WinsAndIsNotGreyed()
+        {
+            var (vm, _) = Build(new[] { "POWDER" },
+                seeds: new Dictionary<string, RoomLocationSeed> { ["POWDER"] = Seed(1, 4) },
+                picks: new[] { Pick("POWDER", 9) });
+
+            var row = Row(vm, "POWDER");
             Assert.True(row.IsExplicit);
             Assert.False(row.IsSeeded);
+            Assert.False(row.IsMixed);          // resolved → no lingering flag
+            Assert.True(row.CanEditLocation);
             Assert.Equal(9, row.ResolvedLocation);
         }
 
@@ -131,40 +166,112 @@ namespace TurboSuite.Tests.Number
             var (vm, store) = Build(new[] { "A", "B", "C" },
                 seeds: new Dictionary<string, RoomLocationSeed> { ["A"] = Seed(1) });  // A is auto-seeded
 
-            Row(vm, "B").ExplicitLocation = 5;    // user picks a location for B
+            Row(vm, "B").LocationEntry = "5";    // user picks a location for B (seed-less row)
 
             Assert.Equal(1, store.SaveLocationsCalls);
             // Only the explicit pick is persisted — the auto-seed (A) and blank (C) are not written.
-            Assert.Equal(new[] { ("B", 5) }, store.LastLocations.OrderBy(x => x.Name).ToArray());
+            // A seed-less pick carries IsOverride == false.
+            Assert.Equal(new[] { ("B", 5, false) }, store.LastLocations.OrderBy(x => x.Name).ToArray());
         }
 
         [Fact]
         public void ClearingPick_RemovesItFromPersistedSet()
         {
             var (vm, store) = Build(new[] { "A" },
-                picks: new[] { ("A", 3) });
+                picks: new[] { Pick("A", 3) });   // A is seed-less with a pick
 
-            Row(vm, "A").ExplicitLocation = 0;    // clear the pick
+            Row(vm, "A").LocationEntry = "";    // clear the pick
 
             Assert.Equal(1, store.SaveLocationsCalls);
             Assert.Empty(store.LastLocations);
         }
 
+        // ── Override: the deliberate escape hatch on a unanimous (mis-detected) room ────────────────
+
         [Fact]
-        public void ResolvedLocationsByRoom_FoldsPicksOverSeeds()
+        public void UnlockThenDifferingValue_BecomesOverride_AndPersistsFlag()
         {
-            var (vm, _) = Build(new[] { "A", "B", "C", "D" },
+            var (vm, store) = Build(new[] { "KITCHEN" },
+                seeds: new Dictionary<string, RoomLocationSeed> { ["KITCHEN"] = Seed(1) });
+            var row = Row(vm, "KITCHEN");
+
+            row.UnlockCommand.Execute(null);     // click the lock
+            Assert.True(row.CanEditLocation);    // combo now shown
+            Assert.False(row.IsOverridden);      // nothing changed yet
+
+            row.LocationEntry = "3";             // route against the seed
+
+            Assert.True(row.IsOverridden);
+            Assert.False(row.IsSeeded);
+            Assert.False(row.IsLocked);
+            Assert.Equal(3, row.ResolvedLocation);           // override wins over seed 1
+            Assert.Equal(new[] { ("KITCHEN", 3, true) }, store.LastLocations.ToArray());  // flagged
+        }
+
+        [Fact]
+        public void PersistedOverride_SurvivesReload()
+        {
+            // Simulates a reopen: the store hands back a flagged override on a unanimous room.
+            var (vm, _) = Build(new[] { "KITCHEN" },
+                seeds: new Dictionary<string, RoomLocationSeed> { ["KITCHEN"] = Seed(1) },
+                picks: new[] { Override("KITCHEN", 3) });
+
+            var row = Row(vm, "KITCHEN");
+            Assert.True(row.IsOverridden);
+            Assert.True(row.CanEditLocation);    // not locked — it's an active override
+            Assert.False(row.IsSeeded);
+            Assert.Equal(3, row.ResolvedLocation);
+        }
+
+        [Fact]
+        public void OverrideClearedBackToSeed_ReLocksAndDropsOverride()
+        {
+            var (vm, store) = Build(new[] { "KITCHEN" },
+                seeds: new Dictionary<string, RoomLocationSeed> { ["KITCHEN"] = Seed(1) },
+                picks: new[] { Override("KITCHEN", 3) });
+            var row = Row(vm, "KITCHEN");
+
+            row.LocationEntry = "";              // clear it
+
+            Assert.True(row.IsLocked);           // back to the authoritative seed
+            Assert.False(row.IsOverridden);
+            Assert.Equal(1, row.ResolvedLocation);
+            Assert.Empty(store.LastLocations);   // override dropped from persistence
+        }
+
+        [Fact]
+        public void TypingTheSeedValueOnUnlockedRow_IsNotAnOverride()
+        {
+            var (vm, store) = Build(new[] { "KITCHEN" },
+                seeds: new Dictionary<string, RoomLocationSeed> { ["KITCHEN"] = Seed(1) });
+            var row = Row(vm, "KITCHEN");
+
+            row.UnlockCommand.Execute(null);
+            row.LocationEntry = "1";             // same as the seed → no override
+
+            Assert.False(row.IsOverridden);
+            Assert.True(row.IsLocked);           // re-locked
+            Assert.Equal(1, row.ResolvedLocation);
+            Assert.Equal(0, store.SaveLocationsCalls);  // nothing changed → nothing persisted
+        }
+
+        [Fact]
+        public void ResolvedLocationsByRoom_FoldsPicksAndOverridesOverSeeds()
+        {
+            var (vm, _) = Build(new[] { "A", "B", "C", "D", "E" },
                 seeds: new Dictionary<string, RoomLocationSeed>
                 {
                     ["A"] = Seed(1),        // seeded 1
                     ["B"] = Seed(2, 5),     // mixed → blank
+                    ["E"] = Seed(8),        // seeded 8, but overridden below
                 },
-                picks: new[] { ("C", 7) });  // explicit 7
+                picks: new[] { Pick("C", 7), Override("E", 2) });  // C gap-fill; E deliberate override
             // D: no seed, no pick → blank (absent from the map).
 
             var map = vm.ResolvedLocationsByRoom;
             Assert.Equal(1, map["A"]);
             Assert.Equal(7, map["C"]);
+            Assert.Equal(2, map["E"]);               // override wins over seed 8
             Assert.False(map.ContainsKey("B"));
             Assert.False(map.ContainsKey("D"));
         }

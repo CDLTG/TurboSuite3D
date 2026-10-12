@@ -107,8 +107,13 @@ namespace TurboSuite.Shared.Services
 
             var seeds = Collect(doc);
             var picks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (var (name, loc) in RoomLocationStorageService.Load(doc))
-                if (!string.IsNullOrEmpty(name) && loc > 0) picks[name] = loc;
+            var overrides = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (name, loc, isOverride) in RoomLocationStorageService.Load(doc))
+            {
+                if (string.IsNullOrEmpty(name) || loc <= 0) continue;
+                picks[name] = loc;
+                if (isOverride) overrides.Add(name);
+            }
 
             var empty = RoomLocationSeeder.Classify(Array.Empty<int>());
             var rooms = new HashSet<string>(seeds.Keys, StringComparer.OrdinalIgnoreCase);
@@ -118,7 +123,7 @@ namespace TurboSuite.Shared.Services
             {
                 int pick = picks.TryGetValue(room, out int p) ? p : 0;
                 var seed = seeds.TryGetValue(room, out var s) ? s : empty;
-                int location = RoomLocationSeeder.Resolve(pick, seed);
+                int location = RoomLocationSeeder.Resolve(pick, overrides.Contains(room), seed);
                 if (location > 0) resolved[room] = location;
             }
 

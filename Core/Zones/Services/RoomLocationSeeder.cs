@@ -132,14 +132,25 @@ namespace TurboSuite.Zones.Services
         }
 
         /// <summary>
-        /// The per-room resolution ladder: an explicit designer pick (a positive location)
-        /// always wins; otherwise a unanimous auto-seed; otherwise 0 (blank — a valid state).
-        /// A non-positive <paramref name="explicitPick"/> means "no pick."
+        /// The per-room resolution ladder. A <b>unanimous auto-seed is authoritative</b>: the room's
+        /// own circuits/DALI already name its location, so an ordinary hand-entered pick can't contradict
+        /// them (to move the location, move the panel/zone assignments in the project). The one exception
+        /// is an <b>acknowledged override</b> (<paramref name="isOverride"/>) — the deliberate escape hatch
+        /// for a mis-detected room — which wins even over a unanimous seed. For the seed-less states
+        /// (<see cref="RoomLocationSeedKind.Mixed"/> / <see cref="RoomLocationSeedKind.None"/>) a positive
+        /// pick always wins (the override flag is moot there), otherwise 0 (blank — a valid state). A
+        /// non-positive <paramref name="explicitPick"/> means "no pick."
+        ///
+        /// <para>The flag is what separates a deliberate override from an <i>inert stale pick</i> — a pick
+        /// left on a room that has since become unanimous. The stale pick (flag off) sits dormant here and
+        /// springs back only if the room later loses its unanimous signal; only the acknowledged override
+        /// (flag on) overrides a live unanimous seed.</para>
         /// </summary>
-        public static int Resolve(int explicitPick, in RoomLocationSeed seed)
+        public static int Resolve(int explicitPick, bool isOverride, in RoomLocationSeed seed)
         {
+            if (seed.Kind == RoomLocationSeedKind.Unanimous)
+                return (isOverride && explicitPick > 0) ? explicitPick : seed.Location;
             if (explicitPick > 0) return explicitPick;
-            if (seed.Kind == RoomLocationSeedKind.Unanimous) return seed.Location;
             return 0;
         }
     }

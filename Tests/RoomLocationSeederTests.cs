@@ -124,43 +124,52 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(new[] { 2, 6 }, seed.Candidates);
         }
 
-        // ── Resolution ladder: explicit pick → auto-seed → blank ──────────────────────────────────
+        // ── Resolution ladder: unanimous seed (authoritative) → explicit pick (Mixed/None backstop) → blank ──
 
         [Fact]
         public void Resolve_UnanimousSeed_WhenNoPick()
         {
             var seed = RoomLocationSeeder.Classify(new[] { 4 });
-            Assert.Equal(4, RoomLocationSeeder.Resolve(0, seed));
+            Assert.Equal(4, RoomLocationSeeder.Resolve(0, isOverride: false, seed));
         }
 
         [Fact]
-        public void Resolve_ExplicitPick_OverridesSeed()
+        public void Resolve_UnanimousSeed_WinsOverStalePick()
         {
-            // Auto-seed says 4, designer picked 9 → the pick wins (and never overwrites: seed stays).
+            // Auto-seed is unanimous (4) and the pick (9) is NOT an acknowledged override → the seed
+            // wins and the pick is inert. An unflagged pick on a unanimous room is treated as stale.
             var seed = RoomLocationSeeder.Classify(new[] { 4 });
-            Assert.Equal(9, RoomLocationSeeder.Resolve(9, seed));
+            Assert.Equal(4, RoomLocationSeeder.Resolve(9, isOverride: false, seed));
+        }
+
+        [Fact]
+        public void Resolve_AcknowledgedOverride_WinsOverUnanimousSeed()
+        {
+            // The escape hatch for a mis-detected room: a deliberately-flagged override beats the seed.
+            var seed = RoomLocationSeeder.Classify(new[] { 4 });
+            Assert.Equal(9, RoomLocationSeeder.Resolve(9, isOverride: true, seed));
         }
 
         [Fact]
         public void Resolve_ExplicitPick_WinsOverMixed()
         {
-            // The manual pick is the backstop for a genuine mixed room.
+            // The manual pick is the backstop for a genuine mixed room (flag is moot — no seed to override).
             var seed = RoomLocationSeeder.Classify(new[] { 1, 4 });
-            Assert.Equal(1, RoomLocationSeeder.Resolve(1, seed));
+            Assert.Equal(1, RoomLocationSeeder.Resolve(1, isOverride: false, seed));
         }
 
         [Fact]
         public void Resolve_Mixed_NoPick_IsBlank()
         {
             var seed = RoomLocationSeeder.Classify(new[] { 1, 4 });
-            Assert.Equal(0, RoomLocationSeeder.Resolve(0, seed));
+            Assert.Equal(0, RoomLocationSeeder.Resolve(0, isOverride: false, seed));
         }
 
         [Fact]
         public void Resolve_None_NoPick_IsBlank()
         {
             var seed = RoomLocationSeeder.Classify(Enumerable.Empty<int>());
-            Assert.Equal(0, RoomLocationSeeder.Resolve(0, seed));
+            Assert.Equal(0, RoomLocationSeeder.Resolve(0, isOverride: false, seed));
         }
     }
 }
