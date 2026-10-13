@@ -793,10 +793,11 @@ namespace TurboSuite.Tests.Zones
             Assert.DoesNotContain(bom, i => i.PartNumber == "QSE-CI-DMX");
         }
 
-        /// <summary>A subsystem part with no compartment to sit in has no placement to defer to, so it
-        /// is emitted at its solved quantity. Forward cover for the DALI DIN module.</summary>
+        /// <summary>A DIN-slot subsystem part (the DALI module) has no compartment to defer to, so it is
+        /// emitted at its solved quantity — and it is a module on the rail, so it files under the Modules
+        /// header, not Accessories.</summary>
         [Fact]
-        public void PartsWithNoCompartmentFollowTheSolve()
+        public void DinSlotPartFollowsTheSolveUnderModules()
         {
             var demand = new ControlSubsystemDemand("DALI",
                 parts: new List<DemandPart>
@@ -806,8 +807,28 @@ namespace TurboSuite.Tests.Zones
 
             var bom = Build(OnePanel(), Lutron, With(demand, BomAudience.IssuedDocument));
 
-            Assert.Equal(3, Assert.Single(Section(bom, "Accessories"),
+            Assert.Equal(3, Assert.Single(Section(bom, "Modules"),
                 i => i.PartNumber == "LQSE-4DALI").Quantity);
+            Assert.DoesNotContain(Section(bom, "Accessories"), i => i.PartNumber == "LQSE-4DALI");
+        }
+
+        /// <summary>The DALI over-cap diagnostic rides with its module under Modules (a warning sits with
+        /// the thing it is about), while a compartment-only subsystem's diagnostic stays in Accessories.</summary>
+        [Fact]
+        public void DaliDiagnosticRidesUnderModules()
+        {
+            var demand = new ControlSubsystemDemand("DALI",
+                parts: new List<DemandPart>
+                {
+                    new DemandPart("LQSE-4DALI", 2, DemandMount.DinSlot, "DALI Module")
+                },
+                diagnostic: "loop \"Lobby\" (72) over 64 loads/bus — split it into more loops.");
+
+            var bom = Build(OnePanel(), Lutron, With(demand, BomAudience.DesignSurface));
+
+            var warning = Assert.Single(Section(bom, "Modules"), i => i.IsWarning);
+            Assert.Contains("over 64 loads/bus", warning.Description);
+            Assert.DoesNotContain(Section(bom, "Accessories"), i => i.IsWarning);
         }
 
         /// <summary>The issued PDF carries no design-state commentary — the audience rule from Phase 0

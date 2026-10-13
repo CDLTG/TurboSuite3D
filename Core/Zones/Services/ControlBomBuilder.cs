@@ -85,15 +85,30 @@ namespace TurboSuite.Zones.Services
                 }
             }
 
+            // Subsystem contributions (the DALI module, DMX/shade external parts, diagnostics),
+            // partitioned once by the section each belongs in. Computed here, ahead of the Modules
+            // section, so a DIN-slot module can join Modules before Accessories claims the rest.
+            var subsystemLines = SubsystemLines(brand, extras).ToList();
+            var moduleSubsystemLines = subsystemLines.Where(l => l.Category == "Modules").ToList();
+            var shadeLines = subsystemLines.Where(l => l.Category == "Shades").ToList();
+            var accessorySubsystemLines = subsystemLines
+                .Where(l => l.Category != "Modules" && l.Category != "Shades").ToList();
+
             // --- Modules ---
+            // Dimming modules placed in panels (the roll-up skips OrderedBySubsystem slots — see
+            // GroupModulesByPartNumber, which keeps the display-only DALI slot from being double-counted)
+            // plus any subsystem that ships its own DIN-rail module (DALI's LQSE2-1DALUNV-D). They sit
+            // side by side on the rail, so they share this section; a DMX compartment interface does not
+            // and stays in Accessories.
             var allModules = allPanels.SelectMany(p => p.Modules).ToList();
-            if (allModules.Count > 0)
+            var moduleRollup = PanelAllocationService.GroupModulesByPartNumber(allModules).ToList();
+            if (moduleRollup.Count > 0 || moduleSubsystemLines.Count > 0)
             {
                 bom.Add(new BomLineItem { IsHeader = true, Category = "Modules", Description = "Modules" });
 
                 // Group by resolved part number so a single module type carrying multiple
                 // dimming roles (e.g. LQSE-4T5 for both 0-10V and Relay) collapses to one line.
-                foreach (var group in PanelAllocationService.GroupModulesByPartNumber(allModules))
+                foreach (var group in moduleRollup)
                 {
                     bom.Add(new BomLineItem
                     {
@@ -103,6 +118,10 @@ namespace TurboSuite.Zones.Services
                         Category = "Modules"
                     });
                 }
+
+                // The DALI DIN module (and its over-cap diagnostic) — ordered by the job-wide DALI
+                // demand, filed here with the dimming modules it rails beside.
+                bom.AddRange(moduleSubsystemLines);
             }
 
             // --- Accessories ---
@@ -225,11 +244,9 @@ namespace TurboSuite.Zones.Services
                 }
             }
 
-            // Subsystem parts. Shades carry their own "Shades" category and get their own section below;
-            // every other subsystem's external parts join Accessories.
-            var subsystemLines = SubsystemLines(brand, extras).ToList();
-            var shadeLines = subsystemLines.Where(l => l.Category == "Shades").ToList();
-            accessories.AddRange(subsystemLines.Where(l => l.Category != "Shades"));
+            // Subsystem parts that are neither a DIN-slot module (filed under Modules above) nor a shade
+            // panel (its own section below) — a DMX interface's external parts and diagnostics land here.
+            accessories.AddRange(accessorySubsystemLines);
 
             // Hybrid repeaters (Lutron only), one line per catalog number.
             if (string.Equals(brand.Name, "Lutron", StringComparison.OrdinalIgnoreCase))
@@ -350,6 +367,13 @@ namespace TurboSuite.Zones.Services
         /// overrides it. TurboDMX says "this job needs four"; the designer says "and here is where the
         /// four go"; the purchase order follows the designer. A part with no compartment (the DALI DIN
         /// module, when it lands) has no placement to defer to and is emitted at its solved quantity.
+        ///
+        /// <b>Section is by what the part physically IS, not which subsystem owns it.</b> A DinSlot part
+        /// (the DALI <c>LQSE2-1DALUNV-D</c>) is a module sitting on the DIN rail alongside the dimming
+        /// modules, so it carries <c>Category = "Modules"</c> and <see cref="Build"/> files it under the
+        /// Modules header; a DMX interface is a compartment device and stays in Accessories. Each
+        /// subsystem's diagnostic follows its own parts to that same section (<see cref="HomeCategory"/>),
+        /// so the warning about a module lands with the module.
         /// </summary>
         private static IEnumerable<BomLineItem> SubsystemLines(BrandConfig brand, BomExtras extras)
         {
@@ -360,15 +384,11 @@ namespace TurboSuite.Zones.Services
             {
                 if (demand == null) continue;
 
-                // Shades get their own section, apart from the general Accessories; every other
-                // subsystem's external parts land in Accessories.
-                string category = string.Equals(demand.Subsystem, ShadeSolver.SubsystemName,
-                    StringComparison.OrdinalIgnoreCase) ? "Shades" : "Accessories";
-
                 // Something is wrong and a human has to fix it: a design that would not solve, or one
                 // that solved over incomplete input. Worth a line rather than silence, in the
                 // subsystem's own words. Design surface only — a purchasing document is not where a
-                // half-declared design gets fixed, and the reason is not orderable.
+                // half-declared design gets fixed, and the reason is not orderable. It rides in the same
+                // section as this subsystem's orderable parts (Modules for DALI, Accessories for DMX).
                 if (demand.HasDiagnostic && extras.Audience == BomAudience.DesignSurface)
                 {
                     lines.Add(new BomLineItem
@@ -376,7 +396,7 @@ namespace TurboSuite.Zones.Services
                         Quantity = 0,
                         PartNumber = "",
                         Description = $"{demand.Subsystem}: {demand.Diagnostic}",
-                        Category = category,
+                        Category = HomeCategory(demand),
                         IsWarning = true
                     });
                 }
@@ -398,12 +418,35 @@ namespace TurboSuite.Zones.Services
                         Quantity = part.Quantity,
                         PartNumber = part.PartNumber,
                         Description = part.Description ?? brand.GetPartDescription(part.PartNumber),
-                        Category = category
+                        Category = PartCategory(demand, part)
                     });
                 }
             }
             return lines;
         }
+
+        /// <summary>Which BOM section a non-compartment subsystem part files under, by what it physically
+        /// is: a Shade panel → Shades, a DIN-slot module (DALI) → Modules, anything else external →
+        /// Accessories.</summary>
+        private static string PartCategory(ControlSubsystemDemand demand, DemandPart part)
+        {
+            if (IsShade(demand)) return "Shades";
+            return part.Mount == DemandMount.DinSlot ? "Modules" : "Accessories";
+        }
+
+        /// <summary>The section a subsystem's diagnostic rides in — the one its orderable parts land in,
+        /// so a warning sits with the thing it is about. DALI ships a DinSlot module ⇒ Modules; a
+        /// compartment-only subsystem (DMX) ⇒ Accessories.</summary>
+        private static string HomeCategory(ControlSubsystemDemand demand)
+        {
+            if (IsShade(demand)) return "Shades";
+            bool hasDinSlot = demand.Parts != null
+                && demand.Parts.Any(p => p != null && p.Mount == DemandMount.DinSlot);
+            return hasDinSlot ? "Modules" : "Accessories";
+        }
+
+        private static bool IsShade(ControlSubsystemDemand demand) =>
+            string.Equals(demand.Subsystem, ShadeSolver.SubsystemName, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>How many of a compartment device the subsystems say the job needs, or 0 when
         /// nothing speaks for it. Matched on the special-device NAME ("DMX"), which is what both the
