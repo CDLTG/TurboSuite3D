@@ -1,7 +1,8 @@
 #nullable enable
-using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Shared.Constants;
+using TurboSuite.Shared.Helpers;
 
 namespace TurboSuite.Shared.Services;
 
@@ -18,27 +19,20 @@ namespace TurboSuite.Shared.Services;
 /// </list>
 ///
 /// <b>Identity — the shade motor, not the panel.</b> A circuit is a shade circuit when a connected
-/// fixture is a shade motor, matched by family name containing <see cref="ShadeMotorFamilyToken"/>
-/// ("Shade Motor" — catches both the 3D <c>AL_Electrical Fixture_Shade Motor</c> and the 2D
-/// <c>Shade Motor</c>). A shade motor is an Electrical Fixture, which the lighting collectors would
-/// otherwise treat as a lighting load.
+/// fixture is a shade motor, identified by its <see cref="Roles.ShadeMotor"/>
+/// <see cref="ParameterNames.TurboSuiteRole"/> — the same role-not-name classification contract every
+/// other module uses (see <see cref="Roles"/>), so a shade family is recognized however it is named.
+/// A shade motor is an Electrical Fixture, which the lighting collectors would otherwise treat as a
+/// lighting load.
 /// </summary>
 public static class ShadeCircuitClassifier
 {
-    /// <summary>Family-name token identifying a shade motor. A substring, case-insensitive, so it
-    /// catches both authored families (<c>AL_Electrical Fixture_Shade Motor</c> and <c>Shade
-    /// Motor</c>) and future variants that keep the words.</summary>
-    public const string ShadeMotorFamilyToken = "Shade Motor";
-
     /// <summary>A circuit carrying shade motors — the hook the lighting collectors use to drop shade
     /// circuits before their motors become a spurious lighting load.</summary>
     public static bool IsShadeCircuit(ElectricalSystem circuit) => CountShadeMotors(circuit) > 0;
 
     public static bool IsShadeMotor(FamilyInstance fi)
-    {
-        string family = fi?.Symbol?.Family?.Name ?? string.Empty;
-        return family.IndexOf(ShadeMotorFamilyToken, StringComparison.OrdinalIgnoreCase) >= 0;
-    }
+        => fi != null && ParameterHelper.GetRole(fi) == Roles.ShadeMotor;
 
     public static int CountShadeMotors(ElectricalSystem circuit)
     {

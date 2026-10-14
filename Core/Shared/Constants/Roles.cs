@@ -35,6 +35,7 @@ public static class Roles
     public const string Keypad = "Keypad";
     public const string DriverPlaceholder = "DriverPlaceholder";
     public const string HybridRepeater = "HybridRepeater";
+    public const string ShadeMotor = "ShadeMotor";
 
     // ── Finder roles (on tag / detail / annotation families) ─────────────────────────────────────
     public const string FixtureTypeTag = "FixtureTypeTag";
@@ -121,7 +122,7 @@ public static class Roles
         BuildCanonicalMap(new[]
         {
             Sconce, Chandelier, PictureLight, WallVertical, CeilingFan, ExhaustFan, FireplaceIgniter,
-            Receptacle, Switch, Keypad, DriverPlaceholder, HybridRepeater,
+            Receptacle, Switch, Keypad, DriverPlaceholder, HybridRepeater, ShadeMotor,
             FixtureTypeTag, LinearTag, RunLengthTag, SwitchIdTag, KeypadTag, DeviceTypeTag,
             FixtureSwitchlegTag, RemoteSwitchlegTag, ElectricalSwitchlegTag, DeviceSwitchlegTag,
             LinearFeedTag, LinearFeedDetail, DmxDecoderDetail, DmxDriverDetail, DmxInterfaceDetail,
