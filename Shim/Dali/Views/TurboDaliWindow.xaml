@@ -241,8 +241,7 @@
                                                                       PreviewMouseLeftButtonDown="ZoneRow_PreviewMouseLeftButtonDown"
                                                                       PreviewMouseMove="ZoneRow_PreviewMouseMove"
                                                                       DragOver="ZoneRow_DragOver" DragLeave="ZoneRow_DragLeave"
-                                                                      Drop="ZoneRow_Drop"
-                                                                      ToolTip="Drag the zone name to reorder — this loop's zone order sets the addressing sequence.">
+                                                                      Drop="ZoneRow_Drop">
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto"/>
                                                                         <ColumnDefinition Width="*"/>
