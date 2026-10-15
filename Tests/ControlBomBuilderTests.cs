@@ -347,6 +347,85 @@ namespace TurboSuite.Tests.Zones
 
             Assert.DoesNotContain("Accessories", Headers(bom));
         }
+
+        /// <summary>A wireless keypad circuited to no repeater (or to one whose panel name carries no
+        /// readable location) is dropped from the located Clear Connect sizing — correct, the same way
+        /// an unlocated shade is dropped from the per-location panel count. The gap surfaces as a
+        /// design-surface warning counting the keypads that aren't sizing a CC-A link: the global
+        /// connector-wireless count less the per-location assigned sum. The wireless analog of
+        /// ShadeSolver's "N motors not assigned to a SHADE panel".</summary>
+        [Fact]
+        public void UnassignedWirelessKeypadsWarnOnTheDesignSurface()
+        {
+            var extras = new BomExtras
+            {
+                Audience = BomAudience.DesignSurface,
+                KeypadTallies = Tally.Of(("HQRD-W3BD", 3)),
+                WirelessDeviceCount = 5,                                   // five wireless keypads job-wide
+                RepeaterLocations = new List<RepeaterLocationTally>
+                {
+                    Tally.Loc("1-REP1", repeaters: 1, Tally.Keypad("K1", 1), Tally.Keypad("K2", 1))
+                }                                                         // two assigned → three unassigned
+            };
+
+            var warning = Assert.Single(
+                Section(Build(TwoFullPanels(), Lutron, extras), "Keypads"), k => k.IsWarning);
+            Assert.Contains("3 wireless keypads with no repeater", warning.Description);
+        }
+
+        /// <summary>The warning is design-surface only — a purchasing document is not where a half-wired
+        /// design gets fixed, exactly like every other diagnostic line.</summary>
+        [Fact]
+        public void UnassignedWirelessWarningIsAbsentFromTheIssuedDocument()
+        {
+            var extras = new BomExtras
+            {
+                Audience = BomAudience.IssuedDocument,
+                KeypadTallies = Tally.Of(("HQRD-W3BD", 3)),
+                WirelessDeviceCount = 5,
+                RepeaterLocations = new List<RepeaterLocationTally>
+                {
+                    Tally.Loc("1-REP1", repeaters: 1, Tally.Keypad("K1", 1))
+                }
+            };
+
+            Assert.DoesNotContain(Section(Build(TwoFullPanels(), Lutron, extras), "Keypads"),
+                k => k.IsWarning);
+        }
+
+        /// <summary>Every wireless keypad assigned to a located repeater ⇒ nothing is unaccounted for,
+        /// so no warning. A two-gang keypad is two devices on both sides of the subtraction, so the
+        /// delta is exact and this stays quiet.</summary>
+        [Fact]
+        public void FullyAssignedWirelessKeypadsRaiseNoWarning()
+        {
+            var extras = new BomExtras
+            {
+                Audience = BomAudience.DesignSurface,
+                KeypadTallies = Tally.Of(("HQRD-W3BD", 2)),
+                WirelessDeviceCount = 3,                                   // one of the two is two-gang
+                RepeaterLocations = new List<RepeaterLocationTally>
+                {
+                    Tally.Loc("1-REP1", repeaters: 1,
+                        Tally.Keypad("K1", 1), Tally.Keypad("K2", 1, devices: 2))
+                }
+            };
+
+            Assert.DoesNotContain(Section(Build(TwoFullPanels(), Lutron, extras), "Keypads"),
+                k => k.IsWarning);
+        }
+
+        /// <summary>A single unassigned keypad reads in the singular — no repeater anywhere on the job.</summary>
+        [Fact]
+        public void OneUnassignedWirelessKeypadReadsSingular()
+        {
+            var extras = new BomExtras { Audience = BomAudience.DesignSurface, WirelessDeviceCount = 1 };
+
+            var warning = Assert.Single(
+                Section(Build(TwoFullPanels(), Lutron, extras), "Keypads"), k => k.IsWarning);
+            Assert.Contains("1 wireless keypad with no repeater", warning.Description);
+            Assert.DoesNotContain("keypads", warning.Description);
+        }
     }
 
     /// <summary>Quantities — the part of the BOM that costs money when it is wrong.</summary>

@@ -204,8 +204,11 @@ stamps every marker with `legend.NumberFor(t)`, so the legend and the sheet mark
 **Clear Connect is not a cable:** an RF link is QS wire to a Hybrid Repeater, so the wireless leg draws as
 **QS wire with a QS marker** on the **same spine + carets as a QS link** — each repeater (≤4) hangs off a
 caret as a bottom-aligned `ControlRepeaterDetail` stamp (labeled with the job's repeater catalog), the
-`WIRELESS KEYPADS` stub tailing the spine. Swapping a repeater for a dimmer/shade along the link changes
-only what is drawn **above the caret**, never the link. The **per-keypad RF fan off each repeater is
+`WIRELESS KEYPADS` stub tailing the spine. A wireless keypad on **no** Controls circuit (or a repeater whose
+panel name carries no readable location) is dropped from the located CC-A sizing — mirroring an unassigned
+shade — and surfaces as a design-surface BOM warning (*"N wireless keypads with no repeater"*, in the Keypads
+section), computed as the global connector-wireless count minus the per-location assigned sum. Swapping a
+repeater for a dimmer/shade along the link changes only what is drawn **above the caret**, never the link. The **per-keypad RF fan off each repeater is
 deferred**. `ClearConnect` / `PanelControlLink` /
 `DaliLoop` stay **benched** `ControlWireType` members, never rostered (panel links are QS; DALI/DMX are never
 drawn here). Everything drawn is a WIRED run, so every segment is **solid** (solid `<Medium Lines>`); wireless is

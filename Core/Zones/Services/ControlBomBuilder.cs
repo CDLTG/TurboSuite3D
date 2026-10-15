@@ -277,6 +277,33 @@ namespace TurboSuite.Zones.Services
             // link math, which is the only place it was ever needed. This section used to print the
             // words "Keypad" and "Two-Gang Keypad" against blank part numbers.
             var keypadLines = TallyLines(extras.KeypadTallies, "Keypads", extras.Audience, "Keypad");
+
+            // Wireless keypads on no Controls circuit (or on a repeater whose panel name carries no
+            // readable location) are dropped from the located Clear Connect sizing — correct, the same
+            // way an unlocated shade is dropped from the per-location panel count. Surface the gap as a
+            // design warning so the designer knows those keypads aren't sizing a CC-A link yet. The
+            // wireless analog of ShadeSolver's "N motors not assigned to a SHADE panel"; device-count
+            // grain on both sides (a two-gang keypad is two devices), so the delta matches the sizing.
+            // Design surface only and quantity-0, the same shape every other diagnostic line uses.
+            if (extras.Audience == BomAudience.DesignSurface)
+            {
+                int assignedWireless = extras.RepeaterLocations?.Sum(l => l?.WirelessDeviceCount ?? 0) ?? 0;
+                int unassignedWireless = extras.WirelessDeviceCount - assignedWireless;
+                if (unassignedWireless > 0)
+                {
+                    keypadLines.Add(new BomLineItem
+                    {
+                        Quantity = 0,
+                        PartNumber = "",
+                        Description = $"{unassignedWireless} wireless keypad" +
+                                      (unassignedWireless == 1 ? "" : "s") +
+                                      " with no repeater — circuit to a repeater to size Clear Connect.",
+                        Category = "Keypads",
+                        IsWarning = true
+                    });
+                }
+            }
+
             if (keypadLines.Count > 0)
             {
                 bom.Add(new BomLineItem { IsHeader = true, Category = "Keypads", Description = "Keypads" });
