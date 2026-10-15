@@ -7,6 +7,32 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.5.5] — 2026-10-15
+
+### Added
+- TurboZones: control one-line now lists located keypads and per-motor shades, fans wireless keypads per repeater, and draws repeater stamps.
+- TurboZones: warns when a wireless keypad is circuited to no repeater.
+- TurboMask: line-based family footprints (tape/linear fixtures) reconstructed as detail-line overlays.
+- TurboWire: wireless keypads wired to hybrid repeaters via Controls circuits.
+- TurboNumber: unanimous room locations lock, with a deliberate override escape hatch.
+- TurboSchedule: the type header shows the current type's family name.
+
+### Changed
+- TurboSuite: circuit/loop "Zone" renamed to "Location" (the Control Zone parameter is unchanged).
+- TurboZones: Clear Connect links sized per repeater-location, with CC-A links on their own processor.
+- TurboZones: one-line node spacing unified on a measured per-gap center-to-center; 120V feed run lengthened to 2'-6".
+- TurboZones: the DALI module and its warning filed under Modules, not Accessories.
+- TurboZones: Draw lands on the one-line diagram (sheet 1) and persists one-line/legend view IDs across sessions.
+- TurboZones: one-line references point at the Lutron reference sheets.
+- TurboName: the pick-loop hint promoted to a prominent callout, with a note on view-scoped Escape.
+- Shades: shade motors identified by the TurboSuite Role parameter instead of family name.
+
+### Removed
+- TurboZones: RF/WIRED line-style keys dropped from the wire legend.
+
+### Security
+- Core: System.Security.Cryptography.Pkcs pinned to the patched 8.0.2.
+
 ## [1.5.4] — 2026-10-02
 
 ### Added
@@ -304,6 +330,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.5.5]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.5
 [1.5.4]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.4
 [1.5.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.3
 [1.5.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.2
