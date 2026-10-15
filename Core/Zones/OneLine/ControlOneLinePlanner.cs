@@ -124,12 +124,11 @@ namespace TurboSuite.Zones.OneLine
                     .ThenBy(k => k.SwitchId, natural)
                     .Select(ControlListLayout.KeypadRowLabel)
                     .ToList();
-                // Center the [glyph + text] block on the stamp. The shade list aligns its text to the 120V
-                // label instead, but the repeater is narrower than that offset, so a measured center keeps
-                // the fan over the stamp. Block runs glyph → text; shift the glyph left by half its width.
-                int maxChars = labels.Max(l => l.Length);
-                double contentWidth = G.Layout.KeypadListTextDx + maxChars * G.Layout.KeypadListCharWidth;
-                var anchor = new XY(cx - contentWidth / 2.0, t1.Y + G.Layout.MotorListAnchorDy);
+                // 120V-anchored, unified with the shade motor list (supersedes the former measured centering):
+                // every fan hangs from the same offset left of its node center, so adjacent-fan clearance
+                // reduces to c-c ≥ FanWidth(left). The repeater stamp is narrower than that offset, so the fan
+                // text starts left of the stamp, at the 120V label — the intended look, matching the shades.
+                var anchor = new XY(Fan120VAnchorX(cx), t1.Y + G.Layout.MotorListAnchorDy);
                 var positions = ControlListLayout.Layout(labels.Count, anchor,
                     rowsPerColumn: labels.Count + 1, G.Layout.KeypadListRowPitch, columnWidth: 0.0);
                 for (int i = 0; i < positions.Count; i++)
@@ -338,7 +337,6 @@ namespace TurboSuite.Zones.OneLine
                     Wire(new XY(lx, ey), new XY(lx, spineY), dashed: false);       // drop the lane to the spine
                     Mark(new XY(headRightX + G.Layout.MarkerExitOffset, ey), ControlWireType.QsControlLink);   // at the head RIGHT-edge exit
 
-                    double cursorX = col1LeftX - G.Layout.NodeGap;   // so the first QS node lands at col1LeftX + w/2
                     double spineFromX = lx;                          // spine starts at the lane drop
 
                     void Caret(double cxAt, bool leftHalfOnly)
@@ -370,14 +368,23 @@ namespace TurboSuite.Zones.OneLine
                         bool perRepeater = repRecords.Count > 0;
                         int reps = perRepeater ? repRecords.Count : System.Math.Max(0, pl.Link.Repeaters);
                         double lastCx = double.NaN;
+                        double ccFanWidth = 0.0;   // previous stamp's keypad-fan width — drives the gap to the next
                         for (int r = 0; r < reps; r++)
                         {
-                            double cx = colX + G.Layout.HeadColumnCenterToCenter + r * G.Layout.PanelCenterToCenter;
+                            // First stamp at the head→column-1 c-c; each later stamp at the measured gap off the
+                            // previous — floored to PanelCenterToCenter, widened only to clear the previous
+                            // stamp's keypad fan (120V-anchored, so the gap is exactly its FanWidth + pad).
+                            double cx = double.IsNaN(lastCx)
+                                ? colX + G.Layout.HeadColumnCenterToCenter
+                                : lastCx + Math.Max(G.Layout.PanelCenterToCenter, ccFanWidth + G.Layout.FanGapPad);
                             Caret(cx, leftHalfOnly: perRepeater && r == reps - 1);   // records → no tail after last
                             var stampCenter = new XY(cx, panelBottomY + G.Repeater.Height / 2.0);
                             repeaterNodes.Add(new ControlRepeaterNode(stampCenter, repeaterPartNumber ?? string.Empty));
                             Add120V(stampCenter, G.Repeater.Height);   // 120 V feed, same as every other node
                             if (perRepeater) DrawRepeaterFan(cx, panelBottomY, repRecords[r].Keypads);
+                            ccFanWidth = perRepeater
+                                ? FanWidth(repRecords[r].Keypads.Select(ControlListLayout.KeypadRowLabel).ToList())
+                                : 0.0;
                             lastCx = cx;
                         }
 
@@ -400,12 +407,18 @@ namespace TurboSuite.Zones.OneLine
                     }
 
                     var loc = pl.Located;
+                    double prevCx = double.NaN;      // last node center (NaN until the first node is placed)
+                    double prevFanWidth = 0.0;       // last node's fan width — drives the gap to the next node
                     for (int m = 0; m < loc.Count; m++)
                     {
                         var u = loc[m];
                         bool isShade = u.Category == LinkCategory.Shades;
                         double w = isShade ? G.ShadePanel.Width : G.Panel.Width;
-                        double cx = cursorX + G.Layout.NodeGap + w / 2.0;
+                        // First node sits its left edge at col1LeftX; each later node a measured c-c off the
+                        // previous — floored to PanelCenterToCenter, widened only to clear the previous fan.
+                        double cx = double.IsNaN(prevCx)
+                            ? col1LeftX + w / 2.0
+                            : prevCx + Math.Max(G.Layout.PanelCenterToCenter, prevFanWidth + G.Layout.FanGapPad);
                         Caret(cx, leftHalfOnly: m == loc.Count - 1 && !pl.HasKeypads);
 
                         if (isShade)
@@ -433,10 +446,9 @@ namespace TurboSuite.Zones.OneLine
                                      m1.Offset(G.Layout.MotorTerminusHalf, 0), dashed: false);   // 9" terminus
 
                                 var motorLabels = motorRecs.Select(ControlListLayout.MotorRowLabel).ToList();
-                                // Align row text left with the 120V label; the glyph sits one TextDx to its left.
-                                double term120X = c.X + G.Layout.Feed120VLegDx - G.Layout.Feed120VRun;
-                                double anchorX = term120X + G.Layout.Feed120VLabelDx - G.Layout.KeypadListTextDx;
-                                var mAnchor = new XY(anchorX, m1.Y + G.Layout.MotorListAnchorDy);
+                                // 120V-anchored like every fan (factored into Fan120VAnchorX): row text
+                                // left-aligns with the shade's 120V label, the glyph one TextDx to its left.
+                                var mAnchor = new XY(Fan120VAnchorX(c.X), m1.Y + G.Layout.MotorListAnchorDy);
                                 var mPos = ControlListLayout.Layout(motorLabels.Count, mAnchor,
                                     ShadeSolver.ShadesPerPanel, G.Layout.KeypadListRowPitch, columnWidth: 0.0);
                                 for (int mi = 0; mi < mPos.Count; mi++)
@@ -463,12 +475,19 @@ namespace TurboSuite.Zones.OneLine
                             panelNodes.Add(Node(prd, c));
                             Add120V(c, PanelHeight(prd));
                         }
-                        cursorX = cx + w / 2.0;
+                        prevCx = cx;
+                        prevFanWidth = isShade && u.Motors.Count > 0
+                            ? FanWidth(u.Motors.Select(ControlListLayout.MotorRowLabel).ToList())
+                            : 0.0;
                     }
 
                     if (pl.HasKeypads)
                     {
-                        double kx = cursorX + G.Layout.KeypadTailGap;
+                        // Tail advances off the last node with the same measured gap (its fan can't collide with
+                        // the tail). Keypads-only link (no located nodes) → anchor at col1LeftX, as before.
+                        double kx = double.IsNaN(prevCx)
+                            ? col1LeftX
+                            : prevCx + Math.Max(G.Layout.PanelCenterToCenter, prevFanWidth + G.Layout.FanGapPad);
                         Wire(new XY(spineFromX, spineY), new XY(kx, spineY), dashed: false);
                         Tick(wires, new XY(kx, spineY), G.Layout.KeypadTickHalf);
 
@@ -607,5 +626,21 @@ namespace TurboSuite.Zones.OneLine
 
         private static void Tick(List<ControlWireSegment> wires, XY at, double half)
             => wires.Add(new ControlWireSegment(at.Offset(0, -half), at.Offset(0, half), dashed: false));
+
+        /// <summary>The 120 V anchor X every fan hangs from — the glyph-column X, left of the node center by the
+        /// same offset the shade motor list uses (the 120 V terminus + label geometry). Because every fan (shade,
+        /// repeater) shares this one anchor, adjacent-fan clearance collapses to <c>c-c ≥ FanWidth(left)</c> (the
+        /// offset cancels), so the spacing walk needs only the fan WIDTH — never a per-node-type footprint.</summary>
+        private static double Fan120VAnchorX(double centerX)
+            => centerX + G.Layout.Feed120VLegDx - G.Layout.Feed120VRun
+               + G.Layout.Feed120VLabelDx - G.Layout.KeypadListTextDx;
+
+        /// <summary>The model width of a fan's one-column list block: the row glyph→text gap plus the longest
+        /// label. Zero when there are no rows (a plain panel floors to <see cref="ControlOneLineGeometry.Layout.PanelCenterToCenter"/>).
+        /// This is the exact measure the lists already use for their dynamic column width, so it bounds the fan's
+        /// rightward extent precisely.</summary>
+        private static double FanWidth(IReadOnlyCollection<string> labels)
+            => labels.Count == 0 ? 0.0
+               : G.Layout.KeypadListTextDx + labels.Max(l => l.Length) * G.Layout.KeypadListCharWidth;
     }
 }

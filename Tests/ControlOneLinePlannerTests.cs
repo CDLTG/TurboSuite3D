@@ -231,8 +231,8 @@ namespace TurboSuite.Tests.Zones
 
             var xs = page.Repeaters.Select(r => r.Center.X).ToList();
             Assert.Equal(xs.OrderBy(x => x).ToList(), xs);                 // left→right
-            // First stamp at the head→column-1 c-c off the head center (15'-0"), then the inter-panel c-c
-            // (10'-0") between repeaters — a repeater sits exactly where a panel would on the link.
+            // First stamp at the head→column-1 c-c off the head center (15'-0"), then the inter-node c-c floor
+            // (12'-0") between fan-less repeaters — a repeater sits exactly where a panel would on the link.
             Assert.Equal(
                 ControlOneLineGeometry.Layout.ProcessorColumnX + ControlOneLineGeometry.Layout.HeadColumnCenterToCenter,
                 xs[0], 3);
@@ -279,6 +279,39 @@ namespace TurboSuite.Tests.Zones
             // Wireless glyphs: one at each stamp's tap + one per keypad row (3 + 2 across the two fans).
             Assert.Equal(5, page.Glyphs.Count);
             Assert.All(page.Glyphs, g => Assert.Equal(Roles.ControlWirelessGlyph, g.Role));
+        }
+
+        /// <summary>Unified c-c spacing (the beaver plan): a node's own fan drives ONLY its right gap. A
+        /// repeater carrying a wide keypad fan widens the gap to the next stamp to exactly
+        /// <c>FanWidth + FanGapPad</c> (past the floor), while a fan-less neighbor's right gap sits at the
+        /// <c>PanelCenterToCenter</c> floor. Three stamps: a wide first fan, then two fan-less.</summary>
+        [Fact]
+        public void WideFanWidensOnlyItsOwnRightGap_FanlessNeighborStaysAtTheFloor()
+        {
+            var wideKp = new KeypadRecord("K1", "GRAND BEDROOM SITTING AREA", "seeTouch Tabletop", location: 1);
+            var r1 = new RepeaterRecord("1-REP1", 1, new[] { wideKp });   // wide fan → widens its right gap
+            var r2 = new RepeaterRecord("1-REP2", 1);                     // no keypads → no fan
+            var r3 = new RepeaterRecord("1-REP3", 1);                     // no keypads → no fan (terminal)
+            var cca = new PackedLink(ProcessorLink.ClearConnectLinkType, 99, 0, Array.Empty<string>(),
+                repeaters: 3, repeaterRecords: new[] { r1, r2, r3 });
+            var pack = Pack(Group(Qs(U("1-A", LinkCategory.Modules, 8)), cca));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = Assert.Single(
+                ControlOneLinePlanner.Build(pack, panels, "TurboControl", "HQR-REP-120"));
+
+            var xs = page.Repeaters.Select(r => r.Center.X).OrderBy(x => x).ToList();
+            Assert.Equal(3, xs.Count);
+
+            double floor = ControlOneLineGeometry.Layout.PanelCenterToCenter;
+            string wideLabel = ControlListLayout.KeypadRowLabel(wideKp);
+            double expectedWideGap = ControlOneLineGeometry.Layout.KeypadListTextDx
+                + wideLabel.Length * ControlOneLineGeometry.Layout.KeypadListCharWidth
+                + ControlOneLineGeometry.Layout.FanGapPad;
+
+            Assert.True(expectedWideGap > floor, "the test's wide label must actually exceed the floor");
+            Assert.Equal(expectedWideGap, xs[1] - xs[0], 3);   // R1's wide fan drove its own right gap
+            Assert.Equal(floor, xs[2] - xs[1], 3);             // R2 is fan-less → its right gap is the floor
         }
 
         /// <summary>A link with no keypad unit gets no keypad stub.</summary>

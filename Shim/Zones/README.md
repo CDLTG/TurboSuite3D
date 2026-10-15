@@ -140,7 +140,7 @@ its two processor compartments merge into **one** drawn head) — sits bottom-al
 its QS links off its **right edge** as separate, crossing-free **dogleg lanes** (deepest row = leftmost lane +
 lowest exit) across a widened head→column-1 gap, each dropping into its row's spine; a completely **dead (0/0)
 link is dropped** so live rows stay consecutive; each row a QS **spine 1' below the panels with a caret up to
-each panel origin**, panels 10' center-to-center; **bottom-aligned shades** with a top **`n MOTORS`** tap;
+each panel origin**, nodes at a **measured per-gap center-to-center** (a 12' floor, widened only to clear a wide fan); **bottom-aligned shades** with a top **`n MOTORS`** tap;
 rule-#5 node order; keypad + wireless stubs; each head draws its own **Ethernet-to-Home-Network stub** out its
 left edge — Lutron-style, no shared switch node), and
 `ControlRenderDataFactory` (PanelResult + BrandConfig →
@@ -190,8 +190,9 @@ Families are authored with a **bottom-center origin, artwork expanding upward**;
 band bottom (`ControlOneLineService.PlaceFamilyGrowUp` for enclosures/shades/repeater stamps) while the
 planner/geometry keep reasoning in band centers. The repeater stamp (`ControlRepeaterDetail`, measured
 3'-8 1/16" × 4'-9 3/8", `PartNumber`-only) follows the same convention and hangs off the link's carets like
-a panel, spaced by the link's own center-to-centers — the first at `Layout.HeadColumnCenterToCenter` (15'-0")
-off the head, then `Layout.PanelCenterToCenter` (10'-0") between repeaters. Tiles anchor their origin to authored per-rung Y offsets (`Panel.RungOffsets` for power panels,
+a panel, spaced by the link's **measured per-gap c-c** — the first at `Layout.HeadColumnCenterToCenter` (15'-0")
+off the head, then a `Layout.PanelCenterToCenter` (12'-0") floor between repeaters, widened to clear a stamp's
+keypad fan (`Layout.FanGapPad`). Tiles anchor their origin to authored per-rung Y offsets (`Panel.RungOffsets` for power panels,
 `Panel.Lv21RungOffsets` for the LV21, measured up from the enclosure bottom origin, picked by tile count), so
 anchors are per-panel-relative (no diagram-wide rung grid);
 cross-panel alignment among power panels is emergent from their identical fixed height. The wire marker stays
@@ -208,8 +209,9 @@ caret as a bottom-aligned `ControlRepeaterDetail` stamp (labeled with the job's 
 panel name carries no readable location) is dropped from the located CC-A sizing — mirroring an unassigned
 shade — and surfaces as a design-surface BOM warning (*"N wireless keypads with no repeater"*, in the Keypads
 section), computed as the global connector-wireless count minus the per-location assigned sum. Swapping a
-repeater for a dimmer/shade along the link changes only what is drawn **above the caret**, never the link. The **per-keypad RF fan off each repeater is
-deferred**. `ClearConnect` / `PanelControlLink` /
+repeater for a dimmer/shade along the link changes only what is drawn **above the caret**, never the link. On the
+located path each repeater **fans its own keypads** above its stamp (120V-anchored, like the shade motor list, so
+every fan clears its neighbor by the same c-c rule); the `WIRELESS KEYPADS` stub is the count-only fallback. `ClearConnect` / `PanelControlLink` /
 `DaliLoop` stay **benched** `ControlWireType` members, never rostered (panel links are QS; DALI/DMX are never
 drawn here). Everything drawn is a WIRED run, so every segment is **solid** (solid `<Medium Lines>`); wireless is
 shown by the keypad **glyph**, not a dashed RF line, so the legend carries **no** `RF CONNECTION` / `WIRED

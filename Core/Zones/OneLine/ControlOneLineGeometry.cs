@@ -289,13 +289,25 @@ namespace TurboSuite.Zones.OneLine
             /// height with clearance.</summary>
             public const double RowPitch = (28.0 * 12.0) / 12.0;   // 28'-0" origin-to-origin
 
-            /// <summary>Horizontal edge-to-edge gap between consecutive power panels on a link (holds the wire +
-            /// marker). Derived so panel CENTER-TO-CENTER is exactly the target below (c-c = <see cref="Panel.Width"/>
-            /// + this gap); re-measuring the family width keeps the 10' c-c automatically. Tune by the c-c target.</summary>
-            public const double NodeGap = PanelCenterToCenter - Panel.Width;   // ⇒ 4'-0 59/256" gap at the current width
+            /// <summary>Horizontal edge-to-edge gap between consecutive power panels, derived so panel
+            /// CENTER-TO-CENTER equals <see cref="PanelCenterToCenter"/> at the power-panel width. The per-node
+            /// spacing walk now measures c-c directly; this remains for the count-only aggregate keypad tails.
+            /// Re-measuring the family width keeps the c-c target automatically.</summary>
+            public const double NodeGap = PanelCenterToCenter - Panel.Width;   // ⇒ ~6'-0" gap at the current width
 
-            /// <summary>Target panel center-to-center spacing along a link: 10'-0".</summary>
-            public const double PanelCenterToCenter = 120.0 / 12.0;   // 10'-0"
+            /// <summary>Target node center-to-center spacing along a link: 12'-0" — the universal spacing floor.
+            /// <c>ControlOneLinePlanner</c> floors every gap to this and widens it only to clear a wide fan
+            /// (<c>c-c = max(PanelCenterToCenter, FanWidth + FanGapPad)</c>). A real job has plenty of horizontal
+            /// room, so a generous floor lets most gaps sit here untouched. Tunable in-Revit — raise it if
+            /// spacing still feels tight.</summary>
+            public const double PanelCenterToCenter = 144.0 / 12.0;   // 12'-0"
+
+            /// <summary>Clearance added to a fan's width when a wide fan drives a node gap past
+            /// <see cref="PanelCenterToCenter"/> — the breathing room between one node's fan text and the next
+            /// node's glyph. Mirrors <see cref="KeypadListColumnPadding"/>'s role between wrapped list columns.
+            /// (A plain-panel neighbor's 120V terminus square sits ~0'-2" further left than a fan glyph, so the
+            /// realized clearance to a panel is this minus ~2"; 1'-0" absorbs it.) Tunable in-Revit.</summary>
+            public const double FanGapPad = 12.0 / 12.0;   // 1'-0"
 
             /// <summary>Processor-column center X — the left rail; bays hang their panels here.</summary>
             public const double ProcessorColumnX = 0.0;
@@ -306,7 +318,7 @@ namespace TurboSuite.Zones.OneLine
             /// <summary><b>KNOB 1.</b> Head-column center to column-1 center. Wider than
             /// <see cref="PanelCenterToCenter"/> (the inter-panel spacing) so the fan of separate QS link lanes
             /// fits in the gap between the head and the first panel column.</summary>
-            public const double HeadColumnCenterToCenter = 180.0 / 12.0;   // 15'-0" (> the 10' inter-panel c-c)
+            public const double HeadColumnCenterToCenter = 180.0 / 12.0;   // 15'-0" (> the 12' inter-node c-c)
 
             /// <summary>Edge-to-edge head→column-1 gap the link-lane fan nests into (derived from
             /// <see cref="HeadColumnCenterToCenter"/> so re-measuring the panel width keeps the c-c target).</summary>
