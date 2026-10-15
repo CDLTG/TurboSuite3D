@@ -208,9 +208,9 @@ caret as a bottom-aligned `ControlRepeaterDetail` stamp (labeled with the job's 
 only what is drawn **above the caret**, never the link. The **per-keypad RF fan off each repeater is
 deferred**. `ClearConnect` / `PanelControlLink` /
 `DaliLoop` stay **benched** `ControlWireType` members, never rostered (panel links are QS; DALI/DMX are never
-drawn here). Line style follows Lutron — **dashed = RF, solid = wired** (solid `<Medium Lines>`, dashed `Wiring
-(CAT6)`; the cable type is carried by the circled number, so the style is free to mean wired-vs-RF), with
-`RF CONNECTION` / `WIRED CONNECTION` sample keys in the legend; the shade row reads **"SHADE WIRING BY OTHERS"**
+drawn here). Everything drawn is a WIRED run, so every segment is **solid** (solid `<Medium Lines>`); wireless is
+shown by the keypad **glyph**, not a dashed RF line, so the legend carries **no** `RF CONNECTION` / `WIRED
+CONNECTION` line-style sample keys — only the numbered cable rows. The shade row reads **"SHADE WIRING BY OTHERS"**
 (control context only). Head-sourced markers sit at `Layout.MarkerExitOffset` off the head edge — QS/wireless
 right, CAT6 left — while the shade-link marker stays on its motor stub. Legend title is the larger
 `AL_Annotation_6.75"` over 4.5" body rows.

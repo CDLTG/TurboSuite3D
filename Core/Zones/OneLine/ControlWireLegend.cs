@@ -137,12 +137,11 @@ namespace TurboSuite.Zones.OneLine
     public sealed class ControlWireLegendDrawing
     {
         public ControlWireLegendDrawing(ControlNote title, IReadOnlyList<ControlMarker> markers,
-            IReadOnlyList<ControlNote> notes, IReadOnlyList<ControlWireSegment> sampleLines)
+            IReadOnlyList<ControlNote> notes)
         {
             Title = title;
             Markers = markers;
             Notes = notes;
-            SampleLines = sampleLines;
         }
 
         /// <summary>The "WIRE LEGEND" title. Drawn separately (larger type) and centered over the row block by
@@ -152,14 +151,9 @@ namespace TurboSuite.Zones.OneLine
         /// <summary>The circled legend numbers, one per NUMBERED legend row (the wire-mark annotation family).</summary>
         public IReadOnlyList<ControlMarker> Markers { get; }
 
-        /// <summary>One label note per row — the numbered-cable labels AND the two line-style key labels ("RF
-        /// CONNECTION" / "WIRED CONNECTION"). The title is <see cref="Title"/>, not in here.</summary>
+        /// <summary>One label note per row — the numbered-cable labels only. The title is
+        /// <see cref="Title"/>, not in here.</summary>
         public IReadOnlyList<ControlNote> Notes { get; }
-
-        /// <summary>The unnumbered line-style KEY segments at the bottom of the legend (Lutron 609): a dashed
-        /// sample for "RF CONNECTION" and a solid sample for "WIRED CONNECTION". Drawn by the shim with the same
-        /// dashed/solid styles the one-line uses, so the key matches the sheet.</summary>
-        public IReadOnlyList<ControlWireSegment> SampleLines { get; }
 
         /// <summary>Deterministic owned-view name — a re-draw finds + wipes this one view (one per job).</summary>
         public string ViewName(string systemName) => $"{systemName} - Wire Legend";
@@ -206,23 +200,10 @@ namespace TurboSuite.Zones.OneLine
                 y -= ControlOneLineGeometry.Legend.RowPitch;
             }
 
-            // The two unnumbered line-style keys (Lutron 609): a dashed RF sample, then a solid WIRED sample.
-            // Below the numbered rows with an extra gap. The sample line is centered on the marker column.
-            var sampleLines = new List<ControlWireSegment>();
-            double half = ControlOneLineGeometry.Legend.SampleLineHalfLen;
-            void StyleKey(bool dashed, string label)
-            {
-                sampleLines.Add(new ControlWireSegment(new XY(markerX - half, y + symDy), new XY(markerX + half, y + symDy), dashed));
-                notes.Add(new ControlNote(new XY(labelX, y + labelNudge), label, ControlTextAlign.Left,
-                    textTypeName: ControlOneLineGeometry.LargeTextTypeName));   // 4.5" row body
-                y -= ControlOneLineGeometry.Legend.RowPitch;
-            }
-
-            y -= ControlOneLineGeometry.Legend.StyleKeyGap - ControlOneLineGeometry.Legend.RowPitch;
-            StyleKey(dashed: true, "RF CONNECTION");
-            StyleKey(dashed: false, "WIRED CONNECTION");
-
-            return new ControlWireLegendDrawing(title, markers, notes, sampleLines);
+            // No line-style key is drawn: the whole one-line is solid, and wireless is shown by a glyph (the
+            // repeater keypad fan), not a dashed "RF" line — so a dashed-RF / solid-WIRED key would describe a
+            // convention the sheet no longer uses. Only the numbered cable rows remain.
+            return new ControlWireLegendDrawing(title, markers, notes);
         }
     }
 

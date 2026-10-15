@@ -151,7 +151,7 @@ namespace TurboSuite.Tests.Zones
         // ── Legend layout planner ─────────────────────────────────────────────────────────────────────
 
         [Fact]
-        public void LegendPlanner_EmitsTitleMarkersAndTheTwoLineStyleKeys()
+        public void LegendPlanner_EmitsTitleAndNumberedCableRowsOnly()
         {
             var legend = ControlWireLegend.ForPack(
                 Pack(Group(Qs(U("1-A", LinkCategory.Modules, 8), ShadeUnit("1-D", 10)), Cca())));
@@ -159,7 +159,7 @@ namespace TurboSuite.Tests.Zones
 
             Assert.Equal("WIRE LEGEND", drawing.Title.Text);
 
-            // One marker per NUMBERED cable row (no markers for the line-style keys)...
+            // One marker per NUMBERED cable row.
             Assert.Equal(legend.Entries.Count, drawing.Markers.Count);
             for (int i = 0; i < legend.Entries.Count; i++)
             {
@@ -167,16 +167,12 @@ namespace TurboSuite.Tests.Zones
                 Assert.Equal(legend.Entries[i].Type, drawing.Markers[i].Type);
             }
 
-            // ...and one note per cable row PLUS the two unnumbered line-style key labels.
-            Assert.Equal(legend.Entries.Count + 2, drawing.Notes.Count);
+            // Exactly one note per cable row — the RF/WIRED line-style keys have been removed, so there are
+            // no extra label rows and no "RF CONNECTION" / "WIRED CONNECTION" entries.
+            Assert.Equal(legend.Entries.Count, drawing.Notes.Count);
             Assert.All(drawing.Notes, n => Assert.False(string.IsNullOrWhiteSpace(n.Text)));
-            Assert.Contains(drawing.Notes, n => n.Text == "RF CONNECTION");
-            Assert.Contains(drawing.Notes, n => n.Text == "WIRED CONNECTION");
-
-            // Two sample-line keys: exactly one dashed (RF) and one solid (WIRED).
-            Assert.Equal(2, drawing.SampleLines.Count);
-            Assert.Single(drawing.SampleLines, s => s.Dashed);
-            Assert.Single(drawing.SampleLines, s => !s.Dashed);
+            Assert.DoesNotContain(drawing.Notes, n => n.Text == "RF CONNECTION");
+            Assert.DoesNotContain(drawing.Notes, n => n.Text == "WIRED CONNECTION");
         }
 
         // ── Integration: the planner stamps the legend's numbers onto the drawn page markers ───────────

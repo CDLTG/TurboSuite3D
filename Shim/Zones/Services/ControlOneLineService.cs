@@ -141,9 +141,8 @@ namespace TurboSuite.Zones.Services
                     if (marker == null)
                         result.Warnings.Add($"No {Roles.Label(Roles.ControlWireMarkAnnotation)} loaded — numbers skipped.");
                     var textType = ResolveTextType();
-                    // Same dashed (RF) / solid (wired) styles the one-line uses, so the RF/WIRED sample keys match
-                    // the sheet; the border rides the solid style. Solid = the bracketed "<Medium Lines>".
-                    var dashed = ResolveLineStyle(new[] { "Wiring (CAT6)", "Dash", "Dashed", "<Hidden>", "Hidden" });
+                    // The legend's border rides the solid style. Solid = the bracketed "<Medium Lines>". No dashed
+                    // style here any more — the RF/WIRED line-style key has been removed (the sheet is all solid).
                     var solid = ResolveLineStyle(new[] { "<Medium Lines>", "<Thin Lines>", "<Wide Lines>", "Lighting Fixture", "<Solid>", "Solid" });
 
                     var view = FindOrCreateViewByIdOrName(drawing.ViewName(systemName), existingViewId, result.Warnings, out bool created);
@@ -155,7 +154,6 @@ namespace TurboSuite.Zones.Services
 
                     DrawNotes(view, drawing.Notes, textType, result.Warnings);
                     result.Rows += DrawMarkers(view, drawing.Markers, marker);
-                    DrawWires(view, drawing.SampleLines, dashed, solid);   // the RF/WIRED line-style key samples
 
                     // Center the title over the rendered row block, then enclose everything in a border.
                     _doc.Regenerate();

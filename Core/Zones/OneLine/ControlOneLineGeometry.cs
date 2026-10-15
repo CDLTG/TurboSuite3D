@@ -453,18 +453,8 @@ namespace TurboSuite.Zones.OneLine
             /// <summary>Drop from the "WIRE LEGEND" title down to the first row.</summary>
             public const double TitleGap = 12.0 / 12.0; // 1'-0"
 
-            /// <summary>Drop below the last NUMBERED row to the first line-style (RF / WIRED) key, to set the
-            /// unnumbered style keys apart from the numbered cable rows. Defined as 1.5× <see cref="RowPitch"/>
-            /// so this larger gap scales automatically when the row pitch is retuned.</summary>
-            public const double StyleKeyGap = RowPitch * 1.5;   // 1.5 × 9" ⇒ 1'-1 1/2"
-
-            /// <summary>Half-length of an RF / WIRED sample-line key (a short segment centered on the marker
-            /// column, where the circled numbers sit). The whole key line is 2× this; clear of the label at
-            /// <see cref="LabelX"/>.</summary>
-            public const double SampleLineHalfLen = 2.25 / 12.0;   // 0'-2 1/4" half ⇒ 0'-4 1/2" line
-
-            /// <summary>Vertical offset applied to the SYMBOL column only (circled numbers + sample-line keys),
-            /// NOT the text, to line the glyphs up with their labels. Negative = down. Tuned in-Revit.</summary>
+            /// <summary>Vertical offset applied to the SYMBOL column only (the circled numbers), NOT the text,
+            /// to line the glyphs up with their labels. Negative = down. Tuned in-Revit.</summary>
             public const double SymbolDy = -(1.0 + 5.0 / 16.0) / 12.0;   // 0'-1 5/16" DOWN (1 1/2" − 3/16")
 
             /// <summary>Row-label paper text height — the firm's <see cref="LargeTextTypeName"/> (4.5" model @
