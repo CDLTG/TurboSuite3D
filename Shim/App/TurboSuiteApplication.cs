@@ -89,15 +89,15 @@ public class TurboSuiteApplication : IExternalApplication
                 "Select a keypad (or run with one already selected), then snap to a door corner. The keypad slides along its wall to exactly 5\" from the corner, on the side it's already on. Works for hosted (3D) and unhosted (2D) families.",
                 "Blank");
 
-            // ── Commands panel ──
-            CreateButton(commandsPanel, assemblyPath,
+            CreatePulldownItem(scriptsPulldown, assemblyPath,
                 "TurboCompact",
-                "   Compact   ",
+                "Compact Family",
                 "TurboSuite.Compact.CompactCommand",
                 "Suggested shortcut: Ctrl+Shft+S\nClean and compact the active family",
                 "Removes unused materials from the active family document and saves with the compact option to reduce file size.",
-                "TurboCompact");
+                "Blank");
 
+            // ── Commands panel ──
             CreateButton(commandsPanel, assemblyPath,
                 "TurboSnoop",
                 "    Snoop    ",

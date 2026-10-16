@@ -43,12 +43,12 @@ The "TurboSuite" ribbon tab has four panels:
 | Script | Shortcut | Description |
 |--------|----------|-------------|
 | [TurboNudge](Shim/Nudge/README.md) | `TN` | Slide a selected keypad along its wall to exactly 5" from a picked door corner — replaces the manual place-then-dimension flow (3D and 2D) |
+| [TurboCompact](Shim/Compact/README.md) | `Ctrl+Shift+S` | Remove unused materials and compact-save the active family |
 
 ### Commands Panel
 
 | Button | Shortcut | Description |
 |--------|----------|-------------|
-| [TurboCompact](Shim/Compact/README.md) | `Ctrl+Shift+S` | Remove unused materials and compact-save the active family |
 | [TurboSnoop](Shim/Snoop/README.md) | `TS` | Selection-aware: snoop your own element's host (churn/orphan risk), or pick a linked family to list the Visibility/Graphics checkboxes it draws under |
 | [TurboTag](Shim/Tag/README.md) | `TT` | Batch-place type tags on selected lighting fixtures |
 | [TurboWire](Shim/Wire/README.md) | `WW` | Create arc/spline wires between fixtures |
