@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using TurboSuite.Number.ViewModels;
 
 namespace TurboSuite.Number.Views
@@ -13,6 +14,12 @@ namespace TurboSuite.Number.Views
         private int _dragFromIndex = -1;
         private Point _dragStartPoint;
         private ListBoxItem _lastHighlighted;
+
+        // Auto-scroll while dragging a room near the top/bottom edge of the sidebar list, so a
+        // room can be dragged across a list taller than the viewport (e.g. #70 → #5) in one gesture.
+        private ScrollViewer _dragScrollViewer;
+        private DispatcherTimer _dragScrollTimer;
+        private int _dragScrollDirection; // -1 = up, +1 = down, 0 = none
 
         public TurboNumberWindow()
         {
@@ -30,6 +37,15 @@ namespace TurboSuite.Number.Views
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
+        }
+
+        private void ClearSearchButton_Click(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as NumberMainViewModel;
+            if (vm?.RoomOrder == null) return;
+            vm.RoomOrder.SearchText = string.Empty;
+            // Return focus to the box so the next room name can be typed immediately.
+            RoomSearchBox.Focus();
         }
 
         private void CircuitDataGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -79,7 +95,9 @@ namespace TurboSuite.Number.Views
 
             var listBox = (ListBox)sender;
             var data = new DataObject("RoomDragIndex", _dragFromIndex);
-            DragDrop.DoDragDrop(listBox, data, DragDropEffects.Move);
+            StartDragScroll(listBox);
+            DragDrop.DoDragDrop(listBox, data, DragDropEffects.Move); // blocks until drop completes
+            StopDragScroll();
             _dragFromIndex = -1;
             ClearHighlight();
         }
@@ -88,6 +106,8 @@ namespace TurboSuite.Number.Views
         {
             if (!e.Data.GetDataPresent("RoomDragIndex"))
                 return;
+
+            UpdateDragScroll((ListBox)sender, e.GetPosition((ListBox)sender));
 
             var target = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);
             if (target == _lastHighlighted)
@@ -140,6 +160,52 @@ namespace TurboSuite.Number.Views
             vm.RoomOrder.MoveRoom(fromIndex, toIndex);
         }
 
+        // ── Drag auto-scroll ───────────────────────────────────────────────────────────────────────
+        // DragDrop.DoDragDrop runs a nested message loop that pumps the Dispatcher, so a DispatcherTimer
+        // keeps ticking during the drag. DragOver sets the direction from the cursor's edge proximity;
+        // the timer scrolls one line per tick while the cursor rests near an edge (held still or moving).
+
+        private void StartDragScroll(ListBox listBox)
+        {
+            _dragScrollViewer = FindDescendant<ScrollViewer>(listBox);
+            _dragScrollDirection = 0;
+            if (_dragScrollViewer == null) return;
+            if (_dragScrollTimer == null)
+            {
+                _dragScrollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+                _dragScrollTimer.Tick += DragScrollTick;
+            }
+            _dragScrollTimer.Start();
+        }
+
+        private void StopDragScroll()
+        {
+            _dragScrollTimer?.Stop();
+            _dragScrollDirection = 0;
+            _dragScrollViewer = null;
+        }
+
+        private void UpdateDragScroll(ListBox listBox, Point pos)
+        {
+            if (_dragScrollViewer == null) return;
+            const double edge = 28;
+            if (pos.Y < edge)
+                _dragScrollDirection = -1;
+            else if (pos.Y > listBox.ActualHeight - edge)
+                _dragScrollDirection = 1;
+            else
+                _dragScrollDirection = 0;
+        }
+
+        private void DragScrollTick(object sender, EventArgs e)
+        {
+            if (_dragScrollViewer == null || _dragScrollDirection == 0) return;
+            if (_dragScrollDirection < 0)
+                _dragScrollViewer.LineUp();
+            else
+                _dragScrollViewer.LineDown();
+        }
+
         private void ClearHighlight()
         {
             if (_lastHighlighted != null)
@@ -157,6 +223,22 @@ namespace TurboSuite.Number.Views
                 if (current is T match)
                     return match;
                 current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        private static T FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            if (root == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T match)
+                    return match;
+                var result = FindDescendant<T>(child);
+                if (result != null)
+                    return result;
             }
             return null;
         }

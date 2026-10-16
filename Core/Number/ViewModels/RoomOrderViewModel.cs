@@ -293,9 +293,15 @@ namespace TurboSuite.Number.ViewModels
             set
             {
                 if (SetProperty(ref _searchText, value ?? string.Empty))
+                {
+                    OnPropertyChanged(nameof(HasSearchText));
                     CollectionViewSource.GetDefaultView(RoomOrder).Refresh();
+                }
             }
         }
+
+        /// <summary>Whether the filter box holds any text — gates the inline clear ("✕") button.</summary>
+        public bool HasSearchText => !string.IsNullOrEmpty(_searchText);
 
         public bool IsReordering
         {

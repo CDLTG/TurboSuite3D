@@ -46,12 +46,22 @@
                     <TextBlock DockPanel.Dock="Top" Text="Room Order" FontWeight="SemiBold" Margin="8,8,8,4"
                                Foreground="{StaticResource TextPrimaryBrush}"/>
 
-                    <!-- Live filter on the room list — only shown while reordering -->
-                    <TextBox DockPanel.Dock="Top" Margin="8,0,8,6" Height="24"
-                             VerticalContentAlignment="Center"
-                             Visibility="{Binding RoomOrder.IsReordering, Converter={StaticResource BoolToVisibility}}"
-                             Text="{Binding RoomOrder.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
-                             ToolTip="Filter rooms by name"/>
+                    <!-- Live filter on the room list — only shown while reordering.
+                         Inline clear ("✕") button lets the user wipe the filter and keep typing
+                         the next room name without reaching for the mouse/keyboard. -->
+                    <Grid DockPanel.Dock="Top" Margin="8,0,8,6"
+                          Visibility="{Binding RoomOrder.IsReordering, Converter={StaticResource BoolToVisibility}}">
+                        <TextBox x:Name="RoomSearchBox" Height="24"
+                                 VerticalContentAlignment="Center" Padding="0,0,20,0"
+                                 Text="{Binding RoomOrder.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                 ToolTip="Filter rooms by name"/>
+                        <Button Width="18" Height="18" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Margin="0,0,3,0" Padding="0" Content="&#x2715;" FontSize="10"
+                                Foreground="#888888" Cursor="Hand"
+                                Style="{x:Null}" Background="Transparent" BorderThickness="0"
+                                Click="ClearSearchButton_Click" ToolTip="Clear filter"
+                                Visibility="{Binding RoomOrder.HasSearchText, Converter={StaticResource BoolToVisibility}}"/>
+                    </Grid>
 
                     <!-- Bottom buttons: Reset + Reorder (normal), Apply + Cancel (reorder mode) -->
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="4,4"
