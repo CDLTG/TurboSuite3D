@@ -77,6 +77,41 @@ physical tape segmentation is a TurboDriver job.
 
 Requires at least one loaded Lighting Device family type with valid `Power` and `Sub-Driver Power` parameters.
 
+### Driver Match tab
+
+A read-only diagnostic **tab in the TurboRPS window** for the recurring annoyance of building a driver
+family that TurboDriver then refuses to pair with a fixture. It's the design-time half of the same
+driver-correctness concern TurboRPS owns: the **Circuits** tab answers "are my *placed* drivers still
+right?", the **Driver Match** tab answers "*can* this driver family serve this fixture family at all?".
+Pick an **RPS fixture type** and a **driver type** from two dropdowns (the project's loaded types) and it
+shows, field by field, *why* they do or don't match — no selection or placement needed, so it works on a
+family you just built and reloaded. The window opens even with no RPS circuits (so the tab is usable mid
+family-build); it only refuses when *both* tabs would be empty.
+
+Composed, not merged: a thin `TurboRpsShellViewModel` exposes the unchanged `RpsMainViewModel`
+(`Circuits`) and `DriverMatchViewModel` (`Match`) as the two tabs' DataContexts — the dashboard markup
+binds to `RpsMainViewModel` exactly as before — and both share the one `RevitWorkQueue` the command
+creates. The tab's UI is `Shim/Driver/Views/DriverMatchView.xaml`.
+
+- **Dropdowns.** Drivers = Lighting Devices that are driver-shaped: no `TurboSuite Role` (drivers are
+  roleless) or the `DriverPlaceholder` (TBD), and **not** a DMX decoder (`DMX Channels > 0`). Keypads,
+  switches, receptacles, shade motors, hybrid repeaters (all carry an explicit non-driver role) and
+  decoders drop out — but an *incomplete* real driver stays listed (it's roleless) so the grid can show
+  why it isn't valid. Fixtures = Lighting Fixtures with `Remote Power Supply` = yes (the only ones
+  TurboDriver sizes a driver for); a fixture missing from the list simply hasn't that box checked.
+- **The checks mirror the real matcher.** Hard gates (a failure blocks the pair): **valid driver**
+  (`Power` is a positive whole multiple of `Sub-Driver Power` — shared with the candidate-pool collector
+  via `Core/Driver/Services/DriverValidity.cs`), **Voltage**, **Dimming Protocol** (both: driver's must be
+  non-blank and equal the fixture's, case-insensitive — blank is **not** a wildcard). Soft: **Manufacturer**
+  (a mismatch still matches, just loses the ranking). **Wattage** is info-only — a linear fixture carries
+  no type-level wattage, so it never gates. The **TBD** placeholder is the one wildcard: it matches
+  anything. `Core/Driver/Services/DriverMatchDiagnostic.cs` is the pure comparison (oracle-tested); it
+  must stay in **lockstep** with `DriverSelectionService.EvaluateCandidate` — add a hard-gate check here
+  whenever a new hard filter is added there.
+- **Modeless, zero writes.** Type lists are collected once on open (and on **Reload**, for the
+  edit-reload-recheck loop) through the shared `RevitWorkQueue`; every dropdown change recomputes purely
+  in-memory, so the comparison never touches the document.
+
 ## Dependencies
 
 ### Required Tag Families

@@ -31,8 +31,10 @@ namespace TurboSuite.Driver.Views
         // SelectionUnit is full-row here (no in-cell editing), so SelectedItem binds cleanly.
         private void CircuitsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // The window's DataContext is now the shell VM; the grid inherits the Circuits tab's
+            // DataContext (the RpsMainViewModel), so read it off the grid, not the window.
             if (sender is DataGrid grid
-                && DataContext is RpsMainViewModel vm
+                && grid.DataContext is RpsMainViewModel vm
                 && grid.SelectedItem is RpsCircuitRowViewModel row)
             {
                 vm.SelectedRow = row;

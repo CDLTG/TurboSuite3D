@@ -50,25 +50,36 @@ namespace TurboSuite.Driver
                 }
 
                 var circuits = RpsCircuitDataBuilder.Build(doc);
+                var matchCatalog = DriverMatchOperations.Build(doc);
 
-                if (circuits.Count == 0)
+                // Bail only when BOTH tabs would be empty — no RPS circuits AND no driver/fixture types
+                // to compare. With no circuits but types present (e.g. mid family-build), the window still
+                // opens so the Driver Match tab is usable.
+                if (circuits.Count == 0 && matchCatalog.Drivers.Count == 0 && matchCatalog.Fixtures.Count == 0)
                 {
                     TaskDialog.Show("TurboRPS",
-                        "No electrical circuits found with Lighting Fixtures that have Remote Power Supply enabled.\n\n" +
-                        "Please ensure:\n" +
-                        "• Electrical circuits exist in the project\n" +
-                        "• Lighting Fixtures are connected to circuits\n" +
-                        "• At least one Lighting Fixture has the 'Remote Power Supply' type parameter checked");
+                        "Nothing to show.\n\n" +
+                        "• No electrical circuits with Remote Power Supply fixtures (Circuits tab), and\n" +
+                        "• No driver types or Remote Power Supply fixture types to compare (Driver Match tab).\n\n" +
+                        "Ensure Lighting Fixtures have the 'Remote Power Supply' type parameter checked and that " +
+                        "driver (Lighting Device) types are loaded.");
                     return Result.Cancelled;
                 }
 
                 var workQueue = new RevitWorkQueue("TurboRPS Error", "TurboRPS Work Queue");
                 var operations = new RpsRevitOperations(uidoc);
-                var viewModel = new RpsMainViewModel(circuits, operations, workQueue);
+                var circuitsViewModel = new RpsMainViewModel(circuits, operations, workQueue);
+
+                // "Driver Match" tab — design-time driver↔fixture type comparison, sharing the one
+                // work queue. Catalog collected above (API context); Reload re-collects via the queue.
+                var matchOps = new DriverMatchOperations(uidoc);
+                var matchViewModel = new DriverMatchViewModel(matchCatalog, matchOps, workQueue);
+
+                var shellViewModel = new TurboRpsShellViewModel(circuitsViewModel, matchViewModel);
 
                 var window = new TurboRPSWindow
                 {
-                    DataContext = viewModel
+                    DataContext = shellViewModel
                 };
 
                 var revitHandle = commandData.Application.MainWindowHandle;

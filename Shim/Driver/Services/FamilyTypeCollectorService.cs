@@ -62,17 +62,17 @@ namespace TurboSuite.Driver.Services
                 // from the driver pool so TurboRPS leaves DMX sizing to TurboDMX. See TurboRPS-2.
                 bool isDecoder = ReadDmxChannels(symbol) > 0;
 
+                // Validity (Power is a positive whole multiple of Sub-Driver Power) is computed by the
+                // shared Core DriverValidity so the candidate pool and the match-check diagnostic can
+                // never disagree. The decoder guard stays here — it's a category decision, not wattage.
                 bool isValid = false;
                 int subCount = 0;
 
-                if (!isDecoder && power > 0 && subPower > 0)
+                if (!isDecoder)
                 {
-                    double remainder = power % subPower;
-                    if (Math.Abs(remainder) < 0.01)
-                    {
-                        subCount = (int)Math.Round(power / subPower);
-                        isValid = subCount > 0;
-                    }
+                    var validity = DriverValidity.Evaluate(power, subPower);
+                    isValid = validity.IsValid;
+                    subCount = validity.SubDriverCount;
                 }
 
                 candidates.Add(new DriverCandidateInfo

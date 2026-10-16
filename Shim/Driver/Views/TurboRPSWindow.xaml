@@ -64,7 +64,6 @@
     <Grid Background="{StaticResource ContentBgBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -76,8 +75,22 @@
                        VerticalAlignment="Center"/>
         </Border>
 
-        <!-- Toolbar -->
-        <Border Grid.Row="1" Background="#F3F3F3"
+        <!-- Two tabs: the deploy-time circuit staleness dashboard, and the design-time
+             driver↔fixture match check. Each tab's DataContext is its own child VM, so the
+             dashboard markup below binds to RpsMainViewModel exactly as before. -->
+        <TabControl Grid.Row="1" Margin="8,8,8,8">
+
+        <!-- ───────── Circuits tab: the staleness dashboard ───────── -->
+        <TabItem Header="  Circuits  " DataContext="{Binding Circuits}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Toolbar -->
+                <Border Grid.Row="0" Background="White"
                 BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,0,0,1"
                 Padding="8,6">
             <DockPanel>
@@ -107,7 +120,7 @@
         </Border>
 
         <!-- Body: grid (left) + detail pane (right) -->
-        <Grid Grid.Row="2" Margin="8,6,8,4">
+        <Grid Grid.Row="1" Margin="8,6,8,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="300"/>
@@ -223,7 +236,7 @@
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto" DataContext="{Binding SelectedRow}">
                         <StackPanel Margin="10"
-                                    Visibility="{Binding DataContext.SelectedRow, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource NotNullToVisibility}}">
+                                    Visibility="{Binding DataContext.SelectedRow, RelativeSource={RelativeSource AncestorType=TabItem}, Converter={StaticResource NotNullToVisibility}}">
                             <TextBlock Text="Recommended" FontWeight="Bold"
                                        Foreground="{StaticResource HeaderBlueBrush}"/>
                             <TextBlock Text="{Binding RecommendedHeader}" FontWeight="SemiBold"
@@ -289,20 +302,37 @@
             </Border>
         </Grid>
 
-        <!-- Footer -->
-        <Border Grid.Row="3" Background="{StaticResource FooterBgBrush}"
+                <!-- Dashboard footer: Select in Project + live counts -->
+                <Border Grid.Row="2" Background="White"
+                        BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0"
+                        Padding="8,6">
+                    <DockPanel>
+                        <Button Content="Select in Project"
+                                Command="{Binding SelectInProjectCommand}"
+                                Style="{StaticResource RevitButtonStyle}" Height="28"
+                                DockPanel.Dock="Left" Margin="0,0,12,0"/>
+                        <TextBlock Text="{Binding CountsSummary}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </TabItem>
+
+        <!-- ───────── Driver Match tab: design-time driver↔fixture comparison ───────── -->
+        <TabItem Header="  Driver Match  " DataContext="{Binding Match}">
+            <local:DriverMatchView/>
+        </TabItem>
+
+        </TabControl>
+
+        <!-- Window footer -->
+        <Border Grid.Row="2" Background="{StaticResource FooterBgBrush}"
                 BorderBrush="{StaticResource SeparatorBrush}" BorderThickness="0,1,0,0"
                 Padding="8,6">
-            <DockPanel>
+            <DockPanel LastChildFill="False">
                 <Button Content="Close" Click="CloseButton_Click"
                         Style="{StaticResource RevitButtonStyle}" Height="28" Width="80"
                         DockPanel.Dock="Right"/>
-                <Button Content="Select in Project"
-                        Command="{Binding SelectInProjectCommand}"
-                        Style="{StaticResource RevitButtonStyle}" Height="28"
-                        DockPanel.Dock="Left" Margin="0,0,12,0"/>
-                <TextBlock Text="{Binding CountsSummary}" VerticalAlignment="Center"
-                           Foreground="{StaticResource TextSecondaryBrush}"/>
             </DockPanel>
         </Border>
     </Grid>

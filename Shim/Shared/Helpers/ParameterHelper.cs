@@ -621,9 +621,15 @@ namespace TurboSuite.Shared.Helpers
         /// Check if a Lighting Fixture has the "Remote Power Supply" type parameter checked (Yes)
         /// </summary>
         public static bool HasRemotePowerSupply(FamilyInstance element)
+            => HasRemotePowerSupply(element?.Symbol);
+
+        /// <summary>
+        /// Check if a Lighting Fixture type has the "Remote Power Supply" type parameter checked (Yes).
+        /// </summary>
+        public static bool HasRemotePowerSupply(FamilySymbol symbol)
         {
-            if (element?.Symbol == null) return false;
-            Parameter param = element.Symbol.LookupParameter(ParameterNames.RemotePowerSupply);
+            if (symbol == null) return false;
+            Parameter param = symbol.LookupParameter(ParameterNames.RemotePowerSupply);
             return param != null && param.HasValue && param.AsInteger() == 1;
         }
 
