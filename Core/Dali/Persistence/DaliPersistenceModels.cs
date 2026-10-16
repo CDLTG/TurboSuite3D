@@ -119,5 +119,23 @@ namespace TurboSuite.Dali.Persistence
         /// Placement is display-only — a loop's fixtures are all within one zone, but DALI circuits are
         /// created unassigned (like DMX), so the location can't be derived and the designer must pick it.</summary>
         public int AssignedLocation { get; set; }
+
+        /// <summary>Per-zone manual sort overrides for this loop's zones (<b>only Manual zones are
+        /// serialized</b> — an Auto zone persists nothing and tolerant-reads to the Auto default). Additive loop
+        /// data: it rides the existing loop <c>Save</c> path and defaults correctly when absent, so it needs
+        /// <b>no <see cref="DaliModuleState.PayloadVersion"/> bump</b> — a bump would trip
+        /// <see cref="DaliPayload.DiscardStaleSnapshot"/> and wipe every existing lock baseline on upgrade.</summary>
+        public List<DaliZoneSortDto> ZoneSorts { get; set; } = new List<DaliZoneSortDto>();
+    }
+
+    /// <summary>One Control Zone's manual circuit order within its loop — persisted only while the designer has
+    /// hand-ordered (dragged) that zone. <see cref="CircuitKeys"/> are circuit UniqueIds, stable across a driver
+    /// redeploy (the circuit is not recreated); a since-deleted/recreated circuit falls to the Auto-appended
+    /// tail rather than vanishing. An Auto zone has no DTO at all.</summary>
+    public sealed class DaliZoneSortDto
+    {
+        public string ZoneValue { get; set; } = "";
+        public bool Manual { get; set; }
+        public List<string> CircuitKeys { get; set; } = new List<string>();
     }
 }

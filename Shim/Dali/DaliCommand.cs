@@ -66,7 +66,8 @@ namespace TurboSuite.Dali
                 var workQueue = new RevitWorkQueue("TurboDALI Error", "TurboDALI Work Queue");
                 var store = new DaliLoopStore(doc);   // TurboDALI is the sole writer of the DALI schema
 
-                var tab = new DaliTabViewModel(inputs.Zones, inputs.PanelLocations, inputs.Saved, workQueue, store);
+                var tab = new DaliTabViewModel(inputs.Zones, inputs.PanelLocations, inputs.Saved, workQueue, store,
+                                               inputs.RoomOrder);
 
                 // Addressing seams: read the model, write the "DALI Address" param, color the
                 // active-view zones — all routed through the work queue by the ViewModel.

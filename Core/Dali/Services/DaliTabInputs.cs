@@ -14,15 +14,23 @@ namespace TurboSuite.Dali.Services
         public DaliTabInputs(
             IReadOnlyList<DaliZoneItemViewModel> zones,
             IReadOnlyList<int> panelLocations,
-            DaliModuleState saved)
+            DaliModuleState saved,
+            IReadOnlyList<string>? roomOrder = null)
         {
             Zones = zones;
             PanelLocations = panelLocations;
             Saved = saved;
+            RoomOrder = roomOrder ?? System.Array.Empty<string>();
         }
 
+        /// <summary>The Control-Zone pool, each VM pre-seeded with its circuit sort (<c>DaliCircuitSeed</c>s)
+        /// so the tab can order + display circuits without a second model read.</summary>
         public IReadOnlyList<DaliZoneItemViewModel> Zones { get; }
         public IReadOnlyList<int> PanelLocations { get; }
         public DaliModuleState Saved { get; }
+
+        /// <summary>The project-wide room order (TurboNumber's <c>RoomOrderStorageService</c>), the Auto sort's
+        /// outer key. Empty when the job has none ⇒ pure spatial, unchanged from the pre-feature behavior.</summary>
+        public IReadOnlyList<string> RoomOrder { get; }
     }
 }

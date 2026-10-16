@@ -120,6 +120,7 @@ namespace TurboSuite.Dali.ViewModels
             var loops = BuildLoopInputs();
             var baseline = _snapshot;
             bool locked = IsLocked;
+            var roomOrder = DaliTab.RoomOrder;   // cached from the last (re)seed — same order the tab displays
 
             SetBusy(true);
             StatusText = "Reading circuits…";
@@ -130,7 +131,7 @@ namespace TurboSuite.Dali.ViewModels
                     var snapshot = _reader.Read();
                     // Lock-aware: unlocked ⇒ fresh (zone-block → NW-seeded walk); locked ⇒ pin to the baseline
                     // and only append past the loop high-water, flagging moved/retired issued addresses.
-                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, locked);
+                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, locked, roomOrder);
                     string writeStatus = _writer.Write(addressing.TextByUnit);
                     return (object)new WriteResult(addressing, writeStatus, snapshot.UncircuitedDaliCount,
                                                    snapshot.Warnings);
@@ -155,11 +156,24 @@ namespace TurboSuite.Dali.ViewModels
         }
 
         /// <summary>Declared loops, live from the tab — <c>LoopId</c> is the durable L# anchor, zones in
-        /// declared order (the outer key of the canonical load ordering).</summary>
+        /// declared order (the outer key of the canonical load ordering), each loop carrying its Manual zone
+        /// sorts (Auto zones omitted — the reconciler defaults them).</summary>
         private List<DaliLoopInput> BuildLoopInputs() =>
             DaliTab.Loops
-                .Select(l => new DaliLoopInput(l.LoopId, l.Name, l.Zones.Select(z => z.ZoneName).ToList()))
+                .Select(l => new DaliLoopInput(
+                    l.LoopId, l.Name,
+                    l.Zones.Select(z => z.ZoneName).ToList(),
+                    BuildZoneSorts(l)))
                 .ToList();
+
+        private static IReadOnlyDictionary<string, DaliZoneSort> BuildZoneSorts(DaliLoopRowViewModel loop)
+        {
+            var map = new Dictionary<string, DaliZoneSort>(StringComparer.OrdinalIgnoreCase);
+            foreach (var z in loop.Zones)
+                if (z.IsManual)
+                    map[z.ZoneName] = new DaliZoneSort(true, z.CurrentOrder.ToList());
+            return map;
+        }
 
         private void ShowReviews(DaliAddressing addressing)
         {
@@ -197,6 +211,7 @@ namespace TurboSuite.Dali.ViewModels
             var loops = BuildLoopInputs();
             var baseline = _snapshot;
             bool wasLocked = IsLocked;
+            var roomOrder = DaliTab.RoomOrder;
 
             SetBusy(true);
             StatusText = "Locking numbering…";
@@ -207,7 +222,7 @@ namespace TurboSuite.Dali.ViewModels
                     var snapshot = _reader.Read();
                     // Reconcile against the current state (fresh on first lock, pinned on re-lock so numbers
                     // don't move), write it, then freeze exactly what was written as the new baseline.
-                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, wasLocked);
+                    var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, wasLocked, roomOrder);
                     string writeStatus = _writer.Write(addressing.TextByUnit);
                     var captured = DaliSnapshotBuilder.Capture(addressing, "Locked");
                     _store.SaveSnapshot(captured);
@@ -281,7 +296,7 @@ namespace TurboSuite.Dali.ViewModels
                 result =>
                 {
                     var inputs = (DaliTabInputs)result;
-                    DaliTab.Reseed(inputs.Zones, inputs.PanelLocations, inputs.Saved);
+                    DaliTab.Reseed(inputs.Zones, inputs.PanelLocations, inputs.Saved, inputs.RoomOrder);
                     // Re-sync the lock state from the fresh read — another session (or a re-open) may have
                     // locked/unlocked since this window opened.
                     _snapshot = inputs.Saved?.Snapshot;

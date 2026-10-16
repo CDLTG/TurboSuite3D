@@ -28,5 +28,23 @@ namespace TurboSuite.Dali.Input
 
             return 0;
         }
+
+        /// <summary>The Switch ID with its ordinal suffix stripped — the <b>base</b> for a row label. There is
+        /// no existing public string-stripper (<c>DeploymentExecutor.StripSwitchIdSuffix</c> is private), so this
+        /// is the Core twin, applying the identical rule to <see cref="FromSwitchId"/>: a trailing lowercase
+        /// letter is the suffix only when the char before it is not itself lowercase. Returns the input verbatim
+        /// when there is no strippable suffix.</summary>
+        public static string BaseOf(string? switchId)
+        {
+            if (string.IsNullOrEmpty(switchId) || switchId!.Length < 2) return switchId ?? "";
+
+            char last = switchId[switchId.Length - 1];
+            char secondLast = switchId[switchId.Length - 2];
+
+            if (last >= 'a' && last <= 'z' && !(secondLast >= 'a' && secondLast <= 'z'))
+                return switchId.Substring(0, switchId.Length - 1);
+
+            return switchId;
+        }
     }
 }

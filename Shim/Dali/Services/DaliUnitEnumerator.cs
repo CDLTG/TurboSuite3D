@@ -8,6 +8,7 @@ using TurboSuite.Dali.Input;
 using TurboSuite.Driver.Services;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Dali.Services
 {
@@ -77,6 +78,11 @@ namespace TurboSuite.Dali.Services
             var validDriverSymbolIds = GetValidDriverSymbolIds(doc);
             var circuited = new HashSet<ElementId>();
 
+            // Resolve each circuit's room once (the containing Space's ROOM_NAME — the name space the project
+            // Room Order is keyed in), for the Auto within-zone sort. No region fallback: a 2D/no-space job
+            // resolves "" ⇒ unranked ⇒ the pre-feature spatial order.
+            var spaceCache = new SpaceRoomFinderService.SpaceLookupCache(doc);
+
             var circuits = new FilteredElementCollector(doc)
                 .OfClass(typeof(ElectricalSystem))
                 .OfCategory(BuiltInCategory.OST_ElectricalCircuit)
@@ -118,9 +124,12 @@ namespace TurboSuite.Dali.Services
                     ? new DaliPoint(pts.Average(p => p.X), pts.Average(p => p.Y))
                     : (DaliPoint?)null;
                 string circuitKey = circuit.UniqueId;
+                string circuitRoom = ResolveCircuitRoom(spaceCache, daliFixtures, centroid);
+                string loadName = ParameterHelper.GetLoadName(circuit) ?? "";
 
                 if (drivers.Count > 0)
-                    AddDriverUnits(entries, warnings, drivers, circuitKey, circuitZone, centroid);
+                    AddDriverUnits(entries, warnings, drivers, circuitKey, circuitZone, centroid,
+                                   circuitRoom, loadName);
                 else
                     foreach (var fi in daliFixtures)   // self-driven downlights (decision #5: normally one)
                     {
@@ -128,7 +137,7 @@ namespace TurboSuite.Dali.Services
                         DaliPoint? here = loc != null ? new DaliPoint(loc.X, loc.Y) : centroid;
                         entries.Add(new DaliUnitEntry(
                             new DaliUnitReading("UID:" + fi.UniqueId, circuitKey, DaliUnitKind.Downlight,
-                                                0, ReadZone(fi), here),
+                                                0, ReadZone(fi), here, circuitRoom, "", loadName),
                             fi.Id));
                     }
             }
@@ -146,8 +155,10 @@ namespace TurboSuite.Dali.Services
                 if (circuited.Contains(fi.Id) || !IsDali(fi)) continue;
                 XYZ loc = GeometryHelper.GetFixtureLocation(fi);
                 DaliPoint? here = loc != null ? new DaliPoint(loc.X, loc.Y) : (DaliPoint?)null;
+                string room = spaceCache.FindRoomName(fi) ?? "";
                 entries.Add(new DaliUnitEntry(
-                    new DaliUnitReading("UID:" + fi.UniqueId, "", DaliUnitKind.Downlight, 0, ReadZone(fi), here),
+                    new DaliUnitReading("UID:" + fi.UniqueId, "", DaliUnitKind.Downlight, 0, ReadZone(fi), here,
+                                        room, "", ""),
                     fi.Id));
             }
 
@@ -160,7 +171,7 @@ namespace TurboSuite.Dali.Services
 
         private static void AddDriverUnits(
             List<DaliUnitEntry> entries, List<string> warnings, List<FamilyInstance> drivers,
-            string circuitKey, string circuitZone, DaliPoint? centroid)
+            string circuitKey, string circuitZone, DaliPoint? centroid, string circuitRoom, string loadName)
         {
             // Parse each driver's ordinal off its Switch ID suffix; the base is ignored (non-unique placeholder).
             var parsed = drivers
@@ -178,8 +189,12 @@ namespace TurboSuite.Dali.Services
                     ? circuitKey + "#" + ord + "@" + elem.Id.ToRef().Value
                     : circuitKey + "#" + ord;
 
+                // Row-label base — the driver's Switch ID with its ordinal suffix stripped (cosmetic, non-unique).
+                string switchBase = DaliDriverOrdinal.BaseOf(ParameterHelper.GetSwitchID(elem));
+
                 entries.Add(new DaliUnitEntry(
-                    new DaliUnitReading(unitKey, circuitKey, DaliUnitKind.Driver, ord, circuitZone, centroid),
+                    new DaliUnitReading(unitKey, circuitKey, DaliUnitKind.Driver, ord, circuitZone, centroid,
+                                        circuitRoom, switchBase, loadName),
                     elem.Id));
             }
 
@@ -191,6 +206,33 @@ namespace TurboSuite.Dali.Services
                     + "addresses were assigned but won't survive a driver redeploy. Give each driver a distinct "
                     + "Switch ID (run TurboNumber), then re-address.");
             }
+        }
+
+        /// <summary>The circuit's room: the containing Space's ROOM_NAME of the fixture nearest the circuit
+        /// centroid (the most representative), falling back to the first fixture that resolves one; "" when none
+        /// do (2D / no space). Stamped on every unit of the circuit, like the shared centroid.</summary>
+        private static string ResolveCircuitRoom(
+            SpaceRoomFinderService.SpaceLookupCache cache, List<FamilyInstance> fixtures, DaliPoint? centroid)
+        {
+            IEnumerable<FamilyInstance> ordered = fixtures;
+            if (centroid.HasValue)
+            {
+                DaliPoint c = centroid.Value;
+                ordered = fixtures.OrderBy(f =>
+                {
+                    XYZ loc = GeometryHelper.GetFixtureLocation(f);
+                    if (loc == null) return double.MaxValue;
+                    double dx = loc.X - c.X, dy = loc.Y - c.Y;
+                    return dx * dx + dy * dy;
+                });
+            }
+
+            foreach (var fi in ordered)
+            {
+                string room = cache.FindRoomName(fi);
+                if (!string.IsNullOrWhiteSpace(room)) return room;
+            }
+            return "";
         }
 
         /// <summary>The set of Lighting Device <c>FamilySymbol</c> ids that are valid drivers — the single

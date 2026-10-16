@@ -40,11 +40,16 @@ namespace TurboSuite.Dali.Addressing
     /// order — see <see cref="DaliAddressReconciler"/>). Built from the reconciled <c>DaliLoopDto</c>.</summary>
     public sealed class DaliLoopInput
     {
-        public DaliLoopInput(string loopId, string name, IReadOnlyList<string> zoneNames)
+        private static readonly IReadOnlyDictionary<string, DaliZoneSort> EmptySorts =
+            new Dictionary<string, DaliZoneSort>(0);
+
+        public DaliLoopInput(string loopId, string name, IReadOnlyList<string> zoneNames,
+                             IReadOnlyDictionary<string, DaliZoneSort>? zoneSorts = null)
         {
             LoopId = loopId ?? "";
             Name = name ?? "";
             ZoneNames = zoneNames ?? new List<string>();
+            ZoneSorts = zoneSorts ?? EmptySorts;
         }
 
         public string LoopId { get; }
@@ -52,6 +57,10 @@ namespace TurboSuite.Dali.Addressing
 
         /// <summary>The Control Zones grouped onto this loop's bus, in declared order (the address block order).</summary>
         public IReadOnlyList<string> ZoneNames { get; }
+
+        /// <summary>Per-zone sort state, keyed by Control Zone value. A zone absent here is Auto (the default);
+        /// only Manual zones carry an entry. Consumed by <see cref="DaliZoneOrderer"/> inside each zone's block.</summary>
+        public IReadOnlyDictionary<string, DaliZoneSort> ZoneSorts { get; }
     }
 
     // NOTE: the per-unit model read (durable unit key + zone + kind + ordinal + circuit centroid) is

@@ -232,31 +232,77 @@
                                                               Visibility="{Binding IsZonesExpanded, Converter={StaticResource BoolToVisibility}}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <!-- Whole row is a drag source + drop target (reorder within this loop).
-                                                                 Background=Transparent so the empty gap between glyph and text still
-                                                                 hit-tests. A top border, shown only while a drag hovers, marks the
-                                                                 insertion point. Handlers live on the window code-behind. -->
-                                                            <Border x:Name="ZoneRowBorder" BorderThickness="0,2,0,0" BorderBrush="Transparent">
-                                                                <Grid Margin="0,1" Background="Transparent" AllowDrop="True"
-                                                                      PreviewMouseLeftButtonDown="ZoneRow_PreviewMouseLeftButtonDown"
-                                                                      PreviewMouseMove="ZoneRow_PreviewMouseMove"
-                                                                      DragOver="ZoneRow_DragOver" DragLeave="ZoneRow_DragLeave"
-                                                                      Drop="ZoneRow_Drop">
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="Auto"/>
-                                                                        <ColumnDefinition Width="*"/>
-                                                                    </Grid.ColumnDefinitions>
-                                                                    <Button Grid.Column="0" Content="←" Style="{StaticResource IconButton}"
-                                                                            Margin="0,0,6,0"
-                                                                            Command="{Binding DataContext.RemoveZoneCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
-                                                                            CommandParameter="{Binding}"
-                                                                            ToolTip="Return this zone to the pool."/>
-                                                                    <!-- The zone name is the grab handle (SizeAll cursor cues it); the whole row still
-                                                                         drags, but the ← button keeps its own click. -->
-                                                                    <TextBlock Grid.Column="1" Text="{Binding Display}" VerticalAlignment="Center"
-                                                                               Cursor="SizeAll" Foreground="{StaticResource TextPrimaryBrush}"/>
-                                                                </Grid>
-                                                            </Border>
+                                                            <StackPanel>
+                                                                <!-- Zone header row: ← return, zone name (the drag handle), then the inline
+                                                                     circuit-sort controls (expander chevron + Auto/Manual pill + reset ↺)
+                                                                     pushed to the RIGHT of the name — one row per zone instead of a separate
+                                                                     "Order" row. The whole row is the zone drag source; the chevron/reset are
+                                                                     ButtonBase so a click toggles/resets rather than dragging (same as ←). The
+                                                                     inline controls hide for a zone with no circuits. A top border, shown only
+                                                                     while a drag hovers, marks the insertion point. Handlers live on the
+                                                                     window code-behind. -->
+                                                                <Border x:Name="ZoneRowBorder" BorderThickness="0,2,0,0" BorderBrush="Transparent">
+                                                                    <Grid Margin="0,1" Background="Transparent" AllowDrop="True"
+                                                                          PreviewMouseLeftButtonDown="ZoneRow_PreviewMouseLeftButtonDown"
+                                                                          PreviewMouseMove="ZoneRow_PreviewMouseMove"
+                                                                          DragOver="ZoneRow_DragOver" DragLeave="ZoneRow_DragLeave"
+                                                                          Drop="ZoneRow_Drop">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <Button Grid.Column="0" Content="←" Style="{StaticResource IconButton}"
+                                                                                Margin="0,0,6,0"
+                                                                                Command="{Binding DataContext.RemoveZoneCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                                                                CommandParameter="{Binding}"
+                                                                                ToolTip="Return this zone to the pool."/>
+                                                                        <!-- The zone name is the grab handle (SizeAll cursor cues it); the whole row still
+                                                                             drags, but the ← button keeps its own click. -->
+                                                                        <TextBlock Grid.Column="1" Text="{Binding Display}" VerticalAlignment="Center"
+                                                                                   Cursor="SizeAll" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                                        <!-- Inline sort controls, right of the zone name (not next to the ← glyph). -->
+                                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                                                                    Margin="8,0,0,0"
+                                                                                    Visibility="{Binding HasCircuits, Converter={StaticResource BoolToVisibility}}">
+                                                                            <ToggleButton Style="{StaticResource ZonesToggle}" VerticalAlignment="Center"
+                                                                                          IsChecked="{Binding IsExpanded}"
+                                                                                          ToolTip="Show or hide this zone's circuit order."/>
+                                                                            <Border Padding="5,1" CornerRadius="0" VerticalAlignment="Center"
+                                                                                    Background="{StaticResource SeparatorBrush}">
+                                                                                <TextBlock Text="{Binding SortStateText}" FontSize="10"
+                                                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                                                           ToolTip="Auto = room order then spatial. Manual = you dragged this zone's circuits."/>
+                                                                            </Border>
+                                                                            <Button Content="↺" Style="{StaticResource IconButton}" Margin="4,0,0,0"
+                                                                                    Command="{Binding ResetSortCommand}"
+                                                                                    Visibility="{Binding IsManual, Converter={StaticResource BoolToVisibility}}"
+                                                                                    ToolTip="Reset this zone to Auto order."/>
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </Border>
+
+                                                                <!-- Draggable circuit rows (the within-zone order), revealed by the chevron
+                                                                     and indented under the zone. -->
+                                                                <ItemsControl ItemsSource="{Binding Circuits}" Margin="20,2,0,0"
+                                                                              Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Border x:Name="CircuitRowBorder" BorderThickness="0,2,0,0" BorderBrush="Transparent">
+                                                                                <Grid Margin="0,1" Background="Transparent" AllowDrop="True"
+                                                                                      PreviewMouseLeftButtonDown="ZoneRow_PreviewMouseLeftButtonDown"
+                                                                                      PreviewMouseMove="ZoneRow_PreviewMouseMove"
+                                                                                      DragOver="ZoneRow_DragOver" DragLeave="ZoneRow_DragLeave"
+                                                                                      Drop="ZoneRow_Drop">
+                                                                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
+                                                                                               Cursor="SizeAll" FontSize="11"
+                                                                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                                                </Grid>
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </StackPanel>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>

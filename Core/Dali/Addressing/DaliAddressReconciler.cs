@@ -52,10 +52,21 @@ namespace TurboSuite.Dali.Addressing
             IReadOnlyList<DaliLoopInput> loops,
             IReadOnlyList<DaliUnitReading> units,
             DaliSnapshotDto? baseline,
-            bool locked)
+            bool locked,
+            IReadOnlyList<string>? roomOrder = null)
         {
             loops ??= Array.Empty<DaliLoopInput>();
             units ??= Array.Empty<DaliUnitReading>();
+
+            // Project-wide room → rank (first-wins on a dup name), the Auto sort's outer key. Null/empty ⇒ an
+            // empty dict ⇒ every circuit unranked ⇒ one spatial walk per zone = the pre-feature behavior.
+            var roomRank = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (roomOrder != null)
+                for (int i = 0; i < roomOrder.Count; i++)
+                {
+                    string name = roomOrder[i] ?? "";
+                    if (name.Length > 0 && !roomRank.ContainsKey(name)) roomRank[name] = i;
+                }
 
             // Index the live units by zone (a zone → its units), first-wins on a duplicate unit key.
             var byZone = new Dictionary<string, List<DaliUnitReading>>(StringComparer.OrdinalIgnoreCase);
@@ -84,7 +95,8 @@ namespace TurboSuite.Dali.Addressing
                     if (!claimedZones.Add(zone)) continue;                   // zone already in an earlier loop
                     if (!byZone.TryGetValue(zone, out var zoneUnits)) continue;
 
-                    foreach (string unitKey in OrderZone(zoneUnits))
+                    loop.ZoneSorts.TryGetValue(zone, out var zoneSort);
+                    foreach (string unitKey in OrderZone(zoneUnits, roomRank, zoneSort))
                     {
                         keys.Add(unitKey);
                         loopByUnit[unitKey] = loop.LoopId;
@@ -138,29 +150,30 @@ namespace TurboSuite.Dali.Addressing
 
         // ── Inner ordering: walk the circuits, expand each into its units ────────────────────────────────
 
-        /// <summary>Order a zone's units: NW-seeded proximity walk over the distinct circuits (by their shared
-        /// fixture centroid), then within each circuit its units in ordinal (down-column) order. A single-unit
-        /// (downlight) circuit contributes one; a driver circuit contributes its N drivers contiguously.</summary>
-        private static List<string> OrderZone(List<DaliUnitReading> zoneUnits)
+        /// <summary>Order a zone's units: <see cref="DaliZoneOrderer"/> orders the distinct circuits (Auto =
+        /// room-rank groups then NW-seeded spatial walk within each; or the designer's Manual order), then
+        /// within each circuit its units expand in ordinal (down-column) order. A single-unit (downlight)
+        /// circuit contributes one; a driver circuit contributes its N drivers contiguously.</summary>
+        private static List<string> OrderZone(
+            List<DaliUnitReading> zoneUnits,
+            IReadOnlyDictionary<string, int> roomRank,
+            DaliZoneSort? zoneSort)
         {
             var byCircuit = new Dictionary<string, List<DaliUnitReading>>(StringComparer.Ordinal);
-            var circuitOrder = new List<string>();
+            var circuits = new List<ZoneCircuit>();
             foreach (var u in zoneUnits)
             {
                 if (!byCircuit.TryGetValue(u.CircuitKey, out var list))
                 {
                     byCircuit[u.CircuitKey] = list = new List<DaliUnitReading>();
-                    circuitOrder.Add(u.CircuitKey);
+                    // One ZoneCircuit per distinct circuit, from its first unit (mirrors the shared Centroid).
+                    circuits.Add(new ZoneCircuit(u.CircuitKey, u.Room, u.Centroid));
                 }
                 list.Add(u);
             }
 
-            var nodes = circuitOrder
-                .Select(ck => new WalkNode(ck, byCircuit[ck][0].Centroid))
-                .ToList();
-
             var result = new List<string>();
-            foreach (string circuitKey in ProximityWalk.NwSeededOrder(nodes))
+            foreach (string circuitKey in DaliZoneOrderer.Order(circuits, roomRank, zoneSort))
                 foreach (var u in byCircuit[circuitKey]
                              .OrderBy(u => u.Ordinal)
                              .ThenBy(u => u.UnitKey, StringComparer.Ordinal))

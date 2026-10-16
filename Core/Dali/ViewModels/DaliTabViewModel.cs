@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
 using TurboSuite.Abstractions;
+using TurboSuite.Dali.Addressing;
 using TurboSuite.Dali.Persistence;
 using TurboSuite.Dali.Services;
 using TurboSuite.Shared.Helpers;
@@ -33,6 +34,17 @@ namespace TurboSuite.Dali.ViewModels
         private readonly IDaliLoopStore _store;
         private IReadOnlyList<DaliLocationOption> _locationOptions;
 
+        /// <summary>The project-wide room order + its derived rank (room name → index). The Auto sort's outer
+        /// key; rebuilt on each (re)seed so Reset / a drag re-sort uses the current order with no model read.</summary>
+        private IReadOnlyList<string> _roomOrder = Array.Empty<string>();
+        private IReadOnlyDictionary<string, int> _roomRank =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Per-loop persisted zone sorts from the last load, so <see cref="LoadState"/> can apply a
+        /// zone's Manual order as it rebuilds the loop rows. Keyed loopId → (zoneValue → sort).</summary>
+        private IReadOnlyDictionary<string, Dictionary<string, DaliZoneSort>> _savedZoneSorts =
+            new Dictionary<string, Dictionary<string, DaliZoneSort>>();
+
         // Save coalescing — identical shape to the Panel Breakdown tab, so a burst of edits never drops the
         // latest snapshot to an in-flight write.
         private bool _savePending;
@@ -47,11 +59,13 @@ namespace TurboSuite.Dali.ViewModels
             IReadOnlyList<int> availablePanelLocations,
             DaliModuleState saved,
             IRevitWorkQueue workQueue,
-            IDaliLoopStore store)
+            IDaliLoopStore store,
+            IReadOnlyList<string>? roomOrder = null)
         {
             _workQueue = workQueue;
             _store = store;
 
+            SetRoomOrder(roomOrder);
             _locationOptions = BuildLocationOptions(availablePanelLocations, saved);
             Pool = new ObservableCollection<DaliZoneItemViewModel>();
             Loops = new ObservableCollection<DaliLoopRowViewModel>();
@@ -76,15 +90,33 @@ namespace TurboSuite.Dali.ViewModels
         public void Reseed(
             IReadOnlyList<DaliZoneItemViewModel> availableZones,
             IReadOnlyList<int> availablePanelLocations,
-            DaliModuleState saved)
+            DaliModuleState saved,
+            IReadOnlyList<string>? roomOrder = null)
         {
             _loaded = false;
             Pool.Clear();
             Loops.Clear();
+            SetRoomOrder(roomOrder);
             _locationOptions = BuildLocationOptions(availablePanelLocations, saved);
             LoadState(availableZones, saved);
             Recompute();
             _loaded = true;
+        }
+
+        /// <summary>The project-wide room order driving the Auto sort — read by the main VM so its reconcile
+        /// calls use the same order the tab displays. Current after each (re)seed.</summary>
+        public IReadOnlyList<string> RoomOrder => _roomOrder;
+
+        private void SetRoomOrder(IReadOnlyList<string>? roomOrder)
+        {
+            _roomOrder = roomOrder ?? Array.Empty<string>();
+            var rank = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _roomOrder.Count; i++)
+            {
+                string name = _roomOrder[i] ?? "";
+                if (name.Length > 0 && !rank.ContainsKey(name)) rank[name] = i;
+            }
+            _roomRank = rank;
         }
 
         public string TabHeader => "DALI";
@@ -175,10 +207,11 @@ namespace TurboSuite.Dali.ViewModels
 
         private void RemoveLoop(DaliLoopRowViewModel row)
         {
-            // Its zones return to the pool — nothing is orphaned.
+            // Its zones return to the pool — nothing is orphaned (and stop persisting their sort).
             foreach (var z in row.Zones.ToList())
             {
                 z.IsSelected = false;
+                z.Changed = null;
                 Pool.Add(z);
             }
             row.Zones.Clear();
@@ -196,6 +229,7 @@ namespace TurboSuite.Dali.ViewModels
                 Pool.Remove(z);
                 z.IsSelected = false;
                 row.Zones.Add(z);
+                AttachZoneSort(z, DaliZoneSort.Auto);   // a freshly added zone starts in Auto order
             }
             if (selected.Count > 0)
             {
@@ -208,6 +242,7 @@ namespace TurboSuite.Dali.ViewModels
         {
             if (zone == null || !row.Zones.Remove(zone)) return;
             zone.IsSelected = false;
+            zone.Changed = null;
             Pool.Add(zone);
             SortPool();
             Recompute();
@@ -226,6 +261,8 @@ namespace TurboSuite.Dali.ViewModels
 
             var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            _savedZoneSorts = BuildSavedZoneSorts(saved);
+
             foreach (var dto in (saved?.Loops ?? new List<DaliLoopDto>()).OrderBy(l => l.Order))
             {
                 var members = new List<DaliZoneItemViewModel>();
@@ -240,9 +277,15 @@ namespace TurboSuite.Dali.ViewModels
                 // fixable, a silently dropped one is confusing. It orders no module until it has loads.
                 // Restore the persisted LoopId — it is the durable L# anchor the numbering lock pins to, so it
                 // MUST survive a reload; only a pre-LoopId (blank) payload gets a fresh one.
-                Loops.Add(NewRow(string.IsNullOrWhiteSpace(dto.LoopId) ? Guid.NewGuid().ToString("N") : dto.LoopId,
+                string loopId = string.IsNullOrWhiteSpace(dto.LoopId) ? Guid.NewGuid().ToString("N") : dto.LoopId;
+                Loops.Add(NewRow(loopId,
                                  string.IsNullOrWhiteSpace(dto.Name) ? NextLoopName() : dto.Name,
                                  dto.AssignedLocation, members));
+
+                // Seed each member zone's circuit sort: its persisted Manual order if any, else Auto.
+                _savedZoneSorts.TryGetValue(loopId, out var sortsForLoop);
+                foreach (var zone in members)
+                    AttachZoneSort(zone, LookupSavedSort(sortsForLoop, zone.ZoneName));
             }
 
             // Everything not claimed by a loop starts in the pool.
@@ -251,6 +294,39 @@ namespace TurboSuite.Dali.ViewModels
                     Pool.Add(z);
 
             SortPool();
+        }
+
+        /// <summary>Flatten the persisted per-loop zone sorts to loopId → (zoneValue → <see cref="DaliZoneSort"/>),
+        /// so a member zone's Manual order can be re-applied as the loop rows rebuild.</summary>
+        private static IReadOnlyDictionary<string, Dictionary<string, DaliZoneSort>> BuildSavedZoneSorts(
+            DaliModuleState? saved)
+        {
+            var map = new Dictionary<string, Dictionary<string, DaliZoneSort>>(StringComparer.Ordinal);
+            foreach (var loop in saved?.Loops ?? new List<DaliLoopDto>())
+            {
+                if (loop.ZoneSorts == null || loop.ZoneSorts.Count == 0) continue;
+                string loopId = loop.LoopId ?? "";
+                var byZone = new Dictionary<string, DaliZoneSort>(StringComparer.OrdinalIgnoreCase);
+                foreach (var dto in loop.ZoneSorts)
+                {
+                    if (dto == null || !dto.Manual || string.IsNullOrEmpty(dto.ZoneValue)) continue;
+                    byZone[dto.ZoneValue] = new DaliZoneSort(true, dto.CircuitKeys ?? new List<string>());
+                }
+                if (byZone.Count > 0) map[loopId] = byZone;
+            }
+            return map;
+        }
+
+        private static DaliZoneSort LookupSavedSort(
+            Dictionary<string, DaliZoneSort>? sortsForLoop, string zoneName) =>
+            sortsForLoop != null && sortsForLoop.TryGetValue(zoneName, out var s) ? s : DaliZoneSort.Auto;
+
+        /// <summary>Make a zone a sortable loop member: order its circuits (Manual or Auto) and wire its drag/
+        /// reset to the tab's coalesced save.</summary>
+        private void AttachZoneSort(DaliZoneItemViewModel zone, DaliZoneSort sort)
+        {
+            zone.Changed = () => { if (_loaded) { Recompute(); SaveSettings(); } };
+            zone.ApplyOrder(_roomRank, sort);
         }
 
         private void SortPool()
@@ -288,13 +364,25 @@ namespace TurboSuite.Dali.ViewModels
             int order = 0;
             foreach (var row in Loops)
             {
+                // Persist only Manual zones — an Auto zone writes no DTO and tolerant-reads to the Auto default.
+                var zoneSorts = row.Zones
+                    .Where(z => z.IsManual)
+                    .Select(z => new DaliZoneSortDto
+                    {
+                        ZoneValue = z.ZoneName,
+                        Manual = true,
+                        CircuitKeys = z.CurrentOrder.ToList()
+                    })
+                    .ToList();
+
                 state.Loops.Add(new DaliLoopDto
                 {
                     LoopId = row.LoopId,
                     Name = row.Name ?? "",
                     Order = order++,
                     AssignedLocation = row.AssignedLocation,
-                    ZoneValues = row.Zones.Select(z => z.ZoneName).ToList()
+                    ZoneValues = row.Zones.Select(z => z.ZoneName).ToList(),
+                    ZoneSorts = zoneSorts
                 });
             }
             return state;

@@ -1,6 +1,6 @@
 #nullable enable
 using System;
-using System.Collections.ObjectModel;
+using System.Collections;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,15 +27,21 @@ namespace TurboSuite.Dali.Views
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-        // ── Drag-to-reorder a loop's member zones ─────────────────────────────────────────────────────────
-        //  The zone order within a loop is the OUTER addressing key (DaliAddressReconciler walks loop.ZoneNames
-        //  in declared order), so letting the designer reorder in place beats remove-and-re-add-in-order. Pure
-        //  view mechanics — the reorder is a Move on the bound Zones collection, and the VM persists it off the
-        //  CollectionChanged Move. Restricted to same-loop reorder (both endpoints in the target row's list).
+        // ── Drag-to-reorder: a loop's member zones AND a zone's circuit order ───────────────────────────────
+        //  Two nested reorderable lists share these handlers. The zone order within a loop is the OUTER
+        //  addressing key; a zone's circuit order is the within-zone key the Manual override sets. Both are a
+        //  Move on the bound collection, which the respective VM persists off CollectionChanged(Move).
+        //
+        //  The handlers are list-agnostic: the drag payload is the row's DataContext as a plain object, and the
+        //  target collection is resolved from the NEAREST ancestor ItemsControl's ItemsSource (as IList). This
+        //  matters because the circuit ItemsControl nests inside the zone row — a type-specific finder walking
+        //  up from a circuit row would wrongly match the outer zone collection. A drop is valid only when the
+        //  dragged item and the row under the cursor are two distinct members of that same nearest collection,
+        //  which keeps a reorder within one list (a zone can't be dropped into the circuit list, or vice versa).
 
         private Point _dragStartPoint;
-        private DaliZoneItemViewModel? _dragZone;
-        private bool _isDraggingZone;
+        private object? _dragItem;
+        private bool _isDragging;
 
         /// <summary>Insertion-line color — the same TurboSuite header blue TurboNumber's room reorder uses, so
         /// the two drag surfaces read alike (and it's theme-stable, unlike the OS highlight brush).</summary>
@@ -50,19 +56,19 @@ namespace TurboSuite.Dali.Views
 
         private void ZoneRow_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // A press that lands on the ← (return-to-pool) button is a click, not a drag — leave it alone.
+            // A press that lands on a row button (← return-to-pool) is a click, not a drag — leave it alone.
             if (IsWithinButton(e.OriginalSource as DependencyObject))
             {
-                _dragZone = null;
+                _dragItem = null;
                 return;
             }
             _dragStartPoint = e.GetPosition(null);
-            _dragZone = (sender as FrameworkElement)?.DataContext as DaliZoneItemViewModel;
+            _dragItem = (sender as FrameworkElement)?.DataContext;
         }
 
         private void ZoneRow_PreviewMouseMove(object sender, MouseEventArgs e)
         {
-            if (_isDraggingZone || _dragZone == null || e.LeftButton != MouseButtonState.Pressed)
+            if (_isDragging || _dragItem == null || e.LeftButton != MouseButtonState.Pressed)
                 return;
 
             Point pos = e.GetPosition(null);
@@ -70,21 +76,21 @@ namespace TurboSuite.Dali.Views
                 Math.Abs(pos.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
                 return;
 
-            _isDraggingZone = true;
+            _isDragging = true;
             try
             {
-                DragDrop.DoDragDrop((DependencyObject)sender, _dragZone, DragDropEffects.Move);
+                DragDrop.DoDragDrop((DependencyObject)sender, _dragItem, DragDropEffects.Move);
             }
             finally
             {
-                _isDraggingZone = false;
-                _dragZone = null;
+                _isDragging = false;
+                _dragItem = null;
             }
         }
 
         private void ZoneRow_DragOver(object sender, DragEventArgs e)
         {
-            bool ok = CanDrop(sender, e, out _, out _);
+            bool ok = CanDrop(sender, out _, out _);
             e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
             SetInsertionMark(sender, ok);
             e.Handled = true;
@@ -95,11 +101,10 @@ namespace TurboSuite.Dali.Views
         private void ZoneRow_Drop(object sender, DragEventArgs e)
         {
             SetInsertionMark(sender, false);
-            if (!CanDrop(sender, e, out var coll, out var target)) return;
+            if (!CanDrop(sender, out var coll, out var target)) return;
 
-            var dragged = e.Data.GetData(typeof(DaliZoneItemViewModel)) as DaliZoneItemViewModel;
-            int from = coll!.IndexOf(dragged!);
-            int to = coll.IndexOf(target!);
+            int from = coll!.IndexOf(_dragItem);
+            int to = coll.IndexOf(target);
             if (from < 0 || to < 0) return;
 
             // The top-border cue means "insert above this row". ObservableCollection.Move removes-then-inserts,
@@ -108,23 +113,21 @@ namespace TurboSuite.Dali.Views
             if (from < to) to--;
             if (from == to) return;
 
-            coll.Move(from, to);   // fires CollectionChanged(Move) → the VM recomputes + persists the new order
+            MoveInList(coll, from, to);   // ObservableCollection.Move → CollectionChanged(Move) → VM persists
             e.Handled = true;
         }
 
-        /// <summary>The drop is valid when the dragged zone and the row under the cursor are two distinct
-        /// members of the same loop's Zones collection — same-loop reorder only.</summary>
-        private static bool CanDrop(object sender, DragEventArgs e,
-                                    out ObservableCollection<DaliZoneItemViewModel>? coll,
-                                    out DaliZoneItemViewModel? target)
+        /// <summary>The drop is valid when the dragged item and the row under the cursor are two distinct
+        /// members of the same nearest-ItemsControl collection — a within-one-list reorder.</summary>
+        private bool CanDrop(object sender, out IList? coll, out object? target)
         {
             coll = null;
-            target = (sender as FrameworkElement)?.DataContext as DaliZoneItemViewModel;
-            var dragged = e.Data.GetData(typeof(DaliZoneItemViewModel)) as DaliZoneItemViewModel;
+            target = (sender as FrameworkElement)?.DataContext;
+            var dragged = _dragItem;
             if (dragged == null || target == null || ReferenceEquals(dragged, target))
                 return false;
 
-            coll = FindZonesCollection(sender as DependencyObject);
+            coll = FindNearestItemsSource(sender as DependencyObject);
             return coll != null && coll.Contains(dragged) && coll.Contains(target);
         }
 
@@ -135,14 +138,25 @@ namespace TurboSuite.Dali.Views
                 b.BorderBrush = on ? InsertionBrush : Brushes.Transparent;
         }
 
-        /// <summary>Nearest ancestor ItemsControl whose source is a zone collection — the inner member-zone
-        /// list. The outer Loops ItemsControl is skipped by the element-type match on the generic collection.</summary>
-        private static ObservableCollection<DaliZoneItemViewModel>? FindZonesCollection(DependencyObject? start)
+        /// <summary>The nearest ancestor ItemsControl's ItemsSource as an <see cref="IList"/> — the list the
+        /// hovered row belongs to (the inner circuit list for a circuit row, the member-zone list for a zone
+        /// row). Both are ObservableCollections, so <see cref="MoveInList"/> can Move within either.</summary>
+        private static IList? FindNearestItemsSource(DependencyObject? start)
         {
             for (var d = start; d != null; d = VisualTreeHelper.GetParent(d))
-                if (d is ItemsControl ic && ic.ItemsSource is ObservableCollection<DaliZoneItemViewModel> zones)
-                    return zones;
+                if (d is ItemsControl ic && ic.ItemsSource is IList list)
+                    return list;
             return null;
+        }
+
+        /// <summary>Call <c>ObservableCollection&lt;T&gt;.Move(from, to)</c> on an untyped <see cref="IList"/>.
+        /// IList has no Move, and a Remove+Insert would raise Remove/Add instead of Move — which the VMs' Move
+        /// handlers (persist-on-reorder) would miss — so invoke the real Move by reflection.</summary>
+        private static void MoveInList(IList coll, int from, int to)
+        {
+            var move = coll.GetType().GetMethod("Move", new[] { typeof(int), typeof(int) });
+            if (move != null) move.Invoke(coll, new object[] { from, to });
+            else { var item = coll[from]; coll.RemoveAt(from); coll.Insert(to, item); }  // defensive fallback
         }
 
         private static bool IsWithinButton(DependencyObject? source)

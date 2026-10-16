@@ -31,7 +31,8 @@ namespace TurboSuite.Dali.Input
     public readonly struct DaliUnitReading
     {
         public DaliUnitReading(string? unitKey, string? circuitKey, DaliUnitKind kind,
-                               int ordinal, string? zone, DaliPoint? centroid)
+                               int ordinal, string? zone, DaliPoint? centroid,
+                               string? room = null, string? switchId = null, string? loadName = null)
         {
             UnitKey = (unitKey ?? "").Trim();
             CircuitKey = (circuitKey ?? "").Trim();
@@ -39,6 +40,9 @@ namespace TurboSuite.Dali.Input
             Ordinal = ordinal;
             Zone = (zone ?? "").Trim();
             Centroid = centroid;
+            Room = (room ?? "").Trim();
+            SwitchId = (switchId ?? "").Trim();
+            LoadName = (loadName ?? "").Trim();
         }
 
         /// <summary>Durable reconcile/lock anchor — survives a driver redeploy. Drivers:
@@ -64,5 +68,17 @@ namespace TurboSuite.Dali.Input
         /// downlight's is its own location). Null ⇒ deterministic key-order fallback. Shared by every driver
         /// unit on the same circuit so they stay contiguous at that circuit's walked spot.</summary>
         public DaliPoint? Centroid { get; }
+
+        /// <summary>The circuit's resolved room name (the containing Space's ROOM_NAME — the same name space
+        /// the project-wide Room Order is keyed in). "" when unresolved (2D / no space). Feeds the Auto sort's
+        /// room rank; shared by every unit on the same circuit, like <see cref="Centroid"/>.</summary>
+        public string Room { get; }
+
+        /// <summary>Driver label base — the circuit's driver Switch ID with its ordinal suffix stripped
+        /// (<see cref="DaliDriverOrdinal.BaseOf"/>). "" for a downlight. Cosmetic (the row label), never a key.</summary>
+        public string SwitchId { get; }
+
+        /// <summary>The circuit's load name (TurboDriver's Load Name param). Cosmetic — feeds the row label.</summary>
+        public string LoadName { get; }
     }
 }
