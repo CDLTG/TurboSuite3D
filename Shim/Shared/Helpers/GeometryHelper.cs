@@ -220,10 +220,21 @@ public static class GeometryHelper
     public const double LinearRatioThreshold = 3.0;
 
     /// <summary>
+    /// A fixture must ALSO be at least this long (feet, long plan extent) to count as "linear".
+    /// Ratio alone conflates size axes: a tiny accent fixture can be bar-shaped (e.g. 6.5" x 1.8",
+    /// ratio 3.6) yet too short for end-to-end routing to help — the end offset is only ~half its
+    /// length, so center-to-center reads cleaner. End-routing only earns its keep once the fixture
+    /// is long enough that wiring to center visibly drives the wire into the body (~18"+). Below
+    /// this it stays non-linear regardless of ratio. Tune as real fixtures surface.
+    /// </summary>
+    public const double MinLinearLength = 1.5; // ft (18")
+
+    /// <summary>
     /// Resolves a linear fixture's long-axis unit direction (from the BasisX angle, per CLAUDE.md)
-    /// and its half-length. Returns false when the fixture's plan extents can't be measured or it
-    /// isn't clearly linear (long/short ratio below <see cref="LinearRatioThreshold"/>). The ends of
-    /// a center-connectored bar are then <c>connector ± longDir * halfLen</c>.
+    /// and its half-length. Returns false when the fixture's plan extents can't be measured, it
+    /// isn't clearly linear (long/short ratio below <see cref="LinearRatioThreshold"/>), or it's
+    /// too short to benefit (long extent below <see cref="MinLinearLength"/>). The ends of a
+    /// center-connectored bar are then <c>connector ± longDir * halfLen</c>.
     /// </summary>
     public static bool TryGetLinearLongAxis(FamilyInstance fixture, View view, out XYZ longDir, out double halfLen)
     {
@@ -237,6 +248,7 @@ public static class GeometryHelper
         double maxExt = Math.Max(length, width);
         double minExt = Math.Min(length, width);
         if (maxExt / minExt < LinearRatioThreshold) return false; // square-ish → not linear
+        if (maxExt < MinLinearLength) return false;                // too short → end-routing unhelpful
 
         double angle = GetTransformAngle(fixture.GetTransform());
         XYZ localX = new XYZ(Math.Cos(angle), Math.Sin(angle), 0);
