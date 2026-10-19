@@ -67,6 +67,15 @@ A Type Mark deleted in Revit turns **red** on the next Sync (a warning). If it's
 
 A dialog appears only when there's something worth seeing — a **blocking** duplicate Type Mark (aborts the whole sync), junk in a Yes/No cell, a bad Catalog #/Qty token (written anyway, warned), a value the writer couldn't apply, or a locked cell someone overrode. A clean sync just updates the status line (e.g. `Updated 4 types, 9 fields; workbook +2 new`). Unchanged/empty locked cells, unmatched rows, and unknown columns are handled silently.
 
+## Worksharing
+
+On a workshared model the window takes a **session lease** before it opens: it borrows a TurboSchedule lock store plus **every** lighting fixture/driver type (placed or not) and the workbook-path store. If any of it is held by a teammate — or the local copy is behind central — the window doesn't open, and one message says who to ask ("…being edited by *sam.k* — ask them to sync") or to **Reload Latest**. Nothing is written in that case.
+
+- The borrows are **held until you sync**, even after you close the window — teammates editing lighting Type Properties in native Revit see Revit's own "borrowed by" message until then. Sync when you finish a TurboSchedule session.
+- A successful **Sync with Central** or **Reload Latest** closes the window (the lease is gone / the snapshot is stale); reopen to continue. If the form has unsaved edits, the sync (or a project close) first asks whether to cancel it.
+- If a save's transaction still comes back rolled back (Revit borrowed something the lease didn't name), the status line says *"Revit rolled back the change — nothing was saved"* and every field stays dirty. A Sync-workbook pull that rolls back is reported as blocked and the workbook is not refreshed.
+- On a non-workshared model none of this applies — no lock store is created.
+
 ## Dependencies
 
 | Requirement | Purpose |

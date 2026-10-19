@@ -80,6 +80,15 @@ namespace TurboSuite.Schedule.Services
                             if (reqs.Count > 0)
                             {
                                 var wr = _writer.Write(reqs);
+                                if (wr.RolledBack)
+                                {
+                                    // Nothing landed: treat as blocking so the workbook isn't refreshed
+                                    // against a model the pull never reached; the edits stay in the
+                                    // workbook for the next Sync.
+                                    report.Blocking = true;
+                                    report.Errors.Add(WorksharingMessages.RolledBack);
+                                    return (object)new SyncStage { Report = report, Refreshed = null };
+                                }
                                 report.WriterSkipped.AddRange(wr.Skipped);
                             }
                             var refreshed = ScheduleTypeCollector.Collect(_doc);

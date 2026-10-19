@@ -32,6 +32,10 @@ public class ScheduleWriteResult
 
     /// <summary>ParamKey+TypeMark of fields that wrote successfully (so the VM can clear dirty).</summary>
     public HashSet<string> SavedKeys { get; set; } = new HashSet<string>();
+
+    /// <summary>The transaction came back rolled back (e.g. an element another user owns), so nothing
+    /// landed: <see cref="SavedKeys"/> is empty and <see cref="UpdatedTypes"/> is 0.</summary>
+    public bool RolledBack { get; set; }
 }
 
 /// <summary>

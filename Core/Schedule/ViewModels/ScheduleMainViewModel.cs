@@ -7,6 +7,7 @@ using System.Windows.Input;
 using TurboSuite.Abstractions;
 using TurboSuite.Schedule.Models;
 using TurboSuite.Schedule.Services;
+using TurboSuite.Shared.Services;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Schedule.ViewModels;
@@ -275,7 +276,11 @@ public class ScheduleMainViewModel : ViewModelBase
             {
                 try
                 {
-                    if (result is ScheduleWriteResult r)
+                    if (result is ScheduleWriteResult { RolledBack: true })
+                    {
+                        StatusMessage = WorksharingMessages.RolledBack; // every field stays dirty
+                    }
+                    else if (result is ScheduleWriteResult r)
                     {
                         foreach (var page in Pages)
                             foreach (var f in page.AllFields.Where(f => f.IsDirty))

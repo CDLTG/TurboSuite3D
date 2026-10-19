@@ -42,6 +42,14 @@ namespace TurboSuite.Shared.Services
             return entity.Get<string>(PathField) ?? "";
         }
 
+        /// <summary>The path store's id, or null when this project has none yet — so TurboSchedule's session
+        /// lease can borrow it (a store created by a teammate and synced needs a borrow to overwrite).</summary>
+        public static ElementId? FindStorageId(Document doc)
+        {
+            var schema = Schema.Lookup(SchemaGuid);
+            return schema == null ? null : DataStorageHelper.FindDataStorage(doc, schema)?.Id;
+        }
+
         public static void Save(Document doc, string path)
         {
             var schema = GetOrCreateSchema();

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using TurboSuite.Schedule.Models;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Schedule.Services;
 
@@ -10,6 +11,11 @@ namespace TurboSuite.Schedule.Services;
 /// entry). Symbols are re-resolved by Type Mark + category at save time. One unparseable value must
 /// not abort the batch: <c>SetValueString</c> failures are collected and the field left dirty while
 /// the rest commits. Invoked on the Revit API thread via the work queue.
+///
+/// <para>The commit status is the only truth about what landed: under worksharing <c>Set</c> returns
+/// <c>true</c> on a teammate-owned symbol and the whole batch is rolled back at commit. A rolled-back
+/// commit reports <see cref="ScheduleWriteResult.RolledBack"/> with nothing saved. The window's session
+/// lease (<c>ScheduleCommand</c>) borrows every symbol up front, so this is a backstop.</para>
 /// </summary>
 public class ScheduleWriterService : IScheduleWriter
 {
@@ -86,7 +92,8 @@ public class ScheduleWriterService : IScheduleWriter
                 if (typeTouched) result.UpdatedTypes++;
             }
 
-            tx.Commit();
+            if (!CommitGuard.TryCommit(tx))
+                return new ScheduleWriteResult { RolledBack = true };
         }
 
         return result;

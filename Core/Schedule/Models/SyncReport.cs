@@ -15,7 +15,7 @@ public class SyncReport
     /// <summary>A structural problem that aborted the whole Sync (nothing was written).</summary>
     public bool Blocking { get; set; }
 
-    /// <summary>Blocking reasons (duplicate Type Marks) — human-readable.</summary>
+    /// <summary>Blocking reasons (duplicate Type Marks, a rolled-back model write) — human-readable.</summary>
     public List<string> Errors { get; set; } = new List<string>();
 
     /// <summary>"Label on TypeMark" for cells the designer actually attempted to edit but couldn't apply:

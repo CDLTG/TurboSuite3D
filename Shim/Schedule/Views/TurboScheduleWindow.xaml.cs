@@ -45,11 +45,22 @@ namespace TurboSuite.Schedule.Views
             MessageBox.Show(this, body, title, MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        private bool _forceClosing;
+
+        /// <summary>Close without the unsaved-edits prompt, discarding them. Used by
+        /// <c>ModelessWindowGuard</c> on project close / after a sync, which has already asked the user
+        /// (and a deferred async save must never run against a closing document).</summary>
+        public void ForceClose()
+        {
+            _forceClosing = true;
+            Close();
+        }
+
         // Close-time guard: prompt when dirty. Yes saves (async) and keeps the window open so the
         // user closes again once clean; No discards by closing; Cancel keeps the window open.
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (DataContext is not ScheduleMainViewModel vm || !vm.HasUnsavedChanges)
+            if (_forceClosing || DataContext is not ScheduleMainViewModel vm || !vm.HasUnsavedChanges)
                 return;
 
             var choice = MessageBox.Show(
