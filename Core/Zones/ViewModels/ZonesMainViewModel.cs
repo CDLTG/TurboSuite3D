@@ -29,13 +29,14 @@ namespace TurboSuite.Zones.ViewModels
             IControlOneLineService oneLineService = null,
             IOneLineViewStore oneLineViewStore = null,
             OneLineViewState savedOneLineViews = null,
-            bool oneLineEnabled = true)
+            bool oneLineEnabled = true,
+            ControlDeviceGroup clearConnectGateways = null)
         {
             PanelTab = new PanelBreakdownTabViewModel(circuits,
                 keypadCounts, hybridRepeaters,
                 savedSettings, workQueue, panelSettingsStore, subsystemDemands, daliModulesByZone,
                 shadeLocations, repeaterLocations, oneLineService, oneLineViewStore, savedOneLineViews,
-                oneLineEnabled);
+                oneLineEnabled, clearConnectGateways);
             LoadNameTab = new LoadNameTabViewModel(circuits, workQueue, loadNameWriter, circuitSelector);
 
             // Shade Names — the same Load-Names grid fed shade circuits and the shade override store.

@@ -58,6 +58,10 @@ public static class ControlCutSheetUrlResolver
             ["QSE-IO"] = Lutron + "qse-io.pdf",
             ["QSE-CI-DMX"] = Lutron + "369372_qse-ci-dmx.pdf", // DMX (experimental; dev/test builds)
 
+            // Lutron — Clear Connect Type X gateway. A placed family, but single-SKU, so its BOM part
+            // number (Catalog Number1) is as good a key as a Model and needs no Model plumbing.
+            ["HQP7-RF"] = Lutron + "3691128_ENG.pdf",
+
             // Lutron — shades
             ["QSPS-10PNL"] = Lutron + "085335.pdf",
 

@@ -268,6 +268,50 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal("HWQS Hybrid Wired/Wireless RF System Repeater", line.Description);
         }
 
+        /// <summary>A Clear Connect Type X gateway is an Accessories order line, one per placed instance,
+        /// with its own generic fallback when the family carries no catalog number.</summary>
+        [Fact]
+        public void ClearConnectGatewaysAreOrderedAsAccessories()
+        {
+            var accessories = Section(Build(TwoFullPanels(), Lutron, new BomExtras
+            {
+                ClearConnectGateways = new ControlDeviceGroup
+                {
+                    DeviceCount = 3,
+                    Tallies = Tally.Of(("HQP7-RF", 2), (null, 1))
+                }
+            }), "Accessories");
+
+            var gateway = accessories.Single(a => a.PartNumber == "HQP7-RF");
+            Assert.Equal(2, gateway.Quantity);
+            Assert.Equal("HomeWorks Wireless Gateway", gateway.Description);
+            Assert.Equal(1, accessories.Single(a => a.PartNumber == "Clear Connect Gateway").Quantity);
+        }
+
+        /// <summary>Gateways join the home network, not a processor link: however many are placed, the
+        /// processor recommendation and the power-supply sizing do not move.</summary>
+        [Fact]
+        public void ClearConnectGatewaysDoNotTouchLinkMath()
+        {
+            var panel = LutronPanel("1-A", 8, ("ELV", 4));
+            panel.SelectedSpecialDevice = "Processor";
+            var panels = new List<PanelResult> { panel };
+            var without = new BomExtras { KeypadCount = 60, HybridRepeaters = Tally.Repeaters(4) };
+            var with = new BomExtras
+            {
+                KeypadCount = 60,
+                HybridRepeaters = Tally.Repeaters(4),
+                ClearConnectGateways = new ControlDeviceGroup { DeviceCount = 20, Tallies = Tally.Of(("HQP7-RF", 20)) }
+            };
+
+            Assert.True(ControlBomBuilder.SizePowerSupplies(panels, Lutron, without).Quantity > 0);
+
+            Assert.Equal(ControlBomBuilder.CalculateRecommendedProcessors(panels, without),
+                ControlBomBuilder.CalculateRecommendedProcessors(panels, with));
+            Assert.Equal(ControlBomBuilder.SizePowerSupplies(panels, Lutron, without).Quantity,
+                ControlBomBuilder.SizePowerSupplies(panels, Lutron, with).Quantity);
+        }
+
         /// <summary>An unparseable quantity rule still explains itself on the design surface — unlike a
         /// missing catalog number, the number on the line is a fallback rather than the authored
         /// intent, so the row says which slot to look at.</summary>

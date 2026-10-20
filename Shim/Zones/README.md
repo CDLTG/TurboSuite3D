@@ -287,8 +287,14 @@ stock-cut divides Linear Length, which a control device does not have. An unpars
 to one-per-device and is flagged in this tab with the type and slot named — never dropped, because a
 part nobody can parse is still a part somebody has to buy.
 
+**Clear Connect Type X gateways (Electrical Equipment, `Role=ClearConnectGateway`, e.g. `HQP7-RF`)** read
+the same catalog slots and land in **Accessories**, one per placed instance (default description
+"HomeWorks Wireless Gateway"); the TurboDocs control cut sheets pick it up off that line by part number.
+That is all it does. A gateway joins the home network directly, not a processor link, so it never enters
+the link math, the CC-A pool, or the one-line.
+
 A type with no catalog number is still ordered, with the part column falling back to the generic word
-(`Keypad`, `Hybrid Repeater`) and an amber flag here. Descriptions pair with slots by position and
+(`Keypad`, `Hybrid Repeater`, `Clear Connect Gateway`) and an amber flag here. Descriptions pair with slots by position and
 stop at two, because a family carries two description fields and six catalog slots. Slots 3–6 print
 without words; nothing in the library uses them yet.
 

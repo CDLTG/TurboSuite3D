@@ -36,6 +36,7 @@ namespace TurboSuite.Zones.ViewModels
         private readonly IReadOnlyList<ControlDeviceTally> _keypadTallies;
         private readonly IReadOnlyList<KeypadRecord> _keypadRecords;
         private readonly ControlDeviceGroup _hybridRepeaters;
+        private readonly ControlDeviceGroup _clearConnectGateways;
 
         /// <summary>What the control subsystems (TurboDMX today) reported at window open. Read once —
         /// re-solving DMX on every panel-size tweak would be wasted work, and the DMX design cannot
@@ -93,7 +94,8 @@ namespace TurboSuite.Zones.ViewModels
             IControlOneLineService oneLineService = null,
             IOneLineViewStore viewStore = null,
             OneLineViewState savedViewState = null,
-            bool oneLineEnabled = true)
+            bool oneLineEnabled = true,
+            ControlDeviceGroup clearConnectGateways = null)
         {
             _workQueue = workQueue;
             _settingsStore = settingsStore;
@@ -120,6 +122,7 @@ namespace TurboSuite.Zones.ViewModels
             _keypadTallies = keypadCounts.Tallies;
             _keypadRecords = keypadCounts.Records;
             _hybridRepeaters = hybridRepeaters;
+            _clearConnectGateways = clearConnectGateways;
 
             Circuits = new ObservableCollection<ZonesCircuitViewModel>(
                 circuits.OrderBy(c => c.CircuitNumber).Select(c => new ZonesCircuitViewModel(c)));
@@ -464,6 +467,7 @@ namespace TurboSuite.Zones.ViewModels
             KeypadTallies = _keypadTallies,
             KeypadRecords = _keypadRecords,
             HybridRepeaters = _hybridRepeaters,
+            ClearConnectGateways = _clearConnectGateways,
             RepeaterLocations = _repeaterLocations,
             OrphanToHost = _orphanAssignments,
             SubsystemDemands = _subsystemDemands,

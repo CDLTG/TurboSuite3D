@@ -254,6 +254,11 @@ namespace TurboSuite.Zones.Services
                 accessories.AddRange(TallyLines(extras.HybridRepeaterTallies, "Accessories",
                     extras.Audience, "Hybrid Repeater",
                     "HWQS Hybrid Wired/Wireless RF System Repeater"));
+
+                // Clear Connect Type X gateways — order lines only; they ride no processor link.
+                accessories.AddRange(TallyLines(extras.ClearConnectGatewayTallies, "Accessories",
+                    extras.Audience, "Clear Connect Gateway",
+                    "HomeWorks Wireless Gateway"));
             }
 
             if (accessories.Count > 0)
@@ -651,6 +656,13 @@ namespace TurboSuite.Zones.Services
         /// in a second catalog slot orders two parts and is still one device, and summing would
         /// silently size the wireless links for hardware that does not exist.</summary>
         public int HybridRepeaterCount => HybridRepeaters?.DeviceCount ?? 0;
+
+        /// <summary>Clear Connect Type X gateways (HQP7-RF): the parts to order, and nothing more. They
+        /// join the home network directly rather than a processor link, so — unlike the repeaters —
+        /// nothing here feeds the link math, and no device count is exposed for it to reach for.</summary>
+        public ControlDeviceGroup ClearConnectGateways { get; set; }
+
+        public IReadOnlyList<ControlDeviceTally> ClearConnectGatewayTallies => ClearConnectGateways?.Tallies;
 
         /// <summary>Wireless devices, already expanded to device count. These ride the processor's
         /// Clear Connect link rather than a QS link, so they pressure a different budget — and a job

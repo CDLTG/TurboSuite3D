@@ -242,6 +242,29 @@ namespace TurboSuite.Zones.Services
         }
 
         /// <summary>
+        /// Clear Connect Type X gateways (HQP7-RF) — what to order for them, and nothing else.
+        ///
+        /// Electrical <b>Equipment</b> (<c>Role=ClearConnectGateway</c>) placed by the designer, so the
+        /// order is 1:1 with instances. Unlike a Hybrid Repeater it talks to the home network directly:
+        /// no processor link, no CC-A pool, no circuiting — so it feeds the BOM and no link math.
+        /// </summary>
+        public ControlDeviceGroup GetClearConnectGateways(Document doc)
+        {
+            var gateways = new FilteredElementCollector(doc)
+                .OfCategory(BuiltInCategory.OST_ElectricalEquipment)
+                .OfClass(typeof(FamilyInstance))
+                .Cast<FamilyInstance>()
+                .Where(fi => ParameterHelper.GetRole(fi) == Roles.ClearConnectGateway)
+                .ToList();
+
+            return new ControlDeviceGroup
+            {
+                DeviceCount = gateways.Count,
+                Tallies = TallyCatalogSlots(gateways)
+            };
+        }
+
+        /// <summary>
         /// Counts instances per family type, reads that type's six catalog slots once, and merges the
         /// rows across types by catalog number.
         ///

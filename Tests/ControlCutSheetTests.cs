@@ -135,6 +135,19 @@ namespace TurboSuite.Tests.Docs
             Assert.Equal("HQP7-2", rows[0].Label);
         }
 
+        /// <summary>The Clear Connect Type X gateway is a placed family, but it reaches the cut sheets
+        /// through its Accessories BOM line, keyed by part number like the closed hardware.</summary>
+        [Fact]
+        public void ClearConnectGateway_ResolvesFromItsAccessoriesLine()
+        {
+            var bom = new List<BomLineItem> { Line("Accessories", "HQP7-RF", "HomeWorks Wireless Gateway") };
+
+            var row = Assert.Single(ControlCutSheetRowBuilder.Build(bom, new List<string>(), new List<string>()));
+
+            Assert.Equal("HQP7-RF", row.Label);
+            Assert.Equal("https://assets.lutron.com/a/documents/3691128_ENG.pdf", row.Url);
+        }
+
         [Fact]
         public void Keypads_UnresolvedModel_YieldsSkippedRow_WithModelKey()
         {

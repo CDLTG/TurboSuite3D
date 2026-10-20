@@ -70,6 +70,7 @@ namespace TurboSuite.Zones
                 var keypadLocations = new RoomLocationCollector().ResolveLocations(doc);
                 var keypadCounts = collectorService.GetKeypadCounts(doc, keypadLocations);
                 var hybridRepeaters = collectorService.GetHybridRepeaters(doc);
+                var clearConnectGateways = collectorService.GetClearConnectGateways(doc);
 
                 // Load persisted panel settings shim-side (a Core ctor cannot read Revit synchronously).
                 var savedSettings = ZonesPanelSettingsStorageService.Load(doc);
@@ -125,7 +126,8 @@ namespace TurboSuite.Zones
                     new ControlOneLineService(uidoc),    // Section 2 one-line renderer
                     new OneLineViewStore(doc),           // cross-session owned-view id persistence
                     savedOneLineViews,
-                    App.TurboSuiteApplication.ExperimentalCommandsEnabled);  // dev-visible-only until release
+                    App.TurboSuiteApplication.ExperimentalCommandsEnabled,   // dev-visible-only until release
+                    clearConnectGateways);
 
                 var window = new TurboZonesWindow
                 {

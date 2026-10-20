@@ -44,6 +44,7 @@ public static class BomCollectorService
 
         var keypadCounts = collector.GetKeypadCounts(doc);
         var hybridRepeaters = collector.GetHybridRepeaters(doc);
+        var clearConnectGateways = collector.GetClearConnectGateways(doc);
         var repeaterLocations = ControlsCircuitDemandProvider.CollectLocations(doc);
 
         // Same builder the TurboZones window uses, so the issued PDF and the live panel breakdown
@@ -56,6 +57,7 @@ public static class BomCollectorService
             WirelessDeviceCount = keypadCounts.WirelessDevices,
             KeypadTallies = keypadCounts.Tallies,
             HybridRepeaters = hybridRepeaters,
+            ClearConnectGateways = clearConnectGateways,
             RepeaterLocations = repeaterLocations,
             OrphanToHost = panelSettings?.OrphanLocationAssignments,
             SubsystemDemands = subsystemDemands,

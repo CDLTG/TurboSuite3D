@@ -35,6 +35,7 @@ public static class Roles
     public const string Keypad = "Keypad";
     public const string DriverPlaceholder = "DriverPlaceholder";
     public const string HybridRepeater = "HybridRepeater";
+    public const string ClearConnectGateway = "ClearConnectGateway";  // HQP7-RF (CC Type X) — BOM only
     public const string ShadeMotor = "ShadeMotor";
 
     // ── Finder roles (on tag / detail / annotation families) ─────────────────────────────────────
@@ -122,7 +123,7 @@ public static class Roles
         BuildCanonicalMap(new[]
         {
             Sconce, Chandelier, PictureLight, WallVertical, CeilingFan, ExhaustFan, FireplaceIgniter,
-            Receptacle, Switch, Keypad, DriverPlaceholder, HybridRepeater, ShadeMotor,
+            Receptacle, Switch, Keypad, DriverPlaceholder, HybridRepeater, ClearConnectGateway, ShadeMotor,
             FixtureTypeTag, LinearTag, RunLengthTag, SwitchIdTag, KeypadTag, DeviceTypeTag,
             FixtureSwitchlegTag, RemoteSwitchlegTag, ElectricalSwitchlegTag, DeviceSwitchlegTag,
             LinearFeedTag, LinearFeedDetail, DmxDecoderDetail, DmxDriverDetail, DmxInterfaceDetail,
