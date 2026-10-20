@@ -278,7 +278,7 @@ namespace TurboSuite.Tests.Zones
                 ClearConnectGateways = new ControlDeviceGroup
                 {
                     DeviceCount = 3,
-                    Tallies = Tally.Of(("HQP7-RF", 2), (null, 1))
+                    Tallies = Tally.Of(("HQP7-RF", 2), ("", 1))
                 }
             }), "Accessories");
 
