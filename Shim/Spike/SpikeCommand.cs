@@ -1,4 +1,5 @@
 #nullable disable
+using System;
 using System.Linq;
 using System.Text;
 using Autodesk.Revit.Attributes;
@@ -37,34 +38,62 @@ public class SpikeCommand : IExternalCommand
 
         Document doc = uidoc.Document;
         View view = doc.ActiveView;
-        var selectedIds = uidoc.Selection.GetElementIds();
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Document: {doc.Title}");
-        sb.AppendLine($"Revit version: {commandData.Application.Application.VersionNumber}");
-        sb.AppendLine($"Active view: {view.Name}  ({view.ViewType})");
-        sb.AppendLine($"Selection count: {selectedIds.Count}");
+        sb.AppendLine($"Revit {commandData.Application.Application.VersionNumber} — view: {view.Name} ({view.ViewType})");
+        sb.AppendLine($"ViewTemplateId: {view.ViewTemplateId}");
 
-        // Default probe: dump the picked element's parameters (name / StorageType / value) so you can
-        // see exactly what's writable and how it's stored before coding against it. Swap as needed.
-        if (selectedIds.Count > 0)
+        // Probe 1: the Spaces category's subcategories as V/G lists them — name ↔ BuiltInCategory ↔ hidden state.
+        sb.AppendLine();
+        sb.AppendLine("── Spaces subcategories (Category.SubCategories) ──");
+        Category spaces = Category.GetCategory(doc, BuiltInCategory.OST_MEPSpaces);
+        if (spaces == null)
         {
-            Element el = doc.GetElement(selectedIds.First());
-            sb.AppendLine();
-            sb.AppendLine($"First selected: {el.Category?.Name} — {el.Name}  (Id {el.Id})");
-            foreach (Parameter p in el.Parameters.Cast<Parameter>()
-                         .OrderBy(p => p.Definition?.Name))
+            sb.AppendLine("  OST_MEPSpaces category not found");
+        }
+        else
+        {
+            sb.AppendLine($"  [parent] '{spaces.Name}'  bic={spaces.BuiltInCategory}  id={spaces.Id}  " +
+                          $"canHide={view.CanCategoryBeHidden(spaces.Id)}  hidden={view.GetCategoryHidden(spaces.Id)}");
+            foreach (Category sub in spaces.SubCategories.Cast<Category>().OrderBy(c => c.Name))
             {
-                string value = p.StorageType switch
-                {
-                    StorageType.String => p.AsString(),
-                    StorageType.Integer => p.AsInteger().ToString(),
-                    StorageType.Double => p.AsValueString(),
-                    StorageType.ElementId => p.AsElementId().ToString(),
-                    _ => "?"
-                };
-                sb.AppendLine($"  {p.Definition?.Name} [{p.StorageType}]{(p.IsReadOnly ? " (ro)" : "")} = {value}");
+                sb.AppendLine($"  '{sub.Name}'  bic={sub.BuiltInCategory}  id={sub.Id}  " +
+                              $"canHide={view.CanCategoryBeHidden(sub.Id)}  hidden={view.GetCategoryHidden(sub.Id)}");
             }
+        }
+
+        // Probe 2: every OST_MEPSpace* enum value — which resolve to a real category, and under which parent.
+        sb.AppendLine();
+        sb.AppendLine("── OST_MEPSpace* enum values ──");
+        foreach (BuiltInCategory bic in Enum.GetValues(typeof(BuiltInCategory)).Cast<BuiltInCategory>()
+                     .Where(b => b.ToString().StartsWith("OST_MEPSpace", StringComparison.Ordinal))
+                     .Distinct())
+        {
+            Category c = null;
+            try { c = Category.GetCategory(doc, bic); } catch { }
+            sb.AppendLine(c == null
+                ? $"  {bic}: (no category)"
+                : $"  {bic}: '{c.Name}'  parent='{c.Parent?.Name}'");
+        }
+
+        // Probe 3: the 2D filter — element type, applied/enabled/visible on this view.
+        sb.AppendLine();
+        sb.AppendLine("── 'Highlight - Rooms' filter ──");
+        FilterElement filter = new FilteredElementCollector(doc)
+            .OfClass(typeof(FilterElement))
+            .Cast<FilterElement>()
+            .FirstOrDefault(f => f.Name == "Highlight - Rooms");
+        if (filter == null)
+        {
+            sb.AppendLine("  not found");
+        }
+        else
+        {
+            sb.AppendLine($"  type={filter.GetType().Name}  id={filter.Id}");
+            bool applied = view.IsFilterApplied(filter.Id);
+            sb.AppendLine($"  applied={applied}");
+            if (applied)
+                sb.AppendLine($"  enabled={view.GetIsFilterEnabled(filter.Id)}  visible={view.GetFilterVisibility(filter.Id)}");
         }
 
         TaskDialog.Show("TurboSpike", sb.ToString());

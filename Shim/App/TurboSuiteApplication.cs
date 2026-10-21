@@ -90,6 +90,14 @@ public class TurboSuiteApplication : IExternalApplication
                 "Blank");
 
             CreatePulldownItem(scriptsPulldown, assemblyPath,
+                "TurboHighlight",
+                "Toggle Room Highlight",
+                "TurboSuite.Highlight.HighlightCommand",
+                "Suggested shortcut: TH\nToggle the room highlight in the active plan view",
+                "3D jobs: turns Spaces on and toggles its subcategories (Color Fill, Interior, Reference) in Visibility/Graphics — all off → all on, otherwise all off. 2D jobs: toggles the visibility of the \"Highlight - Rooms\" filter. Refuses views with a view template applied — unassign it first.",
+                "Blank");
+
+            CreatePulldownItem(scriptsPulldown, assemblyPath,
                 "TurboCompact",
                 "Compact Family",
                 "TurboSuite.Compact.CompactCommand",
