@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using ClosedXML.Excel;
 using TurboSuite.Schedule.Models;
+using TurboSuite.Zones.Services;
 
 namespace TurboSuite.Schedule.Services;
 
@@ -368,7 +369,7 @@ public static class ScheduleWorkbookIo
             if (d.Label == "Remote Power Supply")
                 ListValidation(colIndex[d], "\"Yes,No\"");
             else if (d.Label == "Dimming Protocol")
-                ListValidation(colIndex[d], "\"0-10V,ELV,MLV,DMX,DALI,WIFI,Line Voltage,PWM\"");
+                ListValidation(colIndex[d], "\"" + string.Join(",", DimmingModuleResolver.AcceptedProtocols) + "\"");
         }
     }
 

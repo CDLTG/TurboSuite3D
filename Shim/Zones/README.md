@@ -253,6 +253,7 @@ Protocols fall into three categories:
 |----------|----------|
 | `ELV`, `0-10V`, `MLV`, `RELAY` | Allocates. Note **MLV → ELV module** — the mapping is not the identity |
 | `WIFI` | Network-controlled, rides no module. Excluded **silently**, like a switch-wired circuit |
+| `CCX` | Lutron Clear Connect Type X wireless fixtures (via the HQP7-RF gateway), rides no module. Excluded **silently**, like `WIFI`. The gateway is counted from its placed family's Role, not from this protocol |
 | `DMX` | Rides no DIN module — the `QSE-CI-DMX` is a QS-link interface in the LV compartment, and **TurboDMX** counts them. Excluded **silently, but only while TurboDMX accounts for it** (reports parts *or* a reason). If TurboDMX saw no matching fixtures at all, nothing is counting the circuit and it surfaces in **Unassigned Circuits** rather than vanishing |
 | `DALI` | Subsystem-owned (`LQSE2-1DALUNV-D` DIN module), like DMX. Excluded **silently while the DALI subsystem accounts for it**; DALI fixtures modeled with no loops declared surface the *"declare loops in TurboZones"* warning instead of vanishing |
 | blank / unrecognized | Authoring gap → **Unassigned Circuits** |

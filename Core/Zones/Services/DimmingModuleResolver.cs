@@ -87,6 +87,11 @@ namespace TurboSuite.Zones.Services
                 // switch-wired circuit — this is a design decision, not a missing parameter.
                 { "WIFI",  new Entry(Category.NoModule) },
 
+                // Lutron Clear Connect Type X — wireless fixtures commissioned through the HQP7-RF
+                // gateway, no DIN module. Silent for the same reason as WIFI. (The gateway itself is a
+                // placed family counted by its TurboSuite Role, not inferred from this protocol.)
+                { "CCX",   new Entry(Category.NoModule) },
+
                 // DMX rides no DIN module at all: the QSE-CI-DMX is a QS-link interface in the panel's
                 // LV compartment, and TurboDMX — which knows the channel math — reports how many.
                 // Silent here, because the parts are counted, just not by this map.
@@ -99,6 +104,13 @@ namespace TurboSuite.Zones.Services
                 // circuits, so it is a subsystem like DMX, not a per-circuit DIN module.)
                 { "DALI",  new Entry(Category.ExternalSubsystem, subsystem: "DALI") }
             };
+
+        /// <summary>
+        /// Every protocol the map recognizes, sorted — the authoring vocabulary. TurboSchedule's
+        /// workbook drop-down is built from this so it cannot offer a value TurboZones would flag.
+        /// </summary>
+        public static IReadOnlyList<string> AcceptedProtocols { get; } =
+            Map.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
 
         /// <summary>
         /// Resolves the module type and display protocol for one circuit from its member

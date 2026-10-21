@@ -21,13 +21,15 @@ namespace TurboSuite.Zones.Models
         /// <summary>Rides a control module — allocate on DimmingType.</summary>
         Allocatable,
 
-        /// <summary>Deliberately module-less (WIFI). Excluded silently, like a switch-wired circuit.</summary>
+        /// <summary>Deliberately module-less (WIFI, CCX). Excluded silently, like a switch-wired circuit.</summary>
         NoModuleByDesign,
 
-        /// <summary>DALI — a real module TurboSuite does not allocate yet. Flagged.</summary>
+        /// <summary>A real module TurboSuite does not allocate yet. Flagged. No protocol maps here today
+        /// (DALI, its last member, became <see cref="HandledBySubsystem"/>) — kept as the seam for the
+        /// next benched protocol.</summary>
         NotYetSupported,
 
-        /// <summary>DMX — a dedicated subsystem owns this circuit's control hardware, and reports its
+        /// <summary>DMX / DALI — a dedicated subsystem owns this circuit's control hardware, and reports its
         /// own demand through <c>IControlSubsystemDemandProvider</c>. Like
         /// <see cref="NoModuleByDesign"/> it rides no DIN module and is excluded silently; unlike it,
         /// the circuit is not module-less — the module is just counted somewhere else.</summary>
@@ -48,12 +50,13 @@ namespace TurboSuite.Zones.Models
 
         /// <summary>The raw Dimming Protocol as authored ("MLV", "ELV; 0-10V"), kept separate from
         /// <see cref="DimmingType"/> so neither field has to mean two things. Shown in the
-        /// Unassigned list, where a benched DALI circuit must read "DALI" rather than blank.</summary>
+        /// Unassigned list, where a flagged circuit must read its authored value (e.g. "DMX" when the
+        /// subsystem reported nothing) rather than blank.</summary>
         public string DimmingProtocolDisplay { get; set; }
 
         public DimmingResolveOutcome DimmingOutcome { get; set; }
 
-        /// <summary>Which subsystem owns this circuit's control hardware ("DMX"). Empty unless
+        /// <summary>Which subsystem owns this circuit's control hardware ("DMX", "DALI"). Empty unless
         /// <see cref="DimmingOutcome"/> is <see cref="DimmingResolveOutcome.HandledBySubsystem"/>.</summary>
         public string DimmingSubsystem { get; set; }
         public string RoomName { get; set; }

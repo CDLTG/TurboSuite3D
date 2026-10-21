@@ -150,17 +150,17 @@ namespace TurboSuite.Zones.Services
             var circuitsByZone = new Dictionary<int, List<ZonesCircuitData>>();
             foreach (var circuit in circuits)
             {
-                // Deliberately module-less (WIFI, network-controlled). Checked before the panel gates
+                // Deliberately module-less (WIFI / CCX wireless). Checked before the panel gates
                 // because such a circuit often has no zone panel either, and warning about that would
                 // be noise. Same silence the switch-wired exclusion below gets.
                 if (circuit.DimmingOutcome == DimmingResolveOutcome.NoModuleByDesign)
                     continue;
 
-                // Owned by a subsystem that counts its own hardware (DMX → TurboDMX) — silenced only if
-                // that subsystem actually said something. If it reported neither parts nor a reason, it
-                // never saw this circuit's fixtures at all (the fixtures carry Dimming Protocol but not
-                // the DMX Channels the reader keys on), and nothing anywhere would mention them. Better
-                // in the Unassigned list, where they were before subsystems existed, than nowhere.
+                // Owned by a subsystem that counts its own hardware (DMX → TurboDMX, DALI → TurboDALI) —
+                // silenced only if that subsystem actually said something. If it reported neither parts
+                // nor a reason, it accounted for none of this circuit's fixtures, and nothing anywhere
+                // would mention them. Better in the Unassigned list, where they were before subsystems
+                // existed, than nowhere.
                 if (circuit.DimmingOutcome == DimmingResolveOutcome.HandledBySubsystem
                     && accountedSubsystems.Contains(circuit.DimmingSubsystem ?? ""))
                     continue;

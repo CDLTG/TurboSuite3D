@@ -24,6 +24,18 @@ namespace TurboSuite.Tests.Zones
 
     public class DimmingModuleResolverTests
     {
+        /// <summary>The authoring vocabulary TurboSchedule's workbook drop-down is built from. Pinned so
+        /// adding or dropping a protocol is a deliberate, visible change — and every listed value must
+        /// resolve to something other than an authoring gap.</summary>
+        [Fact]
+        public void AcceptedProtocols_IsTheSortedVocabulary_AndNoneIsAGap()
+        {
+            Assert.Equal(new[] { "0-10V", "CCX", "DALI", "DMX", "ELV", "MLV", "RELAY", "WIFI" },
+                DimmingModuleResolver.AcceptedProtocols);
+            Assert.All(DimmingModuleResolver.AcceptedProtocols, p =>
+                Assert.NotEqual(DimmingResolveOutcome.NoProtocol, DimmingModuleResolver.Resolve(new[] { p }).Outcome));
+        }
+
         /// <summary>Module-category protocols resolve to their BrandConfig key. Matching is
         /// case-insensitive and trimmed; the returned key keeps canonical casing regardless.</summary>
         [Theory]
@@ -47,6 +59,8 @@ namespace TurboSuite.Tests.Zones
         [Theory]
         [InlineData("WIFI", DimmingResolveOutcome.NoModuleByDesign)]
         [InlineData("wifi", DimmingResolveOutcome.NoModuleByDesign)]
+        [InlineData("CCX", DimmingResolveOutcome.NoModuleByDesign)]   // Clear Connect Type X wireless
+        [InlineData("RF-CCX", DimmingResolveOutcome.NoProtocol)]      // not the standard spelling → flagged
         [InlineData("DALI", DimmingResolveOutcome.HandledBySubsystem)]  // Phase 3: subsystem-owned like DMX
         [InlineData("DMX", DimmingResolveOutcome.HandledBySubsystem)]
         [InlineData("dmx", DimmingResolveOutcome.HandledBySubsystem)]
