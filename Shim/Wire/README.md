@@ -65,7 +65,7 @@ The discriminator is the **`Controls` connector**: only wireless keypads carry o
 
 When both fixtures share a non-axis-aligned rotation (e.g., fixtures on a rotated grid), the on-axis vs off-axis decision is evaluated in the fixtures' local coordinate frame. This ensures inline rotated fixtures receive the 24° arc rather than an incorrect S-curve.
 
-For multi-fixture runs, arc direction is determined by: (1) existing tag positions, then (2) outward from the group centroid, then (3) default. Existing wires between two fixtures are deleted before placing new ones.
+For multi-fixture runs, arc direction is determined by: (1) existing tag positions, then (2) outward from the group centroid, then (3) default. Existing wires between two fixtures **in this view** (and its primary/dependent views, which share annotation) are deleted before placing new ones; wires between the same pair in other plans are left alone (`ViewAnnotationScope`).
 
 ### Linear fixtures (end-to-end)
 

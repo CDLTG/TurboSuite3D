@@ -371,8 +371,9 @@ public class BubbleCommand : IExternalCommand
         {
             trans.Start();
 
-            DeleteExistingElectricalSwitchlegTags(doc, fixture);
-            var wiresDeleted = DeleteUnconnectedWires(doc, fixtureConnector);
+            var scope = new ViewAnnotationScope(activeView);
+            DeleteExistingElectricalSwitchlegTags(doc, fixture, scope);
+            var wiresDeleted = DeleteUnconnectedWires(doc, fixtureConnector, scope);
             if (wiresDeleted)
                 doc.Regenerate();
 
@@ -477,10 +478,10 @@ public class BubbleCommand : IExternalCommand
         return GeometryHelper.GetFixtureLocationRotation(fixture);
     }
 
-    private static void DeleteExistingElectricalSwitchlegTags(Document doc, FamilyInstance fixture)
+    private static void DeleteExistingElectricalSwitchlegTags(Document doc, FamilyInstance fixture, ViewAnnotationScope scope)
     {
         DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_ElectricalFixtureTags,
-            role => role == Roles.ElectricalSwitchlegTag);
+            role => role == Roles.ElectricalSwitchlegTag, scope);
     }
 
     #endregion
@@ -573,8 +574,9 @@ public class BubbleCommand : IExternalCommand
         {
             trans.Start();
 
-            DeleteExistingSwitchlegTags(doc, fixture, sourceTag);
-            var wiresDeleted = DeleteUnconnectedWires(doc, fixtureConnector);
+            var scope = new ViewAnnotationScope(view);
+            DeleteExistingSwitchlegTags(doc, fixture, sourceTag, scope);
+            var wiresDeleted = DeleteUnconnectedWires(doc, fixtureConnector, scope);
 
             if (wiresDeleted)
                 doc.Regenerate();
@@ -622,15 +624,19 @@ public class BubbleCommand : IExternalCommand
         return true;
     }
 
-    private static void DeleteExistingSwitchlegTags(Document doc, FamilyInstance fixture, IndependentTag sourceTag)
+    private static void DeleteExistingSwitchlegTags(Document doc, FamilyInstance fixture, IndependentTag sourceTag,
+        ViewAnnotationScope scope)
     {
         DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_LightingFixtureTags,
             role => role == Roles.FixtureSwitchlegTag || role == Roles.RemoteSwitchlegTag,
-            excludeTagId: sourceTag.Id);
+            scope, excludeTagId: sourceTag.Id);
     }
 
+    // Re-run cleanup is limited to the placement view's annotation (ViewAnnotationScope): the same
+    // fixture's switchleg tags and stub wires in other plans are left alone.
     private static void DeleteSwitchlegTagsByCategory(Document doc, FamilyInstance fixture,
-        BuiltInCategory tagCategory, Func<string, bool> roleMatch, ElementId? excludeTagId = null)
+        BuiltInCategory tagCategory, Func<string, bool> roleMatch, ViewAnnotationScope scope,
+        ElementId? excludeTagId = null)
     {
         var tagsToDelete = new List<ElementId>();
 
@@ -646,6 +652,9 @@ public class BubbleCommand : IExternalCommand
                 if (excludeTagId != null && tag.Id == excludeTagId)
                     continue;
 
+                if (!scope.Owns(tag))
+                    continue;
+
                 if (!tag.GetTaggedLocalElementIds().Contains(fixture.Id))
                     continue;
 
@@ -659,7 +668,7 @@ public class BubbleCommand : IExternalCommand
             doc.Delete(tagsToDelete);
     }
 
-    private static bool DeleteUnconnectedWires(Document doc, Connector fixtureConnector)
+    private static bool DeleteUnconnectedWires(Document doc, Connector fixtureConnector, ViewAnnotationScope scope)
     {
         var wiresToDelete = new List<ElementId>();
 
@@ -671,6 +680,9 @@ public class BubbleCommand : IExternalCommand
         {
             var owner = connectedConn.Owner;
             if (owner is not ElectricalWire wire)
+                continue;
+
+            if (!scope.Owns(wire))
                 continue;
 
             if (IsWireOnlyConnectedToFixture(wire, fixtureConnector))

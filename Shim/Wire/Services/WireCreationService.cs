@@ -113,12 +113,18 @@ internal static class WireCreationService
         }
     }
 
+    /// <summary>
+    /// Deletes the wires joining the two connectors in the active view (and its primary/dependent
+    /// family) — the wires a re-run replaces. Wires between the same pair in other plans are kept.
+    /// </summary>
     public static void DeleteWiresBetweenFixtures(Document doc, Connector c1, Connector c2)
     {
+        var scope = new ViewAnnotationScope(doc.ActiveView);
+
         HashSet<ElementId> wiresAtC1 = new HashSet<ElementId>();
         foreach (Connector connected in c1.AllRefs)
         {
-            if (connected.Owner is ElectricalWire wire)
+            if (connected.Owner is ElectricalWire wire && scope.Owns(wire))
             {
                 wiresAtC1.Add(wire.Id);
             }
