@@ -103,24 +103,30 @@ public static class RegionNamingService
                 }
                 else
                 {
-                    // 0 or multiple ceiling heights — place room name separately, then each height at its location
-                    XYZ namePlacement = insideExisting.Count > 0
-                        ? insideExisting.First().RevitPoint
-                        : ComputeCentroid(region.BoundaryLoops[0]);
+                    // 0 or multiple ceiling heights — one note per CAD entry at its own location, the same
+                    // per-entry rule as a first naming below: a name entry carries the region's Comments,
+                    // combined with its height when the entry has both (a name+height block). The name
+                    // used to go at whichever entry came first, name or not, so when that entry carried a
+                    // height the name and the height became two notes at one point, drawn on top of each
+                    // other. With no name entry in the region, the name goes at the centroid.
+                    if (!insideExisting.Any(cd => !string.IsNullOrEmpty(cd.RoomName)))
+                        PlaceNote(textNoteTypeId, ComputeCentroid(region.BoundaryLoops[0]), region.ExistingComments);
 
-                    PlaceNote(textNoteTypeId, namePlacement, region.ExistingComments);
-
-                    foreach (var heightEntry in existingHeightEntries)
+                    foreach (var cadEntry in insideExisting)
                     {
-                        var (entryHeight, description) = CleanCeilingHeight(heightEntry.CeilingHeight);
-                        if (string.IsNullOrEmpty(entryHeight)) continue;
+                        var (entryHeight, description) = CleanCeilingHeight(cadEntry.CeilingHeight);
+                        string entryName = string.IsNullOrEmpty(cadEntry.RoomName) ? "" : region.ExistingComments;
+                        string textContent = BuildTextContent(entryName, entryHeight);
+                        if (string.IsNullOrEmpty(textContent)) continue;
 
-                        PlaceNote(textNoteTypeId, heightEntry.RevitPoint, entryHeight);
+                        if (!HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, cadEntry.RevitPoint, textContent))
+                            PlaceNote(textNoteTypeId, cadEntry.RevitPoint, textContent);
 
                         if (!string.IsNullOrEmpty(description) && descriptionTextNoteTypeId != ElementId.InvalidElementId)
                         {
-                            var descPoint = GetDescriptionPoint(view, heightEntry.RevitPoint, totalTilt);
-                            PlaceNote(descriptionTextNoteTypeId, descPoint, description);
+                            var descPoint = GetDescriptionPoint(view, cadEntry.RevitPoint, totalTilt);
+                            if (!HasMatchingTextNote(viewTextNotes, region.BoundaryLoops, descPoint, description))
+                                PlaceNote(descriptionTextNoteTypeId, descPoint, description);
                         }
                     }
                 }
