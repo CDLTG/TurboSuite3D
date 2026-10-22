@@ -15,6 +15,10 @@ A point stamp can't stand in for a line-based family: its plan graphic is author
 
 Both line styles resolve by Lines subcategory name and fall back to the view default if absent. The detail lines join the `TurboMask N` group, so refresh/ungroup cleans them up like the stamps and wire overlays.
 
+## Plan scale
+
+Two lengths are 1/4" = 1'-0" reference values scaled by `K = view.Scale / 48` of the masked view (`PlanScale`, see CLAUDE.md): the mask's **3.5" outward margin** (`SelectionBoundsService.OutwardOffsetRefFeet`, padding view-measured extents) and the tape **2" end-cap bar** (`TapeEndCapRefLengthFt`, which stands in for the tape's only end cap, its nested Generic Annotation). At 1/4" the output is unchanged. Unscaled: the line-based fixture rectangle (`Symbol Length` × `Symbol Width`, the family's true-size masking graphic) and the stamps (annotation, which Revit already scales). Set the view scale **before** masking; after a scale change, re-select the `TurboMask N` group and re-run to refresh it.
+
 ## Dependencies
 
 | Category | Role |

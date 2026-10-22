@@ -17,12 +17,16 @@ namespace TurboSuite.Mask.Services;
 /// </summary>
 internal static class SelectionBoundsService
 {
-    /// <summary>Hardcoded outward offset (feet). 3.5 inches / 12.0.</summary>
-    public const double OutwardOffsetFeet = 3.5 / 12.0;
+    /// <summary>
+    /// Outward margin at the 1/4" reference (feet), 3.5". It pads view-measured extents (annotation
+    /// scales with the view), so it is applied × K of the masked view (PlanScale).
+    /// </summary>
+    public const double OutwardOffsetRefFeet = 3.5 / 12.0;
 
     public static CurveLoop? BuildOuterLoop(IEnumerable<Element> elements, View view)
     {
         var elementList = elements as IList<Element> ?? elements.ToList();
+        double outwardOffsetFeet = OutwardOffsetRefFeet * PlanScaleHelper.Of(view).K;
 
         double theta = DetermineOrientation(elementList);
         // Rotate content into the oriented frame to measure min/max, then rotate the finished
@@ -55,10 +59,10 @@ internal static class SelectionBoundsService
 
         if (!any) return null;
 
-        minX -= OutwardOffsetFeet;
-        minY -= OutwardOffsetFeet;
-        maxX += OutwardOffsetFeet;
-        maxY += OutwardOffsetFeet;
+        minX -= outwardOffsetFeet;
+        minY -= outwardOffsetFeet;
+        maxX += outwardOffsetFeet;
+        maxY += outwardOffsetFeet;
 
         var p0 = FlattenToLevel(toModel.OfPoint(new XYZ(minX, minY, 0)), z);
         var p1 = FlattenToLevel(toModel.OfPoint(new XYZ(maxX, minY, 0)), z);

@@ -33,7 +33,9 @@ namespace TurboSuite.Driver.Services
     /// </summary>
     public class DeploymentExecutor
     {
-        private const double SpacingFt = 9.5 / 12.0; // 9.5 inches in feet
+        // Column spacing at the 1/4" reference (9.5"). Each device draws as a nested annotation that
+        // scales with the view, so the spacing is × K of the placement view (PlanScale).
+        private const double SpacingRefFt = 9.5 / 12.0;
 
 
         /// <summary>
@@ -159,6 +161,7 @@ namespace TurboSuite.Driver.Services
                 ? ViewOrientationHelper.ScreenOffsetToModel(activeView, new XYZ(0, -1, 0))
                 : new XYZ(0, -1, 0);
             double deviceRotation = snapToScreen ? cropAngle : 0.0;
+            double spacingFt = SpacingRefFt * PlanScaleHelper.Of(activeView).K;
 
             // Pick origin: select an existing power supply (new ones placed 9.5" below)
             // or press Escape to pick a bare point instead
@@ -174,8 +177,8 @@ namespace TurboSuite.Driver.Services
                 var anchorLocation = GeometryHelper.GetFixtureLocation(anchor);
                 // First new supply sits one spacing "down the column" from the anchor.
                 origin = new XYZ(
-                    anchorLocation.X + stackDownUnit.X * SpacingFt,
-                    anchorLocation.Y + stackDownUnit.Y * SpacingFt,
+                    anchorLocation.X + stackDownUnit.X * spacingFt,
+                    anchorLocation.Y + stackDownUnit.Y * spacingFt,
                     anchorLocation.Z);
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
@@ -239,7 +242,7 @@ namespace TurboSuite.Driver.Services
                         {
                             // Column layout: each instance offset "down the column" by 9.5" along
                             // the stack direction (model-aligned, or screen-down at square angles).
-                            double dist = globalIndex * SpacingFt;
+                            double dist = globalIndex * spacingFt;
                             XYZ point = new XYZ(
                                 origin.X + stackDownUnit.X * dist,
                                 origin.Y + stackDownUnit.Y * dist,

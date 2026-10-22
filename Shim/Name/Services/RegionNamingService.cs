@@ -373,14 +373,16 @@ public static class RegionNamingService
 
     /// <summary>
     /// Offsets a point "below" the main text, in the note's own tilted frame. The offset is a
-    /// screen-down half-foot rotated by <paramref name="tilt"/> (Project-North comp + crop
+    /// screen-down half-foot (one text-line pitch at 1/4"; × K of the view, since the notes' rendered
+    /// height scales with it — PlanScale) rotated by <paramref name="tilt"/> (Project-North comp + crop
     /// counter-rotation), mapped into model space via the view so it lands directly under the
     /// note the user sees. Identity in an un-rotated view (tilt = 0, mapping = identity).
     /// </summary>
     private static XYZ GetDescriptionPoint(View view, XYZ anchor, double tilt)
     {
-        double dx = 0.5 * Math.Sin(tilt);
-        double dy = -0.5 * Math.Cos(tilt);
+        double gap = 0.5 * PlanScaleHelper.Of(view).K;
+        double dx = gap * Math.Sin(tilt);
+        double dy = -gap * Math.Cos(tilt);
         XYZ model = ViewOrientationHelper.ScreenOffsetToModel(view, new XYZ(dx, dy, 0));
         return new XYZ(anchor.X + model.X, anchor.Y + model.Y, anchor.Z);
     }

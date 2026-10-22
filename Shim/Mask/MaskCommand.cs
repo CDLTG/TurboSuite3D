@@ -698,13 +698,17 @@ public class MaskCommand : IExternalCommand
         AddDetailLine(doc, view, c4, c1, style, groupMemberIds);
     }
 
-    /// <summary>Total length of a tape end-cap bar, in feet (2").</summary>
-    private const double TapeEndCapLengthFt = 2.0 / 12.0;
+    /// <summary>
+    /// Total length of a tape end-cap bar at the 1/4" reference, in feet (2"). The tape family's only end
+    /// cap is its nested Generic Annotation, which scales with the view, so the bar is drawn × K of the
+    /// masked view (PlanScale).
+    /// </summary>
+    private const double TapeEndCapRefLengthFt = 2.0 / 12.0;
 
     /// <summary>
     /// Draws a line-based "Tape" run's centerline as a detail curve along its full LocationCurve, plus
-    /// a 2" end-cap bar perpendicular to the run at each end, on top of the mask. The connector symbol
-    /// is placed separately by the stamp loop.
+    /// a 2" (× K) end-cap bar perpendicular to the run at each end, on top of the mask. The connector
+    /// symbol is placed separately by the stamp loop.
     /// </summary>
     private static void DrawTapeCenterline(Document doc, View view, FamilyInstance fixture,
         GraphicsStyle? style, List<ElementId> groupMemberIds)
@@ -717,7 +721,8 @@ public class MaskCommand : IExternalCommand
         XYZ start = curve.GetEndPoint(0);
         XYZ end = curve.GetEndPoint(1);
         XYZ dir = (end - start).Normalize();
-        XYZ halfCap = new XYZ(-dir.Y, dir.X, 0) * (TapeEndCapLengthFt / 2.0);
+        double capLengthFt = TapeEndCapRefLengthFt * PlanScaleHelper.Of(view).K;
+        XYZ halfCap = new XYZ(-dir.Y, dir.X, 0) * (capLengthFt / 2.0);
         AddDetailLine(doc, view, start - halfCap, start + halfCap, style, groupMemberIds);
         AddDetailLine(doc, view, end - halfCap, end + halfCap, style, groupMemberIds);
     }
