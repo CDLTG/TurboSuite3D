@@ -34,8 +34,10 @@ namespace TurboSuite.Shared.Services
     /// <item><see cref="WorksharingUtils.CheckoutElements(Document, ICollection{ElementId})"/> on ids a teammate
     /// owns returns a short set and doesn't throw, so it is safe to run speculatively. Ids already held by the
     /// current user come back in the result, so granted = result ⊇ working set.</item>
-    /// <item>It also refuses an element whose central copy is newer than local, so holding the lease <i>is</i> the
-    /// freshness check.</item>
+    /// <item>It does <b>not</b> refuse an element whose central copy is newer than local (Revit 2025): it grants
+    /// the borrow, and the later write rolls back at commit ("You now own the element, but your file is out of
+    /// date"). So freshness is checked separately, up front, with <see cref="WorksharingUtils.GetModelUpdatesStatus"/>
+    /// — a stale working set is refused before anything is borrowed.</item>
     /// <item>ExtensibleStorage <see cref="DataStorage"/> elements behave exactly like model elements.</item>
     /// </list>
     ///
@@ -84,6 +86,19 @@ namespace TurboSuite.Shared.Services
             if (lockIds != null) wanted.UnionWith(lockIds);
             if (wanted.Count == 0) return LeaseResult.Granted;
 
+            // Freshness first: checkout would grant a stale element (see the class doc), so refuse before
+            // borrowing anything.
+            HashSet<ElementId> stale;
+            try
+            {
+                stale = new HashSet<ElementId>(wanted.Where(id => IsBehindCentral(doc, id)));
+            }
+            catch (CentralModelException)
+            {
+                return LeaseResult.Denied(WorksharingMessages.Unreachable);
+            }
+            if (stale.Count > 0) return Deny(doc, wanted, stale, lockIds, module, itemNoun);
+
             ICollection<ElementId> held;
             try
             {
@@ -102,13 +117,33 @@ namespace TurboSuite.Shared.Services
             var shortfall = wanted.Where(id => !heldSet.Contains(id)).ToList();
             if (shortfall.Count == 0) return LeaseResult.Granted;
 
-            // Classify the shortfall. Partial borrows are kept (released at the next sync) — see the class doc.
+            // Partial borrows are kept (released at the next sync) — see the class doc.
+            return Deny(doc, shortfall, null, lockIds, module, itemNoun);
+        }
+
+        private static bool IsBehindCentral(Document doc, ElementId id)
+        {
+            ModelUpdatesStatus status;
+            try { status = WorksharingUtils.GetModelUpdatesStatus(doc, id); }
+            catch (CentralModelException) { throw; }
+            catch { return false; }
+            return status == ModelUpdatesStatus.UpdatedInCentral || status == ModelUpdatesStatus.DeletedInCentral;
+        }
+
+        /// <summary>
+        /// Classify <paramref name="candidates"/> into the one denial message. A teammate-owned element names its
+        /// owner. Otherwise it counts as stale when it's in <paramref name="knownStale"/> — or, when that is null
+        /// (classifying a checkout shortfall), always: refused with no owner means local is behind central.
+        /// </summary>
+        private static LeaseResult Deny(Document doc, IEnumerable<ElementId> candidates, ISet<ElementId> knownStale,
+            IReadOnlyCollection<ElementId> lockIds, string module, string itemNoun)
+        {
             var lockSet = lockIds != null ? new HashSet<ElementId>(lockIds) : new HashSet<ElementId>();
             var lockOwners = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var itemsByOwner = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             int stale = 0;
 
-            foreach (var id in shortfall)
+            foreach (var id in candidates)
             {
                 string owner = null;
                 CheckoutStatus status;
@@ -120,9 +155,8 @@ namespace TurboSuite.Shared.Services
                     if (lockSet.Contains(id)) lockOwners.Add(owner);
                     else itemsByOwner[owner] = (itemsByOwner.TryGetValue(owner, out var n) ? n : 0) + 1;
                 }
-                else
+                else if (knownStale == null || knownStale.Contains(id))
                 {
-                    // No owner but still refused: the central copy is newer than local.
                     stale++;
                 }
             }
