@@ -15,8 +15,8 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
     private double _newTagLocalX;
 
     public HorizontalPlacementCalculator(Document doc, View view, FamilyInstance fixture,
-        IndependentTag sourceTag, bool hasRemotePowerSupply = false)
-        : base(doc, view, fixture, sourceTag)
+        IndependentTag sourceTag, BubbleGeometry g, bool hasRemotePowerSupply = false)
+        : base(doc, view, fixture, sourceTag, g)
     {
         _hasRemotePowerSupply = hasRemotePowerSupply;
     }
@@ -40,7 +40,7 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
         var wireAnchorLocal = newTagLocal;
         if (_hasRemotePowerSupply && !offsets.IsHorizontalCondition)
         {
-            var rpsOffset = Math.Sign(offsets.TagX) * BubbleConstants.RemoteSwitchlegExtraXOffsetFt;
+            var rpsOffset = Math.Sign(offsets.TagX) * G.RemoteSwitchlegExtraXOffsetFt;
             wireAnchorLocal = new XYZ(newTagLocal.X - rpsOffset, newTagLocal.Y, newTagLocal.Z);
         }
         var vertex3Local = CalculateVertex3(wireAnchorLocal, offsets);
@@ -66,41 +66,41 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
         {
             PlacementCondition.Right => new PlacementOffsets
             {
-                V2X = -BubbleConstants.WireHorizontalOffsetFt,
-                V2Y = halfLength + BubbleConstants.WireToSymbolGapFt,
-                V3X = -BubbleConstants.WireElbowOffsetFt,
+                V2X = -G.WireHorizontalOffsetFt,
+                V2Y = halfLength + G.WireToSymbolGapFt,
+                V3X = -G.WireElbowOffsetFt,
                 V3Y = 0,
                 TagX = 0,
-                TagY = halfLength + BubbleConstants.TagOffsetVerticalFt,
+                TagY = halfLength + G.TagOffsetVerticalFt,
                 IsHorizontalCondition = true
             },
             PlacementCondition.Left => new PlacementOffsets
             {
-                V2X = BubbleConstants.WireHorizontalOffsetFt,
-                V2Y = halfLength + BubbleConstants.WireToSymbolGapFt,
-                V3X = BubbleConstants.WireElbowOffsetFt,
+                V2X = G.WireHorizontalOffsetFt,
+                V2Y = halfLength + G.WireToSymbolGapFt,
+                V3X = G.WireElbowOffsetFt,
                 V3Y = 0,
                 TagX = 0,
-                TagY = halfLength + BubbleConstants.TagOffsetVerticalFt,
+                TagY = halfLength + G.TagOffsetVerticalFt,
                 IsHorizontalCondition = true
             },
             PlacementCondition.Up => new PlacementOffsets
             {
-                V2X = halfWidth + BubbleConstants.WireToSymbolGapHorizontalFt,
-                V2Y = -BubbleConstants.WireVerticalOffsetFt,
-                V3X = -BubbleConstants.WireElbowOffsetFt,
+                V2X = halfWidth + G.WireToSymbolGapHorizontalFt,
+                V2Y = -G.WireVerticalOffsetFt,
+                V3X = -G.WireElbowOffsetFt,
                 V3Y = 0,
-                TagX = halfWidth + BubbleConstants.TagOffsetHorizontalFt,
+                TagX = halfWidth + G.TagOffsetHorizontalFt,
                 TagY = 0,
                 IsHorizontalCondition = false
             },
             _ => new PlacementOffsets // Down
             {
-                V2X = halfWidth + BubbleConstants.WireToSymbolGapHorizontalFt,
-                V2Y = BubbleConstants.WireVerticalOffsetFt,
-                V3X = -BubbleConstants.WireElbowOffsetFt,
+                V2X = halfWidth + G.WireToSymbolGapHorizontalFt,
+                V2Y = G.WireVerticalOffsetFt,
+                V3X = -G.WireElbowOffsetFt,
                 V3Y = 0,
-                TagX = halfWidth + BubbleConstants.TagOffsetHorizontalFt,
+                TagX = halfWidth + G.TagOffsetHorizontalFt,
                 TagY = 0,
                 IsHorizontalCondition = false
             }
@@ -128,8 +128,8 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
     {
         if (offsets.IsHorizontalCondition)
         {
-            var baseOffset = BubbleConstants.TagXOffsetFt
-                + (_hasRemotePowerSupply ? BubbleConstants.RemoteSwitchlegExtraXOffsetFt : 0);
+            var baseOffset = G.TagXOffsetFt
+                + (_hasRemotePowerSupply ? G.RemoteSwitchlegExtraXOffsetFt : 0);
             var tagXOffset = Math.Sign(TagLocal.X - FixtureLocal.X) * baseOffset;
             return new XYZ(
                 FixtureLocal.X + tagXOffset,
@@ -138,7 +138,7 @@ internal class HorizontalPlacementCalculator : PlacementCalculatorBase
         }
 
         var extraX = _hasRemotePowerSupply
-            ? Math.Sign(offsets.TagX) * BubbleConstants.RemoteSwitchlegExtraXOffsetFt
+            ? Math.Sign(offsets.TagX) * G.RemoteSwitchlegExtraXOffsetFt
             : 0;
 
         return new XYZ(

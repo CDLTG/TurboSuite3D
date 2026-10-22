@@ -32,9 +32,11 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
     protected readonly PlacementCondition Condition;
     protected readonly double SymbolLength;
     protected readonly double SymbolWidth;
+    protected readonly BubbleGeometry G;
 
-    protected PlacementCalculatorBase(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+    protected PlacementCalculatorBase(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag, BubbleGeometry g)
     {
+        G = g;
         FixturePoint = GeometryHelper.GetFixtureLocation(fixture)
             ?? throw new InvalidOperationException("Fixture has no valid location for placement calculation.");
         TagPoint = sourceTag.TagHeadPosition;
@@ -49,7 +51,7 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
         TagLocal = GlobalToLocal.OfPoint(TagPoint);
 
         Condition = DetermineCondition(FixtureLocal, TagLocal);
-        (SymbolLength, SymbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag);
+        (SymbolLength, SymbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag, g);
     }
 
     public abstract void CalculateFinalPositions(XYZ flipPoint);
@@ -106,28 +108,28 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
         return diffY > 0 ? PlacementCondition.Up : PlacementCondition.Down;
     }
 
-    internal static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
+    internal static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag, BubbleGeometry g)
     {
-        var (length, width) = GeometryHelper.GetSymbolExtents(fixture, view, BubbleConstants.DefaultSymbolSizeFt);
+        var (length, width) = GeometryHelper.GetSymbolExtents(fixture, view, g.DefaultSymbolSizeFt);
 
-        width = Math.Max(width, BubbleConstants.MinSymbolWidthFt);
+        width = Math.Max(width, g.MinSymbolWidthFt);
 
         double fixtureAngle = GeometryHelper.GetTransformAngle(fixture.GetTransform());
-        var tagWidth = GetTagWidth(view, tag, fixtureAngle);
+        var tagWidth = GetTagWidth(view, tag, fixtureAngle, g);
         width = Math.Max(width, tagWidth);
 
         return (length, width);
     }
 
-    internal static double GetTagWidth(View view, IndependentTag tag, double fixtureAngle)
+    internal static double GetTagWidth(View view, IndependentTag tag, double fixtureAngle, BubbleGeometry g)
     {
         var charCount = tag.TagText?.Length ?? 0;
 
         return charCount switch
         {
-            1 => BubbleConstants.TagWidth1CharFt,
-            2 => BubbleConstants.TagWidth2CharsFt,
-            3 => BubbleConstants.TagWidth3CharsFt,
+            1 => g.TagWidth1CharFt,
+            2 => g.TagWidth2CharsFt,
+            3 => g.TagWidth3CharsFt,
             _ => CalculateTagWidthFromBounds(view, tag, fixtureAngle)
         };
     }

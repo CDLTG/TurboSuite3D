@@ -37,7 +37,8 @@ internal static class WirePlacementService
         IPlacementCalculator placement,
         ElementId wireTypeId,
         Connector fixtureConnector,
-        XYZ endPoint)
+        XYZ endPoint,
+        BubbleGeometry g)
     {
         var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
         var wire = ElectricalWire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
@@ -46,7 +47,7 @@ internal static class WirePlacementService
         var endDirection = (endPoint - connectorOrigin).Normalize();
 
         // Double SetVertex technique: seat with a small nudge toward the end, then the final end.
-        wire.SetVertex(0, connectorOrigin + endDirection * BubbleConstants.WireOffsetEndInitialFt);
+        wire.SetVertex(0, connectorOrigin + endDirection * g.WireOffsetEndInitialFt);
         wire.SetVertex(0, endPoint);
     }
 
@@ -58,7 +59,8 @@ internal static class WirePlacementService
         View view,
         IPlacementCalculator placement,
         ElementId wireTypeId,
-        Connector fixtureConnector)
+        Connector fixtureConnector,
+        BubbleGeometry g)
     {
         var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
         var wire = ElectricalWire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
@@ -67,8 +69,8 @@ internal static class WirePlacementService
         var offsetDirection = (placement.Vertex2 - connectorOrigin).Normalize();
 
         // Double SetVertex technique
-        wire.SetVertex(0, connectorOrigin + offsetDirection * BubbleConstants.WireOffsetEndInitialFt);
-        wire.SetVertex(0, connectorOrigin + offsetDirection * BubbleConstants.WireOffsetEndFinalFt);
+        wire.SetVertex(0, connectorOrigin + offsetDirection * g.WireOffsetEndInitialFt);
+        wire.SetVertex(0, connectorOrigin + offsetDirection * g.WireOffsetEndFinalFt);
     }
 
     /// <summary>
@@ -81,18 +83,19 @@ internal static class WirePlacementService
         ElementId wireTypeId,
         Connector fixtureConnector,
         XYZ wallNormal,
-        FamilyInstance fixture)
+        FamilyInstance fixture,
+        BubbleGeometry g)
     {
         var vertices = new List<XYZ>(2) { placement.Vertex2, placement.Vertex3 };
         var wire = ElectricalWire.Create(doc, wireTypeId, view.Id, WiringType.Arc, vertices, fixtureConnector, null);
 
         var scaleFactor = fixture.LookupParameter(ParameterNames.ScaleFactor)?.AsDouble() ?? 1.0;
-        var offsetDistance = BubbleConstants.WireOffsetEndWallSconceFt * scaleFactor;
+        var offsetDistance = g.WireOffsetEndWallSconceFt * scaleFactor;
 
         var connectorOrigin = fixtureConnector.Origin;
 
         // Double SetVertex technique
-        wire.SetVertex(0, connectorOrigin + wallNormal * BubbleConstants.WireOffsetEndInitialFt);
+        wire.SetVertex(0, connectorOrigin + wallNormal * g.WireOffsetEndInitialFt);
         wire.SetVertex(0, connectorOrigin + wallNormal * offsetDistance);
     }
 }

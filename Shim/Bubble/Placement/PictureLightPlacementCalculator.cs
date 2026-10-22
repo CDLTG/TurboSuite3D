@@ -37,9 +37,11 @@ internal class PictureLightPlacementCalculator : IPlacementCalculator
     private readonly XYZ _wallParallel; // along the wall
     private readonly double _halfAlongWall; // origin -> symbol edge along the wall (symmetric)
     private readonly double _roomDepth;     // origin -> symbol edge away from the wall (the asymmetry)
+    private readonly BubbleGeometry _g;
 
-    public PictureLightPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+    public PictureLightPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag, BubbleGeometry g)
     {
+        _g = g;
         FixturePoint = GeometryHelper.GetFixtureLocation(fixture)
             ?? throw new InvalidOperationException("Picture light has no valid location for placement.");
 
@@ -55,10 +57,10 @@ internal class PictureLightPlacementCalculator : IPlacementCalculator
 
         // Measured origin->edge extents (asymmetry-aware). Along the wall is symmetric, so take the
         // larger of the two sides; perpendicular uses the room-side depth only.
-        double alongPos = GeometryHelper.GetSymbolExtentInDirection(fixture, view, _wallParallel, BubbleConstants.DefaultSymbolSizeFt);
-        double alongNeg = GeometryHelper.GetSymbolExtentInDirection(fixture, view, _wallParallel.Negate(), BubbleConstants.DefaultSymbolSizeFt);
+        double alongPos = GeometryHelper.GetSymbolExtentInDirection(fixture, view, _wallParallel, g.DefaultSymbolSizeFt);
+        double alongNeg = GeometryHelper.GetSymbolExtentInDirection(fixture, view, _wallParallel.Negate(), g.DefaultSymbolSizeFt);
         _halfAlongWall = Math.Max(alongPos, alongNeg);
-        _roomDepth = GeometryHelper.GetSymbolExtentInDirection(fixture, view, _wallNormal, BubbleConstants.DefaultSymbolSizeFt);
+        _roomDepth = GeometryHelper.GetSymbolExtentInDirection(fixture, view, _wallNormal, g.DefaultSymbolSizeFt);
     }
 
     public void CalculateFinalPositions(XYZ flipPoint)
@@ -68,27 +70,27 @@ internal class PictureLightPlacementCalculator : IPlacementCalculator
         IsFlipped = side < 0;
 
         // Bubble stands off past the MEASURED room-side depth so it clears the bar into open room.
-        double tagOffWall = _roomDepth + BubbleConstants.PictureLightTagClearanceFt;
+        double tagOffWall = _roomDepth + _g.PictureLightTagClearanceFt;
 
         // Tag: past the bar end along the wall, cleared past the room-side edge (the 2D look).
         NewTagPosition = FixturePoint
-            + _wallParallel * (side * (_halfAlongWall + BubbleConstants.PictureLightTagAlongWallGapFt))
+            + _wallParallel * (side * (_halfAlongWall + _g.PictureLightTagAlongWallGapFt))
             + _wallNormal * tagOffWall;
 
         // v3: elbow, inset from the bubble back along the wall at the same depth.
-        Vertex3 = NewTagPosition - _wallParallel * (side * BubbleConstants.WireElbowOffsetFt);
+        Vertex3 = NewTagPosition - _wallParallel * (side * _g.WireElbowOffsetFt);
 
         // v2 (arc control): at the elbow column, inset from the room-side edge so the wire arcs down
         // from the bar end. Anchored to the measured depth (like v1/v3/bubble) so the arc is rigid.
-        double elbowAlong = _halfAlongWall + BubbleConstants.PictureLightTagAlongWallGapFt - BubbleConstants.WireElbowOffsetFt;
+        double elbowAlong = _halfAlongWall + _g.PictureLightTagAlongWallGapFt - _g.WireElbowOffsetFt;
         Vertex2 = FixturePoint
             + _wallParallel * (side * elbowAlong)
-            + _wallNormal * (_roomDepth - BubbleConstants.PictureLightWireMidInsetFt);
+            + _wallNormal * (_roomDepth - _g.PictureLightWireMidInsetFt);
 
         // v1: the bar end (origin is centered along the wall), exiting just inside the room-side edge.
         // Inset from the MEASURED depth so a deeper symbol pushes the exit out with it, not into the body.
         WireEndPoint = FixturePoint
             + _wallParallel * (side * _halfAlongWall)
-            + _wallNormal * (_roomDepth - BubbleConstants.PictureLightWireEndInsetFt);
+            + _wallNormal * (_roomDepth - _g.PictureLightWireEndInsetFt);
     }
 }

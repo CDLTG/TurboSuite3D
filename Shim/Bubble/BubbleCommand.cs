@@ -50,12 +50,15 @@ public class BubbleCommand : IExternalCommand
             if (selectedElement == null)
                 return Result.Cancelled;
 
+            // Every placement length, scaled to the view the switchleg is drawn into.
+            var g = new BubbleGeometry(PlanScaleHelper.Of(activeView));
+
             if (selectedElement is IndependentTag selectedTag)
-                return ExecuteLightingFixturePath(doc, uidoc, activeView, selectedTag, wireTypeId);
+                return ExecuteLightingFixturePath(doc, uidoc, activeView, selectedTag, wireTypeId, g);
 
             if (selectedElement is FamilyInstance electricalFixture &&
                 electricalFixture.Category?.BuiltInCategory == BuiltInCategory.OST_ElectricalFixtures)
-                return ExecuteElectricalFixturePath(doc, uidoc, activeView, electricalFixture, wireTypeId);
+                return ExecuteElectricalFixturePath(doc, uidoc, activeView, electricalFixture, wireTypeId, g);
 
             ShowError("Selected element is not a lighting fixture tag or electrical fixture.");
             return Result.Failed;
@@ -79,7 +82,7 @@ public class BubbleCommand : IExternalCommand
 
     private static Result ExecuteLightingFixturePath(
         Document doc, UIDocument uidoc, View activeView,
-        IndependentTag selectedTag, ElementId wireTypeId)
+        IndependentTag selectedTag, ElementId wireTypeId, BubbleGeometry g)
     {
         var fixture = GetTaggedFixture(doc, selectedTag);
         if (fixture == null)
@@ -107,15 +110,15 @@ public class BubbleCommand : IExternalCommand
 
         IPlacementCalculator placement;
         if (isLineBased)
-            placement = new LineBasedPlacementCalculator(doc, activeView, fixture, selectedTag);
+            placement = new LineBasedPlacementCalculator(doc, activeView, fixture, selectedTag, g);
         else if (isPictureLight)
-            placement = new PictureLightPlacementCalculator(doc, activeView, fixture, selectedTag);
+            placement = new PictureLightPlacementCalculator(doc, activeView, fixture, selectedTag, g);
         else if (isVerticalFace)
-            placement = new VerticalFacePlacementCalculator(doc, activeView, fixture, selectedTag);
+            placement = new VerticalFacePlacementCalculator(doc, activeView, fixture, selectedTag, g);
         else if (isChandelier)
-            placement = new ChandelierPlacementCalculator(doc, activeView, fixture, selectedTag);
+            placement = new ChandelierPlacementCalculator(doc, activeView, fixture, selectedTag, g);
         else
-            placement = new HorizontalPlacementCalculator(doc, activeView, fixture, selectedTag, hasRemotePowerSupply);
+            placement = new HorizontalPlacementCalculator(doc, activeView, fixture, selectedTag, g, hasRemotePowerSupply);
 
         var flipPoint = PromptForFlipPoint(uidoc, doc, placement.FixturePoint);
         placement.CalculateFinalPositions(flipPoint);
@@ -146,7 +149,7 @@ public class BubbleCommand : IExternalCommand
             }
 
             LinearFeedPlacementService.Place(
-                doc, activeView, fixture, lineBasedPlacement, linearFeedTagId, detailSymbol, isUp);
+                doc, activeView, fixture, lineBasedPlacement, linearFeedTagId, detailSymbol, isUp, g);
             return Result.Succeeded;
         }
         else if (hasRemotePowerSupply)
@@ -206,7 +209,7 @@ public class BubbleCommand : IExternalCommand
             wallNormal = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
         }
 
-        CreateTagAndWire(doc, activeView, fixture, selectedTag, placement, tagTypeId, wireTypeId, fixtureConnector, isLineBased, isWallSconce, wallNormal);
+        CreateTagAndWire(doc, activeView, fixture, selectedTag, placement, tagTypeId, wireTypeId, fixtureConnector, g, isLineBased, isWallSconce, wallNormal);
 
         return Result.Succeeded;
     }
@@ -217,7 +220,7 @@ public class BubbleCommand : IExternalCommand
 
     private static Result ExecuteElectricalFixturePath(
         Document doc, UIDocument uidoc, View activeView,
-        FamilyInstance fixture, ElementId wireTypeId)
+        FamilyInstance fixture, ElementId wireTypeId, BubbleGeometry g)
     {
         var fixtureConnector = GeometryHelper.GetElectricalConnector(fixture);
         if (fixtureConnector == null)
@@ -284,22 +287,22 @@ public class BubbleCommand : IExternalCommand
             double d = activeView.ViewType == ViewType.CeilingPlan ? -1.0 : 1.0;
 
             tagPosition = fixtureOrigin
-                + localX * (d * BubbleConstants.CeilingFanTagXOffsetFt)
-                + localY * (d * BubbleConstants.CeilingFanTagYOffsetFt);
+                + localX * (d * g.CeilingFanTagXOffsetFt)
+                + localY * (d * g.CeilingFanTagYOffsetFt);
 
             var v2 = fixtureOrigin
-                + localX * (d * BubbleConstants.CeilingFanV2XOffsetFt)
-                + localY * (d * BubbleConstants.CeilingFanV2YOffsetFt);
+                + localX * (d * g.CeilingFanV2XOffsetFt)
+                + localY * (d * g.CeilingFanV2YOffsetFt);
 
             // V3 relative to tag position, same elbow offset pattern as other conditions
-            var v3 = tagPosition - localX * (d * BubbleConstants.WireElbowOffsetFt);
+            var v3 = tagPosition - localX * (d * g.WireElbowOffsetFt);
 
             wireVertices = new List<XYZ>(2) { v2, v3 };
         }
         else
         {
         // Annotation midpoint is 6" from origin in the fixture's local Y direction
-        var fixtureMidpoint = fixtureOrigin + localY * BubbleConstants.ElectricalMidpointOffsetFt;
+        var fixtureMidpoint = fixtureOrigin + localY * g.ElectricalMidpointOffsetFt;
 
         // Prompt user to pick flip direction
         var flipPoint = PromptForFlipPoint(uidoc, doc, fixtureOrigin);
@@ -316,15 +319,15 @@ public class BubbleCommand : IExternalCommand
             // Vertical families: flip over X axis (up/down), +/-10" along localY only
             direction = flipLocal.Y >= fixtureLocal.Y ? 1.0 : -1.0;
 
-            tagPosition = fixtureOrigin + localY * (direction * BubbleConstants.ElectricalVerticalTagOffsetFt);
+            tagPosition = fixtureOrigin + localY * (direction * g.ElectricalVerticalTagOffsetFt);
 
             // Generate arc vertices to approximate circular wire
             // Arc defined by center, radius, start point (4",0"), and sweep angle
             // Start angle computed from center to start point
-            var arcCenterX = BubbleConstants.ElectricalVerticalArcCenterXFt;
-            var arcCenterY = BubbleConstants.ElectricalVerticalArcCenterYFt;
-            var arcRadius = BubbleConstants.ElectricalVerticalArcRadiusFt;
-            var startX = 4.0 * BubbleConstants.InchesToFeet; // start at (4", 0")
+            var arcCenterX = g.ElectricalVerticalArcCenterXFt;
+            var arcCenterY = g.ElectricalVerticalArcCenterYFt;
+            var arcRadius = g.ElectricalVerticalArcRadiusFt;
+            var startX = g.ElectricalVerticalArcStartXFt; // start at (4", 0")
             var startY = 0.0;
             var startAngle = Math.Atan2(startY - arcCenterY, startX - arcCenterX);
             var sweepRad = BubbleConstants.ElectricalVerticalArcSweepDeg * Math.PI / 180.0;
@@ -350,15 +353,15 @@ public class BubbleCommand : IExternalCommand
             // Default: flip over Y axis (left/right), offset along localX
             direction = flipLocal.X >= fixtureLocal.X ? 1.0 : -1.0;
 
-            tagPosition = fixtureMidpoint + localX * (direction * BubbleConstants.ElectricalTagOffsetFt);
+            tagPosition = fixtureMidpoint + localX * (direction * g.ElectricalTagOffsetFt);
 
             var v2 = fixtureOrigin
-                + localX * (direction * BubbleConstants.ElectricalV2XOffsetFt)
-                + localY * BubbleConstants.ElectricalV2YOffsetFt;
+                + localX * (direction * g.ElectricalV2XOffsetFt)
+                + localY * g.ElectricalV2YOffsetFt;
 
             var v3 = fixtureOrigin
-                + localX * (direction * BubbleConstants.ElectricalV3XOffsetFt)
-                + localY * BubbleConstants.ElectricalV3YOffsetFt;
+                + localX * (direction * g.ElectricalV3XOffsetFt)
+                + localY * g.ElectricalV3YOffsetFt;
 
             wireVertices = new List<XYZ>(2) { v2, v3 };
         }
@@ -396,19 +399,20 @@ public class BubbleCommand : IExternalCommand
             if (isCeilingFan)
             {
                 double d = activeView.ViewType == ViewType.CeilingPlan ? -1.0 : 1.0;
-                wire.SetVertex(0, connOrigin + localX * (d * BubbleConstants.WireOffsetEndInitialFt));
+                wire.SetVertex(0, connOrigin + localX * (d * g.WireOffsetEndInitialFt));
+                // V1 sits on the fan base, which is drawn at true size (model geometry) — unscaled.
                 wire.SetVertex(0, fixtureOrigin
                     + localX * (d * BubbleConstants.CeilingFanV1XOffsetFt)
                     + localY * (d * BubbleConstants.CeilingFanV1YOffsetFt));
             }
             else if (isVerticalPlacement)
             {
-                wire.SetVertex(0, connOrigin + localX * (4.0 * BubbleConstants.InchesToFeet));
+                wire.SetVertex(0, connOrigin + localX * g.ElectricalVerticalArcStartXFt);
             }
             else
             {
-                wire.SetVertex(0, connOrigin + localY * BubbleConstants.WireOffsetEndInitialFt);
-                wire.SetVertex(0, connOrigin + localY * BubbleConstants.ElectricalWireStartOffsetFt);
+                wire.SetVertex(0, connOrigin + localY * g.WireOffsetEndInitialFt);
+                wire.SetVertex(0, connOrigin + localY * g.ElectricalWireStartOffsetFt);
             }
 
             trans.Commit();
@@ -560,6 +564,7 @@ public class BubbleCommand : IExternalCommand
         ElementId tagTypeId,
         ElementId wireTypeId,
         Connector fixtureConnector,
+        BubbleGeometry g,
         bool isLineBased = false,
         bool isWallSconce = false,
         XYZ? wallNormal = null)
@@ -577,13 +582,13 @@ public class BubbleCommand : IExternalCommand
             var newTag = TagPlacementService.CreateAndConfigureTag(doc, view, fixture, sourceTag, placement, tagTypeId);
 
             if (isLineBased)
-                WirePlacementService.CreateWireWithOffsetEnd(doc, view, placement, wireTypeId, fixtureConnector);
+                WirePlacementService.CreateWireWithOffsetEnd(doc, view, placement, wireTypeId, fixtureConnector, g);
             else if (isWallSconce && wallNormal != null)
-                WirePlacementService.CreateWireWithWallSconceOffset(doc, view, placement, wireTypeId, fixtureConnector, wallNormal, fixture);
+                WirePlacementService.CreateWireWithWallSconceOffset(doc, view, placement, wireTypeId, fixtureConnector, wallNormal, fixture, g);
             else if (placement is PictureLightPlacementCalculator pictureLight)
-                WirePlacementService.CreateWireWithLinearEnd(doc, view, placement, wireTypeId, fixtureConnector, pictureLight.WireEndPoint);
-            else if (TryGetLinearWireEnd(fixture, view, fixtureConnector, placement, out XYZ linearEnd))
-                WirePlacementService.CreateWireWithLinearEnd(doc, view, placement, wireTypeId, fixtureConnector, linearEnd);
+                WirePlacementService.CreateWireWithLinearEnd(doc, view, placement, wireTypeId, fixtureConnector, pictureLight.WireEndPoint, g);
+            else if (TryGetLinearWireEnd(fixture, view, fixtureConnector, placement, g, out XYZ linearEnd))
+                WirePlacementService.CreateWireWithLinearEnd(doc, view, placement, wireTypeId, fixtureConnector, linearEnd, g);
             else
                 WirePlacementService.CreateWire(doc, view, placement, wireTypeId, fixtureConnector);
 
@@ -600,13 +605,13 @@ public class BubbleCommand : IExternalCommand
     /// </summary>
     private static bool TryGetLinearWireEnd(
         FamilyInstance fixture, View view, Connector fixtureConnector,
-        IPlacementCalculator placement, out XYZ endPoint)
+        IPlacementCalculator placement, BubbleGeometry g, out XYZ endPoint)
     {
         endPoint = XYZ.Zero;
 
         if (!GeometryHelper.TryGetLinearLongAxis(fixture, view, out XYZ longDir, out double halfLen))
             return false;
-        if (halfLen <= BubbleConstants.WireOffsetEndInitialFt)
+        if (halfLen <= g.WireOffsetEndInitialFt)
             return false; // connector already at (or past) the end — nothing to relocate
 
         var origin = fixtureConnector.Origin;

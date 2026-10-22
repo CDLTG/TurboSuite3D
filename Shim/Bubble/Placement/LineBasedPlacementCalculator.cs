@@ -40,9 +40,11 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
     private PlacementCondition _condition;
     private readonly double _symbolLength;
     private readonly double _symbolWidth;
+    private readonly BubbleGeometry _g;
 
-    public LineBasedPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+    public LineBasedPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag, BubbleGeometry g)
     {
+        _g = g;
         var connector = GeometryHelper.GetElectricalConnector(fixture);
         FixturePoint = connector?.Origin ?? GetCurveMidpoint(fixture);
 
@@ -67,7 +69,7 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
 
         _condition = PlacementCondition.Up;
 
-        (_symbolLength, _symbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag);
+        (_symbolLength, _symbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag, g);
     }
 
     private static XYZ GetCurveMidpoint(FamilyInstance fixture)
@@ -85,26 +87,26 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
         return value == "Horizontal" || value == "Vertical";
     }
 
-    private static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag)
+    private static (double length, double width) CalculateSymbolDimensions(View view, FamilyInstance fixture, IndependentTag tag, BubbleGeometry g)
     {
-        var (length, width) = GeometryHelper.GetSymbolExtents(fixture, view, BubbleConstants.DefaultSymbolSizeFt);
+        var (length, width) = GeometryHelper.GetSymbolExtents(fixture, view, g.DefaultSymbolSizeFt);
 
-        width = Math.Max(width, BubbleConstants.MinSymbolWidthFt);
+        width = Math.Max(width, g.MinSymbolWidthFt);
 
-        var tagWidth = GetTagWidth(view, tag);
+        var tagWidth = GetTagWidth(view, tag, g);
         width = Math.Max(width, tagWidth);
 
         return (length, width);
     }
 
-    private static double GetTagWidth(View view, IndependentTag tag)
+    private static double GetTagWidth(View view, IndependentTag tag, BubbleGeometry g)
     {
         var charCount = tag.TagText?.Length ?? 0;
 
         return charCount switch
         {
-            2 => BubbleConstants.TagWidth2CharsFt,
-            3 => BubbleConstants.TagWidth3CharsFt,
+            2 => g.TagWidth2CharsFt,
+            3 => g.TagWidth3CharsFt,
             _ => CalculateTagWidthFromBounds(view, tag)
         };
     }
@@ -151,8 +153,8 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
     {
         var halfWidth = symbolWidth * 0.5;
 
-        var tagOffsetAlongFixture = 14.0 * BubbleConstants.InchesToFeet;
-        var tagOffsetPerpendicular = 6.25 * BubbleConstants.InchesToFeet;
+        var tagOffsetAlongFixture = _g.LineBasedTagAlongFixtureFt;
+        var tagOffsetPerpendicular = _g.LineBasedTagPerpendicularFt;
 
         var tagXDirection = 1;
 
@@ -164,7 +166,7 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
             {
                 V2X = 0,
                 V2Y = tagOffsetPerpendicular,
-                V3X = -BubbleConstants.WireElbowOffsetFt,
+                V3X = -_g.WireElbowOffsetFt,
                 V3Y = 0,
                 TagX = tagXDirection * tagOffsetAlongFixture,
                 TagY = tagOffsetPerpendicular,
@@ -177,7 +179,7 @@ internal class LineBasedPlacementCalculator : IPlacementCalculator
             {
                 V2X = 0,
                 V2Y = -tagOffsetPerpendicular,
-                V3X = -BubbleConstants.WireElbowOffsetFt,
+                V3X = -_g.WireElbowOffsetFt,
                 V3Y = 0,
                 TagX = tagXDirection * tagOffsetAlongFixture,
                 TagY = -tagOffsetPerpendicular,

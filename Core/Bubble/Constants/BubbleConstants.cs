@@ -1,10 +1,11 @@
 namespace TurboSuite.Bubble.Constants;
 
 /// <summary>
-/// All geometry constants used by TurboBubble. Public (not internal) because it lives in
-/// TurboSuite.Core — the Revit-free slice ahead of the Bubble module's own migration — and
-/// the Bubble shim consumes it across the assembly boundary. Tag/detail families are found by
-/// TurboSuite Role (see Core Roles), not by the name constants that used to live here.
+/// TurboBubble's scale-independent constants: type names, angles, segment counts, epsilons. Every
+/// paper-relative length lives in <see cref="BubbleGeometry"/>, scaled to the placement view — none
+/// belongs here. Public (not internal) because it lives in TurboSuite.Core and the Bubble shim
+/// consumes it across the assembly boundary. Tag/detail families are found by TurboSuite Role (see
+/// Core Roles), not by the name constants that used to live here.
 /// </summary>
 public static class BubbleConstants
 {
@@ -15,99 +16,30 @@ public static class BubbleConstants
     public const string RemoteSwitchlegTypeRight = "Switchleg Right";
     public const string RemoteSwitchlegTypeLeft = "Switchleg Left";
 
-    // Symbol dimension defaults (in feet)
-    public const double DefaultSymbolSizeFt = 4.5 * InchesToFeet;
-    public const double MinSymbolWidthFt = 4.0 * InchesToFeet;
-
-    // Tag width by character count (in feet)
-    public const double TagWidth1CharFt = 6.25 * InchesToFeet;
-    public const double TagWidth2CharsFt = 7.75 * InchesToFeet;
-    public const double TagWidth3CharsFt = 11.15 * InchesToFeet;
-
-    // Wire geometry offsets (in feet)
-    public const double WireHorizontalOffsetFt = 0.613 * InchesToFeet;
-    public const double WireVerticalOffsetFt = 0.65 * InchesToFeet;
-    public const double WireToSymbolGapFt = 4.215 * InchesToFeet;
-    public const double WireToSymbolGapHorizontalFt = 4.55 * InchesToFeet;
-    public const double WireToSymbolGapWallSconceFt = 0.5 * InchesToFeet;
-    public const double WireElbowOffsetFt = 3.56 * InchesToFeet;
-
-    // Wire end offset constants
-    public const double WireOffsetEndInitialFt = 0.5 * InchesToFeet;
-    public const double WireOffsetEndFinalFt = 1.0 * InchesToFeet;
-    public const double WireOffsetEndWallSconceFt = 2.5 * InchesToFeet;
-
-    public const double ElectricalVerticalTagOffsetFt = 10.0 * InchesToFeet;  // 10" tag offset along localY
-
-    // Vertical wire arc parameters (in inches, converted to feet)
-    // Arc circle: radius 4.5", center at (3.78125", 3.75") relative to fixture origin
-    public const double ElectricalVerticalArcRadiusFt = 4.5 * InchesToFeet;
-    public const double ElectricalVerticalArcCenterXFt = 3.78125 * InchesToFeet; // along localX
-    public const double ElectricalVerticalArcCenterYFt = 3.75 * InchesToFeet;    // along localY
+    // Vertical electrical wire arc (lengths in BubbleGeometry.ElectricalVerticalArc*)
     public const double ElectricalVerticalArcSweepDeg = 145.0; // arc sweep in degrees
     public const int ElectricalVerticalArcSegments = 3;        // number of segments to approximate arc
 
-    // Default Electrical Fixture switchleg (left/right placement)
-    public const double ElectricalMidpointOffsetFt = 6.0 * InchesToFeet;   // 6" from origin to annotation center along localY
-    public const double ElectricalTagOffsetFt = 12.5 * InchesToFeet;       // 12.5" tag offset along localX
-    public const double ElectricalV2XOffsetFt = 3.47 * InchesToFeet;      // V2 along localX
-    public const double ElectricalV2YOffsetFt = 1.56 * InchesToFeet;      // V2 perpendicular
-    public const double ElectricalV3XOffsetFt = 6.9 * InchesToFeet;       // V3 along localX
-    public const double ElectricalV3YOffsetFt = 3.09 * InchesToFeet;      // V3 perpendicular
-    public const double ElectricalWireStartOffsetFt = 3.0 * InchesToFeet; // wire start perpendicular offset (SetVertex)
-
-    // Ceiling Fan fixed switchleg placement (no user flip prompt) — classified by TurboSuite Role.
-    public const double CeilingFanTagXOffsetFt = 15.0 * InchesToFeet;     // 1'-3" along localX
-    public const double CeilingFanTagYOffsetFt = 7.625 * InchesToFeet;    // 0'-7 5/8" along localY
+    // Ceiling Fan wire start (V1), seated on the base of the fan. Real-world, NOT view-scaled: ceiling
+    // fan families deliberately draw their symbol as model geometry (no nested annotation) so the fan
+    // shows its true size at any scale, and V1 is anchored to that unscaled body. The tag, V2 and the
+    // elbow stand off in paper space with the (scaled) tag, so they stay in BubbleGeometry.
     public const double CeilingFanV1XOffsetFt = 4.1875 * InchesToFeet;    // 4 3/16" along localX
-    public const double CeilingFanV1YOffsetFt = 1.78125 * InchesToFeet;  // 1 25/32" along localY
-    public const double CeilingFanV2XOffsetFt = 9.0625 * InchesToFeet;   // 9 1/16" along localX
-    public const double CeilingFanV2YOffsetFt = 1.75 * InchesToFeet;     // 1 3/4" along localY
+    public const double CeilingFanV1YOffsetFt = 1.78125 * InchesToFeet;   // 1 25/32" along localY
 
     // Chandelier (decorative pendant) — diagonal-corner switchleg placement, classified by TurboSuite Role.
     public const double ChandelierBubbleAngleDegrees = 33.0;
-    public const double ChandelierBubbleOffsetExtensionFt = 8.0 * InchesToFeet; // push bubble outward past crosshair tip along the diagonal
-    public const double ChandelierBubbleHorizontalNudgeFt = 0.75 * InchesToFeet; // extra horizontal-only push away from fixture (added along the corner's X sign)
-    public const double ChandelierWireV2GapFt = 1.59 * InchesToFeet;            // V2 distance past symbol edge along diagonal
-    public const double ChandelierWireV2PerpKickFt = 3.50 * InchesToFeet;       // V2 perpendicular kick (creates arc curvature)
-    public const double ChandelierWireElbowOffsetFt = 3.56 * InchesToFeet;      // V3 inset from bubble along diagonal (elbow)
 
     // Picture lights — linear wall fixtures whose plan symbol is symmetric along the wall but
     // extends ENTIRELY away from the wall (asymmetric perpendicular; origin sits on the wall-side
     // edge). Both the 2D and 3D families are geometrically identical in wall-normal terms, so one
-    // wall-aware placement path serves both. Routed here (ahead of the shared vertical-face path)
-    // so sconces/mirrors are untouched. The switchleg tag/wire clear the symbol's true room-side
-    // depth (measured, not assumed) and stand off AWAY from the wall. Classified by TurboSuite Role.
-    // Switchleg geometry, in the wall frame (X along wall, Y = wall normal away from wall). Derived
-    // from a hand-drawn ideal (TurboSpike read-back): the bubble stands off past the MEASURED
-    // room-side depth so it clears the bar and sits in open room (the 2D look), and the wire exits the
-    // bar end near the room side then arcs down to the bubble.
-    public const double PictureLightTagAlongWallGapFt = 8.75 * InchesToFeet; // bubble past the bar end
-    public const double PictureLightTagClearanceFt = 4.25 * InchesToFeet;    // bubble/elbow past the room-side edge (added to roomDepth)
-    // v1/v2 wire depths are anchored to the MEASURED room-side edge (roomDepth), inset back toward the
-    // wall — so the whole arc keeps its shape and simply translates outward for a deeper symbol, rather
-    // than staying pinned near the wall while the bubble marches out. Insets derived from the reference
-    // family (spiked roomDepth 4.487") to reproduce the tuned look byte-for-byte: 4.487-3.7 and 4.487-2.9.
-    public const double PictureLightWireEndInsetFt = 0.787 * InchesToFeet;   // v1 inset from the room-side edge
-    public const double PictureLightWireMidInsetFt = 1.587 * InchesToFeet;   // v2 inset (deeper => bows the arc)
-
-    // Tag placement offsets (in feet)
-    public const double TagOffsetVerticalFt = 5.25 * InchesToFeet;
-    public const double TagOffsetHorizontalFt = 8.75 * InchesToFeet;
-    public const double TagXOffsetFt = 9.0 * InchesToFeet;
-    public const double RemoteSwitchlegExtraXOffsetFt = 5.15625 * InchesToFeet;
+    // wall-aware placement path serves both. Routed ahead of the shared vertical-face path so
+    // sconces/mirrors are untouched. Classified by TurboSuite Role. Offsets: BubbleGeometry.PictureLight*.
 
     // Linear Feed (static driver tag) — used when "Enable dynamic driver tags" is OFF
     // and the fixture is line-based with a remote power supply. The tag/detail families are found
     // by TurboSuite Role (LinearFeedTag / LinearFeedDetail); this is the tag's default type name.
     public const string LinearFeedTagDefaultType = "SwitchID";
-    // Detail leader: placement line offset 1" perpendicular from connector (default "down" side),
-    // running along the fixture for a placeholder length to be dialed in.
-    public const double LinearFeedDetailPerpOffsetFt = 1.0 * InchesToFeet;
-    public const double LinearFeedDetailLengthFt = 12.0 * InchesToFeet;
-    // Tag: 6" past the end of the detail leader (parallel) and 5" off the fixture line (perpendicular).
-    public const double LinearFeedTagParallelGapFt = 6.5 * InchesToFeet;
-    public const double LinearFeedTagPerpOffsetFt = 5.0 * InchesToFeet;
 
     // Rotation/normal comparison threshold
     public const double RotationEpsilon = 0.001;

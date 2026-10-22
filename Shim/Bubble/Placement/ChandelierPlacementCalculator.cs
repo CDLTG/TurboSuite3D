@@ -13,8 +13,8 @@ namespace TurboSuite.Bubble.Placement;
 /// </summary>
 internal class ChandelierPlacementCalculator : PlacementCalculatorBase
 {
-    public ChandelierPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
-        : base(doc, view, fixture, sourceTag)
+    public ChandelierPlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag, BubbleGeometry g)
+        : base(doc, view, fixture, sourceTag, g)
     {
     }
 
@@ -27,7 +27,7 @@ internal class ChandelierPlacementCalculator : PlacementCalculatorBase
 
         var angleRad = BubbleConstants.ChandelierBubbleAngleDegrees * Math.PI / 180.0;
         var symbolHalf = Math.Max(SymbolLength, SymbolWidth) * 0.5;
-        var d = symbolHalf + BubbleConstants.ChandelierBubbleOffsetExtensionFt;
+        var d = symbolHalf + G.ChandelierBubbleOffsetExtensionFt;
 
         var dirX = sx * Math.Cos(angleRad);
         var dirY = sy * Math.Sin(angleRad);
@@ -48,22 +48,22 @@ internal class ChandelierPlacementCalculator : PlacementCalculatorBase
         // Bubble at the diagonal corner, plus a horizontal-only nudge further away from
         // the fixture (along the corner's X sign, so it never lifts the bubble vertically).
         var newTagLocal = new XYZ(
-            FixtureLocal.X + d * dirX + sx * BubbleConstants.ChandelierBubbleHorizontalNudgeFt,
+            FixtureLocal.X + d * dirX + sx * G.ChandelierBubbleHorizontalNudgeFt,
             FixtureLocal.Y + d * dirY,
             FixtureLocal.Z);
 
         // V3: elbow inset back from bubble along the diagonal (mirrors default WireElbowOffset)
         var v3Local = new XYZ(
-            newTagLocal.X - BubbleConstants.ChandelierWireElbowOffsetFt * dirX,
-            newTagLocal.Y - BubbleConstants.ChandelierWireElbowOffsetFt * dirY,
+            newTagLocal.X - G.ChandelierWireElbowOffsetFt * dirX,
+            newTagLocal.Y - G.ChandelierWireElbowOffsetFt * dirY,
             FixtureLocal.Z);
 
         // V2: just past symbol edge along diagonal, with perpendicular kick for arc curvature
         // (mirrors default V2 = fixture + halfSymbol + gap + perpendicular kick)
-        var v2ParallelDist = symbolHalf + BubbleConstants.ChandelierWireV2GapFt;
+        var v2ParallelDist = symbolHalf + G.ChandelierWireV2GapFt;
         var v2Local = new XYZ(
-            FixtureLocal.X + v2ParallelDist * dirX + BubbleConstants.ChandelierWireV2PerpKickFt * perpX,
-            FixtureLocal.Y + v2ParallelDist * dirY + BubbleConstants.ChandelierWireV2PerpKickFt * perpY,
+            FixtureLocal.X + v2ParallelDist * dirX + G.ChandelierWireV2PerpKickFt * perpX,
+            FixtureLocal.Y + v2ParallelDist * dirY + G.ChandelierWireV2PerpKickFt * perpY,
             FixtureLocal.Z);
 
         NewTagPosition = LocalToGlobal.OfPoint(newTagLocal);

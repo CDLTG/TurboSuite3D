@@ -185,8 +185,10 @@ public static class GeometryHelper
 
     /// <summary>
     /// Returns (length, width) of the fixture's 2D plan symbol in fixture-local coordinates.
-    /// For 3D families, isolates the nested Generic Annotation geometry ("Symbol" family).
-    /// For 2D families (no nested annotation), uses the full element bounding box.
+    /// Isolates the nested Generic Annotation geometry ("Symbol" family) — 3D and 2D families both
+    /// carry one (2D ones just have no model geometry). Falls back to the full element bounding box
+    /// only when no annotation curves are found. The result is at the view's scale (the annotation
+    /// is scaled by Revit), so callers add only K-scaled constants to it (see PlanScale).
     /// Length = local Y extent, Width = local X extent.
     /// </summary>
     public static (double length, double width) GetSymbolExtents(FamilyInstance fixture, View view, double defaultSize)

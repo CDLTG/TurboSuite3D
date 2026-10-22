@@ -34,9 +34,11 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
     private readonly double _symbolLength;
     private readonly double _symbolWidth;
     private readonly bool _isWallSconce;
+    private readonly BubbleGeometry _g;
 
-    public VerticalFacePlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag)
+    public VerticalFacePlacementCalculator(Document doc, View view, FamilyInstance fixture, IndependentTag sourceTag, BubbleGeometry g)
     {
+        _g = g;
         FixturePoint = GeometryHelper.GetFixtureLocation(fixture)
             ?? throw new InvalidOperationException("Fixture has no valid location for vertical face placement.");
         var tagPoint = sourceTag.TagHeadPosition;
@@ -61,7 +63,7 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
 
         _condition = DetermineCondition(_fixtureLocal, _tagLocal);
 
-        (_symbolLength, _symbolWidth) = PlacementCalculatorBase.CalculateSymbolDimensions(view, fixture, sourceTag);
+        (_symbolLength, _symbolWidth) = PlacementCalculatorBase.CalculateSymbolDimensions(view, fixture, sourceTag, g);
 
         _isWallSconce = GeometryHelper.IsWallSconce(fixture);
     }
@@ -107,10 +109,10 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
         var halfWidth = symbolWidth * 0.5;
         var halfLength = symbolLength * 0.5;
 
-        var tagOffsetAlongWall = halfWidth + (8.25 * BubbleConstants.InchesToFeet);
-        var tagOffsetFromWall = 5.5 * BubbleConstants.InchesToFeet;
+        var tagOffsetAlongWall = halfWidth + _g.WallTagAlongWallGapFt;
+        var tagOffsetFromWall = _g.WallTagOffWallFt;
 
-        var wireGapHorizontal = _isWallSconce ? BubbleConstants.WireToSymbolGapWallSconceFt : BubbleConstants.WireToSymbolGapHorizontalFt;
+        var wireGapHorizontal = _isWallSconce ? _g.WireToSymbolGapWallSconceFt : _g.WireToSymbolGapHorizontalFt;
 
         var tagXDirection = Math.Sign(_tagLocal.X - _fixtureLocal.X);
         if (tagXDirection == 0) tagXDirection = 1;
@@ -122,8 +124,8 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
             return new PlacementOffsets
             {
                 V2X = tagXDirection * (halfWidth + wireGapHorizontal),
-                V2Y = BubbleConstants.WireVerticalOffsetFt,
-                V3X = -tagXDirection * BubbleConstants.WireElbowOffsetFt,
+                V2Y = _g.WireVerticalOffsetFt,
+                V3X = -tagXDirection * _g.WireElbowOffsetFt,
                 V3Y = 0,
                 TagX = tagXDirection * tagOffsetAlongWall,
                 TagY = tagOffsetFromWall,
@@ -135,8 +137,8 @@ internal class VerticalFacePlacementCalculator : IPlacementCalculator
             return new PlacementOffsets
             {
                 V2X = tagXDirection * (halfWidth + wireGapHorizontal),
-                V2Y = -BubbleConstants.WireVerticalOffsetFt,
-                V3X = -tagXDirection * BubbleConstants.WireElbowOffsetFt,
+                V2Y = -_g.WireVerticalOffsetFt,
+                V3X = -tagXDirection * _g.WireElbowOffsetFt,
                 V3Y = 0,
                 TagX = tagXDirection * tagOffsetAlongWall,
                 TagY = -tagOffsetFromWall,

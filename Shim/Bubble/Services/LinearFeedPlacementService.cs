@@ -19,7 +19,8 @@ internal static class LinearFeedPlacementService
         LineBasedPlacementCalculator placement,
         ElementId tagTypeId,
         FamilySymbol detailSymbol,
-        bool isUp)
+        bool isUp,
+        BubbleGeometry g)
     {
         using var trans = new Transaction(doc, "TurboBubble - Linear Feed");
         trans.Start();
@@ -39,8 +40,8 @@ internal static class LinearFeedPlacementService
 
         // Detail leader anchor: 1" off the fixture line on the family-default ("down") side.
         // We always place in the default state, then mirror to the +Y side if user clicked "up".
-        var detailStart = connector - perpDir * BubbleConstants.LinearFeedDetailPerpOffsetFt;
-        var detailEnd = detailStart + lineDir * BubbleConstants.LinearFeedDetailLengthFt;
+        var detailStart = connector - perpDir * g.LinearFeedDetailPerpOffsetFt;
+        var detailEnd = detailStart + lineDir * g.LinearFeedDetailLengthFt;
 
         var placementType = detailSymbol.Family.FamilyPlacementType;
         FamilyInstance detail;
@@ -79,8 +80,8 @@ internal static class LinearFeedPlacementService
         // on the same side as the user's click.
         var perpSign = isUp ? +1.0 : -1.0;
         var tagPosition = connector
-            + lineDir * (BubbleConstants.LinearFeedDetailLengthFt + BubbleConstants.LinearFeedTagParallelGapFt)
-            + perpDir * (BubbleConstants.LinearFeedTagPerpOffsetFt * perpSign);
+            + lineDir * (g.LinearFeedDetailLengthFt + g.LinearFeedTagParallelGapFt)
+            + perpDir * (g.LinearFeedTagPerpOffsetFt * perpSign);
 
         var tag = IndependentTag.Create(
             doc,
