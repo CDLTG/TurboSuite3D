@@ -16,6 +16,10 @@ Tag families are matched by their `TurboSuite Role` type parameter, not by famil
 
 Point/face offsets are computed from each fixture's `Symbol Length`, `Symbol Width`, and the type-mark text width.
 
+## Plan scale
+
+Every tag offset is a 1/4" = 1'-0" reference value scaled by `K = view.Scale / 48` of the active view (`PlanScale`, see CLAUDE.md). `TagCommand` builds one `TagGeometry` (Core) per run and passes it down, so a tag sits the same printed distance from its fixture at 3/16" or 1/8" as at 1/4"; at 1/4" the output is unchanged. Measured symbol and tag extents already come back at view scale, so only the gaps and fallback widths added to them carry `K`. Set the view scale **before** tagging; after a scale change, re-run TurboTag, which replaces its own tags. Power-supply tags sit on the device (zero offset) and are unaffected. TurboDriver's split-fixture linear tags read the same `TagGeometry.LinearOffsetFeet`. `TagGeometryTests` pins every member to its pre-scale value at 1/4" and to linear scaling with `K`.
+
 ## Required families / parameters
 
 | Tag role | Note |

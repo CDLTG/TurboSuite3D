@@ -20,14 +20,14 @@ internal static class TagPlacementService
         return new XYZ(gx, gy, 0);
     }
 
-    public static XYZ CalculateOffset(TagDirection direction, double symbolLength, double symbolWidth, double tagWidth)
+    public static XYZ CalculateOffset(TagDirection direction, double symbolLength, double symbolWidth, double tagWidth, TagGeometry g)
     {
         return direction switch
         {
-            TagDirection.Up => new XYZ(0, (symbolLength / 2.0) + TagConstants.VerticalOffsetFeet, 0),
-            TagDirection.Down => new XYZ(0, -((symbolLength / 2.0) + TagConstants.VerticalOffsetFeet), 0),
-            TagDirection.Right => new XYZ((symbolWidth / 2.0) + (tagWidth / 2.0) + TagConstants.OffsetMarginRightFeet, 0, 0),
-            TagDirection.Left => new XYZ(-((symbolWidth / 2.0) + (tagWidth / 2.0) + TagConstants.OffsetMarginLeftFeet), 0, 0),
+            TagDirection.Up => new XYZ(0, (symbolLength / 2.0) + g.VerticalOffsetFeet, 0),
+            TagDirection.Down => new XYZ(0, -((symbolLength / 2.0) + g.VerticalOffsetFeet), 0),
+            TagDirection.Right => new XYZ((symbolWidth / 2.0) + (tagWidth / 2.0) + g.OffsetMarginRightFeet, 0, 0),
+            TagDirection.Left => new XYZ(-((symbolWidth / 2.0) + (tagWidth / 2.0) + g.OffsetMarginLeftFeet), 0, 0),
             _ => XYZ.Zero
         };
     }
@@ -45,9 +45,9 @@ internal static class TagPlacementService
         return direction.X < -0.001 || (Math.Abs(direction.X) < 0.001 && direction.Y < -0.001);
     }
 
-    public static XYZ CalculateLinearOffset(TagDirection direction, bool isReversed)
+    public static XYZ CalculateLinearOffset(TagDirection direction, bool isReversed, TagGeometry g)
     {
-        double offset = isReversed ? -TagConstants.LinearOffsetFeet : TagConstants.LinearOffsetFeet;
+        double offset = isReversed ? -g.LinearOffsetFeet : g.LinearOffsetFeet;
 
         return direction switch
         {
@@ -57,7 +57,7 @@ internal static class TagPlacementService
         };
     }
 
-    public static double EstimateTagWidth(IndependentTag tag, Document doc, ElementId viewId)
+    public static double EstimateTagWidth(IndependentTag tag, Document doc, ElementId viewId, TagGeometry g)
     {
         try
         {
@@ -65,12 +65,12 @@ internal static class TagPlacementService
 
             if (string.IsNullOrEmpty(tagText) || tagText.Length <= TagConstants.ShortTextThreshold)
             {
-                return TagConstants.DefaultTagWidthShort;
+                return g.DefaultTagWidthShort;
             }
 
             if (tagText.Length == TagConstants.MediumTextThreshold)
             {
-                return TagConstants.DefaultTagWidthMedium;
+                return g.DefaultTagWidthMedium;
             }
 
             View? view = viewId != ElementId.InvalidElementId ? doc.GetElement(viewId) as View : null;
@@ -81,11 +81,11 @@ internal static class TagPlacementService
                 return bbox.Max.X - bbox.Min.X;
             }
 
-            return TagConstants.DefaultTagWidthMedium;
+            return g.DefaultTagWidthMedium;
         }
         catch
         {
-            return TagConstants.DefaultTagWidthShort;
+            return g.DefaultTagWidthShort;
         }
     }
 }

@@ -38,6 +38,9 @@ public class TagCommand : IExternalCommand
                 return Result.Cancelled;
             }
 
+            // Every tag offset, scaled to the view being tagged.
+            var g = new TagGeometry(PlanScaleHelper.Of(doc.ActiveView));
+
             var selectedIds = uidoc.Selection.GetElementIds();
             var selectedFixtures = FixtureSelectionService.GetSelectedLightingFixtures(doc, selectedIds);
             var selectedPowerSupplies = FixtureSelectionService.GetSelectedPowerSupplies(doc, selectedIds);
@@ -61,7 +64,7 @@ public class TagCommand : IExternalCommand
                     return Result.Cancelled;
                 }
 
-                PlaceTagsFaceBased(doc, faceBasedFixtures, tagType);
+                PlaceTagsFaceBased(doc, faceBasedFixtures, tagType, g);
             }
 
             if (lineBasedFixtures.Count > 0)
@@ -75,7 +78,7 @@ public class TagCommand : IExternalCommand
                 if (linearChoice == TagDirection.Combined || linearChoice == TagDirection.CombinedForced)
                 {
                     bool forced = linearChoice == TagDirection.CombinedForced;
-                    Result combinedResult = HandleCombinedLinear(doc, lineBasedFixtures, forced);
+                    Result combinedResult = HandleCombinedLinear(doc, lineBasedFixtures, forced, g);
                     if (combinedResult != Result.Succeeded)
                         return combinedResult;
                 }
@@ -89,7 +92,7 @@ public class TagCommand : IExternalCommand
                         return Result.Cancelled;
                     }
 
-                    PlaceTags(doc, lineBasedFixtures, linearTagType, linearChoice, true);
+                    PlaceTags(doc, lineBasedFixtures, linearTagType, linearChoice, g, true);
                 }
             }
 
@@ -108,7 +111,7 @@ public class TagCommand : IExternalCommand
                     return Result.Cancelled;
                 }
 
-                PlaceTags(doc, pointBasedFixtures, tagType, direction);
+                PlaceTags(doc, pointBasedFixtures, tagType, direction, g);
             }
 
             if (selectedPowerSupplies.Count > 0)
@@ -134,7 +137,7 @@ public class TagCommand : IExternalCommand
 
                 FamilySymbol? keypadTwoGangTagType = TagTypeService.GetKeypadTagType(doc, TagConstants.KeypadTwoGangTypeName);
 
-                PlaceKeypadTags(doc, selectedKeypads, keypadTagType, keypadTwoGangTagType);
+                PlaceKeypadTags(doc, selectedKeypads, keypadTagType, keypadTwoGangTagType, g);
             }
 
             return Result.Succeeded;
@@ -198,7 +201,7 @@ public class TagCommand : IExternalCommand
         }
     }
 
-    private int PlaceTags(Document doc, List<FamilyInstance> fixtures, FamilySymbol tagType, TagDirection direction, bool isLineBased = false)
+    private int PlaceTags(Document doc, List<FamilyInstance> fixtures, FamilySymbol tagType, TagDirection direction, TagGeometry g, bool isLineBased = false)
     {
         int successCount = 0;
         View activeView = doc.ActiveView;
@@ -218,7 +221,7 @@ public class TagCommand : IExternalCommand
             {
                 DeleteExistingTags(doc, fixture.Id, viewId, tagRole);
 
-                if (TryPlaceTag(doc, fixture, tagTypeId, viewId, direction, isLineBased))
+                if (TryPlaceTag(doc, fixture, tagTypeId, viewId, direction, g, isLineBased))
                 {
                     successCount++;
                 }
@@ -290,7 +293,7 @@ public class TagCommand : IExternalCommand
         }
     }
 
-    private int PlaceKeypadTags(Document doc, List<FamilyInstance> keypads, FamilySymbol tagType, FamilySymbol? twoGangTagType)
+    private int PlaceKeypadTags(Document doc, List<FamilyInstance> keypads, FamilySymbol tagType, FamilySymbol? twoGangTagType, TagGeometry g)
     {
         int successCount = 0;
         View activeView = doc.ActiveView;
@@ -316,7 +319,7 @@ public class TagCommand : IExternalCommand
                     ? twoGangTagTypeId
                     : defaultTagTypeId;
 
-                if (TryPlaceKeypadTag(doc, keypad, tagTypeId, viewId))
+                if (TryPlaceKeypadTag(doc, keypad, tagTypeId, viewId, g))
                 {
                     successCount++;
                 }
@@ -328,7 +331,7 @@ public class TagCommand : IExternalCommand
         return successCount;
     }
 
-    private bool TryPlaceKeypadTag(Document doc, FamilyInstance keypad, ElementId tagTypeId, ElementId viewId)
+    private bool TryPlaceKeypadTag(Document doc, FamilyInstance keypad, ElementId tagTypeId, ElementId viewId, TagGeometry g)
     {
         try
         {
@@ -374,7 +377,7 @@ public class TagCommand : IExternalCommand
                 // used only as the wall-vs-2D gate). Raw Hand × Facing points INTO the wall for a
                 // mirrored keypad, which placed the tag on the wrong side. See GetWallFaceNormalFromTransform.
                 XYZ offsetDirection = GeometryHelper.GetWallFaceNormalFromTransform(keypad);
-                globalOffset = offsetDirection * TagConstants.KeypadOffsetFeet;
+                globalOffset = offsetDirection * g.KeypadOffsetFeet;
 
                 // Rotate tag to align with the wall direction (perpendicular to offset)
                 XYZ hand = -keypad.HandOrientation;
@@ -384,7 +387,7 @@ public class TagCommand : IExternalCommand
             {
                 // Genuine 2D drafting keypad: facing is in-plane, so Hand × Facing is vertical.
                 // BasisX rotation of a local +Y offset works directly in the horizontal plane.
-                XYZ localOffset = new XYZ(0, TagConstants.KeypadOffsetFeet, 0);
+                XYZ localOffset = new XYZ(0, g.KeypadOffsetFeet, 0);
                 globalOffset = TagPlacementService.TransformToGlobal(keypad, localOffset);
 
                 angle = GeometryHelper.GetTransformAngle(keypad.GetTransform());
@@ -414,7 +417,7 @@ public class TagCommand : IExternalCommand
         }
     }
 
-    private int PlaceTagsFaceBased(Document doc, List<FamilyInstance> fixtures, FamilySymbol tagType)
+    private int PlaceTagsFaceBased(Document doc, List<FamilyInstance> fixtures, FamilySymbol tagType, TagGeometry g)
     {
         int successCount = 0;
         View activeView = doc.ActiveView;
@@ -434,7 +437,7 @@ public class TagCommand : IExternalCommand
             {
                 DeleteExistingTags(doc, fixture.Id, viewId, tagRole);
 
-                if (TryPlaceTagFaceBased(doc, fixture, tagTypeId, viewId))
+                if (TryPlaceTagFaceBased(doc, fixture, tagTypeId, viewId, g))
                 {
                     successCount++;
                 }
@@ -446,7 +449,7 @@ public class TagCommand : IExternalCommand
         return successCount;
     }
 
-    private bool TryPlaceTagFaceBased(Document doc, FamilyInstance fixture, ElementId tagTypeId, ElementId viewId)
+    private bool TryPlaceTagFaceBased(Document doc, FamilyInstance fixture, ElementId tagTypeId, ElementId viewId, TagGeometry g)
     {
         try
         {
@@ -497,8 +500,8 @@ public class TagCommand : IExternalCommand
             if (!offsetDirection.IsZeroLength())
             {
                 double symbolExtent = GeometryHelper.GetSymbolExtentInDirection(
-                    fixture, doc.ActiveView, offsetDirection, TagConstants.DefaultSymbolSizeFeet);
-                double offsetDistance = symbolExtent + TagConstants.VerticalOffsetFeet;
+                    fixture, doc.ActiveView, offsetDirection, g.DefaultSymbolSizeFeet);
+                double offsetDistance = symbolExtent + g.VerticalOffsetFeet;
 
                 XYZ globalOffset = offsetDirection * offsetDistance;
                 ElementTransformUtils.MoveElement(doc, tag.Id, globalOffset);
@@ -523,7 +526,7 @@ public class TagCommand : IExternalCommand
         return new List<LinearRun> { new LinearRun(new List<FamilyInstance>(lineBasedFixtures)) };
     }
 
-    private Result HandleCombinedLinear(Document doc, List<FamilyInstance> lineBasedFixtures, bool forced)
+    private Result HandleCombinedLinear(Document doc, List<FamilyInstance> lineBasedFixtures, bool forced, TagGeometry g)
     {
         List<LinearRun> runs = forced
             ? BuildForcedSingleRun(lineBasedFixtures)
@@ -624,7 +627,7 @@ public class TagCommand : IExternalCommand
                     DeleteExistingTags(doc, member.Id, viewId, Roles.RunLengthTag);
                 }
 
-                TryPlaceTag(doc, run.Lead, combinedTagType.Id, viewId, direction, isLineBased: true);
+                TryPlaceTag(doc, run.Lead, combinedTagType.Id, viewId, direction, g, isLineBased: true);
             }
 
             // Run-of-one falls back to the standard linear tag.
@@ -636,7 +639,7 @@ public class TagCommand : IExternalCommand
                     DeleteExistingTags(doc, fixture.Id, viewId, Roles.LinearTag);
                     DeleteExistingTags(doc, fixture.Id, viewId, Roles.RunLengthTag);
 
-                    TryPlaceTag(doc, fixture, singleTagType.Id, viewId, direction, isLineBased: true);
+                    TryPlaceTag(doc, fixture, singleTagType.Id, viewId, direction, g, isLineBased: true);
                 }
             }
 
@@ -646,7 +649,7 @@ public class TagCommand : IExternalCommand
         return Result.Succeeded;
     }
 
-    private bool TryPlaceTag(Document doc, FamilyInstance fixture, ElementId tagTypeId, ElementId viewId, TagDirection direction, bool isLineBased = false)
+    private bool TryPlaceTag(Document doc, FamilyInstance fixture, ElementId tagTypeId, ElementId viewId, TagDirection direction, TagGeometry g, bool isLineBased = false)
     {
         try
         {
@@ -683,13 +686,13 @@ public class TagCommand : IExternalCommand
             if (isLineBased)
             {
                 bool isReversed = TagPlacementService.IsLineReversed(fixture);
-                localOffset = TagPlacementService.CalculateLinearOffset(direction, isReversed);
+                localOffset = TagPlacementService.CalculateLinearOffset(direction, isReversed, g);
             }
             else
             {
-                var (symbolLength, symbolWidth) = GeometryHelper.GetSymbolExtents(fixture, doc.ActiveView, TagConstants.DefaultSymbolSizeFeet);
-                double tagWidth = TagPlacementService.EstimateTagWidth(tag, doc, viewId);
-                localOffset = TagPlacementService.CalculateOffset(direction, symbolLength, symbolWidth, tagWidth);
+                var (symbolLength, symbolWidth) = GeometryHelper.GetSymbolExtents(fixture, doc.ActiveView, g.DefaultSymbolSizeFeet);
+                double tagWidth = TagPlacementService.EstimateTagWidth(tag, doc, viewId, g);
+                localOffset = TagPlacementService.CalculateOffset(direction, symbolLength, symbolWidth, tagWidth, g);
             }
 
             XYZ globalOffset = TagPlacementService.TransformToGlobal(fixture, localOffset);

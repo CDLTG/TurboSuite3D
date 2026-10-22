@@ -11,6 +11,7 @@ using TurboSuite.Driver.Services;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
+using TurboSuite.Tag.Constants;
 
 namespace TurboSuite.Driver
 {
@@ -274,9 +275,9 @@ namespace TurboSuite.Driver
         /// </summary>
         private static void TagSplitFixtures(Document doc, FixtureSplitService.SplitResult splitResult)
         {
-            const double linearOffsetFeet = 5.0 / 12.0;
-
             View activeView = doc.ActiveView;
+            // TurboTag's linear tag offset, scaled to the view the tags are placed in.
+            double linearOffsetFeet = new TagGeometry(PlanScaleHelper.Of(activeView)).LinearOffsetFeet;
             ElementId tagTypeId = splitResult.LinearTagTypeId;
 
             // Determine direction from tag type name (Tag_Top → Up, Tag_Bottom → Down)

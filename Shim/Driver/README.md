@@ -122,7 +122,7 @@ Found by their `TurboSuite Role` type parameter, not by family name (see `Core/S
 |------|----------|---------|
 | `SwitchIdTag` | Lighting Device Tags | Tags Switch ID on placed power supplies |
 | `DeviceSwitchlegTag` | Lighting Device Tags | Switchleg tag on first power supply per circuit |
-| `LinearTag` | Lighting Fixture Tags | Re-tags linear fixtures after splitting (types: `Tag_Top`, `Tag_Bottom`) |
+| `LinearTag` | Lighting Fixture Tags | Re-tags linear fixtures after splitting (types: `Tag_Top`, `Tag_Bottom`), at TurboTag's view-scaled linear offset (`TagGeometry.LinearOffsetFeet`) |
 
 The TBD placeholder driver is likewise identified by Role `DriverPlaceholder` (was the `AL_RPS_TBD` family-name substring).
 
