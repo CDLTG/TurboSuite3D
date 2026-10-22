@@ -39,14 +39,14 @@ internal static class WallSconceService
         FamilyInstance fixture1, FamilyInstance fixture2,
         XYZ p1, XYZ p2,
         double distance, double familyScaleFactor,
-        bool facingSameDirection)
+        bool facingSameDirection, WireGeometry g)
     {
-        double scaleFactor = distance / WireConstants.BaselineDistance;
+        double scaleFactor = distance / g.BaselineDistance;
 
         bool isReceptacle = GeometryHelper.IsReceptacle(fixture1);
-        double connectorOffsetConst = isReceptacle ? WireConstants.ReceptacleSplineConnectorOffset : WireConstants.SplineConnectorOffset;
-        double nearWallConst = isReceptacle ? WireConstants.ReceptacleSplineOffsetNearWall : WireConstants.SplineOffsetNearWall;
-        double midFromWallConst = isReceptacle ? WireConstants.ReceptacleSplineOffsetMidFromWall : WireConstants.SplineOffsetMidFromWall;
+        double connectorOffsetConst = isReceptacle ? g.ReceptacleSplineConnectorOffset : g.SplineConnectorOffset;
+        double nearWallConst = isReceptacle ? g.ReceptacleSplineOffsetNearWall : g.SplineOffsetNearWall;
+        double midFromWallConst = isReceptacle ? g.ReceptacleSplineOffsetMidFromWall : g.SplineOffsetMidFromWall;
 
         double baselineFromWall = connectorOffsetConst * familyScaleFactor;
 
@@ -56,7 +56,7 @@ internal static class WallSconceService
         double midWallDelta = (midFromWallConst * familyScaleFactor) - baselineFromWall;
         double offsetMidFromWall = baselineFromWall + (midWallDelta * scaleFactor);
 
-        double offsetAlongWall = WireConstants.SplineOffsetAlongWall * familyScaleFactor * scaleFactor;
+        double offsetAlongWall = g.SplineOffsetAlongWall * familyScaleFactor * scaleFactor;
 
         var wallCoords1 = new WallLocalCoordinateSystem(fixture1);
         var wallCoords2 = new WallLocalCoordinateSystem(fixture2);

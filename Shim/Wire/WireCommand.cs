@@ -32,6 +32,9 @@ public class WireCommand : IExternalCommand
 
         try
         {
+            // Paper-relative routing lengths, scaled to the view the wires are drawn in.
+            var g = new WireGeometry(PlanScaleHelper.Of(doc.ActiveView));
+
             List<ElectricalSystem> preSelectedCircuits = GetPreSelectedElectricalCircuits(uiDoc);
 
             if (preSelectedCircuits.Count > 0)
@@ -47,7 +50,7 @@ public class WireCommand : IExternalCommand
                     List<FamilyInstance> fixturesOnCircuit = CircuitService.GetFixturesOnCircuit(circuit);
                     if (fixturesOnCircuit.Count >= 2)
                     {
-                        Result result = WireMultipleFixtures(doc, fixturesOnCircuit, ref message);
+                        Result result = WireMultipleFixtures(doc, fixturesOnCircuit, g, ref message);
                         if (result != Result.Succeeded)
                         {
                             txGroup.RollBack();
@@ -116,10 +119,10 @@ public class WireCommand : IExternalCommand
 
             if (preSelectedFixtures.Count >= 2)
             {
-                return HandleMultipleFixtures(uiDoc, doc, preSelectedFixtures, ref message);
+                return HandleMultipleFixtures(uiDoc, doc, preSelectedFixtures, g, ref message);
             }
 
-            return ManualSelection(uiDoc, doc, ref message);
+            return ManualSelection(uiDoc, doc, g, ref message);
         }
         catch (Autodesk.Revit.Exceptions.OperationCanceledException)
         {
@@ -308,7 +311,7 @@ public class WireCommand : IExternalCommand
     }
 
     private static Result HandleMultipleFixtures(UIDocument uiDoc, Document doc,
-        List<FamilyInstance> fixtures, ref string message)
+        List<FamilyInstance> fixtures, WireGeometry g, ref string message)
     {
         // Check for multiple circuits across entire selection — abort if found
         var fullAnalysis = CircuitService.AnalyzeFixtures(fixtures);
@@ -345,7 +348,7 @@ public class WireCommand : IExternalCommand
 
             if (fixtures.Count >= 2)
             {
-                Result result = WireMultipleFixtures(doc, fixtures, ref message);
+                Result result = WireMultipleFixtures(doc, fixtures, g, ref message);
                 if (result != Result.Succeeded)
                     return result;
             }
@@ -388,7 +391,7 @@ public class WireCommand : IExternalCommand
 
         if (fixtures.Count >= 2)
         {
-            Result result = WireMultipleFixtures(doc, fixtures, ref message);
+            Result result = WireMultipleFixtures(doc, fixtures, g, ref message);
             if (result != Result.Succeeded)
             {
                 txGroup.RollBack();
@@ -410,7 +413,7 @@ public class WireCommand : IExternalCommand
         return Result.Succeeded;
     }
 
-    private static Result ManualSelection(UIDocument uiDoc, Document doc, ref string message)
+    private static Result ManualSelection(UIDocument uiDoc, Document doc, WireGeometry g, ref string message)
     {
         var filter = new FixtureSelectionFilter();
 
@@ -424,7 +427,7 @@ public class WireCommand : IExternalCommand
 
         FamilyInstance? fixture2 = uiDoc.Document.GetElement(r2) as FamilyInstance;
 
-        return WireTwoFixtures(doc, fixture1!, fixture2!, useTagAwareArc: false, ref message, tagLookup: null);
+        return WireTwoFixtures(doc, fixture1!, fixture2!, useTagAwareArc: false, g, ref message, tagLookup: null);
     }
 
     private static List<ElectricalSystem> GetPreSelectedElectricalCircuits(UIDocument uiDoc)
@@ -482,7 +485,7 @@ public class WireCommand : IExternalCommand
         return PanelKind.Lighting;
     }
 
-    private static Result WireMultipleFixtures(Document doc, List<FamilyInstance> fixtures, ref string message)
+    private static Result WireMultipleFixtures(Document doc, List<FamilyInstance> fixtures, WireGeometry g, ref string message)
     {
         List<FamilyInstance> orderedFixtures = FixtureOrderingService.OrderFixturesByProximity(fixtures);
         var tagLookup = ArcCalculator.BuildTagLookup(doc);
@@ -495,7 +498,7 @@ public class WireCommand : IExternalCommand
             FamilyInstance fixture1 = orderedFixtures[i];
             FamilyInstance fixture2 = orderedFixtures[i + 1];
 
-            Result result = WireTwoFixtures(doc, fixture1, fixture2, useTagAwareArc: true, ref message, tagLookup, centroid);
+            Result result = WireTwoFixtures(doc, fixture1, fixture2, useTagAwareArc: true, g, ref message, tagLookup, centroid);
             if (result != Result.Succeeded)
             {
                 return result;
@@ -521,7 +524,7 @@ public class WireCommand : IExternalCommand
         return count > 0 ? new XYZ(x / count, y / count, z / count) : XYZ.Zero;
     }
 
-    private static Result WireTwoFixtures(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, bool useTagAwareArc, ref string message,
+    private static Result WireTwoFixtures(Document doc, FamilyInstance fixture1, FamilyInstance fixture2, bool useTagAwareArc, WireGeometry g, ref string message,
         Dictionary<ElementId, IndependentTag>? tagLookup = null, XYZ? groupCentroid = null)
     {
         Connector? c1 = GeometryHelper.GetElectricalConnector(fixture1, endTypeOnly: true);
@@ -545,9 +548,9 @@ public class WireCommand : IExternalCommand
         // 2D (unhosted): connector at 9" from origin, offset 0.01" via BasisX rotation.
         // 3D (wall-hosted): connector at origin, offset 9" away from wall via wall face normal.
         XYZ? switchOffset1 = WallSconceService.IsSwitch(fixture1)
-            ? GetSwitchOffset(fixture1) : null;
+            ? GetSwitchOffset(fixture1, c1, g) : null;
         XYZ? switchOffset2 = WallSconceService.IsSwitch(fixture2)
-            ? GetSwitchOffset(fixture2) : null;
+            ? GetSwitchOffset(fixture2, c2, g) : null;
 
         bool rps1 = ParameterHelper.HasRemotePowerSupply(fixture1);
         bool rps2 = ParameterHelper.HasRemotePowerSupply(fixture2);
@@ -556,7 +559,7 @@ public class WireCommand : IExternalCommand
         {
             IList<XYZ> straightPoints = new List<XYZ> { c1.Origin, c2.Origin };
             return WireCreationService.CreateWire(doc, straightPoints, WiringType.Chamfer,
-                c1, c2, null, null, 0, true, ref message, switchOffset1, switchOffset2);
+                c1, c2, null, null, 0, true, g, ref message, switchOffset1, switchOffset2);
         }
 
         if (rps1 != rps2)
@@ -590,19 +593,19 @@ public class WireCommand : IExternalCommand
                 bool facingSameDirection = dotProduct > 0;
 
                 double connectorOffsetConst = isReceptacle
-                    ? WireConstants.ReceptacleSplineConnectorOffset
-                    : WireConstants.SplineConnectorOffset;
+                    ? g.ReceptacleSplineConnectorOffset
+                    : g.SplineConnectorOffset;
                 double connectorOffset = connectorOffsetConst * familyScaleFactor;
 
                 wirePoints = WallSconceService.CalculateWallSconceSplinePoints(
                     fixture1, fixture2,
                     c1.Origin, c2.Origin,
                     distance, familyScaleFactor,
-                    facingSameDirection);
+                    facingSameDirection, g);
                 wiringType = WiringType.Arc;
                 return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2,
                     wallNormal1, wallNormal2,
-                    connectorOffset, facingSameDirection, ref message, switchOffset1, switchOffset2);
+                    connectorOffset, facingSameDirection, g, ref message, switchOffset1, switchOffset2);
             }
         }
 
@@ -651,9 +654,9 @@ public class WireCommand : IExternalCommand
             XYZ bulge = XYZ.BasisZ.CrossProduct(chordDir).Normalize() * arcDirection;
             (r1, r2) = ChooseEndpoints(
                 c1.Origin, lin1 ? longDir1 : null, half1,
-                c2.Origin, lin2 ? longDir2 : null, half2, bulge);
+                c2.Origin, lin2 ? longDir2 : null, half2, bulge, g);
             // Inline fixtures whose chosen ends collapse together → route the connectors instead.
-            if (r1.DistanceTo(r2) < MinEndGap) { r1 = c1.Origin; r2 = c2.Origin; }
+            if (r1.DistanceTo(r2) < g.MinEndGap) { r1 = c1.Origin; r2 = c2.Origin; }
         }
 
         // Each endpoint's vertex offset: the shift out to a relocated linear end, otherwise the switch
@@ -669,7 +672,7 @@ public class WireCommand : IExternalCommand
         XYZ p2 = useLocalFrame ? ArcCalculator.RotateXY(r2, -sharedAngle) : r2;
 
         // Off-axis fixtures: corner arc (squared) or S-spline (elongated)
-        if (ArcCalculator.IsOffAxis(p1, p2))
+        if (ArcCalculator.IsOffAxis(p1, p2, g.OffAxisThreshold))
         {
             IList<XYZ> localPoints;
             if (ArcCalculator.IsSquared(p1, p2))
@@ -691,7 +694,7 @@ public class WireCommand : IExternalCommand
             wirePoints[0] = c1.Origin;
             wirePoints[wirePoints.Count - 1] = c2.Origin;
             wiringType = WiringType.Arc;
-            return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, endOff1, endOff2);
+            return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, g, ref message, endOff1, endOff2);
         }
 
         // On-axis: standard 24° arc, shaped by the chosen routing points (the apex rides between/above
@@ -701,16 +704,15 @@ public class WireCommand : IExternalCommand
         wirePoints[0] = c1.Origin;
         wirePoints[wirePoints.Count - 1] = c2.Origin;
         wiringType = WiringType.Arc;
-        return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, ref message, endOff1, endOff2);
+        return WireCreationService.CreateWire(doc, wirePoints, wiringType, c1, c2, null, null, 0, true, g, ref message, endOff1, endOff2);
     }
 
-    // Two end-pairs whose lengths are within this of the shortest are treated as tied, and the bulge
-    // (tag/centroid intent) breaks the tie. This is what decides top-vs-bottom in the symmetric
-    // side-by-side case, where the two candidate pairs are exactly equal.
-    private const double EndTieEpsilon = 0.5; // ft
-    // Below this, the two chosen ends are treated as coincident (inline fixtures that meet/overlap)
-    // and the pair routes between the connectors instead, rather than draw a degenerate stub.
-    private const double MinEndGap = 0.25; // ft (3")
+    // WireGeometry.EndTieEpsilon: two end-pairs whose lengths are within this of the shortest are
+    // treated as tied, and the bulge (tag/centroid intent) breaks the tie. This is what decides
+    // top-vs-bottom in the symmetric side-by-side case, where the two candidate pairs are exactly equal.
+    // WireGeometry.MinEndGap: below this, the two chosen ends are treated as coincident (inline fixtures
+    // that meet/overlap) and the pair routes between the connectors instead, rather than draw a
+    // degenerate stub.
 
     /// <summary>
     /// Picks each fixture's routing point: for a linear fixture, one of its two ends; for a non-linear
@@ -722,7 +724,7 @@ public class WireCommand : IExternalCommand
     /// </summary>
     private static (XYZ r1, XYZ r2) ChooseEndpoints(
         XYZ c1, XYZ? longDir1, double half1,
-        XYZ c2, XYZ? longDir2, double half2, XYZ bulge)
+        XYZ c2, XYZ? longDir2, double half2, XYZ bulge, WireGeometry g)
     {
         IReadOnlyList<XYZ> cand1 = EndCandidates(c1, longDir1, half1);
         IReadOnlyList<XYZ> cand2 = EndCandidates(c2, longDir2, half2);
@@ -739,7 +741,7 @@ public class WireCommand : IExternalCommand
         foreach (XYZ p in cand1)
             foreach (XYZ q in cand2)
             {
-                if (p.DistanceTo(q) > bestDist + EndTieEpsilon) continue;
+                if (p.DistanceTo(q) > bestDist + g.EndTieEpsilon) continue;
                 double score = (p - c1).DotProduct(bulge) + (q - c2).DotProduct(bulge);
                 if (score > bestScore) { bestScore = score; r1 = p; r2 = q; }
             }
@@ -756,7 +758,7 @@ public class WireCommand : IExternalCommand
         return new[] { c + longDir * half, c - longDir * half };
     }
 
-    private static XYZ GetSwitchOffset(FamilyInstance fixture)
+    private static XYZ GetSwitchOffset(FamilyInstance fixture, Connector connector, WireGeometry g)
     {
         if (fixture.HostFace != null)
         {
@@ -765,10 +767,17 @@ public class WireCommand : IExternalCommand
             // door-hosted switches nudge the right way instead of collapsing to the wall. See
             // GeometryHelper.GetWallFaceNormalFromTransform.
             XYZ wallNormal = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
-            return wallNormal * (9.0 / 12.0);
+            return wallNormal * g.SwitchOffsetFromWall;
         }
 
-        // 2D unhosted: connector at 9" from origin, offset 0.01" along local +Y
-        return TagPlacementService.TransformToGlobal(fixture, new XYZ(0, 0.01 / 12.0, 0));
+        // 2D unhosted: connector at 9" from origin, offset 0.01" along local +Y. The connector is model
+        // geometry placed at the symbol's edge as drawn at 1/4", and it stays put while the symbol scales
+        // about the origin, so push the wire end out to the scaled edge: the connector's offset from the
+        // origin × (K − 1). At 1/4" that term is exactly zero, leaving only the 0.01" nudge.
+        XYZ nudge = TagPlacementService.TransformToGlobal(fixture, new XYZ(0, 0.01 / 12.0, 0));
+        XYZ? origin = GeometryHelper.GetFixtureLocation(fixture);
+        if (origin == null) return nudge;
+        XYZ fromOrigin = new XYZ(connector.Origin.X - origin.X, connector.Origin.Y - origin.Y, 0);
+        return nudge + fromOrigin * (g.Scale.K - 1.0);
     }
 }

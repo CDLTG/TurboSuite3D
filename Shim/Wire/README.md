@@ -79,6 +79,10 @@ End selection is **nearest ends**: the one-end-per-fixture pair that minimizes t
 
 Switches are wired with an endpoint offset to prevent visual overlap. Wall-hosted switches offset 9" along the wall normal; unhosted switches offset 0.01" along their local Y axis. Switch selections create a single circuit across all fixture categories with the comment "switched" (no comments dialog).
 
+### Plan scale
+
+The routing lengths above (spline offsets and the 4' spline baseline, the 9" wall-hosted switch offset, the 0.5" first step of the sconce end nudge, `EndTieEpsilon`/`MinEndGap`, and the 6" off-axis threshold) are 1/4" = 1'-0" reference values scaled by `K = view.Scale / 48` of the active view (`PlanScale`, see CLAUDE.md). `WireCommand` builds one `WireGeometry` (Core) per run and passes it down, so a wire keeps its printed shape at 3/16" or 1/8"; at 1/4" the output is unchanged. The spline baseline scales with the offsets, so the distance-proportional spline terms come out a small copy of the 1/4" drawing. Set the view scale **before** wiring; after a scale change, re-run TurboWire, which replaces the wires between each pair. Scaling the off-axis threshold keeps the arc-vs-S-curve choice paper-consistent: a pair 9" out of line at 1/8" gets the same 24° arc as its 4.5" twin at 1/4". Unscaled: the 24° arc and corner/S-spline shapes (angles and ratios, scale-free already), `MinLinearLength`, the unhosted switch's 0.01" direction nudge, and the connectors themselves. Connectors are model geometry, so a 2D switch's connector stays 9" from its origin at every scale while its symbol scales about the origin. TurboWire pushes the wire end out to the scaled symbol edge instead: the connector's measured offset from the origin × (K − 1), which is exactly zero at 1/4". `WireGeometryTests` pins every member to its pre-scale value at 1/4" and to linear scaling with `K`.
+
 ## Dependencies
 
 ### Required Custom Parameters
