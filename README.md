@@ -44,6 +44,7 @@ The "TurboSuite" ribbon tab has four panels:
 |--------|----------|-------------|
 | [TurboNudge](Shim/Nudge/README.md) | `TN` | Slide a selected keypad along its wall to exactly 5" from a picked door corner — replaces the manual place-then-dimension flow (3D and 2D) |
 | [TurboHighlight](Shim/Highlight/README.md) | `TH` | Toggle the room highlight in the active plan view — Spaces subcategories in 3D jobs, the `Highlight - Rooms` filter in 2D jobs (refuses views with a template applied) |
+| [TurboFixtureFilter](Shim/FixtureFilter/README.md) | `TF` | Narrow the current selection to Lighting Fixtures — the native Filter dialog's Check None → Lighting Fixtures → OK in one keystroke |
 | [TurboCompact](Shim/Compact/README.md) | `Ctrl+Shift+S` | Remove unused materials and compact-save the active family |
 
 ### Commands Panel
@@ -90,7 +91,7 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 
 | Category | Used By |
 |----------|---------|
-| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs, TurboMask |
+| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs, TurboMask, TurboFixtureFilter |
 | Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs, TurboMask, TurboNudge |
 | Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones, TurboMask |
 | Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones, TurboMask |

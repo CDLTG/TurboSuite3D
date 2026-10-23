@@ -98,6 +98,14 @@ public class TurboSuiteApplication : IExternalApplication
                 "Blank");
 
             CreatePulldownItem(scriptsPulldown, assemblyPath,
+                "TurboFixtureFilter",
+                "Filter to Fixtures",
+                "TurboSuite.FixtureFilter.FixtureFilterCommand",
+                "Suggested shortcut: TF\nNarrow the current selection to Lighting Fixtures",
+                "Select anything (window, crossing, Ctrl-click), then run this to keep only the Lighting Fixtures — the same result as Filter → Check None → Lighting Fixtures → OK. A selection with no Lighting Fixtures is left unchanged.",
+                "Blank");
+
+            CreatePulldownItem(scriptsPulldown, assemblyPath,
                 "TurboCompact",
                 "Compact Family",
                 "TurboSuite.Compact.CompactCommand",
