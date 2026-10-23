@@ -50,10 +50,12 @@ namespace TurboSuite.Dmx.Services
         private const string DecoderTagRole = Roles.SwitchIdTag;
         private const string DriverTagRole = Roles.DeviceTypeTag;
 
-        private const double RowSpacingFt = 9.5 / 12.0;   // 9.5" between devices, like TurboDriver's column
+        // Strip layout at the 1/4" reference. Decoders and drivers draw as nested annotation that scales with
+        // the view, so both lengths are × K of the placement view (PlanScale), like TurboDriver's column.
+        private const double RowSpacingRefFt = 9.5 / 12.0;   // 9.5" between devices, like TurboDriver's column
         // Layout per device: Driver ← 2'-0" → Decoder. The picked point anchors the DECODER (the tagged
         // DEC #); the driver sits one bay (24") to its LEFT (−X).
-        private const double DriverDxFt = 24.0 / 12.0;
+        private const double DriverDxRefFt = 24.0 / 12.0;
 
         private readonly UIDocument _uidoc;
         private readonly Document _doc;
@@ -157,12 +159,16 @@ namespace TurboSuite.Dmx.Services
             XYZ rightUnit = snapToScreen ? ViewOrientationHelper.ScreenOffsetToModel(view, new XYZ(1, 0, 0)) : new XYZ(1, 0, 0);
             double deviceRotation = snapToScreen ? cropAngle : 0.0;
 
+            double k = PlanScaleHelper.Of(view).K;
+            double rowSpacingFt = RowSpacingRefFt * k;
+            double driverDxFt = DriverDxRefFt * k;
+
             int row = 0;
             foreach (var dev in devices)
             {
-                XYZ rowDown = downUnit * (row * RowSpacingFt);
+                XYZ rowDown = downUnit * (row * rowSpacingFt);
                 var decoderPt = origin + rowDown;                    // picked point anchors the decoder column
-                var driverPt = decoderPt - rightUnit * DriverDxFt;   // driver sits one bay to the decoder's left
+                var driverPt = decoderPt - rightUnit * driverDxFt;   // driver sits one bay to the decoder's left
                 row++;
 
                 // Decoder: place → write Switch ID → tag (Switch ID).
@@ -212,8 +218,8 @@ namespace TurboSuite.Dmx.Services
 
         // ── Option-A orphan cleanup: remove placed decoders whose DEC # left the solve ───────────────
         // Model-scan based (not registry-only) so decoders placed BEFORE the registry existed are caught too.
-        // The paired driver is resolved from the registry when available (exact, survives layout nudges),
-        // else best-effort by geometry (the driver sits one bay to the decoder's left).
+        // The paired driver is resolved from the registry only (exact, survives layout nudges); with no live
+        // entry the decoder is removed and the driver left with a "remove it manually" warning.
         private void RemoveOrphans(DmxPlacementPlan plan, bool locked,
                                    IReadOnlyList<DmxPlacedPair> registry, DmxPlacementResult result)
         {
@@ -239,7 +245,7 @@ namespace TurboSuite.Dmx.Services
             {
                 foreach (var o in orphans)
                 {
-                    var driverId = ResolveDriverId(o.Dec, o.Fi, driverByDec);
+                    var driverId = ResolveDriverId(o.Dec, driverByDec);
 
                     _doc.Delete(o.Fi.Id);
                     if (driverId != ElementId.InvalidElementId) _doc.Delete(driverId);
@@ -517,33 +523,14 @@ namespace TurboSuite.Dmx.Services
             }
         }
 
-        // Registry first (exact), then geometry: the lighting device nearest the decoder's expected driver
-        // point (one bay to its left), excluding other decoders, within a tight tolerance.
-        private ElementId ResolveDriverId(int dec, FamilyInstance decoder, Dictionary<int, long> driverByDec)
+        // Registry only (exact). No geometric fallback: this feeds a delete, where a missed driver is recoverable
+        // (the caller warns) but a wrong one is not — a by-position guess could grab a different device once the
+        // real driver was deleted by hand, and couldn't account for view scale or crop rotation anyway.
+        private ElementId ResolveDriverId(int dec, Dictionary<int, long> driverByDec)
         {
-            if (driverByDec.TryGetValue(dec, out var did))
-            {
-                var rid = new ElementRef(did).ToElementId();
-                if (_doc.GetElement(rid) != null) return rid;
-            }
-
-            var loc = GeometryHelper.GetFixtureLocation(decoder);
-            if (loc == null) return ElementId.InvalidElementId;
-            var expected = new XYZ(loc.X - DriverDxFt, loc.Y, loc.Z);
-
-            const double tol = 1.0;   // ft — tight, so a wrong driver isn't grabbed
-            FamilyInstance best = null;
-            double bestD = tol;
-            foreach (var fi in LightingDevices())
-            {
-                if (fi.Id == decoder.Id) continue;
-                if (ParseDec(fi.LookupParameter(ParameterNames.SwitchId)?.AsString()) > 0) continue; // skip decoders
-                var l = GeometryHelper.GetFixtureLocation(fi);
-                if (l == null) continue;
-                double d = l.DistanceTo(expected);
-                if (d < bestD) { bestD = d; best = fi; }
-            }
-            return best?.Id ?? ElementId.InvalidElementId;
+            if (!driverByDec.TryGetValue(dec, out var did)) return ElementId.InvalidElementId;
+            var rid = new ElementRef(did).ToElementId();
+            return _doc.GetElement(rid) != null ? rid : ElementId.InvalidElementId;
         }
 
         private IEnumerable<FamilyInstance> LightingDevices() =>
