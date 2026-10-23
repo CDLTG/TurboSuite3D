@@ -33,7 +33,7 @@ namespace TurboSuite.Driver.Services
         /// point's Z relative to the level's ProjectElevation (verified in-model via TurboSpike; note
         /// the API leaves FamilyInstance.Host null for these even when placed correctly — the level
         /// association, not Host, is what matters). Callers must pass point.Z in the internal-origin
-        /// frame (see GetDisplayElevation, which builds it from Level.ProjectElevation). Pass null only
+        /// frame (see PlanDisplayElevation, which builds it from Level.ProjectElevation). Pass null only
         /// for views with no level (drafting/3D) to keep the bare-point behavior.
         /// </summary>
         public FamilyInstance PlacePowerSupply(XYZ point, FamilySymbol symbol, Level level)

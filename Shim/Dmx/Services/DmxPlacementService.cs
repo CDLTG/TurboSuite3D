@@ -75,7 +75,8 @@ namespace TurboSuite.Dmx.Services
 
             var placedIds = new List<ElementId>();
             View view = _doc.ActiveView;
-            double? displayZ = GetDisplayElevation(_doc, view);
+            double? displayZ = PlanDisplayElevation.Of(_doc, view);
+            Level hostLevel = (view as ViewPlan)?.GenLevel;   // null for non-plan views → bare-point placement
 
             // Option-A cleanup: remove decoders whose DEC # is no longer in the solve, plus their
             // paired drivers (exact, via the registry) — auto when Unlocked, confirmed when Locked. Runs in
@@ -86,6 +87,13 @@ namespace TurboSuite.Dmx.Services
             // the model, so placing again after a locked additive re-run lands only the new decoders.
             var existing = ExistingDecoderSwitchIds();
 
+            // The remainder scan is keyed on decoders, so a skipped decoder's missing driver is never re-placed.
+            // Warn only (decided 2026-10-23) — the fix is to delete the decoder and re-Place the pair. Keyed on the
+            // registry: no entry ⇒ unknown (placed before the registry existed), so nothing is said.
+            var registeredDriver = new Dictionary<int, long>();
+            if (registry != null)
+                foreach (var p in registry) registeredDriver[p.Dec] = p.DriverId;
+
             foreach (var loop in plan.Loops)
             {
                 // Per-loop Place (loop-centric): only the targeted interface is picked + placed this run.
@@ -95,6 +103,10 @@ namespace TurboSuite.Dmx.Services
                     .Where(d => string.IsNullOrEmpty(d.SwitchId) || !existing.Contains(d.SwitchId))
                     .ToList();
                 result.AlreadyPlaced += loop.Devices.Count - todo.Count;
+
+                foreach (var dev in loop.Devices.Except(todo))
+                    if (registeredDriver.TryGetValue(ParseDec(dev.SwitchId), out var did) && !IsLive(did))
+                        result.Warnings.Add($"{dev.SwitchId}: driver is missing — delete the decoder and re-Place to restore the pair.");
                 if (todo.Count == 0) continue;   // whole loop already placed — no pick, no churn
 
                 XYZ origin;
@@ -115,7 +127,7 @@ namespace TurboSuite.Dmx.Services
                     tx.Start();
                     try
                     {
-                        PlaceLoop(todo, origin, view, result, placedIds);
+                        PlaceLoop(todo, origin, view, hostLevel, result, placedIds);
                         tx.Commit();
                     }
                     catch (Exception ex)
@@ -146,9 +158,13 @@ namespace TurboSuite.Dmx.Services
             return result;
         }
 
-        private void PlaceLoop(IReadOnlyList<DmxDevicePlacement> devices, XYZ origin, View view,
+        private void PlaceLoop(IReadOnlyList<DmxDevicePlacement> devices, XYZ origin, View view, Level hostLevel,
                                DmxPlacementResult result, List<ElementId> placedIds)
         {
+            // origin.Z is internal-origin (PlanDisplayElevation, built off ProjectElevation), so Elevation from
+            // Level is it minus the host level's own ProjectElevation.
+            double? elevFromLevel = hostLevel != null ? origin.Z - hostLevel.ProjectElevation : (double?)null;
+
             // Same view-crop rule as TurboDriver's stack: align the two-column strip to the MODEL at
             // odd crop rotations (it tilts with the geometry on screen), but SNAP to screen down/left
             // at square rotations (0/90/180/270) with the devices rotated upright. Identity in an
@@ -172,7 +188,7 @@ namespace TurboSuite.Dmx.Services
                 row++;
 
                 // Decoder: place → write Switch ID → tag (Switch ID).
-                var decoder = PlaceSymbol(dev.DecoderTypeId, decoderPt, deviceRotation);
+                var decoder = PlaceSymbol(dev.DecoderTypeId, decoderPt, deviceRotation, hostLevel, elevFromLevel);
                 if (decoder == null)
                 {
                     result.Failed++;
@@ -191,7 +207,7 @@ namespace TurboSuite.Dmx.Services
                 }
 
                 // Driver: place → tag (Type Mark, NOT written — the family carries it).
-                var driver = PlaceSymbol(dev.DriverTypeId, driverPt, deviceRotation);
+                var driver = PlaceSymbol(dev.DriverTypeId, driverPt, deviceRotation, hostLevel, elevFromLevel);
                 if (driver == null)
                 {
                     result.Failed++;
@@ -533,6 +549,9 @@ namespace TurboSuite.Dmx.Services
             return _doc.GetElement(rid) != null ? rid : ElementId.InvalidElementId;
         }
 
+        // 0 ⇒ no driver was ever placed for the pair (its type wasn't loaded), which reads as missing too.
+        private bool IsLive(long id) => id != 0L && _doc.GetElement(new ElementRef(id).ToElementId()) != null;
+
         private IEnumerable<FamilyInstance> LightingDevices() =>
             new FilteredElementCollector(_doc)
                 .OfCategory(BuiltInCategory.OST_LightingDevices)
@@ -574,13 +593,24 @@ namespace TurboSuite.Dmx.Services
             return ids;
         }
 
-        private FamilyInstance PlaceSymbol(string typeId, XYZ point, double rotation)
+        // Level-based like TurboDriver's power supplies (CLAUDE.md "NewFamilyInstance ignores the placement Z"):
+        // the level overload ties the device to the plan's level, and Elevation from Level is then SET, since
+        // NewFamilyInstance inherits the family's sticky default instead of honoring point.Z. A null level
+        // (non-plan view) keeps the bare-point placement.
+        private FamilyInstance PlaceSymbol(string typeId, XYZ point, double rotation, Level level, double? elevFromLevel)
         {
             if (string.IsNullOrEmpty(typeId)) return null;
             if (!(_doc.GetElement(typeId) is FamilySymbol symbol)) return null;
 
             if (!symbol.IsActive) { symbol.Activate(); _doc.Regenerate(); }
-            var instance = _doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
+            var instance = level != null
+                ? _doc.Create.NewFamilyInstance(point, symbol, level, StructuralType.NonStructural)
+                : _doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
+            if (elevFromLevel.HasValue)
+            {
+                var p = instance.get_Parameter(BuiltInParameter.INSTANCE_ELEVATION_PARAM);
+                if (p != null && !p.IsReadOnly) p.Set(elevFromLevel.Value);
+            }
             if (Math.Abs(rotation) > 1e-9)
             {
                 var axis = Line.CreateBound(point, point + XYZ.BasisZ);
@@ -630,42 +660,6 @@ namespace TurboSuite.Dmx.Services
             }
 
             return byRole;
-        }
-
-        // ── View-range elevation snap (decoders/drivers have no 3D geometry, so a point off the display
-        // plane hides the device while its view-owned tag still draws — same RCP gotcha TurboDriver fixes). ──
-        private static double? GetDisplayElevation(Document doc, View view)
-        {
-            if (!(view is ViewPlan plan)) return null;
-
-            PlanViewPlane whichPlane = plan.ViewType == ViewType.CeilingPlan
-                ? PlanViewPlane.TopClipPlane
-                : PlanViewPlane.BottomClipPlane;
-
-            PlanViewRange range = plan.GetViewRange();
-            ElementId levelId = range.GetLevelId(whichPlane);
-            Level level;
-            if (levelId.Equals(PlanViewRange.LevelAbove)) level = AdjacentLevel(doc, plan.GenLevel, above: true);
-            else if (levelId.Equals(PlanViewRange.LevelBelow)) level = AdjacentLevel(doc, plan.GenLevel, above: false);
-            else level = doc.GetElement(levelId) as Level;
-
-            return level == null ? (double?)null : level.Elevation + range.GetOffset(whichPlane);
-        }
-
-        private static Level AdjacentLevel(Document doc, Level from, bool above)
-        {
-            if (from == null) return null;
-            double baseElev = from.Elevation;
-            const double Tol = 1e-6;
-            Level best = null;
-            foreach (var el in new FilteredElementCollector(doc).OfClass(typeof(Level)))
-            {
-                if (!(el is Level lvl)) continue;
-                double e = lvl.Elevation;
-                if (above) { if (e > baseElev + Tol && (best == null || e < best.Elevation)) best = lvl; }
-                else { if (e < baseElev - Tol && (best == null || e > best.Elevation)) best = lvl; }
-            }
-            return best;
         }
     }
 }
