@@ -234,7 +234,7 @@ public class TurboSuiteApplication : IExternalApplication
                     "TurboSuite.Dmx.DmxCommand",
                     "Automate DMX-controlled RGBW LED tape systems",
                     "Opens the TurboDMX window to declare DMX loops and control zones, solve decoder/driver packing and addressing, and generate the one-line diagram. Experimental — under construction.",
-                    "Blank");
+                    "TurboDMX");
 
                 CreateButton(controlsPanel, assemblyPath,
                     "TurboDALI",
@@ -242,7 +242,7 @@ public class TurboSuiteApplication : IExternalApplication
                     "TurboSuite.Dali.DaliCommand",
                     "Automate DALI addressing for lighting circuits",
                     "Opens the TurboDALI window to group Control Zones into DALI loops, assign each loop its panel ZONE, and assign and write back per-circuit DALI addresses with a job-wide numbering lock. Experimental — under construction.",
-                    "Blank");
+                    "TurboDALI");
             }
 
             // ── Debug panel (TurboSpike) ──
