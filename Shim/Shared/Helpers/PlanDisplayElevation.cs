@@ -50,7 +50,7 @@ public static class PlanDisplayElevation
         double? ResolvePlane(PlanViewPlane p)
         {
             ElementId levelId = range.GetLevelId(p);
-            Level level;
+            Level? level;
             if (levelId.Equals(PlanViewRange.LevelAbove))
                 level = AdjacentLevel(doc, plan.GenLevel, above: true);
             else if (levelId.Equals(PlanViewRange.LevelBelow))
