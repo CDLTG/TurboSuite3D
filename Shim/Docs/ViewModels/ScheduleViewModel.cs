@@ -26,6 +26,7 @@ public class ScheduleViewModel : ViewModelBase
     private double _progress;
     private string _statusText = string.Empty;
     private bool _isGenerating;
+    private bool _useNewLayout;
     private string _specNote1 = string.Empty;
     private string _specNote2 = string.Empty;
     private string _specNote3 = string.Empty;
@@ -58,6 +59,26 @@ public class ScheduleViewModel : ViewModelBase
         }
     }
 
+    // Layout toggle between the shipped SchedulePdfService and the SchedulePdfServiceV2 overhaul.
+    // Dev-visible only; with the gate off the toggle is hidden and the current layout always renders.
+    public bool ShowLayoutToggle => App.TurboSuiteApplication.ExperimentalCommandsEnabled;
+
+    public bool UseNewLayout
+    {
+        get => _useNewLayout;
+        set
+        {
+            if (SetProperty(ref _useNewLayout, value))
+                OnPropertyChanged(nameof(UseCurrentLayout));
+        }
+    }
+
+    public bool UseCurrentLayout
+    {
+        get => !_useNewLayout;
+        set { if (value) UseNewLayout = false; }
+    }
+
     public string SpecNote1 { get => _specNote1; set => SetProperty(ref _specNote1, value); }
     public string SpecNote2 { get => _specNote2; set => SetProperty(ref _specNote2, value); }
     public string SpecNote3 { get => _specNote3; set => SetProperty(ref _specNote3, value); }
@@ -87,6 +108,7 @@ public class ScheduleViewModel : ViewModelBase
             Fixtures.Add(f);
 
         var settings = DocsSettingsService.Load();
+        UseNewLayout = settings.ScheduleUseNewLayout;
         if (settings.ScheduleSelectedTypeMarks.Count > 0)
         {
             foreach (var fixture in Fixtures)
@@ -112,6 +134,7 @@ public class ScheduleViewModel : ViewModelBase
             .Distinct()
             .ToList();
         settings.SpecificationNotes = [SpecNote1, SpecNote2, SpecNote3, SpecNote4, SpecNote5, SpecNote6];
+        settings.ScheduleUseNewLayout = UseNewLayout;
         DocsSettingsService.Save(settings);
     }
 
@@ -167,10 +190,12 @@ public class ScheduleViewModel : ViewModelBase
         var selected = Fixtures.Where(f => f.IsSelected).ToList();
         if (selected.Count == 0) return;
 
+        // Distinct default name so the two layouts co-exist in one folder for side-by-side review.
+        bool newLayout = ShowLayoutToggle && UseNewLayout;
         var saveDialog = new SaveFileDialog
         {
             Filter = "PDF Files|*.pdf",
-            FileName = $"{ProjectName} Fixture Schedule.pdf"
+            FileName = newLayout ? $"{ProjectName} Fixture Schedule (New).pdf" : $"{ProjectName} Fixture Schedule.pdf"
         };
         if (saveDialog.ShowDialog() != true) return;
 
@@ -195,7 +220,10 @@ public class ScheduleViewModel : ViewModelBase
                 FooterDate = _parent.HeaderDate.ToString("yyyy.MM.dd"),
                 SpecificationNotes = [SpecNote1, SpecNote2, SpecNote3, SpecNote4, SpecNote5, SpecNote6],
             };
-            await Task.Run(() => SchedulePdfService.Generate(selected, ProjectName, outputPath, largeFormat, settings));
+            if (newLayout)
+                await Task.Run(() => SchedulePdfServiceV2.Generate(selected, ProjectName, outputPath, largeFormat, settings));
+            else
+                await Task.Run(() => SchedulePdfService.Generate(selected, ProjectName, outputPath, largeFormat, settings));
 
             Progress = 100;
             StatusText = $"Done. Saved to {Path.GetFileName(outputPath)}";

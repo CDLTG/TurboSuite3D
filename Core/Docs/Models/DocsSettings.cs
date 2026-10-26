@@ -31,6 +31,9 @@ public class DocsSettings
     // Schedule tab settings
     public List<string> ScheduleSelectedTypeMarks { get; set; } = new();
     public bool ScheduleUseLargeFormat { get; set; }
+    // Dev-only: render with the SchedulePdfServiceV2 overhaul layout. Ignored unless
+    // ExperimentalCommandsEnabled, so a shipped build always renders the current layout.
+    public bool ScheduleUseNewLayout { get; set; }
 
     // Schedule tab — Specification Notes
     public List<string> SpecificationNotes { get; set; } = new();

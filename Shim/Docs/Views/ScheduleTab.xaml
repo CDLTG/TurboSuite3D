@@ -47,6 +47,18 @@
                          VerticalContentAlignment="Center"/>
         </StackPanel>
 
+        <!-- Layout (dev-only: ExperimentalCommandsEnabled) -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,0,0,8"
+                    Visibility="{Binding ShowLayoutToggle, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Layout:" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <RadioButton Content="Current" GroupName="ScheduleLayout"
+                         IsChecked="{Binding UseCurrentLayout}"
+                         Margin="0,0,20,0" VerticalContentAlignment="Center"/>
+            <RadioButton Content="New (experimental)" GroupName="ScheduleLayout"
+                         IsChecked="{Binding UseNewLayout}"
+                         VerticalContentAlignment="Center"/>
+        </StackPanel>
+
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>

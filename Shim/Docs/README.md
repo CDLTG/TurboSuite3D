@@ -8,6 +8,8 @@ Entry `DocsCommand.cs`; PDF/render services in `Shim/Docs/`, pure builders/resol
 
 Generates a fixture schedule PDF from lighting fixture type parameters.
 
+**Layout overhaul (dev-only).** `SchedulePdfServiceV2` is an independent fork of `SchedulePdfService` (landscape pages so far) for reworking the format without touching the shipped layout. A **Layout: Current / New (experimental)** radio, shown only when `ExperimentalCommandsEnabled`, picks the renderer (persisted as `DocsSettings.ScheduleUseNewLayout`, ignored with the gate off); New defaults the file name to `… Fixture Schedule (New).pdf` so both can sit side by side.
+
 ### Layout
 
 Each fixture entry is a card-style block:
