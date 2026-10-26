@@ -237,8 +237,7 @@ the per-page one-line view ids + the wire-legend view id are stored in a **dedic
 (`ZonesOneLineViewStorageService`, `OneLineViewState` — its own GUID, not the panel-settings schema, so it
 never re-bumps that one), read at window open and written on Draw via the work queue; redraws still also find
 views by deterministic name, so the persistence is a restart-surviving fast path, not a correctness
-dependency. The **Draw One-Line button is experimental-gated** (`PanelTab.ShowDrawOneLine` = Lutron **and**
-`ExperimentalCommandsEnabled`), so it is dev-visible-only until release.
+dependency. The **Draw One-Line button** shows on Lutron jobs only (`PanelTab.ShowDrawOneLine`).
 
 ## Dependencies
 

@@ -78,9 +78,6 @@ namespace TurboSuite.Zones.ViewModels
         private readonly Dictionary<int, long> _oneLineViewIds = new Dictionary<int, long>();
         private long _wireLegendViewId;
         private bool _drawingOneLine;
-        // Experimental gate: TurboZones ships, but the one-line stays dev-visible-only until release
-        // (ExperimentalCommandsEnabled, threaded in by the shim). Gates ShowDrawOneLine.
-        private readonly bool _oneLineEnabled;
 
         public PanelBreakdownTabViewModel(List<ZonesCircuitData> circuits,
             KeypadCounts keypadCounts,
@@ -94,14 +91,12 @@ namespace TurboSuite.Zones.ViewModels
             IControlOneLineService oneLineService = null,
             IOneLineViewStore viewStore = null,
             OneLineViewState savedViewState = null,
-            bool oneLineEnabled = true,
             ControlDeviceGroup clearConnectGateways = null)
         {
             _workQueue = workQueue;
             _settingsStore = settingsStore;
             _oneLineService = oneLineService;
             _viewStore = viewStore;
-            _oneLineEnabled = oneLineEnabled;
             // Seed the owned-view registry from the persisted state so the first redraw of this session reuses
             // the same views by id (redraws also find them by name, so an empty/null state is harmless).
             if (savedViewState != null)
@@ -157,9 +152,9 @@ namespace TurboSuite.Zones.ViewModels
 
         public bool IsLutronSelected => string.Equals(_selectedBrandName, "Lutron", StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>Visibility of the Draw One-Line button: Lutron-only (CC-A/QS is Lutron-specific) AND the
-        /// experimental gate is open (the one-line is dev-visible-only until release). Bound in the view.</summary>
-        public bool ShowDrawOneLine => _oneLineEnabled && IsLutronSelected;
+        /// <summary>Visibility of the Draw One-Line button: Lutron-only (CC-A/QS is Lutron-specific). Bound in
+        /// the view.</summary>
+        public bool ShowDrawOneLine => IsLutronSelected;
 
         public bool UseDedicatedRelayModule
         {

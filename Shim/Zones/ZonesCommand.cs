@@ -126,7 +126,6 @@ namespace TurboSuite.Zones
                     new ControlOneLineService(uidoc),    // Section 2 one-line renderer
                     new OneLineViewStore(doc),           // cross-session owned-view id persistence
                     savedOneLineViews,
-                    App.TurboSuiteApplication.ExperimentalCommandsEnabled,   // dev-visible-only until release
                     clearConnectGateways);
 
                 var window = new TurboZonesWindow
