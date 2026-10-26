@@ -298,9 +298,11 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(96, packed.Processors[0].Link1.Devices);
             Assert.Equal(27, packed.Processors[0].Link2.Devices);
 
-            // All three shade units whole on Link 1 — none split onto Link 2.
-            Assert.Equal(3, packed.Processors[0].Link1.UnitNames.Count(n => n == "SHADE 1"));
-            Assert.DoesNotContain("SHADE 1", packed.Processors[0].Link2.UnitNames);
+            // All three shade units whole on Link 1 — none split onto Link 2. They continue the location's
+            // letter run after the ten dimmer panels (1-A…1-J), as the Panel Breakdown names them.
+            var shadeNames = new[] { "1-K", "1-L", "1-M" };
+            Assert.All(shadeNames, n => Assert.Contains(n, packed.Processors[0].Link1.UnitNames));
+            Assert.All(shadeNames, n => Assert.DoesNotContain(n, packed.Processors[0].Link2.UnitNames));
             Assert.Contains(LinkCategory.Shades, packed.Processors[0].Link1.Categories);
         }
 
@@ -365,7 +367,7 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(3, modules.Devices);
 
             var shade = Assert.Single(link1.Units, u => u.Category == LinkCategory.Shades);
-            Assert.Equal("SHADE 1", shade.Name);
+            Assert.Equal("1-B", shade.Name);          // continues the letter run after dimmer panel 1-A
             Assert.Equal(6, shade.Devices);           // one QSPS-10PNL: 5 motors + 1 panel device
 
             // Keypads collapse to exactly one synthetic node, and it lands LAST (poured after located units).

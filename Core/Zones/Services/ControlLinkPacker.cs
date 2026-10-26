@@ -435,6 +435,24 @@ namespace TurboSuite.Zones.Services
             // panels, so they join the pinned units below.
             var subsystemUnits = new List<LinkUnit>();
 
+            // A subsystem reports a shade unit under the Revit panel its circuits sit on, but the Panel
+            // Breakdown names shade panels by continuing each location's letter run after its lighting
+            // panels (…3-B lighting, then 3-C, 3-D shades). Renamed here — not in the one-line — because
+            // unit names break packing ties, so every consumer of this demand must see the same names.
+            var lightingPanelsByLocation = panels
+                .GroupBy(p => PanelAllocationService.ParseLocationNumber(p.PanelName))
+                .ToDictionary(g => g.Key, g => g.Count());
+            var shadeIndexByLocation = new Dictionary<int, int>();
+
+            string? BreakdownName(DemandLinkUnit u, LinkCategory category)
+            {
+                if (category != LinkCategory.Shades || u.Location <= 0) return u.Name;
+                lightingPanelsByLocation.TryGetValue(u.Location, out int lighting);
+                shadeIndexByLocation.TryGetValue(u.Location, out int k);
+                shadeIndexByLocation[u.Location] = k + 1;
+                return PanelAllocationService.RecommendedPanelName(u.Location, lighting + k);
+            }
+
             // Wired keypads only. A wireless one is not a QS device at all — it rides the Clear
             // Connect link, and pouring it in here would charge a link that never sees it while
             // leaving the link that does under-reported.
@@ -462,7 +480,8 @@ namespace TurboSuite.Zones.Services
                         var category = CategoryForSubsystem(demand.Subsystem);
                         foreach (var u in demand.LinkUnits)
                             subsystemUnits.Add(new LinkUnit(
-                                u.Name, u.Devices, u.Loads, pdu: 0, category, u.Location, u.Motors));
+                                BreakdownName(u, category), u.Devices, u.Loads, pdu: 0, category,
+                                u.Location, u.Motors));
                         continue;
                     }
 

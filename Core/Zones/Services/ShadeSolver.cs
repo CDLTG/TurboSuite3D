@@ -1,6 +1,8 @@
 #nullable enable
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using TurboSuite.Shared.Helpers;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -103,6 +105,52 @@ namespace TurboSuite.Zones.Services
                 linkLoads: assignedShades,
                 diagnostic: diagnostic,
                 linkUnits: units);
+        }
+
+        /// <summary>
+        /// Pools the shim's raw shade tallies — one per circuit, keyed by its Revit panel name — into one
+        /// tally per location, in first-seen order. Shades pool by the PARSED location number, exactly as
+        /// lighting pools every panel in a location, so circuits split across several real shade panels
+        /// at one location are one pool, ceil'd once (3-B with 4 + 3-C with 3 → one QSPS-10PNL, not two).
+        /// The real panels are only where circuits sit; the panel count and names are the recommendation's.
+        ///
+        /// Each pooled tally carries the first panel name seen at its location (downstream only re-parses
+        /// it to the number) and its motors in natural circuit order, so each QSPS-10PNL takes a
+        /// contiguous, sorted chunk. A panel name with no location stays keyed by its raw name, so it
+        /// still reaches <see cref="Solve"/> as an unassigned warning.
+        /// </summary>
+        public static List<ShadeLocationTally> PoolByLocation(IEnumerable<ShadeLocationTally>? raw)
+        {
+            var keyByNumber = new Dictionary<int, string>();
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var motors = new Dictionary<string, List<ShadeMotorRecord>>(StringComparer.OrdinalIgnoreCase);
+            var order = new List<string>();
+
+            foreach (var t in raw ?? Enumerable.Empty<ShadeLocationTally>())
+            {
+                if (t == null || t.ShadeCount <= 0) continue;
+
+                string key = t.LocationName ?? string.Empty;
+                int number = PanelAllocationService.ParseLocationNumber(key);
+                if (number > 0)
+                {
+                    if (keyByNumber.TryGetValue(number, out string? first)) key = first;
+                    else keyByNumber[number] = key;
+                }
+
+                if (!counts.ContainsKey(key))
+                {
+                    counts[key] = 0;
+                    motors[key] = new List<ShadeMotorRecord>();
+                    order.Add(key);
+                }
+                counts[key] += t.ShadeCount;
+                motors[key].AddRange(t.Motors);
+            }
+
+            return order.Select(k => new ShadeLocationTally(
+                k, counts[k],
+                motors[k].OrderBy(m => m.Circuit, NaturalStringComparer.OrdinalIgnoreCase).ToList())).ToList();
         }
 
         /// <summary>QSPS-10PNL panels one location needs — its shades ceil'd to whole ten-output panels.

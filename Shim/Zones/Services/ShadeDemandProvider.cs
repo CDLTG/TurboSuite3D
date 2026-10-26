@@ -23,14 +23,13 @@ namespace TurboSuite.Zones.Services
     /// zones — a shade motor is an Electrical Fixture, which that collector would otherwise treat as a
     /// lighting load.
     ///
-    /// <b>Location — the circuit's panel name.</b> The shade panel follows the "{Location}-{Panel ID}"
-    /// convention (e.g. "2-D") and groups by that name, exactly as lighting groups by its panel; the
-    /// parsed location number (<see cref="PanelAllocationService.ParseLocationNumber"/>, dash path)
-    /// merges it into the matching lighting location. The older "SHADE N" form still resolves the same.
-    /// The solver ceils each location's shades to whole QSPS-10PNL and sums. This assumes one
-    /// shade-panel name per location (all its shade circuits on the one real panel — the extras are
-    /// circuitless dummies): grouping by name then equals grouping by location, so the per-location
-    /// ceil is exact.
+    /// <b>Location — parsed from the circuit's panel name.</b> The shade panel follows the
+    /// "{Location}-{Panel ID}" convention (e.g. "2-D"; the older "SHADE N" form resolves the same), and
+    /// its parsed location number (<see cref="PanelAllocationService.ParseLocationNumber"/>) merges it
+    /// into the matching lighting location. Shades pool by that NUMBER, not the panel name — exactly as
+    /// lighting pools every panel in a location — via the pure <see cref="ShadeSolver.PoolByLocation"/>,
+    /// which keeps this counts path in step with the panel schedule's circuits path (it pools by
+    /// location too).
     ///
     /// <b>Must not throw</b> (see the interface): every read is wrapped, and a failure becomes an
     /// Unsolvable demand so a half-wired shade job never breaks the BOM.
@@ -55,12 +54,11 @@ namespace TurboSuite.Zones.Services
             }
         }
 
-        /// <summary>Shade motors totalled per location (circuit panel name), in first-seen order.</summary>
+        /// <summary>Shade motors totalled per location (parsed from the circuit panel name), in
+        /// first-seen order — one raw tally per circuit, pooled by <see cref="ShadeSolver.PoolByLocation"/>.</summary>
         internal static List<ShadeLocationTally> CollectLocations(Document doc)
         {
-            var byLocation = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var motorsByLocation = new Dictionary<string, List<ShadeMotorRecord>>(StringComparer.OrdinalIgnoreCase);
-            var order = new List<string>();
+            var perCircuit = new List<ShadeLocationTally>();
 
             var circuits = new FilteredElementCollector(doc)
                 .OfClass(typeof(ElectricalSystem))
@@ -72,31 +70,16 @@ namespace TurboSuite.Zones.Services
                 int shades = ShadeCircuitClassifier.CountShadeMotors(circuit);
                 if (shades == 0) continue;
 
-                string location = LocationOf(circuit);
-                if (!byLocation.ContainsKey(location))
-                {
-                    byLocation[location] = 0;
-                    motorsByLocation[location] = new List<ShadeMotorRecord>();
-                    order.Add(location);
-                }
-                byLocation[location] += shades;
-
                 // Per-motor records for the one-line's motor list (Phase E): circuit # + its load name,
                 // repeated per motor so the record count tracks the shade count (one output = one motor
                 // by convention ⇒ one record normally).
                 string circuitNumber = ParameterHelper.GetCircuitNumber(circuit) ?? string.Empty;
                 string loadName = ParameterHelper.GetLoadName(circuit) ?? string.Empty;
-                for (int i = 0; i < shades; i++)
-                    motorsByLocation[location].Add(new ShadeMotorRecord(circuitNumber, loadName));
+                var motors = Enumerable.Repeat(new ShadeMotorRecord(circuitNumber, loadName), shades).ToList();
+                perCircuit.Add(new ShadeLocationTally(LocationOf(circuit), shades, motors));
             }
 
-            // Circuit-number order within each location (natural), so a QSPS-10PNL carries a contiguous,
-            // sorted motor chunk and its list reads in order.
-            var natural = new NaturalStringComparer();
-            return order.Select(loc => new ShadeLocationTally(
-                loc,
-                byLocation[loc],
-                motorsByLocation[loc].OrderBy(m => m.Circuit, natural).ToList())).ToList();
+            return ShadeSolver.PoolByLocation(perCircuit);
         }
 
         private static string LocationOf(ElectricalSystem circuit)

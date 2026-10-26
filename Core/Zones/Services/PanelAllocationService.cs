@@ -271,7 +271,7 @@ namespace TurboSuite.Zones.Services
                 var panelSizes = new List<(string Name, int Size)>();
                 for (int i = 0; i < panelCount; i++)
                 {
-                    string name = $"{zone}-{(char)('A' + i)}";
+                    string name = RecommendedPanelName(zone, i);
                     int size = defaultSize;
                     if (panelSizeOverrides != null && panelSizeOverrides.TryGetValue(name, out int overrideSize))
                         size = overrideSize;
@@ -283,7 +283,7 @@ namespace TurboSuite.Zones.Services
                 while (totalCapacity < zoneTotalModules)
                 {
                     // Add another panel at default size
-                    string name = $"{zone}-{(char)('A' + panelSizes.Count)}";
+                    string name = RecommendedPanelName(zone, panelSizes.Count);
                     int size = defaultSize;
                     if (panelSizeOverrides != null && panelSizeOverrides.TryGetValue(name, out int overrideSize))
                         size = overrideSize;
@@ -367,7 +367,7 @@ namespace TurboSuite.Zones.Services
                         var shadePanel = new ShadePanelResult
                         {
                             LocationNumber = zone,
-                            PanelName = $"{zone}-{(char)('A' + locationResult.Panels.Count + i)}",
+                            PanelName = RecommendedPanelName(zone, locationResult.Panels.Count + i),
                             ShadeCount = shadeFills[i],
                             Capacity = ShadeSolver.ShadesPerPanel
                         };
@@ -574,6 +574,14 @@ namespace TurboSuite.Zones.Services
             }
             return locations.ToList();
         }
+
+        /// <summary>
+        /// The recommended name of a location's <paramref name="index"/>-th panel (0 → "{location}-A").
+        /// Lighting panels take the first letters and shade panels continue the run. Shared with
+        /// <see cref="ControlLinkPacker"/> so the one-line labels shade panels exactly as the breakdown does.
+        /// </summary>
+        public static string RecommendedPanelName(int location, int index)
+            => $"{location}-{(char)('A' + index)}";
 
         /// <summary>
         /// Parses the location number from a circuit's panel name.
