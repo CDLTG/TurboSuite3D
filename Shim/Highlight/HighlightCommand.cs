@@ -3,6 +3,7 @@ using System.Linq;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Highlight;
 
@@ -61,6 +62,14 @@ public class HighlightCommand : IExternalCommand
             return Result.Cancelled;
         }
 
+        // Worksharing: both toggles edit the view's own visibility settings, so the view is the working set.
+        var lease = WorksharingLease.Acquire(doc, new[] { view.Id }, "view");
+        if (!lease.IsGranted)
+        {
+            TaskDialog.Show("TurboHighlight", lease.DenialMessage);
+            return Result.Cancelled;
+        }
+
         bool is3D = new FilteredElementCollector(doc)
             .OfClass(typeof(RevitLinkInstance))
             .GetElementCount() > 0;
@@ -98,7 +107,7 @@ public class HighlightCommand : IExternalCommand
             view.SetCategoryHidden(spacesId, false);
             foreach (ElementId id in subIds)
                 view.SetCategoryHidden(id, !showSubs);
-            tx.Commit();
+            if (!CommitGuard.TryCommit(tx)) return RolledBack();
         }
 
         return Result.Succeeded;
@@ -131,10 +140,16 @@ public class HighlightCommand : IExternalCommand
                 view.SetFilterVisibility(filter.Id, !view.GetFilterVisibility(filter.Id));
             }
             view.SetIsFilterEnabled(filter.Id, true);
-            tx.Commit();
+            if (!CommitGuard.TryCommit(tx)) return RolledBack();
         }
 
         return Result.Succeeded;
+    }
+
+    private static Result RolledBack()
+    {
+        TaskDialog.Show("TurboHighlight", WorksharingMessages.RolledBack);
+        return Result.Failed;
     }
 
     private static bool IsPlanView(View view) =>

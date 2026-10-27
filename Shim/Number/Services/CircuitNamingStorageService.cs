@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Services;
@@ -74,7 +75,17 @@ namespace TurboSuite.Number.Services
             return entity.Get<bool>(KeypadSortFieldName);
         }
 
-        public static void SaveKeypadRoomSorted(Document doc, bool isSorted)
+        /// <summary>The ids of the stores that already exist in this project — for TurboNumber's session lease.</summary>
+        public static IEnumerable<ElementId> FindStorageIds(Document doc)
+        {
+            var keypadSort = DataStorageHelper.FindStorageId(doc, KeypadSortSchemaGuid);
+            if (keypadSort != null) yield return keypadSort;
+            var prefixSuffix = DataStorageHelper.FindStorageId(doc, PrefixSuffixSchemaGuid);
+            if (prefixSuffix != null) yield return prefixSuffix;
+        }
+
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool SaveKeypadRoomSorted(Document doc, bool isSorted)
         {
             var schema = GetOrCreateKeypadSortSchema();
 
@@ -87,7 +98,7 @@ namespace TurboSuite.Number.Services
                 entity.Set(KeypadSortFieldName, isSorted);
                 storage.SetEntity(entity);
 
-                tx.Commit();
+                return CommitGuard.TryCommit(tx);
             }
         }
 
@@ -105,7 +116,8 @@ namespace TurboSuite.Number.Services
             return (entity.Get<string>(PrefixFieldName), entity.Get<string>(SuffixFieldName));
         }
 
-        public static void SavePrefixSuffix(Document doc, string prefix, string suffix)
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool SavePrefixSuffix(Document doc, string prefix, string suffix)
         {
             var schema = GetOrCreatePrefixSuffixSchema();
 
@@ -119,7 +131,7 @@ namespace TurboSuite.Number.Services
                 entity.Set(SuffixFieldName, suffix ?? "");
                 storage.SetEntity(entity);
 
-                tx.Commit();
+                return CommitGuard.TryCommit(tx);
             }
         }
     }

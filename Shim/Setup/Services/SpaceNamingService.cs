@@ -43,6 +43,13 @@ public static class SpaceNamingService
             .ToList();
         result.Total = spaces.Count;
 
+        // Worksharing: borrow every Space this pass may rename (all of them on a force pass, else the blank
+        // ones) before writing. A refusal or rollback throws WorksharingException; SetupCommand reports it.
+        WorksharingLease.AcquireOrThrow(doc,
+            spaces.Where(s => force || string.IsNullOrWhiteSpace(SpaceRoomFinderService.ReadSpaceName(s)))
+                .Select(s => s.Id),
+            "space");
+
         using (var t = new Transaction(doc, "Name Spaces from Architect Rooms"))
         {
             t.Start();
@@ -85,7 +92,7 @@ public static class SpaceNamingService
                     result.NotWritable++;
                 }
             }
-            t.Commit();
+            CommitGuard.CommitOrThrow(t);
         }
         return result;
     }

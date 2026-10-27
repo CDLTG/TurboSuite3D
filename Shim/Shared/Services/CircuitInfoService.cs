@@ -122,6 +122,20 @@ public static class CircuitInfoService
         // Room override: pure decision (untouched → no-op; typed text equal to a circuit's base
         // room clears it; else stored). See Core/Circuits/CircuitRoomOverride.
         var decision = CircuitRoomOverride.Decide(states, roomPrefill, dialog.RoomOverrideText);
+
+        // Worksharing: borrow everything the choices below write before writing any of it — the
+        // circuits (comment / panel) and, only when an override is persisted, its store (TurboZones'
+        // Load Names Apply overwrites that store, so it isn't borrowed speculatively). A refusal throws
+        // WorksharingException; the synchronous caller returns Failed and Revit discards the run.
+        var workingSet = targets.Select(c => c.Id).ToList();
+        if (decision.ShouldPersist && kind != PanelKind.Control)
+        {
+            var store = kind == PanelKind.Shade
+                ? ShadeRoomOverrideStorageService.FindStorageId(doc)
+                : RoomOverrideStorageService.FindStorageId(doc);
+            if (store != null) workingSet.Add(store);
+        }
+        WorksharingLease.AcquireOrThrow(doc, workingSet, "circuit");
         // Control circuits have no override store (the keypad fan reads the fixture's own room), so
         // their override edit is intentionally inert — persist only for lighting/shade.
         if (decision.ShouldPersist && kind != PanelKind.Control)
@@ -133,7 +147,7 @@ public static class CircuitInfoService
                 ShadeRoomOverrideStorageService.Upsert(doc, changes);
             else
                 RoomOverrideStorageService.Upsert(doc, changes);
-            t.Commit();
+            CommitGuard.CommitOrThrow(t);
         }
 
         if (dialog.UnassignPanel)

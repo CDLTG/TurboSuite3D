@@ -8,6 +8,7 @@ using TurboSuite.Mask.Helpers;
 using TurboSuite.Mask.Services;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
 
 namespace TurboSuite.Mask;
@@ -23,6 +24,12 @@ namespace TurboSuite.Mask;
 /// <see cref="ParameterNames.SymbolLength"/>/<see cref="ParameterNames.SymbolWidth"/>) becomes a
 /// solid rectangle of that size; a "Tape" becomes a dashed centerline along its LocationCurve plus
 /// the connector symbol at the real connector location. See <see cref="ClassifyLineBased"/>.
+///
+/// <para><b>Worksharing:</b> before anything is written (the stamp-family load included), the run leases what a
+/// re-mask deletes or rebuilds — the selected TurboMask groups (group, type, members), prior stamps and masking
+/// regions at the fixtures, the fixtures' tags in the view and the selected detail lines (both copy-then-delete
+/// for draw order); a refusal changes nothing. The real wires are never touched, and the masking region,
+/// overlays and stamp family are new. A rolled-back commit returns <c>Failed</c> with nothing saved.</para>
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class MaskCommand : IExternalCommand
@@ -70,6 +77,13 @@ public class MaskCommand : IExternalCommand
                 .ToList();
 
             var fixtures = CollectFixtures(selectedElements);
+
+            var lease = WorksharingLease.Acquire(doc, RerunWorkingSet(doc, activeView, selectedElements, fixtures), "element");
+            if (!lease.IsGranted)
+            {
+                TaskDialog.Show("TurboMask", lease.DenialMessage);
+                return Result.Cancelled;
+            }
 
             // EditFamily must run OUTSIDE any transaction — resolve stamps first.
             var stampService = new StampFamilyService(doc);
@@ -203,7 +217,7 @@ public class MaskCommand : IExternalCommand
                 // above the mask (and the overlays) so they survive under the region.
                 RaiseSelectedDetailLinesAboveMask(doc, activeView, selectedElements);
 
-                tx.Commit();
+                CommitGuard.CommitOrThrow(tx);
             }
 
             if (failures.Count > 0)
@@ -215,12 +229,41 @@ public class MaskCommand : IExternalCommand
 
             return Result.Succeeded;
         }
+        catch (WorksharingException ex)
+        {
+            TaskDialog.Show("TurboMask", $"{ex.Message}\n\nNo changes were made.");
+            return Result.Failed;
+        }
         catch (Exception ex)
         {
             message = ex.Message;
             TaskDialog.Show("TurboMask Error", $"An unexpected error occurred:\n{ex.Message}");
             return Result.Failed;
         }
+    }
+
+    /// <summary>
+    /// Everything a run edits or deletes, collected before any write with the same queries the deletes use:
+    /// selected TurboMask groups (ungrouped, their type and stamp/overlay members deleted), prior stamps and
+    /// masking regions at the fixtures, the fixtures' tags in this view and the selected detail lines.
+    /// </summary>
+    private static List<ElementId> RerunWorkingSet(Document doc, View view, List<Element> selectedElements,
+        List<FamilyInstance> fixtures)
+    {
+        var ids = new List<ElementId>();
+        foreach (var group in selectedElements.OfType<Group>().Where(IsTurboMaskGroup))
+        {
+            ids.Add(group.Id);
+            ids.Add(group.GroupType.Id);
+            ids.AddRange(group.GetMemberIds());
+        }
+        ids.AddRange(FindStampIds(doc, view, fixtures));
+        var maskingRegionType = FindMaskingRegionType(doc);
+        if (maskingRegionType != null)
+            ids.AddRange(FindMaskingRegionIds(doc, view, fixtures, maskingRegionType.Id));
+        ids.AddRange(FindFixtureTagIds(doc, view, fixtures));
+        ids.AddRange(SelectedDetailLineIds(view, selectedElements));
+        return ids;
     }
 
     private static bool IsValidViewType(View view) =>
@@ -317,10 +360,7 @@ public class MaskCommand : IExternalCommand
     /// </summary>
     private static FilledRegionType? FindOrCreateMaskingRegionType(Document doc)
     {
-        var existing = new FilteredElementCollector(doc)
-            .OfClass(typeof(FilledRegionType))
-            .Cast<FilledRegionType>()
-            .FirstOrDefault(t => t.Name.Equals(MaskRegionTypeName, StringComparison.Ordinal));
+        var existing = FindMaskingRegionType(doc);
         if (existing != null) return existing;
 
         var template = new FilteredElementCollector(doc)
@@ -344,6 +384,12 @@ public class MaskCommand : IExternalCommand
 
         return newType;
     }
+
+    private static FilledRegionType? FindMaskingRegionType(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(FilledRegionType))
+            .Cast<FilledRegionType>()
+            .FirstOrDefault(t => t.Name.Equals(MaskRegionTypeName, StringComparison.Ordinal));
 
     private static ElementId FindSolidFillPatternId(Document doc)
     {
@@ -403,6 +449,14 @@ public class MaskCommand : IExternalCommand
     private static void DeleteExistingMaskingRegions(
         Document doc, View view, List<FamilyInstance> fixtures, ElementId maskingRegionTypeId)
     {
+        var regionIds = FindMaskingRegionIds(doc, view, fixtures, maskingRegionTypeId);
+        if (regionIds.Count > 0)
+            doc.Delete(regionIds);
+    }
+
+    private static List<ElementId> FindMaskingRegionIds(
+        Document doc, View view, List<FamilyInstance> fixtures, ElementId maskingRegionTypeId)
+    {
         var fixturePoints = new HashSet<XYZ>();
         foreach (var fi in fixtures)
         {
@@ -411,7 +465,7 @@ public class MaskCommand : IExternalCommand
                 fixturePoints.Add(pt);
         }
 
-        var regionIds = new FilteredElementCollector(doc, view.Id)
+        return new FilteredElementCollector(doc, view.Id)
             .OfClass(typeof(FilledRegion))
             .Cast<FilledRegion>()
             .Where(r => r.GetTypeId() == maskingRegionTypeId)
@@ -425,12 +479,16 @@ public class MaskCommand : IExternalCommand
             })
             .Select(r => r.Id)
             .ToList();
-
-        if (regionIds.Count > 0)
-            doc.Delete(regionIds);
     }
 
     private static void DeleteExistingStamps(Document doc, View view, List<FamilyInstance> fixtures)
+    {
+        var stampIds = FindStampIds(doc, view, fixtures);
+        if (stampIds.Count > 0)
+            doc.Delete(stampIds);
+    }
+
+    private static List<ElementId> FindStampIds(Document doc, View view, List<FamilyInstance> fixtures)
     {
         var fixturePoints = new Dictionary<XYZ, ElementId>();
         foreach (var fi in fixtures)
@@ -440,7 +498,7 @@ public class MaskCommand : IExternalCommand
                 fixturePoints[pt] = fi.Id;
         }
 
-        var stampIds = new FilteredElementCollector(doc, view.Id)
+        return new FilteredElementCollector(doc, view.Id)
             .OfClass(typeof(FamilyInstance))
             .Cast<FamilyInstance>()
             .Where(fi => fi.Symbol?.Family?.Name?.StartsWith("Stamp_") == true
@@ -448,9 +506,6 @@ public class MaskCommand : IExternalCommand
                          && fixturePoints.Keys.Any(fp => fp.DistanceTo(lp.Point) < 0.01))
             .Select(fi => fi.Id)
             .ToList();
-
-        if (stampIds.Count > 0)
-            doc.Delete(stampIds);
     }
 
     /// <summary>
@@ -459,21 +514,31 @@ public class MaskCommand : IExternalCommand
     /// </summary>
     private static void RaiseTagsAboveStamps(Document doc, View view, List<FamilyInstance> fixtures)
     {
-        var fixtureIds = new HashSet<ElementId>(fixtures.Select(f => f.Id));
-
-        var tagIds = new FilteredElementCollector(doc, view.Id)
-            .OfClass(typeof(IndependentTag))
-            .Cast<IndependentTag>()
-            .Where(tag => tag.GetTaggedLocalElementIds().Any(id => fixtureIds.Contains(id)))
-            .Select(tag => tag.Id)
-            .ToList();
-
+        var tagIds = FindFixtureTagIds(doc, view, fixtures);
         if (tagIds.Count == 0) return;
 
         var copyOpts = new CopyPasteOptions();
         ElementTransformUtils.CopyElements(view, tagIds, view, Transform.Identity, copyOpts);
         doc.Delete(tagIds);
     }
+
+    private static List<ElementId> FindFixtureTagIds(Document doc, View view, List<FamilyInstance> fixtures)
+    {
+        var fixtureIds = new HashSet<ElementId>(fixtures.Select(f => f.Id));
+        return new FilteredElementCollector(doc, view.Id)
+            .OfClass(typeof(IndependentTag))
+            .Cast<IndependentTag>()
+            .Where(tag => tag.GetTaggedLocalElementIds().Any(id => fixtureIds.Contains(id)))
+            .Select(tag => tag.Id)
+            .ToList();
+    }
+
+    private static List<ElementId> SelectedDetailLineIds(View view, List<Element> selectedElements) =>
+        selectedElements
+            .OfType<CurveElement>()
+            .Where(ce => ce.ViewSpecific && ce.OwnerViewId == view.Id)
+            .Select(ce => ce.Id)
+            .ToList();
 
     /// <summary>
     /// Copy-in-place then delete the user's own selected view-specific detail lines so the copies
@@ -487,12 +552,7 @@ public class MaskCommand : IExternalCommand
     private static void RaiseSelectedDetailLinesAboveMask(
         Document doc, View view, List<Element> selectedElements)
     {
-        var detailLineIds = selectedElements
-            .OfType<CurveElement>()
-            .Where(ce => ce.ViewSpecific && ce.OwnerViewId == view.Id)
-            .Select(ce => ce.Id)
-            .ToList();
-
+        var detailLineIds = SelectedDetailLineIds(view, selectedElements);
         if (detailLineIds.Count == 0) return;
 
         var copyOpts = new CopyPasteOptions();

@@ -146,7 +146,7 @@ public static class CircuitService
             }
         }
 
-        t.Commit();
+        CommitGuard.CommitOrThrow(t);
         return circuit;
     }
 
@@ -235,12 +235,13 @@ public static class CircuitService
         try
         {
             circuit.SelectPanel(panel);
-            t.Commit();
         }
         catch
         {
             t.RollBack();
+            return;
         }
+        CommitGuard.CommitOrThrow(t);
     }
 
     /// <summary>
@@ -254,12 +255,13 @@ public static class CircuitService
         try
         {
             circuit.DisconnectPanel();
-            t.Commit();
         }
         catch
         {
             t.RollBack();
+            return;
         }
+        CommitGuard.CommitOrThrow(t);
     }
 
     /// <summary>
@@ -335,7 +337,7 @@ public static class CircuitService
             addSet.Insert(fi);
         circuit.AddToCircuit(addSet);
 
-        t.Commit();
+        CommitGuard.CommitOrThrow(t);
     }
 
     /// <summary>
@@ -349,7 +351,7 @@ public static class CircuitService
         var param = circuit.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
         param?.Set(comments);
 
-        t.Commit();
+        CommitGuard.CommitOrThrow(t);
     }
 
     /// <summary>

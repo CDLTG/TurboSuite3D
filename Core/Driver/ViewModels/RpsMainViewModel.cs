@@ -224,7 +224,7 @@ namespace TurboSuite.Driver.ViewModels
                             RowsView.Refresh();
                             RaiseCountsChanged();
                         }
-                        else
+                        else if (result is bool)   // null = refused / rolled back — already reported
                         {
                             System.Windows.MessageBox.Show(
                                 "This circuit no longer exists in the project.", "TurboRPS");
@@ -273,13 +273,14 @@ namespace TurboSuite.Driver.ViewModels
                 {
                     try
                     {
+                        if (result is not int count) return;   // refused / rolled back — already reported
+
                         foreach (var row in selected)
                             row.RefreshSwapped();
 
                         RowsView.Refresh();
                         RaiseCountsChanged();
 
-                        int count = result is int n ? n : 0;
                         System.Windows.MessageBox.Show(
                             $"Re-typed {count} power suppl{(count == 1 ? "y" : "ies")} across {selected.Count} circuit(s).",
                             "TurboRPS");

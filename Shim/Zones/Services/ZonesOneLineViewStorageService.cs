@@ -77,7 +77,11 @@ namespace TurboSuite.Zones.Services
             return state;
         }
 
-        public static void Save(Document doc, OneLineViewState state)
+        /// <summary>The store's id, or null when this project has none yet — for TurboZones' session lease.</summary>
+        public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool Save(Document doc, OneLineViewState state)
         {
             state ??= new OneLineViewState();
             var schema = GetOrCreateSchema();
@@ -95,7 +99,7 @@ namespace TurboSuite.Zones.Services
                 entity.Set(WireLegendViewIdField, state.WireLegendViewId.ToString(CultureInfo.InvariantCulture));
                 storage.SetEntity(entity);
 
-                tx.Commit();
+                return CommitGuard.TryCommit(tx);
             }
         }
     }

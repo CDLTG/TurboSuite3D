@@ -22,6 +22,12 @@ namespace TurboSuite.Zones
     /// TurboZones — modeless window for managing circuit load names and visualizing dimmer-panel
     /// load distribution. All Revit writes go through <see cref="IExternalEventHandler"/>; see
     /// CLAUDE.md "Modeless pattern".
+    ///
+    /// <para><b>Worksharing:</b> the window holds a session lease (<see cref="WorksharingLease.AcquireSession"/>)
+    /// on the TurboZones lock store plus its auto-saved panel-settings and one-line-view stores, taken before the
+    /// window opens. Load-name Apply leases its circuits and override store, and a one-line redraw the content it
+    /// wipes, per operation. The borrows hold until the user syncs, and a successful sync closes the window
+    /// (<see cref="ModelessWindowGuard"/>).</para>
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     public class ZonesCommand : IExternalCommand
@@ -62,6 +68,20 @@ namespace TurboSuite.Zones
                         "No electrical circuits with lighting fixtures found.\n\n" +
                         "Please ensure electrical circuits are assigned to lighting fixtures.");
                     return Result.Cancelled;
+                }
+
+                // Returns Succeeded on denial, not Cancelled: a first-ever open may have just committed the
+                // lock store, and a non-Succeeded return would roll it back.
+                var sessionSet = new[]
+                {
+                    ZonesPanelSettingsStorageService.FindStorageId(doc),
+                    ZonesOneLineViewStorageService.FindStorageId(doc)
+                }.Where(id => id != null);
+                var lease = WorksharingLease.AcquireSession(doc, "TurboZones", sessionSet, "setting");
+                if (!lease.IsGranted)
+                {
+                    TaskDialog.Show("TurboZones", lease.DenialMessage);
+                    return Result.Succeeded;
                 }
 
                 // Keypad locations (Phase C): the room→location map (explicit picks folded over

@@ -52,7 +52,11 @@ public static class GeneralSettingsStorageService
         };
     }
 
-    public static void Save(Document doc, GeneralSettings settings)
+    /// <summary>The store's id, or null when this project has none yet — for the Settings dialog's lease.</summary>
+    public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
+    /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+    public static bool Save(Document doc, GeneralSettings settings)
     {
         var schema = GetOrCreateSchema();
 
@@ -69,6 +73,6 @@ public static class GeneralSettingsStorageService
             entity.Set(EnableDynamicDriverTagsField, settings.EnableDynamicDriverTags);
         storage.SetEntity(entity);
 
-        tx.Commit();
+        return CommitGuard.TryCommit(tx);
     }
 }

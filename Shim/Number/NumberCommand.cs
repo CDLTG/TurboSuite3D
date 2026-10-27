@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -15,6 +16,11 @@ namespace TurboSuite.Number
     /// TurboNumber — modeless window for managing circuit numbers, keypad Switch IDs, and
     /// power-supply Switch IDs. All Revit writes go through <see cref="IExternalEventHandler"/>;
     /// see CLAUDE.md "Modeless pattern" for the request-queue + completion-callback model.
+    ///
+    /// <para><b>Worksharing:</b> the window holds a session lease (<see cref="WorksharingLease.AcquireSession"/>)
+    /// on the TurboNumber lock store plus its auto-saved stores, taken before the window opens; each write to
+    /// circuits, panels, schedule views or devices borrows just those per operation. The borrows hold until the
+    /// user syncs, and a successful sync closes the window (<see cref="ModelessWindowGuard"/>).</para>
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -63,6 +69,15 @@ namespace TurboSuite.Number
                     return Result.Cancelled;
                 }
 
+                // Returns Succeeded on denial, not Cancelled: a first-ever open may have just committed the
+                // lock store, and a non-Succeeded return would roll it back.
+                var lease = WorksharingLease.AcquireSession(doc, "TurboNumber", SessionWorkingSet(doc), "setting");
+                if (!lease.IsGranted)
+                {
+                    TaskDialog.Show("TurboNumber", lease.DenialMessage);
+                    return Result.Succeeded;
+                }
+
                 var writerService = new NumberWriterService();
                 var panelScheduleService = new PanelScheduleService();
 
@@ -105,6 +120,19 @@ namespace TurboSuite.Number
                 TaskDialog.Show("TurboNumber Error", $"An unexpected error occurred:\n{ex.Message}");
                 return Result.Failed;
             }
+        }
+
+        /// <summary>The auto-saved stores the window writes, where they already exist. Circuits, panels and
+        /// devices are leased per operation (<see cref="NumberWorksharing"/>) so teammates aren't blocked for
+        /// the whole session.</summary>
+        private static List<ElementId> SessionWorkingSet(Document doc)
+        {
+            var ids = new List<ElementId>(CircuitNamingStorageService.FindStorageIds(doc));
+            var roomOrder = RoomOrderStorageService.FindStorageId(doc);
+            if (roomOrder != null) ids.Add(roomOrder);
+            var roomLocation = RoomLocationStorageService.FindStorageId(doc);
+            if (roomLocation != null) ids.Add(roomLocation);
+            return ids;
         }
     }
 }

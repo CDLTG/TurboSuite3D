@@ -7,6 +7,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.OneLine;
 using G = TurboSuite.Zones.OneLine.ControlOneLineGeometry;
 
@@ -22,11 +23,19 @@ namespace TurboSuite.Zones.Services
     /// (<c>DetailCurve</c>s / <c>TextNote</c>s); the wire-mark annotation is a family that degrades to "skip
     /// markers" when absent. Reuses the TurboDMX one-line service's view-ownership, wipe, wire/note/marker,
     /// and resolution helpers. One transaction per page on the API thread via the work queue.
+    ///
+    /// <para><b>Worksharing:</b> a redraw leases what it will delete — the content of each existing owned view
+    /// and any stale sheets — before touching anything (new views and new content need no borrow). A refused
+    /// page draw also skips the wire legend chained after it, so the user sees one refusal, not two.</para>
     /// </summary>
     public sealed class ControlOneLineService : IControlOneLineService
     {
         private readonly UIDocument _uidoc;
         private readonly Document _doc;
+
+        // Set when Draw's lease is refused; the wire legend is always chained right after Draw in the same
+        // run, so it stands down instead of raising a second refusal.
+        private bool _drawRefused;
 
         public ControlOneLineService(UIDocument uidoc)
         {
@@ -46,6 +55,22 @@ namespace TurboSuite.Zones.Services
                 return results;
             }
             if (string.IsNullOrWhiteSpace(systemName)) systemName = "TurboControl";
+
+            var redrawSet = new List<ElementId>();
+            foreach (var page in pages)
+            {
+                long pageVid = viewRegistry != null && viewRegistry.TryGetValue(page.PageIndex, out long pv) ? pv : 0L;
+                var existing = FindViewByIdOrName(page.ViewName(systemName), pageVid);
+                if (existing != null) redrawSet.AddRange(WipeIds(existing));
+            }
+            redrawSet.AddRange(StaleSheetIds(pages.Count, systemName));
+            var lease = WorksharingLease.Acquire(_doc, redrawSet, "one-line element");
+            _drawRefused = !lease.IsGranted;
+            if (_drawRefused)
+            {
+                TaskDialog.Show("TurboZones", lease.DenialMessage);
+                return results;
+            }
 
             View firstOpened = null;
             foreach (var page in pages)
@@ -98,9 +123,16 @@ namespace TurboSuite.Zones.Services
                         result.Notes += DrawNotes(view, page.Notes, textType, result.Warnings);
                         result.Markers += DrawMarkers(view, page.Markers, marker);
 
-                        result.ViewId = view.Id.ToRef().Value;
-                        if (firstOpened == null) firstOpened = view;   // land on sheet 1, the start of the diagram
-                        tx.Commit();
+                        if (!CommitGuard.TryCommit(tx))
+                        {
+                            result.Warnings.Add($"One-line sheet {page.PageIndex}: {WorksharingMessages.RolledBack}");
+                            result.ViewId = 0L;
+                        }
+                        else
+                        {
+                            result.ViewId = view.Id.ToRef().Value;
+                            if (firstOpened == null) firstOpened = view;   // land on sheet 1, the start of the diagram
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -131,6 +163,18 @@ namespace TurboSuite.Zones.Services
             var result = new ControlWireLegendResult();
             if (drawing == null) { result.Warnings.Add("No solved wire legend to draw."); ReportWarnings(result.Warnings); return result; }
             if (string.IsNullOrWhiteSpace(systemName)) systemName = "TurboControl";
+            if (_drawRefused) { _drawRefused = false; return result; }
+
+            var existingLegend = FindViewByIdOrName(drawing.ViewName(systemName), existingViewId);
+            if (existingLegend != null)
+            {
+                var lease = WorksharingLease.Acquire(_doc, WipeIds(existingLegend), "wire legend element");
+                if (!lease.IsGranted)
+                {
+                    TaskDialog.Show("TurboZones", lease.DenialMessage);
+                    return result;
+                }
+            }
 
             using (var tx = new Transaction(_doc, "TurboZones — Wire legend"))
             {
@@ -161,8 +205,8 @@ namespace TurboSuite.Zones.Services
                     _doc.Regenerate();
                     DrawLegendBorder(view, solid);
 
-                    result.ViewId = view.Id.ToRef().Value;
-                    tx.Commit();
+                    if (CommitGuard.TryCommit(tx)) result.ViewId = view.Id.ToRef().Value;
+                    else result.Warnings.Add($"Wire legend: {WorksharingMessages.RolledBack}");
                 }
                 catch (Exception ex)
                 {
@@ -439,13 +483,8 @@ namespace TurboSuite.Zones.Services
         {
             created = false;
 
-            if (existingViewId != 0L
-                && _doc.GetElement(new ElementRef(existingViewId).ToElementId()) is ViewDrafting byId && !byId.IsTemplate)
-                return byId;
-
-            var byName = new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
-                .FirstOrDefault(v => !v.IsTemplate && string.Equals(v.Name, name, StringComparison.Ordinal));
-            if (byName != null) return byName;
+            var found = FindViewByIdOrName(name, existingViewId);
+            if (found != null) return found;
 
             var vft = new FilteredElementCollector(_doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
                 .FirstOrDefault(v => v.ViewFamily == ViewFamily.Drafting);
@@ -458,21 +497,42 @@ namespace TurboSuite.Zones.Services
             return view;
         }
 
-        // Delete owned one-line sheets numbered above the kept count (a job that shrank from N pages to fewer).
+        // An owned view by persisted id, else by its deterministic name; null when it doesn't exist yet.
+        private ViewDrafting FindViewByIdOrName(string name, long existingViewId)
+        {
+            if (existingViewId != 0L
+                && _doc.GetElement(new ElementRef(existingViewId).ToElementId()) is ViewDrafting byId && !byId.IsTemplate)
+                return byId;
+
+            return new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
+                .FirstOrDefault(v => !v.IsTemplate && string.Equals(v.Name, name, StringComparison.Ordinal));
+        }
+
+        // Owned one-line sheets numbered above the kept count (a job that shrank from N pages to fewer).
         // Matched by the deterministic view name "{systemName} One-Line - Sheet {index}" so it works whether or
         // not the in-session registry still holds the orphan's id (a fresh session starts with an empty one).
-        private void PruneStaleSheets(int keptPageCount, string systemName, List<string> warnings)
+        private List<ElementId> StaleSheetIds(int keptPageCount, string systemName)
         {
             string prefix = $"{systemName} One-Line - Sheet ";
-            var stale = new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
+            return new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
                 .Where(v => !v.IsTemplate && v.Name.StartsWith(prefix, StringComparison.Ordinal)
                             && int.TryParse(v.Name.Substring(prefix.Length), out int idx) && idx > keptPageCount)
                 .Select(v => v.Id).ToList();
+        }
+
+        private void PruneStaleSheets(int keptPageCount, string systemName, List<string> warnings)
+        {
+            var stale = StaleSheetIds(keptPageCount, systemName);
             if (stale.Count == 0) return;
             using (var tx = new Transaction(_doc, "TurboZones — remove stale one-line sheets"))
             {
                 tx.Start();
-                try { _doc.Delete(stale); tx.Commit(); }
+                try
+                {
+                    _doc.Delete(stale);
+                    if (!CommitGuard.TryCommit(tx))
+                        warnings.Add($"Could not remove {stale.Count} stale one-line sheet(s) — {WorksharingMessages.RolledBack}");
+                }
                 catch (Exception ex)
                 {
                     if (tx.HasStarted()) tx.RollBack();
@@ -492,12 +552,15 @@ namespace TurboSuite.Zones.Services
         // the view itself; the type filter skips it, and OwnedByView is empty for drafting content.
         private void WipeView(View view)
         {
-            var ids = new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType()
-                .Where(e => e is CurveElement || e is TextNote || e is FamilyInstance)
-                .Select(e => e.Id).ToList();
+            var ids = WipeIds(view);
             if (ids.Count == 0) return;
             try { _doc.Delete(ids); } catch { /* best-effort */ }
         }
+
+        private List<ElementId> WipeIds(View view) =>
+            new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType()
+                .Where(e => e is CurveElement || e is TextNote || e is FamilyInstance)
+                .Select(e => e.Id).ToList();
 
         // ── Resolution helpers (from DmxOneLineService) ──────────────────────────────────────────────
         private FamilySymbol ResolveSymbol(string role) =>

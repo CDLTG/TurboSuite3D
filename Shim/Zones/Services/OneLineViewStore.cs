@@ -1,5 +1,7 @@
 #nullable disable
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -18,6 +20,9 @@ namespace TurboSuite.Zones.Services
         }
 
         public void Save(OneLineViewState state)
-            => ZonesOneLineViewStorageService.Save(_doc, state);
+        {
+            if (!ZonesOneLineViewStorageService.Save(_doc, state))
+                TaskDialog.Show("TurboZones", WorksharingMessages.RolledBack);
+        }
     }
 }

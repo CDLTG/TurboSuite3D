@@ -2,6 +2,7 @@
 using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Driver.Services
 {
@@ -54,7 +55,8 @@ namespace TurboSuite.Driver.Services
 
         /// <summary>Writes the deferral state to a circuit element inside its own transaction.
         /// Clearing stores Deferred=false with an empty signature.</summary>
-        public static void Save(Document doc, Element circuit, bool deferred, string signature)
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool Save(Document doc, Element circuit, bool deferred, string signature)
         {
             var schema = GetOrCreateSchema();
 
@@ -67,7 +69,7 @@ namespace TurboSuite.Driver.Services
             entity.Set(SignatureField, signature ?? string.Empty);
             circuit.SetEntity(entity);
 
-            tx.Commit();
+            return CommitGuard.TryCommit(tx);
         }
     }
 }

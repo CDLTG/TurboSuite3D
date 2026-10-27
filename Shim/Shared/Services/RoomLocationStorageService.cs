@@ -54,6 +54,9 @@ namespace TurboSuite.Shared.Services
             return builder.Finish();
         }
 
+        /// <summary>The store's id, or null when this project has none yet — for a session lease.</summary>
+        public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
         /// <summary>Loads the persisted explicit room→location picks, each with its acknowledged-override
         /// flag (<c>true</c> only for a deliberate override of a unanimous room). Only rooms the designer
         /// picked appear; absent rooms are blank (resolved via auto-seed at runtime).</summary>
@@ -96,7 +99,8 @@ namespace TurboSuite.Shared.Services
         /// <summary>Persists the explicit picks. Entries with a non-positive location are
         /// dropped, so clearing a pick (location → 0) removes it from the store. An entry flagged
         /// <c>IsOverride</c> is suffixed <c>|O</c> so it survives as a deliberate override.</summary>
-        public static void Save(Document doc, IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool Save(Document doc, IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
         {
             var schema = GetOrCreateSchema();
 
@@ -114,7 +118,7 @@ namespace TurboSuite.Shared.Services
                 entity.Set(FieldName, (IList<string>)encoded);
                 storage.SetEntity(entity);
 
-                tx.Commit();
+                return CommitGuard.TryCommit(tx);
             }
         }
     }

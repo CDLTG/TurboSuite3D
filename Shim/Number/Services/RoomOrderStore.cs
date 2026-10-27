@@ -24,12 +24,12 @@ namespace TurboSuite.Number.Services
         }
 
         public void SaveRoomOrder(IReadOnlyList<(string Name, int ClickOrder)> roomOrder)
-            => RoomOrderStorageService.Save(_doc, roomOrder.ToList());
+            => NumberWorksharing.ReportIfRolledBack(RoomOrderStorageService.Save(_doc, roomOrder.ToList()));
 
         public void SaveKeypadRoomSorted(bool isSorted)
-            => CircuitNamingStorageService.SaveKeypadRoomSorted(_doc, isSorted);
+            => NumberWorksharing.ReportIfRolledBack(CircuitNamingStorageService.SaveKeypadRoomSorted(_doc, isSorted));
 
         public void SaveRoomLocations(IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
-            => RoomLocationStorageService.Save(_doc, roomLocations);
+            => NumberWorksharing.ReportIfRolledBack(RoomLocationStorageService.Save(_doc, roomLocations));
     }
 }

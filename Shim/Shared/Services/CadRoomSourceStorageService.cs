@@ -76,7 +76,11 @@ public static class CadRoomSourceStorageService
         }
     }
 
-    public static void Save(Document doc, CadRoomSourceSettings settings)
+    /// <summary>The store's id, or null when this project has none yet — for TurboName's session lease.</summary>
+    public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
+    /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+    public static bool Save(Document doc, CadRoomSourceSettings settings)
     {
         if (settings == null) settings = CadRoomSourceSettings.CreateDefaults();
         var schema = GetOrCreateSchema();
@@ -91,6 +95,6 @@ public static class CadRoomSourceStorageService
         entity.Set(PayloadVersionField, PayloadVersion);
         storage.SetEntity(entity);
 
-        tx.Commit();
+        return CommitGuard.TryCommit(tx);
     }
 }

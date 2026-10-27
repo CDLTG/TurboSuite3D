@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using TurboSuite.Tag.Constants;
 using TurboSuite.Tag.Helpers;
 using TurboSuite.Tag.Models;
@@ -18,6 +19,11 @@ namespace TurboSuite.Tag;
 /// TurboTag — batch-places type tags on selected lighting fixtures, devices, and electrical
 /// fixtures. Preconditions: tag families per CLAUDE.md must be loaded; selection must contain
 /// at least one supported instance. Works in both 3D-hosted and 2D-drafting workflows.
+///
+/// <para><b>Worksharing:</b> before placing anything, the run leases every tag in the active view on the
+/// selected elements (a superset of the re-run deletes); combined linear tagging also leases the run members
+/// whose Run Length it writes. New tags need no borrow. A refusal or rolled-back commit returns a
+/// non-Succeeded result, so Revit discards everything the run placed.</para>
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class TagCommand : IExternalCommand
@@ -50,6 +56,16 @@ public class TagCommand : IExternalCommand
                 TaskDialog.Show("TurboTag", "No lighting fixtures, power supplies, or keypads selected.\nSelect at least one.");
                 return Result.Cancelled;
             }
+
+            var taggedIds = new HashSet<ElementId>(selectedFixtures.Concat(selectedPowerSupplies).Concat(selectedKeypads)
+                .Select(f => f.Id));
+            var existingTagIds = new FilteredElementCollector(doc, doc.ActiveView.Id)
+                .OfClass(typeof(IndependentTag))
+                .Cast<IndependentTag>()
+                .Where(tag => tag.GetTaggedLocalElementIds().Any(taggedIds.Contains))
+                .Select(tag => tag.Id);
+            if (!Lease(doc, existingTagIds, "tag"))
+                return Result.Cancelled;
 
             var faceBasedFixtures = selectedFixtures.Where(f => GeometryHelper.IsOnVerticalFace(f) || GeometryHelper.IsWallSconce(f) || GeometryHelper.IsVerticalFamily(f)).ToList();
             var lineBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f) && GeometryHelper.IsLineBasedFixture(f)).ToList();
@@ -146,12 +162,28 @@ public class TagCommand : IExternalCommand
         {
             return Result.Cancelled;
         }
+        catch (WorksharingException ex)
+        {
+            // Failed discards every commit of this run (see CLAUDE.md "Command return value rolls back saves").
+            TaskDialog.Show("TurboTag", $"{ex.Message}\n\nNo changes were made.");
+            return Result.Failed;
+        }
         catch (Exception ex)
         {
             message = ex.Message;
             TaskDialog.Show("TurboTag Error", $"An unexpected error occurred:\n{ex.Message}");
             return Result.Failed;
         }
+    }
+
+    /// <summary>Borrow a working set; on refusal show why and return false (the caller returns Cancelled,
+    /// which also discards anything an earlier phase of the run placed).</summary>
+    private static bool Lease(Document doc, IEnumerable<ElementId> workingSet, string itemNoun)
+    {
+        var lease = WorksharingLease.Acquire(doc, workingSet, itemNoun);
+        if (lease.IsGranted) return true;
+        TaskDialog.Show("TurboTag", lease.DenialMessage);
+        return false;
     }
 
     private static bool IsValidViewType(View view)
@@ -227,7 +259,7 @@ public class TagCommand : IExternalCommand
                 }
             }
 
-            trans.Commit();
+            CommitGuard.CommitOrThrow(trans);
         }
 
         return successCount;
@@ -259,7 +291,7 @@ public class TagCommand : IExternalCommand
                 }
             }
 
-            trans.Commit();
+            CommitGuard.CommitOrThrow(trans);
         }
 
         return successCount;
@@ -325,7 +357,7 @@ public class TagCommand : IExternalCommand
                 }
             }
 
-            trans.Commit();
+            CommitGuard.CommitOrThrow(trans);
         }
 
         return successCount;
@@ -443,7 +475,7 @@ public class TagCommand : IExternalCommand
                 }
             }
 
-            trans.Commit();
+            CommitGuard.CommitOrThrow(trans);
         }
 
         return successCount;
@@ -588,6 +620,10 @@ public class TagCommand : IExternalCommand
         if (direction == TagDirection.None)
             return Result.Cancelled;
 
+        // Run Length is written onto every multi-run member.
+        if (!Lease(doc, multiRuns.SelectMany(r => r.Members).Select(m => m.Id), "fixture"))
+            return Result.Cancelled;
+
         FamilySymbol combinedTagType = direction == TagDirection.Up ? combinedTop : combinedBottom;
         FamilySymbol? singleTagType = direction == TagDirection.Up ? linearTop : linearBottom;
 
@@ -643,7 +679,7 @@ public class TagCommand : IExternalCommand
                 }
             }
 
-            trans.Commit();
+            CommitGuard.CommitOrThrow(trans);
         }
 
         return Result.Succeeded;

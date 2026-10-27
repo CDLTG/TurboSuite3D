@@ -5,6 +5,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.UI;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Number.Services
 {
@@ -24,8 +25,7 @@ namespace TurboSuite.Number.Services
             {
                 tx.Start();
                 var view = PanelScheduleView.CreateInstanceView(doc, panelId);
-                tx.Commit();
-                return view;
+                return NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx)) ? view : null;
             }
         }
 
@@ -124,13 +124,15 @@ namespace TurboSuite.Number.Services
                 return false;
             }
 
+            if (!LeaseSlots(doc, psv, new[] { (fromRow, fromCol), (toRow, toCol) })) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Move Circuit"))
             {
                 tx.Start();
                 try
                 {
                     psv.MoveSlotTo(fromRow, fromCol, toRow, toCol);
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -143,13 +145,15 @@ namespace TurboSuite.Number.Services
         }
         public bool AssignSpare(Document doc, PanelScheduleView psv, int row, int col)
         {
+            if (!LeaseSlots(doc, psv, new[] { (row, col) })) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Assign Spare"))
             {
                 tx.Start();
                 try
                 {
                     psv.AddSpare(row, col);
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -163,13 +167,15 @@ namespace TurboSuite.Number.Services
 
         public bool AssignSpace(Document doc, PanelScheduleView psv, int row, int col)
         {
+            if (!LeaseSlots(doc, psv, new[] { (row, col) })) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Assign Space"))
             {
                 tx.Start();
                 try
                 {
                     psv.AddSpace(row, col);
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -183,13 +189,15 @@ namespace TurboSuite.Number.Services
 
         public bool RemoveSpare(Document doc, PanelScheduleView psv, int row, int col)
         {
+            if (!LeaseSlots(doc, psv, new[] { (row, col) })) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Remove Spare"))
             {
                 tx.Start();
                 try
                 {
                     psv.RemoveSpare(row, col);
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -203,13 +211,15 @@ namespace TurboSuite.Number.Services
 
         public bool RemoveSpace(Document doc, PanelScheduleView psv, int row, int col)
         {
+            if (!LeaseSlots(doc, psv, new[] { (row, col) })) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Remove Space"))
             {
                 tx.Start();
                 try
                 {
                     psv.RemoveSpace(row, col);
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -223,6 +233,8 @@ namespace TurboSuite.Number.Services
 
         public bool AssignSpareMultiple(Document doc, PanelScheduleView psv, List<(int Row, int Col)> slots)
         {
+            if (!LeaseSlots(doc, psv, slots)) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Assign Spare"))
             {
                 tx.Start();
@@ -230,7 +242,7 @@ namespace TurboSuite.Number.Services
                 {
                     foreach (var (row, col) in slots)
                         psv.AddSpare(row, col);
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -244,6 +256,8 @@ namespace TurboSuite.Number.Services
 
         public bool AssignSpaceMultiple(Document doc, PanelScheduleView psv, List<(int Row, int Col)> slots)
         {
+            if (!LeaseSlots(doc, psv, slots)) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Assign Space"))
             {
                 tx.Start();
@@ -251,7 +265,7 @@ namespace TurboSuite.Number.Services
                 {
                     foreach (var (row, col) in slots)
                         psv.AddSpace(row, col);
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -265,6 +279,8 @@ namespace TurboSuite.Number.Services
 
         public bool RemoveSpareSpaceMultiple(Document doc, PanelScheduleView psv, List<(int Row, int Col, string SlotType)> slots)
         {
+            if (!LeaseSlots(doc, psv, slots.Select(s => (s.Row, s.Col)))) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Remove Spare/Space"))
             {
                 tx.Start();
@@ -277,7 +293,7 @@ namespace TurboSuite.Number.Services
                         else
                             psv.RemoveSpace(row, col);
                     }
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -307,6 +323,9 @@ namespace TurboSuite.Number.Services
             List<(int A, int B)> swaps,
             List<SlotInfo> slotInfos)
         {
+            // Every slot can move, so the whole panel's circuits are the working set.
+            if (!LeaseSlots(doc, psv, slotInfos.Select(si => (si.Row, si.Col)))) return false;
+
             using (Transaction tx = new Transaction(doc, "TurboNumber - Sort Panel by Room"))
             {
                 tx.Start();
@@ -340,7 +359,7 @@ namespace TurboSuite.Number.Services
                         psv.MoveSlotTo(from.Row, from.Col, to.Row, to.Col);
                     }
 
-                    tx.Commit();
+                    if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return false;
                     return true;
                 }
                 catch (Exception ex)
@@ -350,6 +369,23 @@ namespace TurboSuite.Number.Services
                     return false;
                 }
             }
+        }
+
+        /// <summary>
+        /// Borrow a slot operation's working set: the schedule view, its panel, and the circuit in every touched
+        /// cell (Spare/Space cells carry ids too; empty cells contribute nothing). Deliberately broader than the
+        /// probed rule — <c>MoveSlotTo</c>/<c>AddSpare</c>/<c>AddSpace</c> haven't been spiked against an owned
+        /// panel or schedule view yet (worksharing plan O2), and over-borrowing only blocks teammates until sync.
+        /// </summary>
+        private static bool LeaseSlots(Document doc, PanelScheduleView psv, IEnumerable<(int Row, int Col)> cells)
+        {
+            var ids = new List<ElementId> { psv.Id, psv.GetPanel() };
+            foreach (var (row, col) in cells)
+            {
+                try { ids.Add(psv.GetCircuitIdByCell(row, col)); }
+                catch { /* not a slot cell — nothing to borrow */ }
+            }
+            return NumberWorksharing.Lease(doc, ids, "panel item");
         }
     }
 

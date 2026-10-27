@@ -1,5 +1,7 @@
 #nullable disable
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using TurboSuite.Shared.Services;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -19,6 +21,9 @@ namespace TurboSuite.Zones.Services
         }
 
         public void Save(PanelSettings settings)
-            => ZonesPanelSettingsStorageService.Save(_doc, settings);
+        {
+            if (!ZonesPanelSettingsStorageService.Save(_doc, settings))
+                TaskDialog.Show("TurboZones", WorksharingMessages.RolledBack);
+        }
     }
 }

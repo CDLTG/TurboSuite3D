@@ -21,7 +21,7 @@ namespace TurboSuite.Zones.Services
             _service = service;
         }
 
-        public int UpdateLoadNames(IReadOnlyList<ZonesCircuitData> circuits)
+        public int? UpdateLoadNames(IReadOnlyList<ZonesCircuitData> circuits)
             => _service.UpdateLoadNames(_doc, circuits.ToList());
     }
 }

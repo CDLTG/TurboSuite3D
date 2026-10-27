@@ -1,11 +1,13 @@
 #nullable disable
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Number.Models;
 using TurboSuite.Number.ViewModels;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Number.Services
 {
@@ -15,6 +17,9 @@ namespace TurboSuite.Number.Services
         {
             int updated = 0;
             int skipped = 0;
+
+            if (!NumberWorksharing.Lease(doc, panelSettings.Select(p => p.PanelElementId.ToElementId()), "panel"))
+                return;
 
             using (Transaction tx = new Transaction(doc, "TurboNumber - Write Panel Settings"))
             {
@@ -31,7 +36,7 @@ namespace TurboSuite.Number.Services
                     updated++;
                 }
 
-                tx.Commit();
+                if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return;
             }
 
             TaskDialog.Show("TurboNumber", $"Panel Settings: {updated} updated, {skipped} skipped.");
@@ -41,6 +46,9 @@ namespace TurboSuite.Number.Services
         {
             int updated = 0;
             int skipped = 0;
+
+            if (!NumberWorksharing.Lease(doc, rows.Select(r => r.ElementId.ToElementId()), "device"))
+                return;
 
             using (Transaction tx = new Transaction(doc, "TurboNumber - Write Switch IDs"))
             {
@@ -62,7 +70,7 @@ namespace TurboSuite.Number.Services
                     updated++;
                 }
 
-                tx.Commit();
+                if (!NumberWorksharing.ReportIfRolledBack(CommitGuard.TryCommit(tx))) return;
             }
 
             TaskDialog.Show("TurboNumber", $"Switch IDs: {updated} updated, {skipped} skipped.");

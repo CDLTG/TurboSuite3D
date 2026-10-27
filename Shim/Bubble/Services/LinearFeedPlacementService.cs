@@ -2,6 +2,7 @@ using System;
 using Autodesk.Revit.DB;
 using TurboSuite.Bubble.Constants;
 using TurboSuite.Bubble.Placement;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Bubble.Services;
 
@@ -98,6 +99,6 @@ internal static class LinearFeedPlacementService
             ElementTransformUtils.RotateElement(doc, tag.Id, tagAxis, rotation);
         }
 
-        trans.Commit();
+        CommitGuard.CommitOrThrow(trans);
     }
 }

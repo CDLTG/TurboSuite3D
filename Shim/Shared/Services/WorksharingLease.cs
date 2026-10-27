@@ -44,8 +44,10 @@ namespace TurboSuite.Shared.Services
     /// <para><b>Acquire-only — there is no release.</b> Sync with Central is the only release point; TurboSuite
     /// never calls <c>RelinquishOwnership</c>. It is document-wide (no per-element overload) and frees elements
     /// that carry the user's own finalized, unsynced edits — calling it would hand a teammate the exact collision
-    /// this exists to prevent. So a refused lease keeps whatever it partially took until the next sync, and a
-    /// granted one holds its set until then too, even after the window closes.</para>
+    /// this exists to prevent. A granted lease holds its set until the next sync, even after the window closes.
+    /// A refused one normally borrows nothing — teammate-owned and stale elements are caught by a local pre-check
+    /// before checkout — but when the local cache missed a teammate's borrow, checkout itself comes back short
+    /// and whatever it partially took is kept until the next sync too.</para>
     /// </summary>
     public static class WorksharingLease
     {
@@ -55,6 +57,17 @@ namespace TurboSuite.Shared.Services
         /// <param name="itemNoun">Singular noun the denial message counts with ("lighting type", "circuit"…).</param>
         public static LeaseResult Acquire(Document doc, IEnumerable<ElementId> workingSet, string itemNoun = "item") =>
             AcquireCore(doc, workingSet, null, null, itemNoun);
+
+        /// <summary>
+        /// <see cref="Acquire"/>, throwing <see cref="WorksharingException"/> on refusal — for a lease taken
+        /// partway through a synchronous command, where the refusal must also discard what the run already
+        /// committed (see <see cref="CommitGuard.CommitOrThrow"/>).
+        /// </summary>
+        public static void AcquireOrThrow(Document doc, IEnumerable<ElementId> workingSet, string itemNoun = "item")
+        {
+            var lease = Acquire(doc, workingSet, itemNoun);
+            if (!lease.IsGranted) throw new WorksharingException(lease.DenialMessage);
+        }
 
         /// <summary>
         /// Borrow a modeless module's session working set: its <see cref="ModuleLockStorageService"/> lock store
@@ -86,18 +99,26 @@ namespace TurboSuite.Shared.Services
             if (lockIds != null) wanted.UnionWith(lockIds);
             if (wanted.Count == 0) return LeaseResult.Granted;
 
-            // Freshness first: checkout would grant a stale element (see the class doc), so refuse before
-            // borrowing anything.
-            HashSet<ElementId> stale;
+            // Pre-check against the local worksharing cache (free — no central round-trip) and refuse before
+            // borrowing anything: checkout would grant a stale element (see the class doc), and a doomed checkout
+            // would still borrow every free id in the set until the next sync. Checkout stays authoritative for
+            // whatever the cache doesn't know yet.
+            var stale = new HashSet<ElementId>();
+            var blocked = new List<ElementId>();
             try
             {
-                stale = new HashSet<ElementId>(wanted.Where(id => IsBehindCentral(doc, id)));
+                foreach (var id in wanted)
+                {
+                    bool isStale = IsBehindCentral(doc, id);
+                    if (isStale) stale.Add(id);
+                    if (isStale || IsOwnedByOther(doc, id)) blocked.Add(id);
+                }
             }
             catch (CentralModelException)
             {
                 return LeaseResult.Denied(WorksharingMessages.Unreachable);
             }
-            if (stale.Count > 0) return Deny(doc, wanted, stale, lockIds, module, itemNoun);
+            if (blocked.Count > 0) return Deny(doc, blocked, stale, lockIds, module, itemNoun);
 
             ICollection<ElementId> held;
             try
@@ -128,6 +149,13 @@ namespace TurboSuite.Shared.Services
             catch (CentralModelException) { throw; }
             catch { return false; }
             return status == ModelUpdatesStatus.UpdatedInCentral || status == ModelUpdatesStatus.DeletedInCentral;
+        }
+
+        private static bool IsOwnedByOther(Document doc, ElementId id)
+        {
+            try { return WorksharingUtils.GetCheckoutStatus(doc, id) == CheckoutStatus.OwnedByOtherUser; }
+            catch (CentralModelException) { throw; }
+            catch { return false; }
         }
 
         /// <summary>

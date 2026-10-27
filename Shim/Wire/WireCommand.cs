@@ -21,6 +21,11 @@ namespace TurboSuite.Wire;
 /// <summary>
 /// TurboWire — creates electrical circuits and routes arc/spline wires between selected
 /// lighting/electrical fixtures. Precondition: at least one WireType must exist in the project.
+///
+/// <para><b>Worksharing:</b> each path leases what it edits before writing — the fixtures (circuit membership is
+/// fixture-side) and their existing circuits; a refusal changes nothing. Re-run wire deletes are leased where
+/// they're found. Any refusal or rolled-back commit midway throws <see cref="WorksharingException"/> and the
+/// command returns <c>Failed</c>, so Revit discards the whole run rather than leave it half-wired.</para>
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class WireCommand : IExternalCommand
@@ -39,6 +44,10 @@ public class WireCommand : IExternalCommand
 
             if (preSelectedCircuits.Count > 0)
             {
+                if (!LeaseCircuitWork(doc,
+                        preSelectedCircuits.SelectMany(CircuitService.GetFixturesOnCircuit), preSelectedCircuits))
+                    return Result.Cancelled;
+
                 using var txGroup = new TransactionGroup(doc, "TurboWire");
                 txGroup.Start();
 
@@ -128,6 +137,12 @@ public class WireCommand : IExternalCommand
         {
             return Result.Cancelled;
         }
+        catch (WorksharingException ex)
+        {
+            // Failed discards every commit of this run (see CLAUDE.md "Command return value rolls back saves").
+            TaskDialog.Show("TurboWire", $"{ex.Message}\n\nNo changes were made.");
+            return Result.Failed;
+        }
         catch (Autodesk.Revit.Exceptions.ArgumentException ex) when (
             ex.Message.IndexOf("electComponents", StringComparison.OrdinalIgnoreCase) >= 0
             || ex.Message.IndexOf("at least one component", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -165,6 +180,8 @@ public class WireCommand : IExternalCommand
                 return Result.Succeeded;
             }
         }
+
+        if (!LeaseCircuitWork(doc, new[] { fixture })) return Result.Cancelled;
 
         using var txGroup = new TransactionGroup(doc, "TurboWire");
         txGroup.Start();
@@ -226,6 +243,8 @@ public class WireCommand : IExternalCommand
             }
         }
 
+        if (!LeaseCircuitWork(doc, new[] { shade })) return Result.Cancelled;
+
         using var txGroup = new TransactionGroup(doc, "TurboWire");
         txGroup.Start();
 
@@ -280,6 +299,8 @@ public class WireCommand : IExternalCommand
             }
         }
 
+        if (!LeaseCircuitWork(doc, new[] { keypad })) return Result.Cancelled;
+
         using var txGroup = new TransactionGroup(doc, "TurboWire");
         txGroup.Start();
 
@@ -322,6 +343,8 @@ public class WireCommand : IExternalCommand
                 "Select fixtures from a single circuit.");
             return Result.Failed;
         }
+
+        if (!LeaseCircuitWork(doc, fixtures)) return Result.Cancelled;
 
         bool hasSwitch = fixtures.Any(f => GeometryHelper.IsSwitch(f));
 
@@ -428,6 +451,32 @@ public class WireCommand : IExternalCommand
         FamilyInstance? fixture2 = uiDoc.Document.GetElement(r2) as FamilyInstance;
 
         return WireTwoFixtures(doc, fixture1!, fixture2!, useTagAwareArc: false, g, ref message, tagLookup: null);
+    }
+
+    /// <summary>
+    /// Borrow what a run edits, before it writes anything: the fixtures (circuit membership is fixture-side —
+    /// spike-confirmed for <c>RemoveFromCircuit</c>, predicted for <c>Create</c>/<c>AddToCircuit</c>), their existing
+    /// circuits (switched comment, circuit-info writes) and any pre-selected circuits. New circuits and wires
+    /// need no borrow. On refusal, shows why and returns false — nothing has been written.
+    /// </summary>
+    private static bool LeaseCircuitWork(Document doc, IEnumerable<FamilyInstance> fixtures,
+        IEnumerable<ElectricalSystem>? circuits = null)
+    {
+        var ids = new HashSet<ElementId>();
+        foreach (var fixture in fixtures)
+        {
+            ids.Add(fixture.Id);
+            var systems = fixture.MEPModel?.GetElectricalSystems();
+            if (systems == null) continue;
+            foreach (ElectricalSystem s in systems) ids.Add(s.Id);
+        }
+        if (circuits != null)
+            foreach (var c in circuits) ids.Add(c.Id);
+
+        var lease = WorksharingLease.Acquire(doc, ids, "element");
+        if (lease.IsGranted) return true;
+        TaskDialog.Show("TurboWire", lease.DenialMessage);
+        return false;
     }
 
     private static List<ElectricalSystem> GetPreSelectedElectricalCircuits(UIDocument uiDoc)

@@ -107,7 +107,11 @@ namespace TurboSuite.Zones.Services
             return settings;
         }
 
-        public static void Save(Document doc, PanelSettings settings)
+        /// <summary>The store's id, or null when this project has none yet — for TurboZones' session lease.</summary>
+        public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool Save(Document doc, PanelSettings settings)
         {
             var schema = GetOrCreateSchema();
 
@@ -128,7 +132,7 @@ namespace TurboSuite.Zones.Services
                 entity.Set(OrphanValuesField, (IList<string>)settings.OrphanLocationAssignments.Values.Select(v => v.ToString()).ToList());
                 storage.SetEntity(entity);
 
-                tx.Commit();
+                return CommitGuard.TryCommit(tx);
             }
         }
     }

@@ -12,6 +12,9 @@ namespace TurboSuite.App;
 /// <summary>
 /// Opens the TurboSuite Settings dialog. Edits general settings stored in project
 /// ExtensibleStorage. No model elements are modified directly.
+///
+/// <para><b>Worksharing:</b> the settings store is leased on save (<see cref="WorksharingLease.Acquire"/>); a
+/// refused or rolled-back save is reported and nothing is cached as saved.</para>
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class SettingsCommand : IExternalCommand
@@ -37,7 +40,12 @@ public class SettingsCommand : IExternalCommand
 
             if (result == true)
             {
-                GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel());
+                var store = GeneralSettingsStorageService.FindStorageId(doc);
+                var lease = WorksharingLease.Acquire(doc, store != null ? new[] { store } : new ElementId[0], "setting");
+                if (!lease.IsGranted)
+                    TaskDialog.Show("TurboSuite Settings", lease.DenialMessage);
+                else if (!GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel()))
+                    TaskDialog.Show("TurboSuite Settings", WorksharingMessages.RolledBack);
                 GeneralSettingsCache.Invalidate();
             }
 

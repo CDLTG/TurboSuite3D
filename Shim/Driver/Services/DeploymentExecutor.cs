@@ -8,6 +8,7 @@ using Autodesk.Revit.UI.Selection;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Driver.Services
 {
@@ -130,6 +131,7 @@ namespace TurboSuite.Driver.Services
             // Consecutive device pairs to wire AFTER placement commits (see note below).
             var wirePairs = new List<(FamilyInstance First, FamilyInstance Second)>();
             bool placementCommitted = false;
+            bool placementRolledBack = false;
 
             using (Transaction trans = new Transaction(doc, "TurboDriver — Place Power Supplies"))
             {
@@ -229,8 +231,8 @@ namespace TurboSuite.Driver.Services
                             wirePairs.Add((circuitInstances[w - 1], circuitInstances[w]));
                     }
 
-                    trans.Commit();
-                    placementCommitted = true;
+                    if (CommitGuard.TryCommit(trans)) placementCommitted = true;
+                    else placementRolledBack = true;
                 }
                 catch (Exception ex)
                 {
@@ -239,6 +241,9 @@ namespace TurboSuite.Driver.Services
                         trans.RollBack();
                 }
             }
+
+            // Outside the catch above, so it reaches DriverCommand, which returns Failed and discards the run.
+            if (placementRolledBack) throw new WorksharingException(WorksharingMessages.RolledBack);
 
             // Wire each pair in its OWN transaction. Committing each wire separately gives Revit the
             // post-commit regeneration that clips the terminal wire end to the family boundary.
@@ -253,8 +258,9 @@ namespace TurboSuite.Driver.Services
                         using Transaction wireTx = new Transaction(doc, "TurboDriver — Wire Power Supplies");
                         wireTx.Start();
                         bool wired = service.CreateWireBetween(d1, d2, doc.ActiveView);
-                        wireTx.Commit();
-                        if (wired)
+                        if (!CommitGuard.TryCommit(wireTx))
+                            result.Warnings.Add($"Could not wire a power-supply pair: {WorksharingMessages.RolledBack}");
+                        else if (wired)
                             result.TotalWiresPlaced++;
                     }
                     catch (Exception ex)

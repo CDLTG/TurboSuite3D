@@ -4,6 +4,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using RvtOperationCanceled = Autodesk.Revit.Exceptions.OperationCanceledException;
 
 namespace TurboSuite.Nudge;
@@ -63,6 +64,14 @@ public class NudgeCommand : IExternalCommand
                 return Result.Cancelled;
             }
 
+            // Worksharing: borrow the keypad before asking for the corner, so a refusal doesn't waste a pick.
+            var lease = WorksharingLease.Acquire(doc, new[] { keypad.Id }, "keypad");
+            if (!lease.IsGranted)
+            {
+                TaskDialog.Show("TurboNudge", lease.DenialMessage);
+                return Result.Cancelled;
+            }
+
             // The corner: snap to the door jamb / frame corner. Endpoint + intersection + point snaps
             // catch the corner on both linked model geometry (3D) and CAD lines (2D).
             XYZ corner = uidoc.Selection.PickPoint(
@@ -81,7 +90,11 @@ public class NudgeCommand : IExternalCommand
             {
                 tx.Start();
                 ElementTransformUtils.MoveElement(doc, keypad.Id, delta);
-                tx.Commit();
+                if (!CommitGuard.TryCommit(tx))
+                {
+                    TaskDialog.Show("TurboNudge", WorksharingMessages.RolledBack);
+                    return Result.Failed;
+                }
             }
 
             return Result.Succeeded;

@@ -6,6 +6,7 @@ using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.UI;
 using ElectricalWire = Autodesk.Revit.DB.Electrical.Wire;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 using TurboSuite.Wire.Constants;
 
 namespace TurboSuite.Wire.Services;
@@ -90,7 +91,7 @@ internal static class WireCreationService
             if (endOffset2 != null)
                 SafeSetVertex(wire, vertexCount - 1, c2.Origin + endOffset2);
 
-            t.Commit();
+            CommitGuard.CommitOrThrow(t);
         }
 
         return Result.Succeeded;
@@ -141,11 +142,14 @@ internal static class WireCreationService
 
         if (wiresToDelete.Count > 0)
         {
+            // Found only now (pairwise, mid-run), so leased here; a refusal throws and WireCommand's
+            // Failed return discards the run.
+            WorksharingLease.AcquireOrThrow(doc, wiresToDelete, "wire");
             using (Transaction t = new Transaction(doc, "Delete Existing Wires"))
             {
                 t.Start();
                 doc.Delete(wiresToDelete);
-                t.Commit();
+                CommitGuard.CommitOrThrow(t);
             }
         }
     }

@@ -21,6 +21,11 @@ namespace TurboSuite.Bubble;
 /// <summary>
 /// Creates a switchleg tag and wire connection for lighting fixtures and electrical fixtures.
 /// Works in floor plan and ceiling plan views only.
+///
+/// <para><b>Worksharing:</b> before the first write, each path leases the active view (the flip-point prompt
+/// swaps its sketch plane) plus the switchleg tags and stub wires a re-run deletes; a refusal changes nothing.
+/// New tags and wires need no borrow. A rolled-back commit throws <see cref="WorksharingException"/> and the
+/// command returns <c>Failed</c>, discarding the run.</para>
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class BubbleCommand : IExternalCommand
@@ -71,6 +76,12 @@ public class BubbleCommand : IExternalCommand
         {
             return Result.Cancelled;
         }
+        catch (WorksharingException ex)
+        {
+            // Failed discards every commit of this run (see CLAUDE.md "Command return value rolls back saves").
+            ShowError($"{ex.Message}\n\nNo changes were made.");
+            return Result.Failed;
+        }
         catch (Exception ex)
         {
             ShowError($"Unexpected error: {ex.Message}");
@@ -119,6 +130,12 @@ public class BubbleCommand : IExternalCommand
             placement = new ChandelierPlacementCalculator(doc, activeView, fixture, selectedTag, g);
         else
             placement = new HorizontalPlacementCalculator(doc, activeView, fixture, selectedTag, g, hasRemotePowerSupply);
+
+        if (!LeaseRerun(doc, activeView, scope =>
+                CollectSwitchlegTags(doc, fixture, BuiltInCategory.OST_LightingFixtureTags, IsLightingSwitchlegRole,
+                    scope, excludeTagId: selectedTag.Id)
+                .Concat(CollectUnconnectedWires(fixtureConnector, scope))))
+            return Result.Cancelled;
 
         var flipPoint = PromptForFlipPoint(uidoc, doc, placement.FixturePoint);
         placement.CalculateFinalPositions(flipPoint);
@@ -243,6 +260,12 @@ public class BubbleCommand : IExternalCommand
             ShowError("Cannot determine fixture location.");
             return Result.Failed;
         }
+
+        if (!LeaseRerun(doc, activeView, scope =>
+                CollectSwitchlegTags(doc, fixture, BuiltInCategory.OST_ElectricalFixtureTags, IsElectricalSwitchlegRole,
+                    scope)
+                .Concat(CollectUnconnectedWires(fixtureConnector, scope))))
+            return Result.Cancelled;
 
         var rotation = GetElectricalFixtureRotation(fixture);
 
@@ -416,7 +439,7 @@ public class BubbleCommand : IExternalCommand
                 wire.SetVertex(0, connOrigin + localY * g.ElectricalWireStartOffsetFt);
             }
 
-            trans.Commit();
+            CommitGuard.CommitOrThrow(trans);
         }
 
         return Result.Succeeded;
@@ -481,7 +504,27 @@ public class BubbleCommand : IExternalCommand
     private static void DeleteExistingElectricalSwitchlegTags(Document doc, FamilyInstance fixture, ViewAnnotationScope scope)
     {
         DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_ElectricalFixtureTags,
-            role => role == Roles.ElectricalSwitchlegTag, scope);
+            IsElectricalSwitchlegRole, scope);
+    }
+
+    private static bool IsElectricalSwitchlegRole(string role) => role == Roles.ElectricalSwitchlegTag;
+
+    private static bool IsLightingSwitchlegRole(string role) =>
+        role == Roles.FixtureSwitchlegTag || role == Roles.RemoteSwitchlegTag;
+
+    /// <summary>
+    /// Borrow what a run edits or deletes before its first write: the view (the flip-point prompt swaps its
+    /// sketch plane) and the switchleg tags / stub wires a re-run replaces. On refusal, shows why and returns
+    /// false — nothing has been written. <paramref name="rerunIds"/> runs only on a workshared doc: the tag
+    /// query is doc-wide, too costly to repeat on every click when the lease is a no-op anyway.
+    /// </summary>
+    private static bool LeaseRerun(Document doc, View view, Func<ViewAnnotationScope, IEnumerable<ElementId>> rerunIds)
+    {
+        if (!doc.IsWorkshared) return true;
+        var lease = WorksharingLease.Acquire(doc, rerunIds(new ViewAnnotationScope(view)).Append(view.Id), "element");
+        if (lease.IsGranted) return true;
+        ShowError(lease.DenialMessage);
+        return false;
     }
 
     #endregion
@@ -594,7 +637,7 @@ public class BubbleCommand : IExternalCommand
             else
                 WirePlacementService.CreateWire(doc, view, placement, wireTypeId, fixtureConnector);
 
-            trans.Commit();
+            CommitGuard.CommitOrThrow(trans);
         }
     }
 
@@ -628,13 +671,21 @@ public class BubbleCommand : IExternalCommand
         ViewAnnotationScope scope)
     {
         DeleteSwitchlegTagsByCategory(doc, fixture, BuiltInCategory.OST_LightingFixtureTags,
-            role => role == Roles.FixtureSwitchlegTag || role == Roles.RemoteSwitchlegTag,
-            scope, excludeTagId: sourceTag.Id);
+            IsLightingSwitchlegRole, scope, excludeTagId: sourceTag.Id);
     }
 
     // Re-run cleanup is limited to the placement view's annotation (ViewAnnotationScope): the same
     // fixture's switchleg tags and stub wires in other plans are left alone.
     private static void DeleteSwitchlegTagsByCategory(Document doc, FamilyInstance fixture,
+        BuiltInCategory tagCategory, Func<string, bool> roleMatch, ViewAnnotationScope scope,
+        ElementId? excludeTagId = null)
+    {
+        var tagsToDelete = CollectSwitchlegTags(doc, fixture, tagCategory, roleMatch, scope, excludeTagId);
+        if (tagsToDelete.Count > 0)
+            doc.Delete(tagsToDelete);
+    }
+
+    private static List<ElementId> CollectSwitchlegTags(Document doc, FamilyInstance fixture,
         BuiltInCategory tagCategory, Func<string, bool> roleMatch, ViewAnnotationScope scope,
         ElementId? excludeTagId = null)
     {
@@ -664,17 +715,26 @@ public class BubbleCommand : IExternalCommand
             }
         }
 
-        if (tagsToDelete.Count > 0)
-            doc.Delete(tagsToDelete);
+        return tagsToDelete;
     }
 
     private static bool DeleteUnconnectedWires(Document doc, Connector fixtureConnector, ViewAnnotationScope scope)
+    {
+        var wiresToDelete = CollectUnconnectedWires(fixtureConnector, scope);
+        if (wiresToDelete.Count == 0)
+            return false;
+
+        doc.Delete(wiresToDelete);
+        return true;
+    }
+
+    private static List<ElementId> CollectUnconnectedWires(Connector fixtureConnector, ViewAnnotationScope scope)
     {
         var wiresToDelete = new List<ElementId>();
 
         var connectedRefs = fixtureConnector.AllRefs;
         if (connectedRefs == null)
-            return false;
+            return wiresToDelete;
 
         foreach (Connector connectedConn in connectedRefs)
         {
@@ -691,13 +751,7 @@ public class BubbleCommand : IExternalCommand
             }
         }
 
-        if (wiresToDelete.Count > 0)
-        {
-            doc.Delete(wiresToDelete);
-            return true;
-        }
-
-        return false;
+        return wiresToDelete;
     }
 
     private static bool IsWireOnlyConnectedToFixture(ElectricalWire wire, Connector fixtureConnector)

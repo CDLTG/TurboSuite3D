@@ -19,17 +19,19 @@ namespace TurboSuite.Driver.Services
         bool SelectInProject(ElementRef circuitRef);
 
         /// <summary>Swaps each device to its target type IN PLACE, all in ONE transaction
-        /// (one undo step). Returns the count actually swapped. Preserves
+        /// (one undo step). Returns the count actually swapped, or null when nothing was written
+        /// (refused under worksharing or rolled back — the shim has already told the user). Preserves
         /// location/workset/plan-visibility param/wiring/tags and the manual switch-system
         /// memberships (never deletes).</summary>
-        int SwapDriverTypes(IReadOnlyList<DriverSwap> swaps);
+        int? SwapDriverTypes(IReadOnlyList<DriverSwap> swaps);
 
         /// <summary>Re-collects + reclassifies all RPS circuits on the Revit thread (for Rescan).</summary>
         IReadOnlyList<RpsCircuitData> Rescan();
 
         /// <summary>Sets/clears the deferred flag on a circuit, persisting it to ExtensibleStorage
         /// on the circuit element. <paramref name="signature"/> is the config snapshot to store when
-        /// deferring (ignored when clearing). Returns false if the circuit no longer exists.</summary>
-        bool SetDeferred(ElementRef circuitRef, bool deferred, string signature);
+        /// deferring (ignored when clearing). Returns false if the circuit no longer exists, or null when
+        /// nothing was written (refused under worksharing or rolled back — the shim has already told the user).</summary>
+        bool? SetDeferred(ElementRef circuitRef, bool deferred, string signature);
     }
 }

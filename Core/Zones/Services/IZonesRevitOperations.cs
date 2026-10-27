@@ -14,8 +14,9 @@ namespace TurboSuite.Zones.Services
     public interface ILoadNameWriter
     {
         /// <summary>Writes load name / circuit comments / room-override for each circuit;
-        /// returns the count of circuits actually updated.</summary>
-        int UpdateLoadNames(IReadOnlyList<ZonesCircuitData> circuits);
+        /// returns the count of circuits actually updated, or null when nothing was written
+        /// (refused under worksharing or rolled back — the writer has already told the user).</summary>
+        int? UpdateLoadNames(IReadOnlyList<ZonesCircuitData> circuits);
     }
 
     /// <summary>Persists the Panel Breakdown tab's <see cref="PanelSettings"/> snapshot to

@@ -76,6 +76,8 @@ All commands work in both:
 - **3D Model** — Hosted families with 3D geometry in plan/RCP views
 - **2D Drafting** — Unhosted families placed over linked CAD in floor plan views
 
+On **workshared** models every writing command first borrows what it will change. If a teammate holds any of it, or the local copy is behind central, the command writes nothing and says who to ask or to Reload Latest. Borrowed elements are released at your next Sync with Central, and a sync or Reload Latest closes any open TurboSuite windows. See [WORKSHARING.md](Shim/Shared/Services/WORKSHARING.md).
+
 ## Documentation
 
 Companion references are published via GitHub Pages from `docs/`, indexed at **[cdltg.github.io/TurboSuite3D](https://cdltg.github.io/TurboSuite3D/)** (`docs/index.html` is the hub):

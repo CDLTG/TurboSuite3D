@@ -41,6 +41,18 @@ namespace TurboSuite.Shared.Services
             return matches.FirstOrDefault();
         }
 
+        /// <summary>
+        /// The id of the project's store for <paramref name="schemaGuid"/>, or null when this project has none
+        /// yet (or the schema was never loaded) — for a session lease's working set. A store created by a
+        /// teammate and synced needs a borrow to overwrite; one that doesn't exist yet is created by its first
+        /// save and owned by its creator, so it needs nothing.
+        /// </summary>
+        public static ElementId FindStorageId(Document doc, Guid schemaGuid)
+        {
+            var schema = Schema.Lookup(schemaGuid);
+            return schema == null ? null : FindDataStorage(doc, schema)?.Id;
+        }
+
         private static void WarnDuplicateOnce(Document doc, Schema schema)
         {
             string key = $"{SafePath(doc)}|{schema.GUID}";

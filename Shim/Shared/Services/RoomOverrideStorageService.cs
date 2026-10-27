@@ -80,6 +80,8 @@ namespace TurboSuite.Shared.Services
             return result;
         }
 
+        public ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, _schemaGuid);
+
         public void Write(Document doc, IDictionary<string, string> overrides)
         {
             bool hasAny = overrides != null && overrides.Count > 0;
@@ -140,6 +142,9 @@ namespace TurboSuite.Shared.Services
         /// Empty (never null) when nothing has been saved. No transaction required.</summary>
         public static Dictionary<string, string> Load(Document doc) => Store.Load(doc);
 
+        /// <summary>The store's id, or null when this project has none yet — for a lease's working set.</summary>
+        public static ElementId FindStorageId(Document doc) => Store.FindStorageId(doc);
+
         /// <summary>Writes the full override map, replacing whatever was stored before — so cleared
         /// overrides and deleted circuits absent from <paramref name="overrides"/> are pruned. Use
         /// only when the caller enumerated <b>every</b> lighting circuit (TurboZones' apply);
@@ -168,6 +173,9 @@ namespace TurboSuite.Shared.Services
 
         /// <summary><see cref="RoomOverrideStorageService.Load"/>, for the shade store.</summary>
         public static Dictionary<string, string> Load(Document doc) => Store.Load(doc);
+
+        /// <summary><see cref="RoomOverrideStorageService.FindStorageId"/>, for the shade store.</summary>
+        public static ElementId FindStorageId(Document doc) => Store.FindStorageId(doc);
 
         /// <summary><see cref="RoomOverrideStorageService.Write"/>, for the shade store.</summary>
         public static void Write(Document doc, IDictionary<string, string> overrides)

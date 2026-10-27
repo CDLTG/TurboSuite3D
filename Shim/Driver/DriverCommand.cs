@@ -20,6 +20,12 @@ namespace TurboSuite.Driver
     /// ensure they share an electrical circuit (create one if needed), optionally review the
     /// circuit's comment / room override / panel via the shared circuit-info dialog (gated by
     /// the General setting), then deploy the recommended power supplies.
+    ///
+    /// <para><b>Worksharing:</b> everything the run can edit or delete — the selected fixtures, their circuit,
+    /// every element on it, and the wires between its existing power supplies — is leased up front, before any
+    /// write; a refusal changes nothing. New circuits, drivers, wires and tags need no borrow. Any later refusal
+    /// (the circuit-info override store) or rolled-back commit throws <see cref="WorksharingException"/> and the
+    /// command returns <c>Failed</c>, so Revit discards the whole run — including a split's deleted original.</para>
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -59,6 +65,13 @@ namespace TurboSuite.Driver
                     TaskDialog.Show("TurboDriver",
                         "No lighting fixtures with Remote Power Supply selected.\n\n" +
                         "Select lighting fixtures that have the 'Remote Power Supply' type parameter checked, then run TurboDriver.");
+                    return Result.Cancelled;
+                }
+
+                var lease = WorksharingLease.Acquire(doc, LeaseWorkingSet(doc, rpsFixtures), "element");
+                if (!lease.IsGranted)
+                {
+                    TaskDialog.Show("TurboDriver", lease.DenialMessage);
                     return Result.Cancelled;
                 }
 
@@ -152,7 +165,7 @@ namespace TurboSuite.Driver
                         if (wireIds.Count > 0)
                             doc.Delete(wireIds);
                         doc.Delete(existingDeviceIds);
-                        t.Commit();
+                        CommitGuard.CommitOrThrow(t);
                     }
                 }
 
@@ -176,7 +189,7 @@ namespace TurboSuite.Driver
                         {
                             splitTx.Start();
                             splitResult = splitService.SplitFixtures(recommendation.SubDriverAssignments, circuit);
-                            splitTx.Commit();
+                            CommitGuard.CommitOrThrow(splitTx);
                         }
 
                         // Re-fetch circuit after split
@@ -234,6 +247,13 @@ namespace TurboSuite.Driver
             catch (Autodesk.Revit.Exceptions.OperationCanceledException)
             {
                 return Result.Cancelled;
+            }
+            catch (WorksharingException ex)
+            {
+                // Failed discards every commit of this run (see CLAUDE.md "Command return value rolls back
+                // saves") — the all-or-nothing half of the lease.
+                TaskDialog.Show("TurboDriver", $"{ex.Message}\n\nNo changes were made.");
+                return Result.Failed;
             }
             catch (Exception ex)
             {
@@ -336,7 +356,7 @@ namespace TurboSuite.Driver
                         ElementTransformUtils.MoveElement(doc, newTag.Id, globalOffset);
                 }
 
-                t.Commit();
+                CommitGuard.CommitOrThrow(t);
             }
         }
 
@@ -363,6 +383,37 @@ namespace TurboSuite.Driver
                 localOffset.X * cos - localOffset.Y * sin,
                 localOffset.X * sin + localOffset.Y * cos,
                 0);
+        }
+
+        /// <summary>
+        /// Everything a run can edit or delete, known before it writes anything: the selected fixtures plus, when
+        /// they share one existing circuit, that circuit, every element on it (fixtures the split may replace,
+        /// power supplies it deletes) and the wires between those supplies. Selections spanning several
+        /// circuits are refused by <see cref="GetOrCreateCircuit"/> without writing, so they borrow only the
+        /// fixtures.
+        /// </summary>
+        private static List<ElementId> LeaseWorkingSet(Document doc, List<FamilyInstance> rpsFixtures)
+        {
+            var ids = new HashSet<ElementId>(rpsFixtures.Select(f => f.Id));
+            var circuits = new Dictionary<ElementId, ElectricalSystem>();
+            foreach (var fixture in rpsFixtures)
+            {
+                var systems = fixture.MEPModel?.GetElectricalSystems();
+                if (systems == null) continue;
+                foreach (ElectricalSystem s in systems) { circuits[s.Id] = s; break; }
+            }
+            if (circuits.Count != 1) return ids.ToList();
+
+            var circuit = circuits.Values.First();
+            ids.Add(circuit.Id);
+            var deviceIds = new List<ElementId>();
+            foreach (Element el in circuit.Elements)
+            {
+                ids.Add(el.Id);
+                if (el.Category?.BuiltInCategory == BuiltInCategory.OST_LightingDevices) deviceIds.Add(el.Id);
+            }
+            ids.UnionWith(DeploymentService.GetWiresBetweenDevices(doc, deviceIds));
+            return ids.ToList();
         }
 
         /// <summary>
@@ -421,7 +472,7 @@ namespace TurboSuite.Driver
                     foreach (var fi in uncircuitedFixtures)
                         addSet.Insert(fi);
                     existingCircuit.AddToCircuit(addSet);
-                    t.Commit();
+                    CommitGuard.CommitOrThrow(t);
                 }
                 return existingCircuit;
             }

@@ -19,6 +19,6 @@ namespace TurboSuite.Number.Services
         }
 
         public void Save(string prefix, string suffix)
-            => CircuitNamingStorageService.SavePrefixSuffix(_doc, prefix, suffix);
+            => NumberWorksharing.ReportIfRolledBack(CircuitNamingStorageService.SavePrefixSuffix(_doc, prefix, suffix));
     }
 }

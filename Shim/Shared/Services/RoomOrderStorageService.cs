@@ -60,7 +60,11 @@ namespace TurboSuite.Shared.Services
             return (entry, 0);
         }
 
-        public static void Save(Document doc, List<(string Name, int ClickOrder)> roomOrder)
+        /// <summary>The store's id, or null when this project has none yet — for a session lease.</summary>
+        public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool Save(Document doc, List<(string Name, int ClickOrder)> roomOrder)
         {
             var schema = GetOrCreateSchema();
 
@@ -77,7 +81,7 @@ namespace TurboSuite.Shared.Services
                 entity.Set(FieldName, (IList<string>)encoded);
                 storage.SetEntity(entity);
 
-                tx.Commit();
+                return CommitGuard.TryCommit(tx);
             }
         }
     }

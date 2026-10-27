@@ -1,5 +1,7 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -17,6 +19,13 @@ namespace TurboSuite.Name
     /// <see cref="TurboNameApiHandler"/> external event (see CLAUDE.md "Modeless pattern"). Going modeless also
     /// retires TurboName's old Cancelled-return rollback hazard — the settings save now commits inside the
     /// external event, not synchronously in Execute.
+    ///
+    /// <para><b>Worksharing:</b> the window is bound to one plan view and most of its writes are view-level (CAD
+    /// layer visibility / line graphics / previews), so the session lease (<see cref="WorksharingLease.AcquireSession"/>)
+    /// takes the TurboName lock store, the CAD Room Source store, the view, and the linked CAD imports in it (their
+    /// pin is flipped to force a graphics regen). Region clears and Assign Room Names lease their regions per
+    /// operation. The borrows hold until the user syncs, and a successful sync closes the window
+    /// (<see cref="ModelessWindowGuard"/>).</para>
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     public class NameCommand : IExternalCommand
@@ -52,6 +61,25 @@ namespace TurboSuite.Name
                 }
 
                 View view = doc.ActiveView;
+
+                // Returns Succeeded on denial, not Cancelled: a first-ever open may have just committed the
+                // lock store, and a non-Succeeded return would roll it back. The working set is built only on a
+                // workshared doc — the view-scoped import collector throws on views that can't be filtered,
+                // which a non-workshared open must never trip over.
+                if (doc.IsWorkshared)
+                {
+                    var sessionSet = new List<ElementId> { view.Id };
+                    sessionSet.AddRange(CadLinkResolver.GetLinkedImports(doc, view).Select(i => i.Id));
+                    var settingsStore = CadRoomSourceStorageService.FindStorageId(doc);
+                    if (settingsStore != null) sessionSet.Add(settingsStore);
+                    var lease = WorksharingLease.AcquireSession(doc, "TurboName", sessionSet);
+                    if (!lease.IsGranted)
+                    {
+                        TaskDialog.Show("TurboName", lease.DenialMessage);
+                        return Result.Succeeded;
+                    }
+                }
+
                 var cadSettings = CadRoomSourceSettingsCache.Get(doc);
 
                 // Construction order: the handler reads the live settings via a provider that captures the VM

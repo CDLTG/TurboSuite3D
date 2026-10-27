@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Shared.Models;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Name.Services;
 
@@ -292,8 +293,7 @@ public class TurboNameApiHandler : IExternalEventHandler
                 if (lineStyle != null)
                     detailLine.LineStyle = lineStyle;
 
-                tx.Commit();
-                return detailLine.Id;
+                return CommitOrReport(tx) ? detailLine.Id : ElementId.InvalidElementId;
             }
         }
         catch
@@ -322,7 +322,7 @@ public class TurboNameApiHandler : IExternalEventHandler
             {
                 tx.Start();
                 _doc.Delete(lineIds);
-                tx.Commit();
+                CommitOrReport(tx);
             }
         }
         catch { }
@@ -336,10 +336,10 @@ public class TurboNameApiHandler : IExternalEventHandler
         {
             tx.Start();
             regionId = RegionCreationService.CreateRegion(_doc, _view, boundary, regionTypeId);
-            if (regionId != ElementId.InvalidElementId)
-                tx.Commit();
-            else
+            if (regionId == ElementId.InvalidElementId)
                 tx.RollBack();
+            else if (!CommitOrReport(tx))
+                regionId = ElementId.InvalidElementId;
         }
 
         if (regionId != ElementId.InvalidElementId)
@@ -401,6 +401,11 @@ public class TurboNameApiHandler : IExternalEventHandler
             ReportError(request, $"Could not inspect the existing regions:\n{ex.Message}");
             return;
         }
+
+        // The clear deletes existing regions + notes, which a teammate may have drawn: borrow them all before
+        // anything runs. New regions need no borrow; the view and imports are held by the session lease.
+        var clearLease = WorksharingLease.Acquire(_doc, clear.RegionIds.Concat(clear.NoteIds), "region");
+        if (!clearLease.IsGranted) { ReportError(request, clearLease.DenialMessage); return; }
 
         string report;
         int created = 0, failed = 0;
@@ -467,7 +472,12 @@ public class TurboNameApiHandler : IExternalEventHandler
                             failures.Add($"    {name}: {reason} [{region.Boundary.Count} pts]");
                         }
                     }
-                    tx.Commit();
+                    if (!CommitGuard.TryCommit(tx))
+                    {
+                        group.RollBack();
+                        ReportError(request, WorksharingMessages.RolledBack);
+                        return;
+                    }
                 }
 
                 NudgeImportGraphics();
@@ -670,6 +680,10 @@ public class TurboNameApiHandler : IExternalEventHandler
             .FirstOrDefault(rt => rt.Name == "Room Region");
         ElementId roomRegionTypeId = roomRegionType?.Id;
 
+        // Every region can be written (Comments, type flagged/empty); new text notes need no borrow.
+        var namingLease = WorksharingLease.Acquire(_doc, regions.Select(r => r.RegionId), "region");
+        if (!namingLease.IsGranted) { ReportError(request, namingLease.DenialMessage); return; }
+
         Models.NamingResult result;
         using (var t = new Transaction(_doc, "TurboName - Assign Room Names"))
         {
@@ -705,7 +719,7 @@ public class TurboNameApiHandler : IExternalEventHandler
                 }
             }
 
-            t.Commit();
+            if (!CommitGuard.TryCommit(t)) { ReportError(request, WorksharingMessages.RolledBack); return; }
         }
 
         var summary = $"TurboName Complete\n\n" +
@@ -726,7 +740,7 @@ public class TurboNameApiHandler : IExternalEventHandler
             tx.Start();
             foreach (var subId in vis.SubIds)
                 LinkedCadLayerService.ApplyHidden(_view, subId, vis.Hidden);
-            tx.Commit();
+            CommitOrReport(tx);
         }
         _uidoc.RefreshActiveView();
     }
@@ -771,7 +785,7 @@ public class TurboNameApiHandler : IExternalEventHandler
             {
                 tx.Start();
                 LinkedCadLayerService.ApplyHidden(_view, subId, true);
-                tx.Commit();
+                if (!CommitOrReport(tx)) break;
             }
             _uidoc.RefreshActiveView();
 
@@ -819,7 +833,7 @@ public class TurboNameApiHandler : IExternalEventHandler
             using var revertTx = new Transaction(_doc, "TurboName - Hide Watershed Preview");
             revertTx.Start();
             RolePreview.RevertAll(_doc);
-            revertTx.Commit();
+            CommitOrReport(revertTx);
             _uidoc.RefreshActiveView();
             return;
         }
@@ -833,7 +847,7 @@ public class TurboNameApiHandler : IExternalEventHandler
                 LinkedCadLayerService.ApplyHidden(_view, subId, false); // un-hide so red shows
                 RolePreview.Paint(_view, subId);
             }
-            tx.Commit();
+            CommitOrReport(tx);
         }
         _uidoc.RefreshActiveView();
     }
@@ -849,7 +863,7 @@ public class TurboNameApiHandler : IExternalEventHandler
             tx.Start();
             foreach (var subId in request.SubIds)
                 _view.SetCategoryOverrides(subId, request.Overrides);
-            tx.Commit();
+            CommitOrReport(tx);
         }
         _uidoc.RefreshActiveView();
     }
@@ -862,14 +876,15 @@ public class TurboNameApiHandler : IExternalEventHandler
             using var tx = new Transaction(_doc, "TurboName - Revert Layer Previews");
             tx.Start();
             RolePreview.RevertAll(_doc);
-            tx.Commit();
+            CommitOrReport(tx);
             _uidoc.RefreshActiveView();
         }
 
         if (cleanup.Settings != null)
         {
-            Shared.Services.CadRoomSourceStorageService.Save(_doc, cleanup.Settings);
-            Shared.Services.CadRoomSourceSettingsCache.Invalidate();
+            if (!CadRoomSourceStorageService.Save(_doc, cleanup.Settings))
+                Dispatch(() => TaskDialog.Show("TurboName", WorksharingMessages.RolledBack));
+            CadRoomSourceSettingsCache.Invalidate();
         }
     }
 
@@ -911,6 +926,15 @@ public class TurboNameApiHandler : IExternalEventHandler
             }
         }
         catch { /* cosmetic only */ }
+    }
+
+    // Honor the commit (worksharing backstop — see CommitGuard): a rolled-back write is reported, never
+    // passed off as done.
+    private bool CommitOrReport(Transaction tx)
+    {
+        if (CommitGuard.TryCommit(tx)) return true;
+        Dispatch(() => TaskDialog.Show("TurboName", WorksharingMessages.RolledBack));
+        return false;
     }
 
     private void Finish(TurboNameRequest request)

@@ -237,6 +237,12 @@ public class SetupCommand : IExternalCommand
         {
             return Result.Cancelled;
         }
+        catch (WorksharingException ex)
+        {
+            // Failed discards every commit of this run (see CLAUDE.md "Command return value rolls back saves").
+            TaskDialog.Show("TurboSetup", $"{ex.Message}\n\nNo changes were made.");
+            return Result.Failed;
+        }
         catch (Exception ex)
         {
             message = ex.Message;
@@ -252,7 +258,16 @@ public class SetupCommand : IExternalCommand
     /// </summary>
     private static Result RunNameSpaces(Document doc, bool force)
     {
-        SpaceNamingResult r = SpaceNamingService.NameSpacesFromRooms(doc, force);
+        SpaceNamingResult r;
+        try
+        {
+            r = SpaceNamingService.NameSpacesFromRooms(doc, force);
+        }
+        catch (WorksharingException ex)
+        {
+            TaskDialog.Show("Name Spaces from Architect Rooms", $"{ex.Message}\n\nNo changes were made.");
+            return Result.Failed;
+        }
 
         string summary =
             $"Spaces examined: {r.Total}\r\n" +
@@ -288,6 +303,10 @@ public class SetupCommand : IExternalCommand
         // leaving Revit view-less. We restore it explicitly on failure.
         ElementId originalActiveViewId = uidoc.ActiveView?.Id;
 
+        // Worksharing: borrow what the run edits or deletes before it writes anything. Nothing is committed
+        // yet, so a refusal (WorksharingException) leaves the model untouched.
+        WorksharingLease.AcquireOrThrow(doc, ProjectSetupWorkingSet(doc), "element");
+
         using (var group = new TransactionGroup(doc, "TurboSetup"))
         {
             group.Start();
@@ -308,7 +327,7 @@ public class SetupCommand : IExternalCommand
                     t.Start();
                     sourceToHostLevel = LevelCopyService.CopyLevels(
                         doc, linkDoc, linkTransform, sourceIds, originalLevelIds);
-                    t.Commit();
+                    CommitGuard.CommitOrThrow(t);
                 }
                 result.LevelsCopied = sourceToHostLevel.Count;
 
@@ -322,7 +341,7 @@ public class SetupCommand : IExternalCommand
                 {
                     t.Start();
                     ToposolidVisibilityService.HideOnTemplates(doc);
-                    t.Commit();
+                    CommitGuard.CommitOrThrow(t);
                 }
 
                 // 2. Create views and bake in the firm templates (one-shot, so the views stay free
@@ -334,7 +353,7 @@ public class SetupCommand : IExternalCommand
                     createdViews = ViewGenerationService.CreateViews(
                         doc, plannedViews, sourceToHostLevel, out int skipped);
                     result.ViewsSkippedExisting = skipped;
-                    t.Commit();
+                    CommitGuard.CommitOrThrow(t);
                 }
                 result.ViewsCreated = createdViews.Count;
 
@@ -356,7 +375,7 @@ public class SetupCommand : IExternalCommand
                     if (deleted < originalLevelIds.Count)
                         result.Notes.Add(
                             $"{originalLevelIds.Count - deleted} original level(s) could not be deleted and were left in place.");
-                    t.Commit();
+                    CommitGuard.CommitOrThrow(t);
                 }
 
                 // 5. Apply the firm link-graphics hybrid (Revit 2025+ only). The views are
@@ -406,7 +425,7 @@ public class SetupCommand : IExternalCommand
                                 result.ViewsUnmapped++;
                             }
                         }
-                        t.Commit();
+                        CommitGuard.CommitOrThrow(t);
                     }
                 }
 
@@ -428,6 +447,30 @@ public class SetupCommand : IExternalCommand
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// What Project Setup edits or deletes in the host: every original level (renamed, then deleted), the plan
+    /// views on them (cascade-deleted with the level) and the firm <c>AL_</c> templates (Toposolid hidden).
+    /// The copied levels and created views are new and need no borrow.
+    /// </summary>
+    private static List<ElementId> ProjectSetupWorkingSet(Document doc)
+    {
+        var levelIds = new HashSet<ElementId>(new FilteredElementCollector(doc).OfClass(typeof(Level)).ToElementIds());
+        var ids = new List<ElementId>(levelIds);
+        foreach (var view in new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>())
+        {
+            if (view.IsTemplate)
+            {
+                if (view.Name.StartsWith(SetupConstants.LightingTemplatePrefix, StringComparison.OrdinalIgnoreCase))
+                    ids.Add(view.Id);
+            }
+            else if (view is ViewPlan plan && plan.GenLevel != null && levelIds.Contains(plan.GenLevel.Id))
+            {
+                ids.Add(view.Id);
+            }
+        }
+        return ids;
     }
 
     private static List<View> CollectLinkedViews(Document linkDoc, ViewType viewType)
