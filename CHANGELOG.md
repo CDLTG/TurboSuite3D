@@ -7,6 +7,33 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-10-27
+
+### Added
+- TurboDMX: shipped on the new Controls ribbon panel — DMX loops, decoder/driver packing and addressing, placement with per-zone circuits, one-line diagram, wire legend, and numbering lock.
+- TurboDALI: shipped on the Controls panel — DALI loops, per-unit `L#-##` address write-back, and a job-wide numbering lock.
+- TurboDALI: room-order auto-sort with a per-zone manual override for intra-zone addressing.
+- Worksharing: every writing command borrows what it will change up front and, if a teammate holds it or the model is behind central, writes nothing and says who to ask or to Reload Latest.
+- TurboFixtureFilter: Scripts keybind that narrows the current selection to Lighting Fixtures.
+- TurboHighlight: Scripts keybind that toggles the active plan view's room highlight.
+- TurboRPS: Driver Match tab for design-time driver↔fixture checks.
+- TurboZones: Draw One-Line button enabled.
+- TurboZones: HQP7-RF Clear Connect Type X gateway as a BOM accessory with cut sheet; CCX accepted as a Dimming Protocol.
+- TurboSchedule: Dimming Protocol drop-down drawn from the accepted vocabulary.
+- TurboNumber: Room Order sidebar clear button and drag auto-scroll.
+
+### Changed
+- TurboBubble, TurboTag, TurboWire, TurboMask, TurboDriver, TurboName, TurboDMX: placement offsets scale with the plan view scale (unchanged at 1/4" = 1'-0").
+- TurboZones: one-line shade panels labeled with the panel breakdown's recommended names.
+- TurboDMX: devices placed on the plan's level; warns when a placed decoder's driver is missing.
+- TurboWire: linear end-to-end routing only for fixtures above a minimum length.
+- App: TurboCompact moved into the Scripts pulldown; 16px ribbon icons remapped to first letters, with a shared Scripts icon.
+
+### Fixed
+- TurboBubble, TurboWire: re-run cleanup limited to the placement view, so a re-run in a duplicate view no longer deletes another view's tags and wires.
+- TurboName: re-run no longer stacks a room name on a ceiling height.
+- TurboSchedule: a save rolled back by worksharing is reported instead of shown as saved.
+
 ## [1.5.5] — 2026-10-15
 
 ### Added
@@ -330,6 +357,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.6.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.0
 [1.5.5]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.5
 [1.5.4]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.4
 [1.5.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.3
