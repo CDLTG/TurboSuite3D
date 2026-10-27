@@ -12,15 +12,14 @@ namespace TurboSuite.App;
 
 /// <summary>
 /// External Application that registers the TurboSuite ribbon panels — Settings, Tools, Commands, Utilities,
-/// and (gated on <see cref="ExperimentalCommandsEnabled"/>) Controls and Debug, in that ribbon order.
+/// Controls, and (gated on <see cref="ExperimentalCommandsEnabled"/>) Debug, in that ribbon order.
 /// </summary>
 public class TurboSuiteApplication : IExternalApplication
 {
-    // Gates experimental commands (e.g., TurboDMX, TurboDALI) so they ship compiled but
+    // Gates experimental commands (e.g., TurboSpike) so they ship compiled but
     // unreachable until they're ready. `static readonly` (not `const`) so the compiler doesn't
-    // flag the gated branch as unreachable (CS0162). TurboDALI owns DALI loop declaration outright now
-    // (the transitional TurboZones DALI tab is gone) — DALI editing is dev-only until this gate ungates.
-    public static readonly bool ExperimentalCommandsEnabled = true;
+    // flag the gated branch as unreachable (CS0162).
+    public static readonly bool ExperimentalCommandsEnabled = false;
 
     private static bool _updateAccepted;
 
@@ -39,7 +38,7 @@ public class TurboSuiteApplication : IExternalApplication
 
             application.CreateRibbonTab("TurboSuite");
             // Panels render in creation order: Settings, Tools, Commands, Utilities, then the
-            // experimental Controls/Debug panels below.
+            // Controls and experimental Debug panels below.
             RibbonPanel settingsPanel = application.CreateRibbonPanel("TurboSuite", "Settings");
             RibbonPanel toolsPanel = application.CreateRibbonPanel("TurboSuite", "Tools");
             RibbonPanel commandsPanel = application.CreateRibbonPanel("TurboSuite", "Commands");
@@ -220,30 +219,26 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboMask");
 
             // ── Controls panel (TurboDMX + TurboDALI) ──
-            // The digital-lighting-control commands, kept as separate buttons in their own panel. Rides the
-            // shared ExperimentalCommandsEnabled gate (both commands are experimental), so the whole panel
-            // ships compiled but hidden. Created here — after Utilities, before the Debug panel below — so it
-            // lands between them on the ribbon (panels render in creation order).
-            if (ExperimentalCommandsEnabled)
-            {
-                RibbonPanel controlsPanel = application.CreateRibbonPanel("TurboSuite", "Controls");
+            // The digital-lighting-control commands, kept as separate buttons in their own panel. Created
+            // here — after Utilities, before the Debug panel below — so it lands between them on the ribbon
+            // (panels render in creation order).
+            RibbonPanel controlsPanel = application.CreateRibbonPanel("TurboSuite", "Controls");
 
-                CreateButton(controlsPanel, assemblyPath,
-                    "TurboDMX",
-                    "     DMX     ",
-                    "TurboSuite.Dmx.DmxCommand",
-                    "Automate DMX-controlled RGBW LED tape systems",
-                    "Opens the TurboDMX window to declare DMX loops and control zones, solve decoder/driver packing and addressing, and generate the one-line diagram. Experimental — under construction.",
-                    "TurboDMX");
+            CreateButton(controlsPanel, assemblyPath,
+                "TurboDMX",
+                "     DMX     ",
+                "TurboSuite.Dmx.DmxCommand",
+                "Automate DMX-controlled RGBW LED tape systems",
+                "Opens the TurboDMX window to declare DMX loops and control zones, solve decoder/driver packing and addressing, place decoders and drivers, and generate the one-line diagram and wire legend.",
+                "TurboDMX");
 
-                CreateButton(controlsPanel, assemblyPath,
-                    "TurboDALI",
-                    "     DALI    ",
-                    "TurboSuite.Dali.DaliCommand",
-                    "Automate DALI addressing for lighting circuits",
-                    "Opens the TurboDALI window to group Control Zones into DALI loops, assign each loop its panel ZONE, and assign and write back per-circuit DALI addresses with a job-wide numbering lock. Experimental — under construction.",
-                    "TurboDALI");
-            }
+            CreateButton(controlsPanel, assemblyPath,
+                "TurboDALI",
+                "     DALI    ",
+                "TurboSuite.Dali.DaliCommand",
+                "Automate DALI addressing for lighting circuits",
+                "Opens the TurboDALI window to group Control Zones into DALI loops, assign each loop its panel ZONE, and assign and write back per-unit DALI addresses with a job-wide numbering lock.",
+                "TurboDALI");
 
             // ── Debug panel (TurboSpike) ──
             // Rides the shared ExperimentalCommandsEnabled gate, so the spike bench surfaces every dev

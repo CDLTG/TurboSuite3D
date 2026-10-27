@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Linq;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -15,15 +16,18 @@ namespace TurboSuite.Dmx;
 /// TurboDMX — DMX-controlled RGBW LED tape automation (decoder/driver packing, addressing, one-line
 /// generation). The Revit-coupled front end of the pure engine in <c>Core/Dmx/</c>.
 ///
-/// STATE: experimental — registered only when <c>ExperimentalCommandsEnabled</c> is set
-/// (App/TurboSuiteApplication.cs), ribbon still uses the <c>Blank</c> placeholder icon. The model READ is
-/// still read-only (no element creation/modification — that's placement, pending); adds the
-/// first writes as doc-side ExtensibleStorage persistence of the declarations (settings, curated part pools,
-/// declared loops) so the window reopens where the designer left it.
+/// Declarations (settings, curated part pools, declared loops, the numbering lock) persist doc-side in
+/// ExtensibleStorage so the window reopens where the designer left it; placement, circuiting, the one-line,
+/// and the wire legend are the model writes.
 ///
 /// MODELESS (TurboNumber/TurboZones pattern): the initial read + state load happen here before the window
 /// opens; the Refresh re-read and the coalesced state save both route through an
 /// <see cref="Autodesk.Revit.UI.IExternalEventHandler"/>-backed work queue so they run on the Revit API thread.
+///
+/// <para><b>Worksharing:</b> the window holds a session lease (<see cref="WorksharingLease.AcquireSession"/>)
+/// on the TurboDMX lock store plus its auto-saved state store, taken before the window opens. Placement, the
+/// one-line / wire-legend redraws, and the zone overlay each lease what they edit or delete, per operation. The
+/// borrows hold until the user syncs, and a successful sync closes the window (<see cref="ModelessWindowGuard"/>).</para>
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class DmxCommand : IExternalCommand
@@ -52,6 +56,16 @@ public class DmxCommand : IExternalCommand
             {
                 TaskDialog.Show("TurboDMX", "Please close any active transactions before opening TurboDMX.");
                 return Result.Failed;
+            }
+
+            // Returns Succeeded on denial, not Cancelled: a first-ever open may have just committed the
+            // lock store, and a non-Succeeded return would roll it back.
+            var sessionSet = new[] { DmxStorageService.FindStorageId(doc) }.Where(id => id != null);
+            var lease = WorksharingLease.AcquireSession(doc, "TurboDMX", sessionSet, "setting");
+            if (!lease.IsGranted)
+            {
+                TaskDialog.Show("TurboDMX", lease.DenialMessage);
+                return Result.Succeeded;
             }
 
             var reader = new DmxModelReader(doc);

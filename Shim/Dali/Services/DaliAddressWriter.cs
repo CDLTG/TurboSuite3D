@@ -1,8 +1,10 @@
 #nullable disable
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using TurboSuite.Dali.Services;
 using TurboSuite.Shared.Constants;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Dali.Services
 {
@@ -12,8 +14,12 @@ namespace TurboSuite.Dali.Services
     /// self-driven fixture (downlight unit), resolved through the shared <see cref="DaliUnitEnumerator"/> (so
     /// the write targets match the addressing read exactly). It then <b>clears</b> any bound fixture/device
     /// carrying a value it did not write this pass — including a driver's tape fixtures, which no longer carry
-    /// the address — so no orphan label lingers. Idempotent (an unchanged model re-writes the same values),
-    /// one transaction. Runs inside the work queue (Revit API thread).
+    /// the address — so no orphan label lingers. Idempotent: an element already carrying its value is left
+    /// alone, so an unchanged model writes nothing. One transaction. Runs inside the work queue (Revit API thread).
+    ///
+    /// <para><b>Worksharing:</b> the writes are planned before anything changes, and exactly the elements whose
+    /// value will change (stamped or cleared) are leased per operation. A refused lease or a rolled-back commit
+    /// writes nothing and returns null, which the ViewModel treats as "not saved" (no lock is captured).</para>
     /// </summary>
     public sealed class DaliAddressWriter : IDaliAddressWriter
     {
@@ -30,38 +36,59 @@ namespace TurboSuite.Dali.Services
             foreach (var e in DaliUnitEnumerator.Scan(_doc).Entries)
                 targetByKey[e.Reading.UnitKey] = e.WriteTargetId;
 
-            var written = new HashSet<ElementId>();
-            int writtenCount = 0;
-
-            using (var tx = new Transaction(_doc, "TurboDALI — write addresses"))
+            // 1. Each addressed unit's element takes its label; only a differing value is an actual write.
+            var pending = new Dictionary<ElementId, string>();
+            var addressed = new HashSet<ElementId>();
+            int addressedCount = 0;
+            foreach (var kv in addressByUnit)
             {
-                tx.Start();
+                if (!targetByKey.TryGetValue(kv.Key, out var id)) continue;   // unit no longer in the model
+                var p = WritableAddress(_doc.GetElement(id));
+                if (p == null) continue;                                       // unbound elements are a no-op
+                addressed.Add(id);
+                addressedCount++;
+                if (p.AsString() != kv.Value) pending[id] = kv.Value;
+            }
 
-                // 1. Stamp each addressed unit's element with its label.
-                foreach (var kv in addressByUnit)
+            // 2. Stale labels — any bound fixture/device with a value we didn't just address.
+            int cleared = 0;
+            foreach (var id in StaleIds(addressed))
+            {
+                pending[id] = "";
+                cleared++;
+            }
+
+            if (pending.Count > 0)
+            {
+                var lease = WorksharingLease.Acquire(_doc, pending.Keys, "DALI device");
+                if (!lease.IsGranted)
                 {
-                    if (!targetByKey.TryGetValue(kv.Key, out var id)) continue;   // unit no longer in the model
-                    var el = _doc.GetElement(id);
-                    if (el == null || !TrySet(el, kv.Value)) continue;            // unbound elements are a no-op
-                    written.Add(el.Id);
-                    writtenCount++;
+                    TaskDialog.Show("TurboDALI", lease.DenialMessage);
+                    return null;
                 }
 
-                // 2. Clear stale labels — any bound fixture/device with a value we didn't just write.
-                int cleared = ClearStale(written);
-
-                tx.Commit();
-
-                return $"Wrote {writtenCount} address{(writtenCount == 1 ? "" : "es")}"
-                     + (cleared > 0 ? $"; cleared {cleared} stale" : "") + ".";
+                using (var tx = new Transaction(_doc, "TurboDALI — write addresses"))
+                {
+                    tx.Start();
+                    foreach (var kv in pending)
+                        WritableAddress(_doc.GetElement(kv.Key))?.Set(kv.Value);
+                    if (!CommitGuard.TryCommit(tx))
+                    {
+                        TaskDialog.Show("TurboDALI", WorksharingMessages.RolledBack);
+                        return null;
+                    }
+                }
             }
+
+            return $"Wrote {addressedCount} address{(addressedCount == 1 ? "" : "es")}"
+                 + (cleared > 0 ? $"; cleared {cleared} stale" : "") + ".";
         }
 
-        /// <summary>Blank the DALI Address on every bound Lighting Fixture / Lighting Device that carries a
-        /// value but was not written this pass — spanning both categories.</summary>
-        private int ClearStale(HashSet<ElementId> written)
+        /// <summary>Every bound Lighting Fixture / Lighting Device that carries a DALI Address but is not in
+        /// <paramref name="addressed"/> — spanning both categories.</summary>
+        private List<ElementId> StaleIds(HashSet<ElementId> addressed)
         {
-            int cleared = 0;
+            var stale = new List<ElementId>();
             var cats = new[] { BuiltInCategory.OST_LightingFixtures, BuiltInCategory.OST_LightingDevices };
             foreach (var cat in cats)
             {
@@ -73,23 +100,19 @@ namespace TurboSuite.Dali.Services
 
                 foreach (var el in elements)
                 {
-                    if (written.Contains(el.Id)) continue;
-                    var p = el.LookupParameter(ParameterNames.DaliAddress);
-                    if (p == null || p.IsReadOnly || p.StorageType != StorageType.String) continue;
-                    if (string.IsNullOrEmpty(p.AsString())) continue;   // already blank
-                    p.Set("");
-                    cleared++;
+                    if (addressed.Contains(el.Id)) continue;
+                    var p = WritableAddress(el);
+                    if (p == null || string.IsNullOrEmpty(p.AsString())) continue;   // unbound or already blank
+                    stale.Add(el.Id);
                 }
             }
-            return cleared;
+            return stale;
         }
 
-        private static bool TrySet(Element el, string address)
+        private static Parameter WritableAddress(Element el)
         {
-            var p = el.LookupParameter(ParameterNames.DaliAddress);
-            if (p == null || p.IsReadOnly || p.StorageType != StorageType.String) return false;
-            p.Set(address);
-            return true;
+            var p = el?.LookupParameter(ParameterNames.DaliAddress);
+            return p == null || p.IsReadOnly || p.StorageType != StorageType.String ? null : p;
         }
     }
 }

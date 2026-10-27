@@ -1,7 +1,9 @@
 #nullable disable
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 using TurboSuite.Dmx.Persistence;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Dmx.Services
 {
@@ -14,6 +16,9 @@ namespace TurboSuite.Dmx.Services
     ///
     /// All ES writes run on the Revit API thread through the shared <see cref="IRevitWorkQueue"/>; Save() and
     /// the completion callback both run on the WPF thread, so the small _lock is just defensive.
+    ///
+    /// <para><b>Worksharing:</b> the store is in TurboDMX's session lease (<see cref="DmxCommand"/>), so a
+    /// rollback here is the rare implicit-borrow backstop — reported, never shown as saved.</para>
     /// </summary>
     public sealed class DmxStatePersister
     {
@@ -48,7 +53,12 @@ namespace TurboSuite.Dmx.Services
             if (toWrite == null) { lock (_lock) { _inFlight = false; } return; }
 
             _queue.Enqueue(
-                () => { DmxStorageService.Save(_doc, toWrite); return null; },
+                () =>
+                {
+                    if (!DmxStorageService.Save(_doc, toWrite))
+                        TaskDialog.Show("TurboDMX", WorksharingMessages.RolledBack);
+                    return null;
+                },
                 _ =>
                 {
                     bool more;

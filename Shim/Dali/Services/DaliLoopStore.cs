@@ -1,6 +1,8 @@
 #nullable enable
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using TurboSuite.Dali.Persistence;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Dali.Services
 {
@@ -11,7 +13,10 @@ namespace TurboSuite.Dali.Services
     /// TurboDALI has <b>two</b> writers onto the one schema — the tab's loop auto-save and the window's
     /// numbering-lock — so both methods here <b>read-modify-write</b>: each loads the current persisted state,
     /// overwrites only its own field, and keeps the other's. Both run on the same single work queue, so the
-    /// load/store pairs never interleave; the merge only has to survive ordering, which read-then-write does.</summary>
+    /// load/store pairs never interleave; the merge only has to survive ordering, which read-then-write does.
+    ///
+    /// <para><b>Worksharing:</b> the store is in TurboDALI's session lease (<see cref="DaliCommand"/>), so a
+    /// rollback here is the rare implicit-borrow backstop — reported, never shown as saved.</para></summary>
     public sealed class DaliLoopStore : IDaliLoopStore
     {
         private readonly Document _doc;
@@ -27,16 +32,22 @@ namespace TurboSuite.Dali.Services
             current.PayloadVersion = current.Snapshot != null
                 ? DaliPayload.CurrentVersion
                 : (state?.PayloadVersion ?? current.PayloadVersion);
-            DaliStorageService.Save(_doc, current);
+            ReportIfRolledBack(DaliStorageService.Save(_doc, current));
         }
 
         /// <summary>Write the numbering-lock baseline; preserve the persisted loops.</summary>
-        public void SaveSnapshot(DaliSnapshotDto? snapshot)
+        public bool SaveSnapshot(DaliSnapshotDto? snapshot)
         {
             var current = DaliStorageService.Load(_doc);
             current.Snapshot = snapshot;
             current.PayloadVersion = DaliPayload.CurrentVersion;
-            DaliStorageService.Save(_doc, current);
+            return ReportIfRolledBack(DaliStorageService.Save(_doc, current));
+        }
+
+        private static bool ReportIfRolledBack(bool committed)
+        {
+            if (!committed) TaskDialog.Show("TurboDALI", WorksharingMessages.RolledBack);
+            return committed;
         }
     }
 }

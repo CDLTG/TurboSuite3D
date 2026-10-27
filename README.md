@@ -1,6 +1,6 @@
 # TurboSuite
 
-A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024, 2025, and 2026**, built for electrical/lighting designers working on luxury architectural lighting projects. Seventeen commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET Framework 4.8 for Revit 2024, .NET 8.0-windows for Revit 2025, .NET 10.0-windows for Revit 2026), x64.
+A unified Autodesk Revit add-in for electrical and lighting automation, supporting **Revit 2024, 2025, and 2026**, built for electrical/lighting designers working on luxury architectural lighting projects. Twenty commands plus a Settings dialog, shipped as a per-version `TurboSuite.dll` (.NET Framework 4.8 for Revit 2024, .NET 8.0-windows for Revit 2025, .NET 10.0-windows for Revit 2026), x64.
 
 ## Installation
 
@@ -29,7 +29,7 @@ Run `TurboSuiteInstaller.exe` again and click **Uninstall** to remove all TurboS
 
 ## Ribbon Tab
 
-The "TurboSuite" ribbon tab has four panels:
+The "TurboSuite" ribbon tab has five panels:
 
 ### Settings Panel
 
@@ -70,6 +70,13 @@ The "TurboSuite" ribbon tab has four panels:
 | [TurboRPS](Shim/Driver/README.md) | Flag stale power-supply selections across all RPS circuits and batch-fix them in place |
 | [TurboDocs](Shim/Docs/README.md) | Generate fixture/RPS schedules, load/panel schedules, cut sheets, and cover/notes PDFs |
 
+### Controls Panel
+
+| Button | Description |
+|--------|-------------|
+| [TurboDMX](Shim/Dmx/README.md) | DMX RGBW tape systems: group Control Zones into loops, solve decoder/driver packing and addressing, place decoders/drivers with per-zone circuits, draw the one-line and wire legend, and lock the numbering |
+| [TurboDALI](Shim/Dali/README.md) | DALI addressing: group Control Zones into loops, assign each loop its panel ZONE, and write per-unit `L#-##` addresses with a job-wide numbering lock |
+
 ## Supported Workflows
 
 All commands work in both:
@@ -93,8 +100,8 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 
 | Category | Used By |
 |----------|---------|
-| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs, TurboMask, TurboFixtureFilter |
-| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs, TurboMask, TurboNudge |
+| Lighting Fixtures (`OST_LightingFixtures`) | TurboTag, TurboWire, TurboBubble, TurboDriver, TurboZones, TurboDocs, TurboMask, TurboFixtureFilter, TurboDMX, TurboDALI |
+| Lighting Devices (`OST_LightingDevices`) | TurboTag, TurboDriver, TurboNumber, TurboZones, TurboDocs, TurboMask, TurboNudge, TurboDMX, TurboDALI |
 | Electrical Fixtures (`OST_ElectricalFixtures`) | TurboWire, TurboBubble, TurboZones, TurboMask |
 | Electrical Equipment (`OST_ElectricalEquipment`) | TurboWire, TurboNumber, TurboZones, TurboMask |
 
@@ -108,7 +115,8 @@ TurboSuite expects certain families, parameters, and annotation types to be load
 | `Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS |
 | `Sub-Driver Power` | Lighting Device types | Double (Watts) | TurboDriver, TurboRPS, TurboTag, TurboNumber |
 | `Scale Factor` | Fixture instances | Double | TurboBubble, TurboWire |
-| `Dimming Protocol` | Lighting Fixture types | Text | TurboZones, TurboDocs, TurboDriver |
+| `Dimming Protocol` | Lighting Fixture types | Text | TurboZones, TurboDocs, TurboDriver, TurboDMX, TurboDALI |
+| `Control Zone` | Lighting Fixture instances | Text | TurboDMX, TurboDALI |
 | `Data Sheet URL` | Lighting Fixture/Device types | Text (URL) | TurboDocs |
 
 ### Tag Families

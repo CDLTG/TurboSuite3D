@@ -14,7 +14,8 @@ namespace TurboSuite.Dali.Services
     public interface IDaliAddressWriter
     {
         /// <summary>Write each unit's address to its resolved element and clear stale ones. Returns a short
-        /// status (e.g. "Wrote 34 addresses; cleared 3 stale.").</summary>
-        string Write(IReadOnlyDictionary<string, string> addressByUnit);
+        /// status (e.g. "Wrote 34 addresses; cleared 3 stale."), or null when nothing was written: the
+        /// worksharing lease was refused or the commit rolled back. Either way the user has been told.</summary>
+        string? Write(IReadOnlyDictionary<string, string> addressByUnit);
     }
 }

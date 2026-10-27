@@ -10,6 +10,7 @@ using TurboSuite.Dmx.OneLine;
 using TurboSuite.Dmx.Services;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Dmx.Services
 {
@@ -25,6 +26,9 @@ namespace TurboSuite.Dmx.Services
     /// All geometry is model feet straight off <see cref="DmxOneLineGeometry"/>; the whole draw is one
     /// transaction (no pick — the diagram is generated, not click-placed), run on the API thread via the
     /// work queue. Missing families / line styles degrade to warnings, never a crash.
+    ///
+    /// <para><b>Worksharing:</b> a redraw leases what it will delete — the content of the existing owned view —
+    /// before touching anything (a new view and new content need no borrow), and honors the commit.</para>
     /// </summary>
     public sealed class DmxOneLineService : IDmxOneLineService
     {
@@ -49,6 +53,13 @@ namespace TurboSuite.Dmx.Services
                 return result;
             }
             if (string.IsNullOrWhiteSpace(systemName)) systemName = "DMX";
+
+            long registeredId = viewRegistry != null && viewRegistry.TryGetValue(drawing.InterfaceNumber, out long rv) ? rv : 0L;
+            if (!LeaseRedraw(FindViewByIdOrName(drawing.ViewName(systemName), registeredId), "one-line element", result.Warnings))
+            {
+                ReportWarnings(result);
+                return result;
+            }
 
             View opened = null;
             using (var tx = new Transaction(_doc, $"TurboDMX — One-line interface #{onlyInterfaceNumber}"))
@@ -79,9 +90,12 @@ namespace TurboSuite.Dmx.Services
                     result.Notes += DrawNotes(view, drawing.Notes, textType, result.Warnings);
                     result.Markers += DrawMarkers(view, drawing.Markers, marker, result.Warnings);
 
-                    result.ViewId = view.Id.ToRef().Value;
-                    opened = view;
-                    tx.Commit();
+                    if (CommitGuard.TryCommit(tx))
+                    {
+                        result.ViewId = view.Id.ToRef().Value;
+                        opened = view;
+                    }
+                    else result.Warnings.Add($"One-line: {WorksharingMessages.RolledBack}");
                 }
                 catch (Exception ex)
                 {
@@ -105,6 +119,12 @@ namespace TurboSuite.Dmx.Services
             var result = new DmxWireLegendResult();
             if (drawing == null) { result.Warnings.Add("No solved wire legend to draw."); ReportWarnings(result); return result; }
             if (string.IsNullOrWhiteSpace(systemName)) systemName = "DMX";
+
+            if (!LeaseRedraw(FindViewByIdOrName(drawing.ViewName(systemName), existingViewId), "wire legend element", result.Warnings))
+            {
+                ReportWarnings(result);
+                return result;
+            }
 
             View opened = null;
             using (var tx = new Transaction(_doc, "TurboDMX — Wire legend"))
@@ -136,9 +156,12 @@ namespace TurboSuite.Dmx.Services
                     _doc.Regenerate();
                     DrawLegendBorder(view, borderStyle);
 
-                    result.ViewId = view.Id.ToRef().Value;
-                    opened = view;
-                    tx.Commit();
+                    if (CommitGuard.TryCommit(tx))
+                    {
+                        result.ViewId = view.Id.ToRef().Value;
+                        opened = view;
+                    }
+                    else result.Warnings.Add($"Wire legend: {WorksharingMessages.RolledBack}");
                 }
                 catch (Exception ex)
                 {
@@ -173,13 +196,8 @@ namespace TurboSuite.Dmx.Services
         {
             created = false;
 
-            if (existingViewId != 0L
-                && _doc.GetElement(new ElementRef(existingViewId).ToElementId()) is ViewDrafting byId && !byId.IsTemplate)
-                return byId;
-
-            var byName = new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
-                .FirstOrDefault(v => !v.IsTemplate && string.Equals(v.Name, name, StringComparison.Ordinal));
-            if (byName != null) return byName;
+            var found = FindViewByIdOrName(name, existingViewId);
+            if (found != null) return found;
 
             var vft = new FilteredElementCollector(_doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
                 .FirstOrDefault(v => v.ViewFamily == ViewFamily.Drafting);
@@ -190,6 +208,27 @@ namespace TurboSuite.Dmx.Services
             try { view.Scale = DmxOneLineGeometry.ViewScale; } catch { /* some templates lock scale */ }
             created = true;
             return view;
+        }
+
+        // An owned view by persisted id, else by its deterministic name; null when it doesn't exist yet.
+        private ViewDrafting FindViewByIdOrName(string name, long existingViewId)
+        {
+            if (existingViewId != 0L
+                && _doc.GetElement(new ElementRef(existingViewId).ToElementId()) is ViewDrafting byId && !byId.IsTemplate)
+                return byId;
+
+            return new FilteredElementCollector(_doc).OfClass(typeof(ViewDrafting)).Cast<ViewDrafting>()
+                .FirstOrDefault(v => !v.IsTemplate && string.Equals(v.Name, name, StringComparison.Ordinal));
+        }
+
+        // Worksharing: borrow the content a redraw of an existing owned view will wipe. Nothing to borrow for a
+        // view that doesn't exist yet. On refusal the denial joins the warnings and nothing is drawn.
+        private bool LeaseRedraw(View existing, string itemNoun, List<string> warnings)
+        {
+            if (existing == null) return true;
+            var lease = WorksharingLease.Acquire(_doc, WipeIds(existing), itemNoun);
+            if (!lease.IsGranted) warnings.Add(lease.DenialMessage);
+            return lease.IsGranted;
         }
 
         private void TrySetName(View view, string name)
@@ -207,12 +246,15 @@ namespace TurboSuite.Dmx.Services
         // here — it comes back empty for drafting-view detail/annotation content, so nothing gets wiped.
         private void WipeView(View view)
         {
-            var ids = new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType()
-                .Where(e => e is CurveElement || e is TextNote || e is FamilyInstance)
-                .Select(e => e.Id).ToList();
+            var ids = WipeIds(view);
             if (ids.Count == 0) return;
             try { _doc.Delete(ids); } catch { /* best-effort: a pinned/undeletable element shouldn't abort the redraw */ }
         }
+
+        private List<ElementId> WipeIds(View view) =>
+            new FilteredElementCollector(_doc, view.Id).WhereElementIsNotElementType()
+                .Where(e => e is CurveElement || e is TextNote || e is FamilyInstance)
+                .Select(e => e.Id).ToList();
 
         // ── Drawing passes ───────────────────────────────────────────────────────────────────────────
         private void DrawSymbols(View view, DmxOneLineDrawing drawing,

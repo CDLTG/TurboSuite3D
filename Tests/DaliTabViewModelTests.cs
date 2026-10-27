@@ -34,7 +34,7 @@ namespace TurboSuite.Tests.Dali
             public DaliSnapshotDto? LastSnapshot;
             public int SnapshotSaveCount;
             public void Save(DaliModuleState state) { Last = state; SaveCount++; }
-            public void SaveSnapshot(DaliSnapshotDto? snapshot) { LastSnapshot = snapshot; SnapshotSaveCount++; }
+            public bool SaveSnapshot(DaliSnapshotDto? snapshot) { LastSnapshot = snapshot; SnapshotSaveCount++; return true; }
         }
 
         private static DaliZoneItemViewModel Zone(string name, int loads) =>

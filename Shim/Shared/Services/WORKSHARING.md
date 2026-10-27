@@ -122,11 +122,11 @@ When the rule is unsure, **borrow more, not less**. Over-borrowing only blocks a
 
 ## Implementation patterns
 
-### Modeless windows (TurboNumber, TurboZones, TurboName, TurboRPS, TurboSchedule)
+### Modeless windows (TurboNumber, TurboZones, TurboName, TurboRPS, TurboSchedule, TurboDMX, TurboDALI)
 
 - **Session lease before the window opens** (`AcquireSession`): the lock store plus every data store the window auto-saves. If it's refused, show the message, don't open the window, and return `Succeeded`.
 - **Per-operation lease on hot elements** (circuits, panels, devices, driver types). These are borrowed on the click that writes them, not for the whole session, so teammates aren't blocked for hours by an open window.
-- **Every commit goes through `TryCommit`.** On `false`, report it and leave the UI dirty or unsaved. Core contracts carry the result: `ILoadNameWriter.UpdateLoadNames` and `IRpsRevitOperations.SwapDriverTypes` return `int?`, and `SetDeferred` returns `bool?` (null = refused or rolled back, already reported).
+- **Every commit goes through `TryCommit`.** On `false`, report it and leave the UI dirty or unsaved. Core contracts carry the result: `ILoadNameWriter.UpdateLoadNames` and `IRpsRevitOperations.SwapDriverTypes` return `int?`, `SetDeferred` returns `bool?`, and `IDaliAddressWriter.Write` returns `string?` (null = refused or rolled back, already reported); `IDaliLoopStore.SaveSnapshot` returns `bool`, so a failed write or save never moves the DALI lock.
 - **Register with `ModelessWindowGuard`.** Explicit-save windows also pass `hasUnsavedEdits`. Auto-saving windows never prompt.
 
 ### Synchronous commands (TurboDriver, TurboWire, TurboBubble, TurboTag, TurboMask, TurboSetup, TurboNudge, TurboHighlight)
@@ -167,7 +167,10 @@ When the rule is unsure, **borrow more, not less**. Over-borrowing only blocks a
 | **TurboSetup** | operation | Project Setup: every original level (renamed or deleted), plan views on them (cascade), `AL_` templates (`ProjectSetupWorkingSet`). Name Spaces: the Spaces it may rename |
 | **TurboCompact** | — | family documents are never workshared |
 | **TurboDocs, TurboSnoop, TurboTab, TurboFixtureFilter** | — | read-only |
-| **TurboDMX, TurboDALI** | — | **not leased yet.** Apply this pattern when they ungate |
+| **TurboDMX** | session | lock + DMX state store |
+| | operation | Place (`DmxPlacementService.LeaseWorkingSet`, before the first pick): orphan decoders + their registered drivers (deleted), inactive decoder/driver types (activated), the plan zones' DMX fixtures + every placed decoder/driver (circuit membership), and every unpaneled circuit the reconcile may tear down (ours, or holding one of those members) with its members. A rolled-back loop stops the run. One-line / wire-legend redraw: the content it wipes. Zone overlay: the active view |
+| **TurboDALI** | session | lock + DALI state store |
+| | operation | Write / Lock: exactly the fixtures/devices whose `DALI Address` changes, stamped or cleared (unchanged values aren't written). Zone overlay: the active view |
 
 ## What users see
 
@@ -182,6 +185,8 @@ Known friction (not data loss):
 - After a TurboZones Load Names Apply, that user holds the room-override store until sync. A teammate's TurboWire/TurboDriver run that persists a room override is refused after they fill in the circuit-info dialog.
 - TurboName holds its plan view and CAD imports for the whole session.
 - TurboSchedule holds every lighting type while the window is open, even if the user only looks.
+- TurboDMX and TurboDALI hold each view their zone overlay colored until sync. A sync closes the window without reverting the overlay, so the colors sync to central and clear on the next clean close.
+- A TurboDMX Place holds every DMX fixture in the plan's zones until sync, even when the circuits were already correct.
 
 Optional upgrades if blocking becomes a complaint: acquire on first edit instead of on open, a "holding until sync" label, and "Save and sync" (writing dirty edits inside the pre-sync event; unprobed).
 

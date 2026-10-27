@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Linq;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -13,12 +14,9 @@ namespace TurboSuite.Dali
 {
     /// <summary>
     /// TurboDALI — the standalone DALI addressing command. Owns DALI end to end: collect DALI fixtures, group
-    /// Control Zones into loops, declare each loop's panel ZONE, and assign + write back per-circuit addresses
+    /// Control Zones into loops, declare each loop's panel ZONE, and assign + write back per-unit addresses
     /// (with a job-wide numbering lock). TurboZones stays a pure consumer of the resulting demand + placement.
-    ///
-    /// STATE: experimental — registered only when <c>ExperimentalCommandsEnabled</c> is set
-    /// (App/TurboSuiteApplication.cs). It is the <b>sole writer</b> of the DALI schema: the transitional
-    /// TurboZones DALI tab has been removed, so DALI loop declaration is dev-only until this command ungates.
+    /// It is the <b>sole writer</b> of the DALI schema (the transitional TurboZones DALI tab is gone).
     ///
     /// INDEPENDENT COLLECTION: TurboDALI reads its own inputs from the doc — DALI fixtures/zones,
     /// and the model-derived panel-location list via <c>PanelAllocationService.DiscoverPanelLocations</c> — so
@@ -27,6 +25,11 @@ namespace TurboSuite.Dali
     /// MODELESS (TurboZones/TurboDMX pattern): the read + state load happen here before the window opens; the
     /// coalesced state save routes through the shared <see cref="RevitWorkQueue"/> so its transaction runs on
     /// the Revit API thread.
+    ///
+    /// <para><b>Worksharing:</b> the window holds a session lease (<see cref="WorksharingLease.AcquireSession"/>)
+    /// on the TurboDALI lock store plus the DALI state store, taken before the window opens. An address write
+    /// leases the elements it changes, and the zone overlay the active view, per operation. The borrows hold
+    /// until the user syncs, and a successful sync closes the window (<see cref="ModelessWindowGuard"/>).</para>
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     public class DaliCommand : IExternalCommand
@@ -55,6 +58,16 @@ namespace TurboSuite.Dali
                 {
                     TaskDialog.Show("TurboDALI", "Please close any active transactions before opening TurboDALI.");
                     return Result.Failed;
+                }
+
+                // Returns Succeeded on denial, not Cancelled: a first-ever open may have just committed the
+                // lock store, and a non-Succeeded return would roll it back.
+                var sessionSet = new[] { DaliStorageService.FindStorageId(doc) }.Where(id => id != null);
+                var lease = WorksharingLease.AcquireSession(doc, "TurboDALI", sessionSet, "setting");
+                if (!lease.IsGranted)
+                {
+                    TaskDialog.Show("TurboDALI", lease.DenialMessage);
+                    return Result.Succeeded;
                 }
 
                 // ── Independent collection ─────────────────────────────────────────────────────────────────

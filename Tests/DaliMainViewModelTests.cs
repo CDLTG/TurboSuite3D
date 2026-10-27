@@ -30,8 +30,14 @@ namespace TurboSuite.Tests.Dali
             public DaliSnapshotDto? LastSnapshot;
             public int SnapshotSaveCount;
             public int LoopSaveCount;
+            public bool SnapshotSaveSucceeds = true;   // false = Revit rolled the save back
             public void Save(DaliModuleState state) { LoopSaveCount++; }
-            public void SaveSnapshot(DaliSnapshotDto? snapshot) { LastSnapshot = snapshot; SnapshotSaveCount++; }
+            public bool SaveSnapshot(DaliSnapshotDto? snapshot)
+            {
+                SnapshotSaveCount++;
+                if (SnapshotSaveSucceeds) LastSnapshot = snapshot;
+                return SnapshotSaveSucceeds;
+            }
         }
 
         private sealed class FakeReader : IDaliModelReader
@@ -45,7 +51,14 @@ namespace TurboSuite.Tests.Dali
         {
             public IReadOnlyDictionary<string, string> LastWrite = new Dictionary<string, string>();
             public int Writes;
-            public string Write(IReadOnlyDictionary<string, string> m) { LastWrite = m; Writes++; return ""; }
+            public bool Refuse;   // true = worksharing lease refused / commit rolled back (returns null)
+            public string? Write(IReadOnlyDictionary<string, string> m)
+            {
+                Writes++;
+                if (Refuse) return null;
+                LastWrite = m;
+                return "";
+            }
         }
 
         private sealed class FakeZoneColor : IDaliZoneColorService
@@ -216,6 +229,55 @@ namespace TurboSuite.Tests.Dali
 
             Assert.True(vm.IsLocked);
             Assert.Equal(0, store.SnapshotSaveCount);   // nothing persisted when the gate is declined
+        }
+
+        // ── Worksharing: a refused write or rolled-back save never moves the lock ─────────────────────
+        [Fact]
+        public void Lock_RefusedWrite_StaysUnlocked_AndPersistsNothing()
+        {
+            var vm = Build(new[] { Circuit("c1", "Kitchen", 0, 0) }, out var writer, out var store);
+            writer.Refuse = true;
+
+            vm.LockCommand.Execute(null);
+
+            Assert.False(vm.IsLocked);
+            Assert.Equal(0, store.SnapshotSaveCount);   // never freeze numbers that didn't land
+        }
+
+        [Fact]
+        public void Lock_RolledBackSnapshotSave_StaysUnlocked()
+        {
+            var vm = Build(new[] { Circuit("c1", "Kitchen", 0, 0) }, out _, out var store);
+            store.SnapshotSaveSucceeds = false;
+
+            vm.LockCommand.Execute(null);
+
+            Assert.False(vm.IsLocked);
+        }
+
+        [Fact]
+        public void Unlock_RolledBackSave_KeepsLock()
+        {
+            var baseline = new DaliSnapshotDto { NumberingState = "Locked" };
+            var vm = Build(new[] { Circuit("c1", "Kitchen", 0, 0) }, out _, out var store,
+                           savedSnapshot: baseline);
+            store.SnapshotSaveSucceeds = false;
+
+            vm.UnlockCommand.Execute(null);
+
+            Assert.True(vm.IsLocked);
+        }
+
+        [Fact]
+        public void Write_Refused_ReportsNothingSaved()
+        {
+            var vm = Build(new[] { Circuit("c1", "Kitchen", 0, 0) }, out var writer, out _);
+            writer.Refuse = true;
+
+            vm.WriteAddressesCommand.Execute(null);
+
+            Assert.Equal(1, writer.Writes);
+            Assert.Contains("nothing was saved", vm.StatusText);
         }
     }
 }

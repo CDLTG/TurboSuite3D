@@ -42,6 +42,11 @@ namespace TurboSuite.Dmx.Services
     ///
     /// Invoked through the work queue, so this runs on the Revit API thread (UIDocument.Selection picks +
     /// the placement transactions are both legal there).
+    ///
+    /// <para><b>Worksharing:</b> the run's whole working set is leased before the first pick
+    /// (<see cref="LeaseWorkingSet"/>); a refusal places nothing. Every commit is honored: a rolled-back loop
+    /// stops the run and drops its pairs from the registry, and a rolled-back orphan cleanup keeps the registry
+    /// intact. What already committed stays — a re-Place lands only the remainder.</para>
     /// </summary>
     public sealed class DmxPlacementService : IDmxPlacementService
     {
@@ -72,6 +77,12 @@ namespace TurboSuite.Dmx.Services
         {
             var result = new DmxPlacementResult();
             if (plan == null || plan.LoopCount == 0) return result;
+
+            if (!LeaseWorkingSet(plan, registry, onlyInterfaceNumber))
+            {
+                result.Cancelled = true;
+                return result;
+            }
 
             var placedIds = new List<ElementId>();
             View view = _doc.ActiveView;
@@ -122,19 +133,39 @@ namespace TurboSuite.Dmx.Services
                     break;   // keep everything placed so far
                 }
 
+                // What this loop adds to the result, so a rolled-back loop can be taken back out of it.
+                var before = (result.DecodersPlaced, result.DriversPlaced, result.SwitchIdsSet, result.TagsPlaced,
+                              result.Failed, Pairs: result.PlacedPairs.Count, Ids: placedIds.Count);
+                bool rolledBack = false;
                 using (var tx = new Transaction(_doc, $"TurboDMX — Place {loop.Label}"))
                 {
                     tx.Start();
                     try
                     {
                         PlaceLoop(todo, origin, view, hostLevel, result, placedIds);
-                        tx.Commit();
+                        if (!CommitGuard.TryCommit(tx))
+                        {
+                            result.Warnings.Add($"{loop.Label}: {WorksharingMessages.RolledBack}");
+                            rolledBack = true;
+                        }
                     }
                     catch (Exception ex)
                     {
                         result.Warnings.Add($"{loop.Label}: placement transaction failed — {ex.Message}");
                         if (tx.HasStarted()) tx.RollBack();
+                        rolledBack = true;
                     }
+                }
+
+                if (rolledBack)
+                {
+                    // Nothing from this loop landed — keep its pairs out of the registry and its ids out of the selection.
+                    (result.DecodersPlaced, result.DriversPlaced, result.SwitchIdsSet, result.TagsPlaced, result.Failed) =
+                        (before.DecodersPlaced, before.DriversPlaced, before.SwitchIdsSet, before.TagsPlaced, before.Failed);
+                    result.PlacedPairs.RemoveRange(before.Pairs, result.PlacedPairs.Count - before.Pairs);
+                    placedIds.RemoveRange(before.Ids, placedIds.Count - before.Ids);
+                    // A worksharing rollback would recur on every remaining loop, so stop; the remainder re-Places.
+                    if (_doc.IsWorkshared) break;
                 }
             }
 
@@ -270,7 +301,12 @@ namespace TurboSuite.Dmx.Services
                     result.RemovedDecoders++;
                     result.RemovedDecs.Add(o.Dec);
                 }
-                tx.Commit();
+                if (!CommitGuard.TryCommit(tx))
+                {
+                    result.Warnings.Add($"Orphan cleanup: {WorksharingMessages.RolledBack}");
+                    result.RemovedDecs.Clear();               // rolled back ⇒ keep the registry intact
+                    result.RemovedDecoders = 0;
+                }
             }
             catch (Exception ex)
             {
@@ -421,9 +457,15 @@ namespace TurboSuite.Dmx.Services
                 tx.Start();
                 try
                 {
+                    int removed = 0;
                     foreach (var id in toTearDown)
-                        if (_doc.GetElement(id) != null) { _doc.Delete(id); result.CircuitsRemoved++; }
-                    tx.Commit();
+                        if (_doc.GetElement(id) != null) { _doc.Delete(id); removed++; }
+                    if (!CommitGuard.TryCommit(tx))
+                    {
+                        result.Warnings.Add($"Circuit teardown: {WorksharingMessages.RolledBack}");
+                        return;   // don't create against circuits we failed to free
+                    }
+                    result.CircuitsRemoved += removed;
                 }
                 catch (Exception ex)
                 {
@@ -454,7 +496,8 @@ namespace TurboSuite.Dmx.Services
                     continue;
                 }
                 result.CircuitsCreated++;
-                if (preservedLoadName.TryGetValue(zone, out var ln)) RestoreLoadName(circuit, ln);
+                if (preservedLoadName.TryGetValue(zone, out var ln) && !RestoreLoadName(circuit, ln))
+                    result.Warnings.Add($"Zone \"{zone}\": couldn't restore its Load Name \"{ln}\" — re-enter it in TurboZones.");
             }
         }
 
@@ -523,20 +566,74 @@ namespace TurboSuite.Dmx.Services
             return devices.All(d => memberIds.Contains(d.Id));
         }
 
-        /// <summary>Restore a preserved TurboZones Load Name onto a rebuilt circuit (its own transaction).</summary>
-        private void RestoreLoadName(ElectricalSystem circuit, string loadName)
+        /// <summary>Restore a preserved TurboZones Load Name onto a rebuilt circuit (its own transaction). False
+        /// when the write failed or rolled back. The circuit is the one just created, so it needs no lease.</summary>
+        private bool RestoreLoadName(ElectricalSystem circuit, string loadName)
         {
             using var tx = new Transaction(_doc, "TurboDMX — Restore Load Name");
             tx.Start();
             try
             {
                 circuit.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_NAME)?.Set(loadName);
-                tx.Commit();
+                return CommitGuard.TryCommit(tx);
             }
             catch
             {
                 if (tx.HasStarted()) tx.RollBack();
+                return false;
             }
+        }
+
+        // ── Worksharing: the run's whole working set, leased before the first pick ─────────────────────
+        // Borrow only what the run directly edits or deletes (WORKSHARING.md): orphan decoders + their drivers
+        // (deleted), inactive decoder/driver types (activated), and for the circuiting pass every DMX fixture in a
+        // plan zone plus every placed decoder/driver (circuit membership is fixture-side), and each unpaneled
+        // circuit the reconcile may tear down — ours (it carries a DMX fixture) or one holding any of those
+        // members — with all its members. New devices, tags and circuits are created, so they need nothing. A
+        // superset of what any one run touches: over-borrowing only blocks a teammate until sync. On refusal
+        // shows why and returns false. Free (no collectors) on a non-workshared doc.
+        private bool LeaseWorkingSet(DmxPlacementPlan plan, IReadOnlyList<DmxPlacedPair> registry,
+                                     int? onlyInterfaceNumber)
+        {
+            if (!_doc.IsWorkshared) return true;
+
+            var ids = new HashSet<ElementId>();
+
+            foreach (var fi in LightingDevices())
+                if (ParseDec(fi.LookupParameter(ParameterNames.SwitchId)?.AsString()) > 0) ids.Add(fi.Id);
+            if (registry != null)
+                foreach (var p in registry)
+                    if (IsLive(p.DriverId)) ids.Add(new ElementRef(p.DriverId).ToElementId());
+
+            foreach (var loop in plan.Loops)
+            {
+                if (onlyInterfaceNumber.HasValue && loop.InterfaceNumber != onlyInterfaceNumber.Value) continue;
+                foreach (var dev in loop.Devices)
+                    foreach (var typeId in new[] { dev.DecoderTypeId, dev.DriverTypeId })
+                        if (!string.IsNullOrEmpty(typeId) && _doc.GetElement(typeId) is FamilySymbol fs && !fs.IsActive)
+                            ids.Add(fs.Id);
+            }
+
+            var planZones = new HashSet<string>(plan.Loops.SelectMany(l => l.Devices).Select(d => d.ZoneName)
+                .Where(z => !string.IsNullOrWhiteSpace(z)), StringComparer.OrdinalIgnoreCase);
+            foreach (var fi in LightingFixtures())
+            {
+                if (!IsDmxFixture(fi)) continue;
+                string zone = fi.LookupParameter(ParameterNames.ControlZone)?.AsString()?.Trim();
+                if (!string.IsNullOrEmpty(zone) && planZones.Contains(zone)) ids.Add(fi.Id);
+            }
+
+            foreach (var circuit in UnpaneledPowerCircuits())
+            {
+                var members = circuit.Elements.Cast<Element>().Select(e => e.Id).ToList();
+                if (GetCircuitDmxZone(circuit) == null && !members.Any(ids.Contains)) continue;
+                ids.Add(circuit.Id);
+                ids.UnionWith(members);
+            }
+
+            var lease = WorksharingLease.Acquire(_doc, ids, "DMX element");
+            if (!lease.IsGranted) TaskDialog.Show("TurboDMX", lease.DenialMessage);
+            return lease.IsGranted;
         }
 
         // Registry only (exact). No geometric fallback: this feeds a delete, where a missed driver is recoverable

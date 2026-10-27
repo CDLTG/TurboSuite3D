@@ -84,8 +84,12 @@ namespace TurboSuite.Dali.Services
             }
         }
 
+        /// <summary>The store's id, or null when this project has none yet — for TurboDALI' session lease.</summary>
+        public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
         /// <summary>Writes the module state to the document inside its own transaction.</summary>
-        public static void Save(Document doc, DaliModuleState state)
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool Save(Document doc, DaliModuleState state)
         {
             if (state == null) state = new DaliModuleState();
             var schema = GetOrCreateSchema();
@@ -100,7 +104,7 @@ namespace TurboSuite.Dali.Services
             entity.Set(PayloadVersionField, state.PayloadVersion);
             storage.SetEntity(entity);
 
-            tx.Commit();
+            return CommitGuard.TryCommit(tx);
         }
     }
 }

@@ -81,8 +81,12 @@ namespace TurboSuite.Dmx.Services
             }
         }
 
+        /// <summary>The store's id, or null when this project has none yet — for TurboDMX' session lease.</summary>
+        public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
+
         /// <summary>Writes the module state to the document inside its own transaction.</summary>
-        public static void Save(Document doc, DmxModuleState state)
+        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
+        public static bool Save(Document doc, DmxModuleState state)
         {
             if (state == null) state = new DmxModuleState();
             var schema = GetOrCreateSchema();
@@ -97,7 +101,7 @@ namespace TurboSuite.Dmx.Services
             entity.Set(PayloadVersionField, state.PayloadVersion);
             storage.SetEntity(entity);
 
-            tx.Commit();
+            return CommitGuard.TryCommit(tx);
         }
     }
 }

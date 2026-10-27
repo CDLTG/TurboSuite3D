@@ -132,7 +132,7 @@ namespace TurboSuite.Dali.ViewModels
                     // Lock-aware: unlocked ⇒ fresh (zone-block → NW-seeded walk); locked ⇒ pin to the baseline
                     // and only append past the loop high-water, flagging moved/retired issued addresses.
                     var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, locked, roomOrder);
-                    string writeStatus = _writer.Write(addressing.TextByUnit);
+                    string? writeStatus = _writer.Write(addressing.TextByUnit);
                     return (object)new WriteResult(addressing, writeStatus, snapshot.UncircuitedDaliCount,
                                                    snapshot.Warnings);
                 },
@@ -142,6 +142,14 @@ namespace TurboSuite.Dali.ViewModels
 
                     ShowReviews(wr.Addressing);
                     AppendWarnings(wr.Warnings);
+
+                    // Refused lease / rolled-back commit: the writer already told the user why.
+                    if (wr.WriteStatus == null)
+                    {
+                        StatusText = "No addresses written — nothing was saved.";
+                        SetBusy(false);
+                        return;
+                    }
 
                     int addressed = wr.Addressing.TextByUnit.Count;
                     string msg = $"Wrote {addressed} DALI address{(addressed == 1 ? "" : "es")}.";
@@ -223,15 +231,25 @@ namespace TurboSuite.Dali.ViewModels
                     // Reconcile against the current state (fresh on first lock, pinned on re-lock so numbers
                     // don't move), write it, then freeze exactly what was written as the new baseline.
                     var addressing = DaliAddressReconciler.Reconcile(loops, snapshot.Units, baseline, wasLocked, roomOrder);
-                    string writeStatus = _writer.Write(addressing.TextByUnit);
-                    var captured = DaliSnapshotBuilder.Capture(addressing, "Locked");
-                    _store.SaveSnapshot(captured);
-                    return (object)new LockResult(addressing, captured, writeStatus,
+                    string? writeStatus = _writer.Write(addressing.TextByUnit);
+                    // Freeze only what actually landed: a refused or rolled-back write leaves the lock as it was.
+                    var captured = writeStatus != null ? DaliSnapshotBuilder.Capture(addressing, "Locked") : null;
+                    bool saved = captured != null && _store.SaveSnapshot(captured);
+                    return (object)new LockResult(addressing, saved ? captured : null, writeStatus,
                                                   snapshot.UncircuitedDaliCount, snapshot.Warnings);
                 },
                 result =>
                 {
                     var lr = (LockResult)result;
+                    if (lr.Snapshot == null)
+                    {
+                        StatusText = lr.WriteStatus == null
+                            ? "Numbering not locked — no addresses were written."
+                            : "Addresses written, but the lock couldn't be saved — numbering is unchanged.";
+                        SetBusy(false);
+                        return;
+                    }
+
                     _snapshot = lr.Snapshot;
                     OnLockChanged();
                     ShowReviews(lr.Addressing);   // a re-baseline clears them; a fresh lock has none
@@ -258,11 +276,17 @@ namespace TurboSuite.Dali.ViewModels
                 () =>
                 {
                     var cleared = new DaliSnapshotDto { NumberingState = "Unlocked" };
-                    _store.SaveSnapshot(cleared);
-                    return (object)cleared;
+                    return _store.SaveSnapshot(cleared) ? cleared : null!;
                 },
                 result =>
                 {
+                    if (result == null)
+                    {
+                        StatusText = "Numbering still locked — the unlock couldn't be saved.";
+                        SetBusy(false);
+                        return;
+                    }
+
                     _snapshot = (DaliSnapshotDto)result;
                     Reviews.Clear();
                     OnPropertyChanged(nameof(HasReviews));
@@ -345,7 +369,7 @@ namespace TurboSuite.Dali.ViewModels
 
         private sealed class WriteResult
         {
-            public WriteResult(DaliAddressing addressing, string writeStatus, int uncircuitedDaliCount,
+            public WriteResult(DaliAddressing addressing, string? writeStatus, int uncircuitedDaliCount,
                                IReadOnlyList<string> warnings)
             {
                 Addressing = addressing;
@@ -355,14 +379,14 @@ namespace TurboSuite.Dali.ViewModels
             }
 
             public DaliAddressing Addressing { get; }
-            public string WriteStatus { get; }
+            public string? WriteStatus { get; }
             public int UncircuitedDaliCount { get; }
             public IReadOnlyList<string> Warnings { get; }
         }
 
         private sealed class LockResult
         {
-            public LockResult(DaliAddressing addressing, DaliSnapshotDto snapshot, string writeStatus,
+            public LockResult(DaliAddressing addressing, DaliSnapshotDto? snapshot, string? writeStatus,
                               int uncircuitedDaliCount, IReadOnlyList<string> warnings)
             {
                 Addressing = addressing;
@@ -373,8 +397,8 @@ namespace TurboSuite.Dali.ViewModels
             }
 
             public DaliAddressing Addressing { get; }
-            public DaliSnapshotDto Snapshot { get; }
-            public string WriteStatus { get; }
+            public DaliSnapshotDto? Snapshot { get; }
+            public string? WriteStatus { get; }
             public int UncircuitedDaliCount { get; }
             public IReadOnlyList<string> Warnings { get; }
         }

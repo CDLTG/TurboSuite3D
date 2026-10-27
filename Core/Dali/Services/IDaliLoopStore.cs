@@ -19,7 +19,8 @@ namespace TurboSuite.Dali.Services
 
         /// <summary>Persist just the addressing numbering-lock baseline (Lock / Re-lock / Unlock). The mirror
         /// of <see cref="Save"/>: it writes only the <see cref="DaliModuleState.Snapshot"/> and preserves the
-        /// stored loops, so the two writers (tab loops vs. window lock) never clobber each other's field.</summary>
-        void SaveSnapshot(DaliSnapshotDto? snapshot);
+        /// stored loops, so the two writers (tab loops vs. window lock) never clobber each other's field.
+        /// Returns false when Revit rolled the save back (nothing persisted; the user has been told).</summary>
+        bool SaveSnapshot(DaliSnapshotDto? snapshot);
     }
 }

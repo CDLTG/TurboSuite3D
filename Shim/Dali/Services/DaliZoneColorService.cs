@@ -9,6 +9,7 @@ using TurboSuite.Dali.Overlay;
 using TurboSuite.Dali.Services;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Dali.Services
 {
@@ -90,7 +91,13 @@ namespace TurboSuite.Dali.Services
             if (toColor.Count == 0)
                 return "Zone colors skipped — no DALI Control-Zone fixtures or drivers are visible in the active view.";
 
+            // Worksharing: per-element overrides are a view-level edit, so the view is the working set. Refusal
+            // is a status note, not a dialog — the overlay is best-effort and re-applies on every refresh.
+            var lease = WorksharingLease.Acquire(doc, new[] { view.Id }, "view");
+            if (!lease.IsGranted) return "Zone colors skipped — " + lease.DenialMessage;
+
             ElementId solidFill = FindSolidFillPatternId(doc);
+            _appliedByView.TryGetValue(view.Id, out var previous);
 
             using (var tx = new Transaction(doc, "TurboDALI — color zones"))
             {
@@ -103,8 +110,13 @@ namespace TurboSuite.Dali.Services
                     view.SetElementOverrides(kvp.Key, MakeOverride(kvp.Value, solidFill));
                     applied.Add(kvp.Key);
                 }
+                if (!CommitGuard.TryCommit(tx))
+                {
+                    // Rolled back ⇒ the view still carries the previous overlay, so keep tracking that one.
+                    if (previous != null) _appliedByView[view.Id] = previous;
+                    return "Zone colors skipped — " + WorksharingMessages.RolledBack;
+                }
                 _appliedByView[view.Id] = applied;
-                tx.Commit();
             }
             return "";
         }
@@ -114,15 +126,18 @@ namespace TurboSuite.Dali.Services
             Document doc = _uidoc?.Document;
             if (doc == null || _appliedByView.Count == 0) return "";
 
+            // No lease: Apply already borrowed every view we colored, and the borrow holds until sync — which
+            // force-closes the window without a revert (ModelessWindowGuard).
+            bool committed;
             using (var tx = new Transaction(doc, "TurboDALI — revert zone colors"))
             {
                 tx.Start();
                 foreach (var viewId in _appliedByView.Keys.ToList())
                     ClearView(doc, doc.GetElement(viewId) as View);
-                tx.Commit();
+                committed = CommitGuard.TryCommit(tx);
             }
             _appliedByView.Clear();
-            return "";
+            return committed ? "" : WorksharingMessages.RolledBack;
         }
 
         /// <summary>Clear the overrides WE applied to <paramref name="view"/>, then forget them. Only touches
