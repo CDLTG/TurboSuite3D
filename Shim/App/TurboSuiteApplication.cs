@@ -79,7 +79,7 @@ public class TurboSuiteApplication : IExternalApplication
             PulldownButton scriptsPulldown = (PulldownButton)toolsPanel.AddItem(
                 new PulldownButtonData("TurboScripts", "   Scripts   "));
             scriptsPulldown.ToolTip = "Small single-shot scripts. Assign each its own keyboard shortcut in Revit's Keyboard Shortcuts.";
-            SetButtonIcons(scriptsPulldown, "Blank");
+            SetButtonIcons(scriptsPulldown, "TurboScripts");
 
             CreatePulldownItem(scriptsPulldown, assemblyPath,
                 "TurboNudge",
@@ -87,7 +87,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Nudge.NudgeCommand",
                 "Suggested shortcut: TN\nSlide a keypad to 5\" from a picked corner",
                 "Select a keypad (or run with one already selected), then snap to a door corner. The keypad slides along its wall to exactly 5\" from the corner, on the side it's already on. Works for hosted (3D) and unhosted (2D) families.",
-                "Blank");
+                "TurboScripts");
 
             CreatePulldownItem(scriptsPulldown, assemblyPath,
                 "TurboHighlight",
@@ -95,7 +95,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Highlight.HighlightCommand",
                 "Suggested shortcut: TH\nToggle the room highlight in the active plan view",
                 "3D jobs: turns Spaces on and toggles its subcategories (Color Fill, Interior, Reference) in Visibility/Graphics — all off → all on, otherwise all off. 2D jobs: toggles the visibility of the \"Highlight - Rooms\" filter. Refuses views with a view template applied — unassign it first.",
-                "Blank");
+                "TurboScripts");
 
             CreatePulldownItem(scriptsPulldown, assemblyPath,
                 "TurboFixtureFilter",
@@ -103,7 +103,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.FixtureFilter.FixtureFilterCommand",
                 "Suggested shortcut: TF\nNarrow the current selection to Lighting Fixtures",
                 "Select anything (window, crossing, Ctrl-click), then run this to keep only the Lighting Fixtures — the same result as Filter → Check None → Lighting Fixtures → OK. A selection with no Lighting Fixtures is left unchanged.",
-                "Blank");
+                "TurboScripts");
 
             CreatePulldownItem(scriptsPulldown, assemblyPath,
                 "TurboCompact",
@@ -111,7 +111,7 @@ public class TurboSuiteApplication : IExternalApplication
                 "TurboSuite.Compact.CompactCommand",
                 "Suggested shortcut: Ctrl+Shft+S\nClean and compact the active family",
                 "Removes unused materials from the active family document and saves with the compact option to reduce file size.",
-                "Blank");
+                "TurboScripts");
 
             // ── Commands panel ──
             CreateButton(commandsPanel, assemblyPath,
