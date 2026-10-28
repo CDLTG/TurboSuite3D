@@ -7,7 +7,7 @@ using TurboSuite.Setup.Models;
 namespace TurboSuite.Setup.Services;
 
 /// <summary>
-/// Creates Floor Plan / RCP views on the copied host levels and bakes in the firm view templates.
+/// Creates Floor Plan / RCP / Spaces views on the copied host levels and bakes in the firm view templates.
 /// Caller owns the transaction.
 ///
 /// Templates are applied via <see cref="View.ApplyViewTemplateParameters"/> — a one-shot copy of the
@@ -45,6 +45,7 @@ internal static class ViewGenerationService
 
         View floorTemplate = FindTemplate(hostDoc, SetupConstants.FloorPlanViewTemplateName);
         View rcpTemplate = FindTemplate(hostDoc, SetupConstants.RcpViewTemplateName);
+        View spacesTemplate = FindTemplate(hostDoc, SetupConstants.SpacesViewTemplateName);
 
         // Existing host view names — case-insensitive skip set.
         var existingNames = new HashSet<string>(
@@ -66,7 +67,8 @@ internal static class ViewGenerationService
             if (!sourceToHostLevel.TryGetValue(planned.SourceLevelId, out var hostLevel) || hostLevel == null)
                 continue;
 
-            ElementId vft = planned.Kind == ViewKind.Floor ? floorVft : ceilingVft;
+            // Spaces views are floor plans — only RCPs take the ceiling plan family.
+            ElementId vft = planned.Kind == ViewKind.Rcp ? ceilingVft : floorVft;
             if (vft == null || vft == ElementId.InvalidElementId)
                 continue;
 
@@ -75,7 +77,13 @@ internal static class ViewGenerationService
 
             // Bake in the template settings as a one-shot baseline, then leave the view free
             // (ViewTemplateId stays None) so link graphics overrides can be applied afterward.
-            View template = planned.Kind == ViewKind.Floor ? floorTemplate : rcpTemplate;
+            View template = planned.Kind switch
+            {
+                ViewKind.Floor => floorTemplate,
+                ViewKind.Rcp => rcpTemplate,
+                ViewKind.Spaces => spacesTemplate,
+                _ => null
+            };
             if (template != null)
                 view.ApplyViewTemplateParameters(template);
 

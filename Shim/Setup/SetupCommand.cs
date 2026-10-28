@@ -16,7 +16,7 @@ namespace TurboSuite.Setup;
 
 /// <summary>
 /// TurboSetup — automates new-project setup: copy levels from the linked architectural model,
-/// create Floor Plan + RCP views per level, assign firm view templates, and wire each view's
+/// create Floor Plan + RCP (+ Spaces, when AL_Spaces exists) views per level, assign firm view templates, and wire each view's
 /// link graphics to a chosen architectural view. v1 handles the 3D (RVT-linked) workflow only;
 /// 2D (CAD-linked) projects get a clean "not yet supported" message.
 /// </summary>
@@ -108,6 +108,11 @@ public class SetupCommand : IExternalCommand
                 return Result.Cancelled;
             }
 
+            // AL_Spaces is optional: without it the Spaces views are left out (noted in the summary)
+            // rather than blocking the rest of the setup.
+            bool spacesTemplatePresent =
+                ViewGenerationService.FindTemplateId(doc, SetupConstants.SpacesViewTemplateName) != null;
+
             // ── Stage 1: link + level picker ──
             var linkOptions = loadedLinks
                 .Select(l => new TurboSetupLinkLevelViewModel.LinkOption(l.Id, l.Name, l.GetLinkDocument()))
@@ -145,9 +150,10 @@ public class SetupCommand : IExternalCommand
                     Index = idx
                 });
 
+                string floorViewName = $"{idx} - {SetupConstants.FloorViewSuffix}";
                 plannedViews.Add(new PlannedView
                 {
-                    ViewName = $"{idx} - {SetupConstants.FloorViewSuffix}",
+                    ViewName = floorViewName,
                     Kind = ViewKind.Floor,
                     SourceLevelId = row.SourceLevelId,
                     LevelName = row.Name
@@ -159,6 +165,18 @@ public class SetupCommand : IExternalCommand
                     SourceLevelId = row.SourceLevelId,
                     LevelName = row.Name
                 });
+                if (spacesTemplatePresent)
+                {
+                    plannedViews.Add(new PlannedView
+                    {
+                        ViewName = $"{idx} - {SetupConstants.SpacesViewSuffix}",
+                        Kind = ViewKind.Spaces,
+                        SourceLevelId = row.SourceLevelId,
+                        LevelName = row.Name,
+                        // Same level, same architect floor plan — no row of its own in Stage 2.
+                        LinkMappingSourceViewName = floorViewName
+                    });
+                }
             }
 
             // ── Stage 2: view mapping (only when the running Revit can apply link overrides) ──
@@ -172,7 +190,7 @@ public class SetupCommand : IExternalCommand
                 var linkedFloorViews = CollectLinkedViews(linkDoc, ViewType.FloorPlan);
                 var linkedCeilingViews = CollectLinkedViews(linkDoc, ViewType.CeilingPlan);
 
-                var stage2Rows = plannedViews.Select(pv =>
+                var stage2Rows = plannedViews.Where(pv => pv.LinkMappingSourceViewName == null).Select(pv =>
                 {
                     var candidates = pv.Kind == ViewKind.Floor ? linkedFloorViews : linkedCeilingViews;
                     var row = new TurboSetupViewMappingViewModel.ViewMappingRow
@@ -202,11 +220,22 @@ public class SetupCommand : IExternalCommand
                     return Result.Cancelled;
 
                 mapping = stage2Vm.GetMapping();
+
+                // Rowless views take their sibling's choice (including "(none)").
+                foreach (var pv in plannedViews.Where(p => p.LinkMappingSourceViewName != null))
+                {
+                    if (mapping.TryGetValue(pv.LinkMappingSourceViewName, out var siblingLinkedViewId))
+                        mapping[pv.ViewName] = siblingLinkedViewId;
+                }
             }
 
             // ── Execution ──
             var result = Execute(uidoc, doc, linkDoc, linkInstance, linkTransform,
                 selectedLevels, plannedViews, mapping, linkSupported);
+
+            if (!spacesTemplatePresent)
+                result.Notes.Add(
+                    $"View template \"{SetupConstants.SpacesViewTemplateName}\" not found — Spaces views were not created.");
 
             string summary =
                 "TurboSetup Complete\n\n" +

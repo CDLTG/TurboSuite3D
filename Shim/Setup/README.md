@@ -24,6 +24,7 @@ A summary dialog reports what was copied, created, skipped, and applied.
 
 - **Copies levels** from the linked arch model into the host, then deletes the host template's original placeholder levels (switching the active view off them first so the cascade delete is allowed).
 - **Creates a Floor Plan and RCP view per selected level**, named `{NN} - Floor - Lighting` / `{NN} - RCP - Lighting`, each baked with its firm template (`AL_Floor Plan` / `AL_RCP`) in one shot so the views stay free to take link overrides.
+- **Creates a Spaces floor plan per selected level**, named `{NN} - Floor - Spaces`, baked with `AL_Spaces` the same one-shot way. It has no Stage 2 row: it takes the linked view chosen for its level's Floor view. `AL_Spaces` is optional — without it the Spaces views are skipped and the summary says so, rather than blocking the run.
 - **Hides the linked Toposolid** on every `AL_`-prefixed lighting template before view creation, so the suppression carries into generated views and later section/elevation views alike.
 - **(Revit 2025) Applies the firm link-graphics hybrid** and copies the architect's view range onto each mapped host view, targeting the link *type* so the override lands on the row the V/G dialog shows.
 
@@ -35,6 +36,7 @@ The whole run is wrapped in a `TransactionGroup` — any failure rolls back clea
 |-------------|---------|
 | A **loaded** RVT architectural link | Source of levels and (2025) linked views; an unloaded or absent link is reported and the command exits |
 | Firm view templates `AL_Floor Plan` and `AL_RCP` | Applied to generated views; missing templates fail fast before any change |
+| Firm view template `AL_Spaces` *(optional)* | Applied to the Spaces views; missing → Spaces views skipped, noted in the summary |
 
 ### Version behavior
 
@@ -45,7 +47,7 @@ The whole run is wrapped in a `TransactionGroup` — any failure rolls back clea
 
 - **3D RVT-linked projects only.** 2D CAD-linked drafting setup is not yet supported — those projects get a clean "not yet supported" message.
 - Firm standards (template names, view-name suffixes, the `AL_` prefix) are baked into `SetupConstants` — they live in the host project template, so there's no Settings UI or ExtensibleStorage.
-- Views whose target name already exists are skipped (reported in the summary), so re-running is safe.
+- Views whose target name already exists are skipped (reported in the summary). **This does not make re-running safe on a set-up project:** every run deletes all levels that existed before it, cascade-deleting the views (and their annotation) on them. Project Setup is a new-project operation only.
 
 ## Space naming
 

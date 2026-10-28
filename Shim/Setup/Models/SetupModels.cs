@@ -8,7 +8,10 @@ namespace TurboSuite.Setup.Models;
 internal enum ViewKind
 {
     Floor,
-    Rcp
+    Rcp,
+
+    /// <summary>A floor plan carrying the <c>AL_Spaces</c> template instead of <c>AL_Floor Plan</c>.</summary>
+    Spaces
 }
 
 /// <summary>
@@ -42,6 +45,12 @@ internal sealed class PlannedView
     public ElementId SourceLevelId { get; set; }
 
     public string LevelName { get; set; }
+
+    /// <summary>
+    /// When set, this view gets no Stage 2 row of its own and takes the linked view chosen for the
+    /// named sibling instead (the Spaces view follows its level's Floor view). Null = own row.
+    /// </summary>
+    public string LinkMappingSourceViewName { get; set; }
 }
 
 /// <summary>Outcome counts from an execution, shown in the post-run summary.</summary>
