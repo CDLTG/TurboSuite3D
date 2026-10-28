@@ -18,7 +18,7 @@ namespace TurboSuite.Name.ViewModels;
 /// and the merged Generate-Regions surface (auto / rectangle / polygon), and drives every Revit write through
 /// one shared <see cref="ExternalEvent"/> + <see cref="TurboNameApiHandler"/> (see CLAUDE.md "Modeless
 /// pattern"). Exactly one request is in flight at a time — the shared event silently drops a second raise, so
-/// user actions are gated on <c>_eventBusy</c>. Settings are dirty-tracked and saved once, on close.
+/// user actions are gated on <see cref="IsBusy"/>. Settings are dirty-tracked and saved once, on close.
 /// </summary>
 public class TurboNameViewModel : ViewModelBase
 {
@@ -68,7 +68,7 @@ public class TurboNameViewModel : ViewModelBase
     private readonly HashSet<ElementId> _painted = new();
 
     // ── Shared-event gate + close/save coordination ──
-    private bool _eventBusy;       // a request is queued/running on the shared event
+    private bool _isBusy;          // a request is queued/running on the shared event (see IsBusy)
     private bool _closeAfterCurrent; // close was requested while a request was in flight
     private bool _saveThenClose;   // the on-close cleanup has been raised; the next close attempt may proceed
 
@@ -85,8 +85,17 @@ public class TurboNameViewModel : ViewModelBase
     public int CreatedCount { get => _createdCount; set => SetProperty(ref _createdCount, value); }
     public int FailedCount { get => _failedCount; set => SetProperty(ref _failedCount, value); }
     /// <summary>
-    /// True while a request owns the shared external event. Gates every button's <c>CanExecute</c> and hides
-    /// the action row.
+    /// True while a region-drawing / hide-by-picking request is running. Visual only: hides the action row and
+    /// shows <see cref="PickingHint"/>. Button gating is <see cref="IsBusy"/>, which covers every request.
+    /// </summary>
+    public bool IsPicking { get => _isPicking; set => SetProperty(ref _isPicking, value); }
+
+    /// <summary>
+    /// True while ANY request owns the shared external event — set in <see cref="RaiseInternal"/>, cleared by its
+    /// OnFinished wrapper. Gates every raising button's <c>CanExecute</c> (including the CAD Room Source picks,
+    /// via <see cref="CadRoomSourceConfigViewModel.IsHostBusy"/>). Separate from <see cref="IsPicking"/> because
+    /// Pick from view runs a PickObject without hiding the action row: Revit pumps messages during the pick, so
+    /// Rectangle/Polygon stayed clickable and the click was dropped by the busy event without a word.
     /// </summary>
     /// <remarks>
     /// The explicit <see cref="CommandManager.InvalidateRequerySuggested"/> is load-bearing.
@@ -96,12 +105,14 @@ public class TurboNameViewModel : ViewModelBase
     /// or into the Revit view. Auto-generate's clear prompt made that reliably reproducible (cancelling the
     /// TaskDialog returns focus to Revit, not to us), but any Revit-focused ending had the same latent bug.
     /// </remarks>
-    public bool IsPicking
+    private bool IsBusy
     {
-        get => _isPicking;
+        get => _isBusy;
         set
         {
-            if (!SetProperty(ref _isPicking, value)) return;
+            if (_isBusy == value) return;
+            _isBusy = value;
+            CadConfig.IsHostBusy = value;
             OnPropertyChanged(nameof(LineEditingEnabled));
             CommandManager.InvalidateRequerySuggested();
         }
@@ -119,8 +130,8 @@ public class TurboNameViewModel : ViewModelBase
     }
 
     /// <summary>Bound by the per-row line-edit (✎) buttons' IsEnabled. Off while the red preview is showing (they
-    /// share the override slot) or a pick loop is running (the shared event is busy, so an apply would drop).</summary>
-    public bool LineEditingEnabled => !_isPreviewActive && !_isPicking;
+    /// share the override slot) or a request is in flight (the shared event is busy, so an apply would drop).</summary>
+    public bool LineEditingEnabled => !_isPreviewActive && !_isBusy;
 
     private bool _isHidePicking;
     /// <summary>True while the "Hide by picking" loop owns the cursor — drives the button's lit state. The loop
@@ -156,12 +167,12 @@ public class TurboNameViewModel : ViewModelBase
         LayersView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(CadLayerRowViewModel.FileName)));
         LayersView.Filter = LayerFilter;
 
-        RunAssignCommand = new RelayCommand(OnAssign, () => !IsPicking);
-        AutoGenerateCommand = new RelayCommand(OnAutoGenerate, () => !IsPicking);
-        RectangleCommand = new RelayCommand(OnRectangle, () => !IsPicking);
-        PolygonCommand = new RelayCommand(OnPolygon, () => !IsPicking);
-        TogglePreviewCommand = new RelayCommand(TogglePreview, () => !IsPicking);
-        HideByPickCommand = new RelayCommand(OnHideByPick, () => !IsPicking && Layers.Count > 0);
+        RunAssignCommand = new RelayCommand(OnAssign, () => !IsBusy);
+        AutoGenerateCommand = new RelayCommand(OnAutoGenerate, () => !IsBusy);
+        RectangleCommand = new RelayCommand(OnRectangle, () => !IsBusy);
+        PolygonCommand = new RelayCommand(OnPolygon, () => !IsBusy);
+        TogglePreviewCommand = new RelayCommand(TogglePreview, () => !IsBusy);
+        HideByPickCommand = new RelayCommand(OnHideByPick, () => !IsBusy && Layers.Count > 0);
     }
 
     /// <summary>Pattern-dropdown roster for the Line Graphics flyout, read once in a valid API context.</summary>
@@ -411,7 +422,7 @@ public class TurboNameViewModel : ViewModelBase
     public bool TryClose()
     {
         if (_saveThenClose) return true;
-        if (_eventBusy)
+        if (IsBusy)
         {
             _closeAfterCurrent = true; // defer until the in-flight request finishes
             return false;
@@ -421,33 +432,46 @@ public class TurboNameViewModel : ViewModelBase
         if (!needsSave && !needsRevert) return true;
 
         _saveThenClose = true;
-        RaiseInternal(new CloseCleanupRequest
+        bool raised = RaiseInternal(new CloseCleanupRequest
         {
             Settings = needsSave ? CadConfig.ToModel() : null,
             RevertPreviews = needsRevert,
             OnFinished = () => { SettingsDirty = false; RequestClose?.Invoke(); }
         });
-        return false;
+        if (raised) return false;
+
+        // Revit refused the cleanup raise. Let the window close rather than trap the user in it, but say what
+        // was lost — the settings save and preview revert only ever run through that request.
+        TaskDialog.Show("TurboName",
+            "Revit didn't accept TurboName's close-out request, so this session's CAD Room Source changes were " +
+            "not saved" + (needsRevert ? " and the red layer preview is still applied to the view." : "."));
+        return true;
     }
 
     // ── Shared-event plumbing ──
 
     /// <summary>Raise a user-initiated request. No-ops (returns false) if a request is already in flight — the
-    /// single shared event would silently drop it.</summary>
+    /// single shared event would silently drop it — or if Revit refuses the raise.</summary>
     private bool RaiseUser(TurboNameRequest request)
     {
-        if (_eventBusy) return false;
-        RaiseInternal(request);
-        return true;
+        if (IsBusy) return false;
+        if (RaiseInternal(request)) return true;
+        StatusText = "Revit didn't accept the request — try again.";
+        return false;
     }
 
-    private void RaiseInternal(TurboNameRequest request)
+    // Returns false if Revit refuses the raise. The busy latch is then released right here: the handler will
+    // never run, so nothing else would ever free it, and every later click would be dropped. The request's own
+    // OnFinished is deliberately NOT run — for the close cleanup it would close the window as if the save had
+    // happened; callers already undo their optimistic state on a false return. Pending counts as raised: the
+    // event fires once and runs whatever CurrentRequest holds at that point, which is this request.
+    private bool RaiseInternal(TurboNameRequest request)
     {
         var userFinished = request.OnFinished;
         request.OnFinished = () =>
         {
             userFinished?.Invoke();
-            _eventBusy = false;
+            IsBusy = false;
             if (_closeAfterCurrent)
             {
                 _closeAfterCurrent = false;
@@ -455,7 +479,13 @@ public class TurboNameViewModel : ViewModelBase
             }
         };
         _handler.CurrentRequest = request;
-        _eventBusy = true;
-        _event.Raise();
+        IsBusy = true;
+
+        var accepted = _event.Raise();
+        if (accepted is ExternalEventRequest.Accepted or ExternalEventRequest.Pending) return true;
+
+        _handler.CurrentRequest = null;
+        IsBusy = false;
+        return false;
     }
 }

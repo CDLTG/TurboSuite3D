@@ -31,7 +31,7 @@ public class TurboNameApiHandler : IExternalEventHandler
     // thread (spike-confirmed thread id 1, same thread the modeless window lives on), so CurrentDispatcher here
     // is the window's dispatcher. Do NOT dispatch via System.Windows.Application.Current — on Revit 2024 there
     // is no WPF Application, so Application.Current is null and Application.Current?.Dispatcher?.BeginInvoke is a
-    // silent no-op. That dropped every completion callback, so the _eventBusy latch never reset and the window
+    // silent no-op. That dropped every completion callback, so the ViewModel's busy latch never reset and the window
     // locked (couldn't act, couldn't close). Spike-confirmed null on 2024; present on 2025/2026.
     private readonly Dispatcher _dispatcher;
 
@@ -114,9 +114,12 @@ public class TurboNameApiHandler : IExternalEventHandler
                     break;
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            Dispatch(() => request.OnComplete?.Invoke(new PickLoopUpdate(0, 0, true)));
+            // Report, never swallow: a silent catch here made a PickPoint failure (view with no work plane) look
+            // like the button did nothing. No PickLoopUpdate either — a loop that created regions before throwing
+            // keeps the running totals its incremental updates already set, instead of being zeroed.
+            Dispatch(() => TaskDialog.Show("TurboName", $"Something went wrong:\n\n{ex.Message}"));
             Finish(request);
         }
     }
@@ -184,6 +187,7 @@ public class TurboNameApiHandler : IExternalEventHandler
         var settings = _settingsProvider();
         var regionTypeId = ResolveRegionTypeId(settings, out string error);
         if (regionTypeId == ElementId.InvalidElementId) { ReportError(request, error); return; }
+        if (!EnsureWorkPlane()) { NotifyLoopEnded(request, 0, 0); return; }
 
         int created = 0;
         int failed = 0;
@@ -230,6 +234,7 @@ public class TurboNameApiHandler : IExternalEventHandler
         var settings = _settingsProvider();
         var regionTypeId = ResolveRegionTypeId(settings, out string error);
         if (regionTypeId == ElementId.InvalidElementId) { ReportError(request, error); return; }
+        if (!EnsureWorkPlane()) { NotifyLoopEnded(request, 0, 0); return; }
 
         int created = 0;
         int failed = 0;
@@ -276,6 +281,26 @@ public class TurboNameApiHandler : IExternalEventHandler
         }
 
         NotifyLoopEnded(request, created, failed);
+    }
+
+    // PickPoint throws InvalidOperationException when the view has no work plane, and a plan view can lack one
+    // (seen on 2D-template views). Give it one at the view's level — left in place, not a TurboBubble-style
+    // temp plane: a plan without a work plane is a defect of the view, and restoring it would mean extra commits
+    // around a loop that already commits per region. The view is in the session lease; the new SketchPlane is a
+    // new element, so nothing needs borrowing. Returns false only if the commit was rolled back (already
+    // reported by CommitOrReport).
+    private bool EnsureWorkPlane()
+    {
+        if (_view.SketchPlane != null) return true;
+
+        var level = _view.GenLevel;
+        var origin = level != null ? new XYZ(0, 0, level.ProjectElevation) : _view.Origin;
+        using (var tx = new Transaction(_doc, "TurboName - Set Work Plane"))
+        {
+            tx.Start();
+            _view.SketchPlane = SketchPlane.Create(_doc, Plane.CreateByNormalAndOrigin(_view.ViewDirection, origin));
+            return CommitOrReport(tx);
+        }
     }
 
     private ElementId DrawGuideLine(XYZ from, XYZ to)

@@ -30,6 +30,12 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     private readonly bool _canPick;
     private string _detectedText;
 
+    /// <summary>Set by the owning <see cref="TurboNameViewModel"/> while its shared external event is busy, so the
+    /// two pick buttons grey out instead of raising into a busy event. A plain property on purpose: raising
+    /// PropertyChanged here would mark the settings dirty (the owner treats any change as an edit); the owner's
+    /// InvalidateRequerySuggested is what re-queries the buttons.</summary>
+    public bool IsHostBusy { get; set; }
+
     private bool _isBlockMode = true;
     private bool _isTextMode;
     private string _blockName;
@@ -145,8 +151,8 @@ public class CadRoomSourceConfigViewModel : ViewModelBase
     {
         _uidoc = uidoc;
         LoadCadSettings(cadSettings);
-        PickFromViewCommand = new RelayCommand(() => PickFromViewRequested?.Invoke(), () => _canPick);
-        PickHeightBlockCommand = new RelayCommand(() => PickHeightBlockRequested?.Invoke(), () => _canPick);
+        PickFromViewCommand = new RelayCommand(() => PickFromViewRequested?.Invoke(), () => _canPick && !IsHostBusy);
+        PickHeightBlockCommand = new RelayCommand(() => PickHeightBlockRequested?.Invoke(), () => _canPick && !IsHostBusy);
         RemoveRoomNameTagCommand = new RelayCommand<string>(RemoveRoomNameTag);
         ClearCeilingHeightTagCommand = new RelayCommand(() => CeilingHeightTag = "");
         ClearHeightBlockTagCommand = new RelayCommand(() => CeilingHeightBlockTag = "");
