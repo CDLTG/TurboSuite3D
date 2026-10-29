@@ -45,9 +45,12 @@ public class DocsSettings
     // Load Schedule export mode: false = By Circuit (flat list, default), true = By Room (grouped).
     public bool LoadsByRoom { get; set; }
     // By-Circuit page size: false = Letter (default), true = 8.5x28.5 construction strip. Only
-    // meaningful when !LoadsByRoom — the three Format radios are mutually exclusive, so the
+    // meaningful when !LoadsByRoom — the Format radios are mutually exclusive, so the
     // invalid (LoadsByRoom && LoadsUseLargeFormat) pair is never written.
     public bool LoadsUseLargeFormat { get; set; }
+    // Excel (By Circuit) export: when true it wins over both flags above. Like them, only one of
+    // the three is ever written true, so each Format radio round-trips on its own.
+    public bool LoadsExportExcel { get; set; }
 
     // Power Supplies tab settings
     public List<string> RPSSelectedTypeMarks { get; set; } = new();

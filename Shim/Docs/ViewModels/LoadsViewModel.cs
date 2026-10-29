@@ -12,11 +12,12 @@ using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Docs.ViewModels;
 
-/// <summary>The three mutually-exclusive Load Schedule outputs. Page size is not an orthogonal
+/// <summary>The four mutually-exclusive Load Schedule outputs. Page size is not an orthogonal
 /// axis here — the 28.5" construction strip only exists for By Circuit — so it collapses into a
 /// single radio group rather than a separate Page Size row (contrast the Power Supplies tab,
-/// where Large applies to all outputs and stays orthogonal).</summary>
-public enum LoadsFormat { ByCircuit, ByCircuitConstruction, ByRoom }
+/// where Large applies to all outputs and stays orthogonal). <see cref="ExcelByCircuit"/> is the
+/// By Circuit list written to .xlsx instead of PDF.</summary>
+public enum LoadsFormat { ByCircuit, ByCircuitConstruction, ByRoom, ExcelByCircuit }
 
 public class LoadsViewModel : ViewModelBase
 {
@@ -33,7 +34,7 @@ public class LoadsViewModel : ViewModelBase
     public string ProjectName { get; }
     public ObservableCollection<LoadsCircuitModel> Circuits { get; } = new();
 
-    /// <summary>Backing field for the three Format radios. Each radio binds one of the IsXxx
+    /// <summary>Backing field for the four Format radios. Each radio binds one of the IsXxx
     /// bool properties; their setters only act on a true (a click that selects) and ignore the
     /// false the group raises on the deselected radio — the enum is the single source of truth.</summary>
     private LoadsFormat Format
@@ -46,6 +47,7 @@ public class LoadsViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsByCircuit));
                 OnPropertyChanged(nameof(IsByCircuitConstruction));
                 OnPropertyChanged(nameof(IsByRoom));
+                OnPropertyChanged(nameof(IsExcelByCircuit));
                 System.Windows.Input.CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -67,6 +69,12 @@ public class LoadsViewModel : ViewModelBase
     {
         get => _format == LoadsFormat.ByRoom;
         set { if (value) Format = LoadsFormat.ByRoom; }
+    }
+
+    public bool IsExcelByCircuit
+    {
+        get => _format == LoadsFormat.ExcelByCircuit;
+        set { if (value) Format = LoadsFormat.ExcelByCircuit; }
     }
 
     public double Progress
@@ -110,22 +118,25 @@ public class LoadsViewModel : ViewModelBase
         _roomOrder = roomOrder ?? new List<string>();
 
         var settings = DocsSettingsService.Load();
-        // ByRoom wins; otherwise the stored page-size flag picks Letter vs Construction.
-        _format = settings.LoadsByRoom
-            ? LoadsFormat.ByRoom
-            : settings.LoadsUseLargeFormat ? LoadsFormat.ByCircuitConstruction : LoadsFormat.ByCircuit;
+        // Excel wins, then ByRoom; otherwise the stored page-size flag picks Letter vs Construction.
+        _format = settings.LoadsExportExcel ? LoadsFormat.ExcelByCircuit
+            : settings.LoadsByRoom ? LoadsFormat.ByRoom
+            : settings.LoadsUseLargeFormat ? LoadsFormat.ByCircuitConstruction
+            : LoadsFormat.ByCircuit;
         OnPropertyChanged(nameof(IsByCircuit));
         OnPropertyChanged(nameof(IsByCircuitConstruction));
         OnPropertyChanged(nameof(IsByRoom));
+        OnPropertyChanged(nameof(IsExcelByCircuit));
     }
 
     public void SaveSettings()
     {
         var settings = DocsSettingsService.Load();
-        // Never write the invalid (ByRoom && Large) pair — the three states map cleanly onto
-        // the two flags, so By Circuit ↔ Construction round-trips even after a By Room detour.
+        // At most one flag is ever written true — the four states map cleanly onto the three
+        // flags (all false = By Circuit), so every radio round-trips on its own.
         settings.LoadsByRoom = _format == LoadsFormat.ByRoom;
         settings.LoadsUseLargeFormat = _format == LoadsFormat.ByCircuitConstruction;
+        settings.LoadsExportExcel = _format == LoadsFormat.ExcelByCircuit;
         DocsSettingsService.Save(settings);
     }
 
@@ -144,18 +155,29 @@ public class LoadsViewModel : ViewModelBase
 
         LoadsFormat format = _format;
 
-        // Distinct default names so the three exports can co-exist in one folder.
+        bool isExcel = format == LoadsFormat.ExcelByCircuit;
+
+        // Distinct default names so the exports can co-exist in one folder.
         var saveDialog = new SaveFileDialog
         {
-            Filter = "PDF Files|*.pdf",
+            Filter = isExcel ? "Excel Files|*.xlsx" : "PDF Files|*.pdf",
             FileName = format switch
             {
+                LoadsFormat.ExcelByCircuit => $"{ProjectName} Load Schedule.xlsx",
                 LoadsFormat.ByRoom => $"{ProjectName} Load Schedule by Room.pdf",
                 LoadsFormat.ByCircuitConstruction => $"{ProjectName} Load Schedule (Construction).pdf",
                 _ => $"{ProjectName} Load Schedule.pdf",
             }
         };
         if (saveDialog.ShowDialog() != true) return;
+
+        // Re-exporting over a workbook still open in Excel fails on save with an opaque
+        // IOException — catch it up front and say what to do.
+        if (isExcel && FileLockHelper.IsFileLocked(saveDialog.FileName))
+        {
+            StatusText = $"{Path.GetFileName(saveDialog.FileName)} is open. Close it in Excel, then try again.";
+            return;
+        }
 
         _parent.SaveSettings();
         IsGenerating = true;
@@ -186,6 +208,9 @@ public class LoadsViewModel : ViewModelBase
             {
                 switch (format)
                 {
+                    case LoadsFormat.ExcelByCircuit:
+                        LoadsWorkbookService.Generate(byCircuitList, ProjectName, outputPath);
+                        break;
                     case LoadsFormat.ByRoom:
                         LoadsPdfService.GenerateByRoom(sections!, ProjectName, outputPath, settings);
                         break;
