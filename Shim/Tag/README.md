@@ -12,9 +12,14 @@ Tag families are matched by their `TurboSuite Role` type parameter, not by famil
 | Line-based (linear) | `LinearTag` | Up/Down (prompted) |
 | Line-based, **Combined** | `RunLengthTag` | One tag per continuous run (end-to-end adjacency), on the middle fixture, summed run length |
 | Line-based, **Combined Forced** | `RunLengthTag` | All selected linears as one run regardless of adjacency — for curved end-caps / geometry that breaks adjacency detection |
+| Line-based, **vertical** (tape run up a wall) | `LinearTag` / `RunLengthTag` | Same Up/Down/Combined prompt picks the tag type; position is auto — offset along the wall normal past the symbol |
 | Face-based (wall sconce) | `FixtureTypeTag` | Auto — offset along wall normal |
 
 Point/face offsets are computed from each fixture's `Symbol Length`, `Symbol Width`, and the type-mark text width.
+
+Any line-based fixture takes the linear path, **even when it is hosted on a wall face** (`IsOnVerticalFace`) or carries a wall role — the face-based path needs a `LocationPoint`, so tape routed there used to get no tag at all. "Vertical" is geometric, not a role (`GeometryHelper.IsVerticalLineBasedFixture`: line within ~3° of plumb), because one tape family is placed both flat and vertical; a tilted run with a real plan projection takes the ordinary linear path.
+
+Any element a placement path skips (no location, Revit refuses the tag, an exception) is listed in one dialog at the end of the run and left selected. Successes are not reported.
 
 ## Plan scale
 

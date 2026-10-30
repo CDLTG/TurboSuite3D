@@ -30,8 +30,12 @@ public class TagCommand : IExternalCommand
 {
     private IntPtr _revitHandle;
 
+    // Every element a placement path skipped, with why — reported once at the end of a successful run.
+    private readonly List<(FamilyInstance Element, string Reason)> _failures = new();
+
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
+        _failures.Clear();
         UIDocument uidoc = commandData.Application.ActiveUIDocument;
         Document doc = uidoc.Document;
         _revitHandle = commandData.Application.MainWindowHandle;
@@ -67,9 +71,11 @@ public class TagCommand : IExternalCommand
             if (!Lease(doc, existingTagIds, "tag"))
                 return Result.Cancelled;
 
-            var faceBasedFixtures = selectedFixtures.Where(f => GeometryHelper.IsOnVerticalFace(f) || GeometryHelper.IsWallSconce(f) || GeometryHelper.IsVerticalFamily(f)).ToList();
-            var lineBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f) && GeometryHelper.IsLineBasedFixture(f)).ToList();
-            var pointBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f) && !GeometryHelper.IsLineBasedFixture(f)).ToList();
+            // Line-based wins: the face-based path needs a LocationPoint, and tape hosted on a wall face
+            // also reads IsOnVerticalFace, so it used to land there and silently get no tag.
+            var lineBasedFixtures = selectedFixtures.Where(GeometryHelper.IsLineBasedFixture).ToList();
+            var faceBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsLineBasedFixture(f) && (GeometryHelper.IsOnVerticalFace(f) || GeometryHelper.IsWallSconce(f) || GeometryHelper.IsVerticalFamily(f))).ToList();
+            var pointBasedFixtures = selectedFixtures.Where(f => !GeometryHelper.IsLineBasedFixture(f) && !GeometryHelper.IsOnVerticalFace(f) && !GeometryHelper.IsWallSconce(f) && !GeometryHelper.IsVerticalFamily(f)).ToList();
 
             if (faceBasedFixtures.Count > 0)
             {
@@ -156,6 +162,7 @@ public class TagCommand : IExternalCommand
                 PlaceKeypadTags(doc, selectedKeypads, keypadTagType, keypadTwoGangTagType, g);
             }
 
+            ReportFailures(uidoc);
             return Result.Succeeded;
         }
         catch (Autodesk.Revit.Exceptions.OperationCanceledException)
@@ -184,6 +191,32 @@ public class TagCommand : IExternalCommand
         if (lease.IsGranted) return true;
         TaskDialog.Show("TurboTag", lease.DenialMessage);
         return false;
+    }
+
+    /// <summary>Record an element the run could not tag; always returns false so a TryPlace* can
+    /// <c>return Fail(...)</c>.</summary>
+    private bool Fail(FamilyInstance element, string reason)
+    {
+        _failures.Add((element, reason));
+        return false;
+    }
+
+    /// <summary>Name every element the run could not tag and leave them selected, so a skip is never silent.
+    /// Successes are not reported.</summary>
+    private void ReportFailures(UIDocument uidoc)
+    {
+        if (_failures.Count == 0)
+            return;
+
+        const int maxListed = 15;
+        var lines = _failures.Take(maxListed)
+            .Select(f => $"  {f.Element.Symbol?.FamilyName} : {f.Element.Symbol?.Name} (id {f.Element.Id}): {f.Reason}");
+        string more = _failures.Count > maxListed ? $"\n  …and {_failures.Count - maxListed} more" : string.Empty;
+        string noun = _failures.Count == 1 ? "element was" : "elements were";
+
+        uidoc.Selection.SetElementIds(_failures.Select(f => f.Element.Id).Distinct().ToList());
+        TaskDialog.Show("TurboTag",
+            $"{_failures.Count} {noun} not tagged (left selected):\n{string.Join("\n", lines)}{more}");
     }
 
     private static bool IsValidViewType(View view)
@@ -302,7 +335,7 @@ public class TagCommand : IExternalCommand
         try
         {
             if (device.Location is not LocationPoint locPoint)
-                return false;
+                return Fail(device, "no location point");
 
             XYZ location = locPoint.Point;
 
@@ -313,15 +346,11 @@ public class TagCommand : IExternalCommand
                 TagOrientation.Horizontal,
                 location);
 
-            return tag != null;
+            return tag != null || Fail(device, "Revit did not create the tag");
         }
-        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+        catch (Exception ex)
         {
-            return false;
-        }
-        catch
-        {
-            return false;
+            return Fail(device, ex.Message);
         }
     }
 
@@ -368,7 +397,7 @@ public class TagCommand : IExternalCommand
         try
         {
             if (keypad.Location is not LocationPoint locPoint)
-                return false;
+                return Fail(keypad, "no location point");
 
             XYZ keypadLocation = locPoint.Point;
 
@@ -380,7 +409,7 @@ public class TagCommand : IExternalCommand
                 keypadLocation);
 
             if (tag == null)
-                return false;
+                return Fail(keypad, "Revit did not create the tag");
 
             XYZ globalOffset;
             double angle;
@@ -439,13 +468,9 @@ public class TagCommand : IExternalCommand
 
             return true;
         }
-        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+        catch (Exception ex)
         {
-            return false;
-        }
-        catch
-        {
-            return false;
+            return Fail(keypad, ex.Message);
         }
     }
 
@@ -486,7 +511,7 @@ public class TagCommand : IExternalCommand
         try
         {
             if (fixture.Location is not LocationPoint locPoint)
-                return false;
+                return Fail(fixture, "no location point");
 
             XYZ fixtureLocation = locPoint.Point;
 
@@ -498,7 +523,7 @@ public class TagCommand : IExternalCommand
                 fixtureLocation);
 
             if (tag == null)
-                return false;
+                return Fail(fixture, "Revit did not create the tag");
 
             // Outward wall normal from the fixture's OWN transform, NOT by re-resolving the
             // host-face reference across the link. That resolution only yields a PlanarFace when
@@ -541,13 +566,9 @@ public class TagCommand : IExternalCommand
 
             return true;
         }
-        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+        catch (Exception ex)
         {
-            return false;
-        }
-        catch
-        {
-            return false;
+            return Fail(fixture, ex.Message);
         }
     }
 
@@ -694,7 +715,7 @@ public class TagCommand : IExternalCommand
             if (isLineBased)
             {
                 if (fixture.Location is not LocationCurve locCurve)
-                    return false;
+                    return Fail(fixture, "no location line");
 
                 Curve curve = locCurve.Curve;
                 fixtureLocation = curve.Evaluate(0.5, true);
@@ -702,7 +723,7 @@ public class TagCommand : IExternalCommand
             else
             {
                 if (fixture.Location is not LocationPoint locPoint)
-                    return false;
+                    return Fail(fixture, "no location point");
 
                 fixtureLocation = locPoint.Point;
             }
@@ -715,23 +736,37 @@ public class TagCommand : IExternalCommand
                 fixtureLocation);
 
             if (tag == null)
-                return false;
+                return Fail(fixture, "Revit did not create the tag");
 
-            XYZ localOffset;
+            XYZ globalOffset;
 
-            if (isLineBased)
+            if (isLineBased && GeometryHelper.IsVerticalLineBasedFixture(fixture))
             {
-                bool isReversed = TagPlacementService.IsLineReversed(fixture);
-                localOffset = TagPlacementService.CalculateLinearOffset(direction, isReversed, g);
+                // Tape run up a wall projects to a point in plan: there is no line to offset across, so push
+                // the tag off the wall face like a WallVertical fixture. The Top/Bottom tag type still stands.
+                XYZ outward = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
+                double symbolExtent = GeometryHelper.GetSymbolExtentInDirection(
+                    fixture, doc.ActiveView, outward, g.DefaultSymbolSizeFeet);
+                globalOffset = outward * (symbolExtent + g.VerticalOffsetFeet);
             }
             else
             {
-                var (symbolLength, symbolWidth) = GeometryHelper.GetSymbolExtents(fixture, doc.ActiveView, g.DefaultSymbolSizeFeet);
-                double tagWidth = TagPlacementService.EstimateTagWidth(tag, doc, viewId, g);
-                localOffset = TagPlacementService.CalculateOffset(direction, symbolLength, symbolWidth, tagWidth, g);
-            }
+                XYZ localOffset;
 
-            XYZ globalOffset = TagPlacementService.TransformToGlobal(fixture, localOffset);
+                if (isLineBased)
+                {
+                    bool isReversed = TagPlacementService.IsLineReversed(fixture);
+                    localOffset = TagPlacementService.CalculateLinearOffset(direction, isReversed, g);
+                }
+                else
+                {
+                    var (symbolLength, symbolWidth) = GeometryHelper.GetSymbolExtents(fixture, doc.ActiveView, g.DefaultSymbolSizeFeet);
+                    double tagWidth = TagPlacementService.EstimateTagWidth(tag, doc, viewId, g);
+                    localOffset = TagPlacementService.CalculateOffset(direction, symbolLength, symbolWidth, tagWidth, g);
+                }
+
+                globalOffset = TagPlacementService.TransformToGlobal(fixture, localOffset);
+            }
 
             if (!globalOffset.IsZeroLength())
             {
@@ -740,13 +775,9 @@ public class TagCommand : IExternalCommand
 
             return true;
         }
-        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+        catch (Exception ex)
         {
-            return false;
-        }
-        catch
-        {
-            return false;
+            return Fail(fixture, ex.Message);
         }
     }
 }

@@ -12,6 +12,9 @@ public static class GeometryHelper
 {
     private const double NormalEpsilon = 0.001;
 
+    // Plan component of a unit line direction below which the line counts as vertical (~3° off plumb).
+    private const double VerticalLineEpsilon = 0.05;
+
     /// <summary>
     /// Determines if a hosted fixture is mounted on a vertical face (e.g., wall) — the strategy
     /// selector for TurboTag/TurboBubble wall placement.
@@ -52,6 +55,24 @@ public static class GeometryHelper
     public static bool IsLineBasedFixture(FamilyInstance fixture)
     {
         return fixture.Location is LocationCurve;
+    }
+
+    /// <summary>
+    /// True for a line-based fixture whose line runs (near-)perpendicular to the plan — LED tape run up a
+    /// wall. Its curve projects to a point, so there is no in-plan line direction: BasisX is ~±Z and the
+    /// BasisX angle the plan-offset helpers rotate by is noise. Callers place it off its wall face instead
+    /// (<see cref="GetWallFaceNormalFromTransform"/>, verified via TurboSpike on wall-hosted tape: Hand × Facing
+    /// is the outward normal, BasisX = (0,0,1)). Keyed on geometry, not role, because the same tape family is
+    /// placed both flat and vertical. A tilted run with a usable plan projection (18° off vertical in the
+    /// spike) stays false and takes the ordinary linear path.
+    /// </summary>
+    public static bool IsVerticalLineBasedFixture(FamilyInstance fixture)
+    {
+        if (fixture.Location is not LocationCurve lc || lc.Curve == null)
+            return false;
+
+        XYZ dir = (lc.Curve.GetEndPoint(1) - lc.Curve.GetEndPoint(0)).Normalize();
+        return new XYZ(dir.X, dir.Y, 0).GetLength() < VerticalLineEpsilon;
     }
 
     /// <summary>
