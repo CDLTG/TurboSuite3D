@@ -164,7 +164,7 @@ When the rule is unsure, **borrow more, not less**. Over-borrowing only blocks a
 | **TurboMask** | operation | selected TurboMask groups (group + type + members), prior stamps + masking regions at the fixtures, fixture tags in the view, selected detail lines (copy-then-delete) (`RerunWorkingSet`). The view is not edited. The stamp family loads only when missing, so it's always new |
 | **TurboNudge** | operation | the one keypad, leased before the corner pick |
 | **TurboHighlight** | operation | the active view (V/G subcategory or filter visibility) |
-| **TurboSetup** | operation | Project Setup: every original level (renamed or deleted), plan views on them (cascade), `AL_` templates (`ProjectSetupWorkingSet`). Name Spaces: the Spaces it may rename |
+| **TurboSetup** | operation | Project Setup: every original level (renamed or deleted), plan views on them (cascade), `AL_` templates, the Stage 1 link type (Room Bounding) (`ProjectSetupWorkingSet`). Name Spaces: the Spaces it may rename |
 | **TurboCompact** | — | family documents are never workshared |
 | **TurboDocs, TurboSnoop, TurboTab, TurboFixtureFilter** | — | read-only |
 | **TurboDMX** | session | lock + DMX state store |

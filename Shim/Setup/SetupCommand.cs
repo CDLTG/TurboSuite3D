@@ -237,11 +237,18 @@ public class SetupCommand : IExternalCommand
                 result.Notes.Add(
                     $"View template \"{SetupConstants.SpacesViewTemplateName}\" not found — Spaces views were not created.");
 
+            string roomBounding = result.LinkRoomBounding switch
+            {
+                LinkRoomBoundingService.Outcome.TurnedOn => "turned on",
+                LinkRoomBoundingService.Outcome.AlreadyOn => "already on",
+                _ => "could not be set — tick it in the link's Edit Type"
+            };
             string summary =
                 "TurboSetup Complete\n\n" +
                 $"Levels copied: {result.LevelsCopied}\n" +
                 $"Views created: {result.ViewsCreated}\n" +
-                $"Views skipped (name already existed): {result.ViewsSkippedExisting}\n";
+                $"Views skipped (name already existed): {result.ViewsSkippedExisting}\n" +
+                $"Link Room Bounding: {roomBounding}\n";
             if (result.LinkStepUnavailable)
             {
                 summary += "Link graphics: skipped — requires Revit 2025 " +
@@ -334,7 +341,7 @@ public class SetupCommand : IExternalCommand
 
         // Worksharing: borrow what the run edits or deletes before it writes anything. Nothing is committed
         // yet, so a refusal (WorksharingException) leaves the model untouched.
-        WorksharingLease.AcquireOrThrow(doc, ProjectSetupWorkingSet(doc), "element");
+        WorksharingLease.AcquireOrThrow(doc, ProjectSetupWorkingSet(doc, linkInstance.GetTypeId()), "element");
 
         using (var group = new TransactionGroup(doc, "TurboSetup"))
         {
@@ -370,6 +377,15 @@ public class SetupCommand : IExternalCommand
                 {
                     t.Start();
                     ToposolidVisibilityService.HideOnTemplates(doc);
+                    CommitGuard.CommitOrThrow(t);
+                }
+
+                // 1c. Make the Stage 1 arch link room-bounding, so host Spaces bound off its walls.
+                using (var t = new Transaction(doc, "Set link room bounding"))
+                {
+                    t.Start();
+                    result.LinkRoomBounding = LinkRoomBoundingService.Enable(
+                        doc.GetElement(linkInstance.GetTypeId()) as RevitLinkType);
                     CommitGuard.CommitOrThrow(t);
                 }
 
@@ -480,13 +496,13 @@ public class SetupCommand : IExternalCommand
 
     /// <summary>
     /// What Project Setup edits or deletes in the host: every original level (renamed, then deleted), the plan
-    /// views on them (cascade-deleted with the level) and the firm <c>AL_</c> templates (Toposolid hidden).
-    /// The copied levels and created views are new and need no borrow.
+    /// views on them (cascade-deleted with the level), the firm <c>AL_</c> templates (Toposolid hidden) and the
+    /// Stage 1 link type (Room Bounding). The copied levels and created views are new and need no borrow.
     /// </summary>
-    private static List<ElementId> ProjectSetupWorkingSet(Document doc)
+    private static List<ElementId> ProjectSetupWorkingSet(Document doc, ElementId linkTypeId)
     {
         var levelIds = new HashSet<ElementId>(new FilteredElementCollector(doc).OfClass(typeof(Level)).ToElementIds());
-        var ids = new List<ElementId>(levelIds);
+        var ids = new List<ElementId>(levelIds) { linkTypeId };
         foreach (var view in new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>())
         {
             if (view.IsTemplate)

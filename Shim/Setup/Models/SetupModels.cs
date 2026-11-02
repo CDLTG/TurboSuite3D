@@ -1,6 +1,7 @@
 #nullable disable
 using System.Collections.Generic;
 using Autodesk.Revit.DB;
+using TurboSuite.Setup.Services;
 
 namespace TurboSuite.Setup.Models;
 
@@ -59,6 +60,9 @@ internal sealed class SetupResult
     public int LevelsCopied { get; set; }
     public int ViewsCreated { get; set; }
     public int ViewsSkippedExisting { get; set; }
+
+    /// <summary>What happened to the Stage 1 link type's Room Bounding checkbox.</summary>
+    public LinkRoomBoundingService.Outcome LinkRoomBounding { get; set; }
 
     /// <summary>Views created where the user chose no linked view (left on host default V/G).</summary>
     public int ViewsUnmapped { get; set; }

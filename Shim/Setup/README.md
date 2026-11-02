@@ -5,7 +5,7 @@ Running TurboSetup opens a **launcher window** (a fixed-size, suite-styled WPF w
 - **Project Setup** — new-project setup automation for the 3D (RVT-linked) lighting workflow (below).
 - **Name Spaces from Rooms** — seed Space names from the architect's linked Rooms ([Space naming](#space-naming)).
 
-Entry `SetupCommand.cs`; work split across `Services/` (`LevelCopyService`, `ViewGenerationService`, `ViewRangeService`, `ToposolidVisibilityService`, `SpaceNamingService`), firm standards in `SetupConstants.cs`, per-version link-graphics seam in `Revit{year}/Setup/LinkGraphicsSeam.cs` (see CLAUDE.md "per-shim split file").
+Entry `SetupCommand.cs`; work split across `Services/` (`LevelCopyService`, `ViewGenerationService`, `ViewRangeService`, `ToposolidVisibilityService`, `LinkRoomBoundingService`, `SpaceNamingService`), firm standards in `SetupConstants.cs`, per-version link-graphics seam in `Revit{year}/Setup/LinkGraphicsSeam.cs` (see CLAUDE.md "per-shim split file").
 
 ## Project Setup
 
@@ -25,6 +25,7 @@ A summary dialog reports what was copied, created, skipped, and applied.
 - **Copies levels** from the linked arch model into the host, then deletes the host template's original placeholder levels (switching the active view off them first so the cascade delete is allowed).
 - **Creates a Floor Plan and RCP view per selected level**, named `{NN} - Floor - Lighting` / `{NN} - RCP - Lighting`, each baked with its firm template (`AL_Floor Plan` / `AL_RCP`) in one shot so the views stay free to take link overrides.
 - **Creates a Spaces floor plan per selected level**, named `{NN} - Floor - Spaces`, baked with `AL_Spaces` the same one-shot way. It has no Stage 2 row: it takes the linked view chosen for its level's Floor view. `AL_Spaces` is optional — without it the Spaces views are skipped and the summary says so, rather than blocking the run.
+- **Turns on Room Bounding** for the Stage 1 link (a type parameter, `WALL_ATTR_ROOM_BOUNDING` — the link's Edit Type checkbox) so host Spaces bound off the linked walls. Only that link; any other link that should bound (e.g. structural) stays a manual tick. Reported in the summary.
 - **Hides the linked Toposolid** on every `AL_`-prefixed lighting template before view creation, so the suppression carries into generated views and later section/elevation views alike.
 - **(Revit 2025) Applies the firm link-graphics hybrid** and copies the architect's view range onto each mapped host view, targeting the link *type* so the override lands on the row the V/G dialog shows.
 
