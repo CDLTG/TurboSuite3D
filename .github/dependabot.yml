@@ -12,3 +12,10 @@ updates:
       # 2025 net8 build. Allow 8.0.x servicing patches; block major bumps.
       - dependency-name: "System.Text.Json"
         update-types: ["version-update:semver-major"]
+      # System.Security.Cryptography.Pkcs is pinned in Core only to lift PDFsharp's
+      # vulnerable transitive 8.0.1 to the patched 8.0.2 (see Core/TurboSuite.Core.csproj).
+      # It is part of the .NET 8 Windows Desktop shared framework that Revit 2025 runs on,
+      # so the 8.0.x line matches the host; a 10.x pin would ship assemblies newer than
+      # the net8 host provides. Allow 8.0.x servicing patches; block major bumps.
+      - dependency-name: "System.Security.Cryptography.Pkcs"
+        update-types: ["version-update:semver-major"]
