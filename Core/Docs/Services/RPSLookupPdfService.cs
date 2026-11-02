@@ -123,55 +123,65 @@ public static class RPSLookupPdfService
 
         var penRule = new XPen(RuleColor, 0.5);
 
-        // Column definitions: (Header, DataSelector, ProportionalWidth)
+        // Column definitions: (Header, DataSelector, Weight). Weights are letter-only: they
+        // share out the slack left after content-fitting (see below). The strip ignores them.
         var columns = new (string Header, Func<RPSInstanceModel, string> Selector, double Weight)[]
         {
             ("Number",         r => r.SwitchID,       1.0),
-            ("Type",            r => r.TypeMark,        1.0),
             ("Catalog Number", r => r.CatalogNumber,   2.5),
-            ("Load Name",      r => r.LoadName,        2.0),
+            ("Load Name",      r => r.LoadName,        3.0),
             ("Circuit",        r => r.CircuitNumber,   1.0),
         };
 
         // ── Column widths + page width ──
-        // Letter keeps fixed proportional shares of the page content width. The 8.5x28.5
-        // strip instead content-fits each column (measure the header and every cell) and
-        // lets the overall strip width follow — collapsing the wasted horizontal gaps
-        // while, because the widths come from measurement, never clipping content.
+        // Both formats start from each column's content-fit width (measure the header and
+        // every cell). The 8.5x28.5 strip uses those widths as-is and lets the overall strip
+        // width follow — collapsing the wasted horizontal gaps while, because the widths come
+        // from measurement, never clipping content. Letter's page width is fixed, so the
+        // table must still fill it: the slack past the content-fit total is shared out by
+        // weight. If the content doesn't fit at all, letter falls back to plain weighted
+        // shares and the per-cell font shrink in the row loop absorbs the overflow.
         double pageWidth;
         double contentWidth;
-        double[] colWidths = new double[columns.Length];
+        double[] colWidths;
 
-        if (useLargeFormat)
+        using (var tempPdf = new PdfDocument())
         {
-            using var tempPdf = new PdfDocument();
             var tempPage = tempPdf.AddPage();
             using var tempGfx = XGraphics.FromPdfPage(tempPage);
 
-            for (int c = 0; c < columns.Length; c++)
+            if (useLargeFormat)
             {
-                double maxWidth = tempGfx.MeasureString(columns[c].Header, fontColHead).Width;
-                foreach (var inst in instances)
-                {
-                    string value = columns[c].Selector(inst);
-                    if (string.IsNullOrEmpty(value)) continue;
-                    double w = tempGfx.MeasureString(value, fontCell).Width;
-                    if (w > maxWidth) maxWidth = w;
-                }
-                colWidths[c] = CellPaddingLeft + maxWidth + CompactColumnGap;
-            }
+                colWidths = MeasureColumnWidths(tempGfx, columns, instances,
+                    fontColHead, fontCell, CompactColumnGap);
 
-            double tableWidth = colWidths.Sum();
-            double titleWidth = tempGfx.MeasureString("POWER SUPPLY LOOKUP TABLE", fontCompactTitle).Width;
-            contentWidth = Math.Max(tableWidth, titleWidth);
-            pageWidth = marginLeft + contentWidth + marginRight;
-        }
-        else
-        {
-            pageWidth = SmallPageWidth;
-            contentWidth = pageWidth - marginLeft - marginRight;
-            double totalWeight = columns.Sum(c => c.Weight);
-            colWidths = columns.Select(c => contentWidth * c.Weight / totalWeight).ToArray();
+                double tableWidth = colWidths.Sum();
+                double titleWidth = tempGfx.MeasureString("POWER SUPPLY LOOKUP TABLE", fontCompactTitle).Width;
+                contentWidth = Math.Max(tableWidth, titleWidth);
+                pageWidth = marginLeft + contentWidth + marginRight;
+            }
+            else
+            {
+                pageWidth = SmallPageWidth;
+                contentWidth = pageWidth - marginLeft - marginRight;
+                double totalWeight = columns.Sum(c => c.Weight);
+
+                // Trailing pad = CellPaddingLeft, so a fitted column is exactly the width
+                // the row loop's shrink check (colWidth - 2 * CellPaddingLeft) accepts.
+                colWidths = MeasureColumnWidths(tempGfx, columns, instances,
+                    fontColHead, fontCell, CellPaddingLeft);
+
+                double slack = contentWidth - colWidths.Sum();
+                if (slack >= 0)
+                {
+                    for (int c = 0; c < columns.Length; c++)
+                        colWidths[c] += slack * columns[c].Weight / totalWeight;
+                }
+                else
+                {
+                    colWidths = columns.Select(c => contentWidth * c.Weight / totalWeight).ToArray();
+                }
+            }
         }
 
         double[] colX = new double[columns.Length];
@@ -320,6 +330,30 @@ public static class RPSLookupPdfService
         }
 
         logoStream?.Dispose();
+    }
+
+    /// <summary>
+    /// Content-fit width of each column: left padding + the widest of its header (bold
+    /// header font) and every non-empty cell (cell font) + <paramref name="trailing"/>.
+    /// </summary>
+    private static double[] MeasureColumnWidths(XGraphics gfx,
+        (string Header, Func<RPSInstanceModel, string> Selector, double Weight)[] columns,
+        List<RPSInstanceModel> instances, XFont fontColHead, XFont fontCell, double trailing)
+    {
+        var widths = new double[columns.Length];
+        for (int c = 0; c < columns.Length; c++)
+        {
+            double maxWidth = gfx.MeasureString(columns[c].Header, fontColHead).Width;
+            foreach (var inst in instances)
+            {
+                string value = columns[c].Selector(inst);
+                if (string.IsNullOrEmpty(value)) continue;
+                double w = gfx.MeasureString(value, fontCell).Width;
+                if (w > maxWidth) maxWidth = w;
+            }
+            widths[c] = CellPaddingLeft + maxWidth + trailing;
+        }
+        return widths;
     }
 
     private static void DrawLetterHeader(XGraphics gfx, string projectName, double pageWidth,
