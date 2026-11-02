@@ -58,11 +58,16 @@
                           VerticalGridLinesBrush="#E0E0E0"
                           BorderThickness="1" BorderBrush="#CCCCCC"
                           MinHeight="150">
+                    <!-- Mirrors the export's seven columns (LoadsPdfService.Headers / LoadsWorkbookService)
+                         so the grid is a true preview; keep the three in step. -->
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Circuit" Binding="{Binding CircuitNumber}" Width="110"/>
-                        <DataGridTextColumn Header="Load" Binding="{Binding LoadName}" Width="*"/>
-                        <DataGridTextColumn Header="Room" Binding="{Binding RoomName}" Width="140"/>
-                        <DataGridTextColumn Header="Wattage" Binding="{Binding TotalWattsDisplay}" Width="100"/>
+                        <DataGridTextColumn Header="Ckt" Binding="{Binding CircuitNumber}" Width="Auto" MinWidth="50"/>
+                        <DataGridTextColumn Header="Load" Binding="{Binding LoadName}" Width="*" MinWidth="120"/>
+                        <DataGridTextColumn Header="Dimming" Binding="{Binding DimmingProtocol}" Width="Auto" MinWidth="60"/>
+                        <DataGridTextColumn Header="Fixtures" Binding="{Binding FixturesDisplay}" Width="Auto" MinWidth="60"/>
+                        <DataGridTextColumn Header="Qty" Binding="{Binding QuantityDisplay}" Width="Auto" MinWidth="40"/>
+                        <DataGridTextColumn Header="Supply" Binding="{Binding DriverDisplay}" Width="Auto" MinWidth="60"/>
+                        <DataGridTextColumn Header="Watts" Binding="{Binding TotalWattsDisplay}" Width="Auto" MinWidth="50"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>

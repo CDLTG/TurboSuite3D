@@ -69,7 +69,7 @@ Generates a load schedule from electrical circuit parameters, in one of four for
 
 ### Layout
 
-Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Supply | Watts**. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded; **shade circuits are excluded** (`ShadeCircuitClassifier.IsShadeCircuit` — the same drop TurboZones' lighting collector makes) — a shade is modeled only to carry a control circuit + BOM, not as a designed electrical load, so it has no accurate wattage and stays off the load schedule. Shade breakers still appear on the **Panel Schedule**.
+Seven-column table: **Ckt | Load | Dimming | Fixtures | Qty | Supply | Watts**. The tab's on-screen grid shows the same seven columns in the same order (a preview of the export, not a separate summary), so a column change lands in all three places: `LoadsTab.xaml`, `LoadsPdfService.Headers`, and `LoadsWorkbookService`. The circuit's resolved room is not a column anywhere; it only drives By Room grouping. Columns are content-fit with **Load** taking the page remainder (ellipsis-truncated); headers repeat per page. Behavioral rules: `<unnamed>` circuits display as `<...>`; `Feed Through Lugs` circuits are excluded; **shade circuits are excluded** (`ShadeCircuitClassifier.IsShadeCircuit` — the same drop TurboZones' lighting collector makes) — a shade is modeled only to carry a control circuit + BOM, not as a designed electrical load, so it has no accurate wattage and stays off the load schedule. Shade breakers still appear on the **Panel Schedule**.
 
 ### Format options
 
