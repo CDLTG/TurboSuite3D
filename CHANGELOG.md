@@ -7,6 +7,23 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-11-03
+
+### Added
+- TurboDocs: Excel (By Circuit) Load Schedule export alongside the PDF.
+- TurboSetup: Project Setup creates a Spaces floor plan per level (when the `AL_Spaces` template exists).
+- TurboSetup: Project Setup turns on Room Bounding for the Stage 1 arch link.
+- TurboTag: fixtures a run skips are listed at the end and left selected.
+
+### Changed
+- TurboDocs: Load Schedule grid shows the export's seven columns, so it previews what gets exported.
+- TurboDocs: Type column dropped from the lookup table; letter columns fit their content.
+- Dependencies: ACadSharp 3.8.35, PDFsharp 6.5.0.
+
+### Fixed
+- TurboTag: wall-hosted and vertical LED tape now gets tagged.
+- TurboName: Rectangle/Polygon region picks work in a view with no work plane, and clicks made while busy are disabled instead of silently dropped.
+
 ## [1.6.0] — 2026-10-27
 
 ### Added
@@ -357,6 +374,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.6.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.1
 [1.6.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.0
 [1.5.5]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.5
 [1.5.4]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.4
