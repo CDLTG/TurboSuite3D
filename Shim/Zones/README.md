@@ -176,6 +176,14 @@ drawn. A full run carries its marker and note at its midpoint, the note left of 
 cross a sheet:** a break draws a stub on each side labeled with the head at the other end (`SPARE ETHERNET DAISY CHAIN
 TO 2-A` / `FROM 1-B`), by panel name because the planner's page index need not match the titleblock's sheet number. A
 stub's marker stays by the head, and its center-aligned note sits in line with the wire, just past the free end.
+
+**Link labels.** Each row is labeled `PROC n LINK m`, hung just below its spine, right of the lane drop. `n` counts
+processors **job-wide in pack order** — the capacity bars' order — so an LV21 takes two numbers, and adding a processor or
+reordering panels renumbers the ones after it on the next draw. `m` is the processor's real link number, so a dead link
+drops its row without closing up the numbering (a sheet can show `LINK 2` with no `LINK 1`). A keypad tail's terminus and
+note sit one glyph→text step right of the list's glyph column, so the note lines up with the row text; a keypads-only
+link further pushes its tail right only when its lane would otherwise land the terminus on this label.
+
 Prominent labels (Ethernet-link, 120V, keypad / wireless /
 motor stubs) render in the firm `AL_Annotation_4.5"` text style, resolved by name and falling back to the
 generic note type when absent (`ControlNote.TextTypeName`).

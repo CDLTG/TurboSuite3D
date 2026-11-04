@@ -514,6 +514,151 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(3, pages[2].Markers.Count(m => m.Type == ControlWireType.Cat6));
         }
 
+        /// <summary>Processor numbers count job-wide across heads and sheets, in pack order.</summary>
+        [Fact]
+        public void LinkLabelsNumberProcessorsAcrossHeadsAndSheets()
+        {
+            ProcessorGroup Pd8(string h, string d1, string d2)
+                => Group(Qs(U(h, LinkCategory.Modules, 8), U(d1, LinkCategory.Modules, 6)),
+                         Qs(U(d2, LinkCategory.Modules, 6)));
+            var names = new[] { "A", "B", "C" };
+            var pack = Pack(names.Select(n => Pd8(n, n + "2", n + "3")).ToArray());
+            var panels = new Dictionary<string, ControlPanelRenderData>();
+            foreach (var n in names)
+            {
+                panels[n] = Proc(n);
+                panels[n + "2"] = Dimmer(n + "2");
+                panels[n + "3"] = Dimmer(n + "3");
+            }
+
+            var pages = ControlOneLinePlanner.Build(pack, panels, "TurboControl");
+
+            Assert.Equal(2, pages.Count);
+            Assert.Equal(new[] { "PROC 1 LINK 1", "PROC 1 LINK 2", "PROC 2 LINK 1", "PROC 2 LINK 2" }, LinkLabels(pages[0]));
+            Assert.Equal(new[] { "PROC 3 LINK 1", "PROC 3 LINK 2" }, LinkLabels(pages[1]));
+        }
+
+        /// <summary>An LV21 is one drawn head but two processors, so it takes two numbers. A dead link draws no row
+        /// and no label, and the links after it keep their real numbers instead of closing up.</summary>
+        [Fact]
+        public void Lv21LinkLabelsCountEachProcessorAndKeepRealLinkNumbers()
+        {
+            var pack = Pack(
+                GroupNamed("L", EmptyQs(), Qs(U("D1", LinkCategory.Modules, 6))),
+                GroupNamed("L", Qs(U("D2", LinkCategory.Modules, 6)), Qs(U("D3", LinkCategory.Modules, 6))));
+            var panels = new Dictionary<string, ControlPanelRenderData>
+            {
+                ["L"] = Lv21("L"), ["D1"] = Dimmer("D1"), ["D2"] = Dimmer("D2"), ["D3"] = Dimmer("D3"),
+            };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.Single(page.Panels, p => p.HostsProcessor);
+            Assert.Equal(new[] { "PROC 1 LINK 2", "PROC 2 LINK 1", "PROC 2 LINK 2" }, LinkLabels(page));
+        }
+
+        /// <summary>A Clear Connect link is labeled like any other: it is a processor link on its own row.</summary>
+        [Fact]
+        public void ClearConnectLinkGetsALinkLabel()
+        {
+            var pack = Pack(Group(Qs(U("1-A", LinkCategory.Modules, 8), U("1-B", LinkCategory.Modules, 6)), Cca()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A"), ["1-B"] = Dimmer("1-B") };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.Equal(new[] { "PROC 1 LINK 1", "PROC 1 LINK 2" }, LinkLabels(page));
+        }
+
+        /// <summary>The label hangs just below the row's spine, starting just right of the lane drop.</summary>
+        [Fact]
+        public void LinkLabelHangsBelowTheSpineRightOfTheLaneDrop()
+        {
+            var pack = Pack(Group(Qs(U("1-A", LinkCategory.Modules, 8), U("1-B", LinkCategory.Modules, 6)), EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A"), ["1-B"] = Dimmer("1-B") };
+
+            var page = BuildOne(pack, panels);
+
+            double headRightX = ControlOneLineGeometry.Layout.ProcessorColumnX + ControlOneLineGeometry.Panel.Width / 2.0;
+            double col1LeftX = headRightX + ControlOneLineGeometry.Layout.HeadColumnGap;
+            double laneX = ControlOneLineGeometry.Layout.LaneX(headRightX, col1LeftX, laneFromLeft: 0, laneCount: 1);
+            double spineY = -ControlOneLineGeometry.Panel.PowerPanelHeight / 2.0 - ControlOneLineGeometry.Layout.LinkSpineDropFt;
+
+            var label = Assert.Single(page.Notes, n => n.Text == "PROC 1 LINK 1");
+            Assert.True(Near(label.Position, laneX + ControlOneLineGeometry.Layout.LinkLabelDx,
+                spineY - ControlOneLineGeometry.Layout.LinkLabelDrop));
+            Assert.Equal(ControlTextAlign.Left, label.Align);
+            Assert.Equal(ControlVerticalAlign.Top, label.VAlign);
+        }
+
+        /// <summary>The KEYPADS note lines up with the list's row text, the glyphs stay one step left of that text,
+        /// and the terminus sits the usual gap before the note, with the spine running out to it.</summary>
+        [Fact]
+        public void KeypadNoteAlignsWithRowTextAndTerminusKeepsItsGapToTheNote()
+        {
+            var recs = new[] { new KeypadRecord("K1", "ENTRY", "seeTouch", location: 1) };
+            var pack = Pack(Group(
+                QsKeypads(recs, U("1-A", LinkCategory.Modules, 8), U("1-B", LinkCategory.Modules, 6)), EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A"), ["1-B"] = Dimmer("1-B") };
+
+            var page = BuildOne(pack, panels);
+
+            var row = Assert.Single(page.Notes, n => n.Text.Contains("[K1]"));
+            var note = Assert.Single(page.Notes, n => n.Text.Contains("MAX 10 PER HOMERUN"));
+            Assert.Equal(row.Position.X, note.Position.X, 6);
+            Assert.Contains(page.Glyphs, g => System.Math.Abs(
+                g.Center.X - (row.Position.X - ControlOneLineGeometry.Layout.KeypadListTextDx)) < 1e-6);
+
+            double tickX = note.Position.X - ControlOneLineGeometry.Layout.KeypadTailBlockDx;
+            double half = ControlOneLineGeometry.Layout.KeypadTickHalf;
+            Assert.Contains(page.Wires, w => Near(w.Start, tickX, note.Position.Y - half)
+                && Near(w.End, tickX, note.Position.Y + half));
+            Assert.Contains(page.Wires, w => Near(w.End, tickX, note.Position.Y));
+        }
+
+        /// <summary>A keypads-only link stays anchored at column 1 when its label already clears the terminus: the
+        /// second row of a 4-link LV21, the case that first showed the collision.</summary>
+        [Fact]
+        public void KeypadsOnlyTail_StaysAtColumnOne_WhenItsLabelFits()
+        {
+            var note = KeypadsOnlyNoteOnLv21(keypadsOnFirstLink: false, out _);
+
+            double headRightX = ControlOneLineGeometry.Layout.ProcessorColumnX + ControlOneLineGeometry.Panel.Width / 2.0;
+            double col1LeftX = headRightX + ControlOneLineGeometry.Layout.HeadColumnGap;
+            Assert.Equal(col1LeftX + ControlOneLineGeometry.Layout.KeypadListTextDx
+                + ControlOneLineGeometry.Layout.KeypadTailBlockDx, note.Position.X, 6);
+        }
+
+        /// <summary>The top row of a 4-link LV21 has the rightmost lane, so its tail moves right to clear the label.</summary>
+        [Fact]
+        public void KeypadsOnlyTail_MovesRightToClearItsLabel_OnTheRightmostLane()
+        {
+            var note = KeypadsOnlyNoteOnLv21(keypadsOnFirstLink: true, out var label);
+
+            double tickX = note.Position.X - ControlOneLineGeometry.Layout.KeypadTailBlockDx;
+            double labelEndX = label.Position.X + label.Text.Length * ControlOneLineGeometry.Layout.KeypadListCharWidth;
+            Assert.True(tickX >= labelEndX - 1e-6);
+        }
+
+        private static ControlNote KeypadsOnlyNoteOnLv21(bool keypadsOnFirstLink, out ControlNote linkLabel)
+        {
+            var recs = new[] { new KeypadRecord("K1", "ENTRY", "seeTouch", location: 1) };
+            var keypads = QsKeypads(recs);
+            var dimmer = Qs(U("D1", LinkCategory.Modules, 6));
+            var pack = Pack(
+                GroupNamed("L", keypadsOnFirstLink ? keypads : dimmer, keypadsOnFirstLink ? dimmer : keypads),
+                GroupNamed("L", Qs(U("D2", LinkCategory.Modules, 6)), Qs(U("D3", LinkCategory.Modules, 6))));
+            var panels = new Dictionary<string, ControlPanelRenderData>
+            {
+                ["L"] = Lv21("L"), ["D1"] = Dimmer("D1"), ["D2"] = Dimmer("D2"), ["D3"] = Dimmer("D3"),
+            };
+
+            var page = BuildOne(pack, panels);
+
+            string labelText = keypadsOnFirstLink ? "PROC 1 LINK 1" : "PROC 1 LINK 2";
+            linkLabel = Assert.Single(page.Notes, n => n.Text == labelText);
+            return Assert.Single(page.Notes, n => n.Text.Contains("MAX 10 PER HOMERUN"));
+        }
+
         /// <summary>The chain does not change the wire legend's roster: it is the same CAT6 cable, one number.</summary>
         [Fact]
         public void DaisyChainAndSpareStubsShareTheCat6LegendNumber()
@@ -538,6 +683,9 @@ namespace TurboSuite.Tests.Zones
         private static double HeadTopY(ControlPanelNode p) => p.Center.Y + NodeHeight(p) / 2.0;
         private static bool Near(XY a, double x, double y)
             => System.Math.Abs(a.X - x) < 1e-6 && System.Math.Abs(a.Y - y) < 1e-6;
+        private static string[] LinkLabels(ControlOneLineDrawing page)
+            => page.Notes.Where(n => n.Text.StartsWith("PROC ")).Select(n => n.Text)
+                .OrderBy(t => t, System.StringComparer.Ordinal).ToArray();
         private static string[] ChainLabels(ControlOneLineDrawing page)
             => page.Notes.Where(n => n.Text.Contains("DAISY CHAIN")).Select(n => n.Text)
                 .OrderBy(t => t, System.StringComparer.Ordinal).ToArray();

@@ -400,6 +400,12 @@ namespace TurboSuite.Zones.OneLine
             /// (so a 2'-0"-wide caret). Its height is <see cref="LinkSpineDropFt"/> (apex − spine).</summary>
             public const double CaretHalfWidth = 12.0 / 12.0;     // 1'-0"  (2'-0" total width)
 
+            // ── Link label ("PROC 1 LINK 2"), hung below the start of each row's spine, right of its lane drop. ──
+            /// <summary>Gap from the lane drop to the label's left edge.</summary>
+            public const double LinkLabelDx = 3.0 / 12.0;         // 0'-3"
+            /// <summary>Gap from the spine down to the label's top edge.</summary>
+            public const double LinkLabelDrop = 2.0 / 12.0;       // 0'-2"
+
             // ── Keypad tail zone (v1 = one REFER-TO-PLAN stub; v2 expands into a compact column-wrapped list) ──
             /// <summary>Horizontal gap from the last node's right edge to the keypad-tail anchor.</summary>
             public const double KeypadTailGap = NodeGap;
@@ -428,8 +434,9 @@ namespace TurboSuite.Zones.OneLine
             public const double KeypadListCharWidth = 3.5 / 12.0;        // ≈ 0'-3 1/2" per char
             /// <summary>Clear gap between a column's longest label and the next column's glyph.</summary>
             public const double KeypadListColumnPadding = 12.0 / 12.0;   // 1'-0"
-            /// <summary>Horizontal gap from the terminus tick to the keypad block (its glyph column and the
-            /// "KEYPADS…" terminus note, kept aligned) — breathing room off the link wire.</summary>
+            /// <summary>Horizontal gap from a keypad tail's anchor X to the list's glyph column, and from its terminus
+            /// tick to the "KEYPADS…" note — breathing room off the link wire. The tick sits
+            /// <see cref="KeypadListTextDx"/> past the anchor, so that note lines up with the list's row text.</summary>
             public const double KeypadTailBlockDx = 4.5 / 12.0;          // 0'-4 1/2"
             /// <summary>Row-0 (bottom) baseline Y above the spine — clears the terminus note + tick.</summary>
             public const double KeypadListAnchorDy = 11.5 / 12.0;        // 0'-11 1/2"

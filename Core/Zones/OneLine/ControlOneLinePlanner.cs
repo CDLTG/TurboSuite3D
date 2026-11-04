@@ -227,6 +227,7 @@ namespace TurboSuite.Zones.OneLine
             while (gi < groups.Count)
             {
                 string? encName = groups[gi].ProcessorPanelName;
+                int firstProcessorNumber = gi + 1;   // job-wide; groups are one per processor, so an LV21 takes two
                 var encGroups = new List<ProcessorGroup> { groups[gi] };
                 gi++;
                 while (!string.IsNullOrEmpty(encName) && gi < groups.Count
@@ -241,10 +242,11 @@ namespace TurboSuite.Zones.OneLine
                 // resolved below; a completely empty link (0 devices/loads, e.g. the spare QS link on a processor
                 // added only to host a Clear Connect link) is dropped — it consumes no row.
                 var plans = new List<LinkPlan>();
-                foreach (var g in encGroups)
+                for (int p = 0; p < encGroups.Count; p++)
                 {
-                    plans.Add(new LinkPlan { Link = g.Link1 });
-                    plans.Add(new LinkPlan { Link = g.Link2 });
+                    int processorNumber = firstProcessorNumber + p;
+                    plans.Add(new LinkPlan { Link = encGroups[p].Link1, ProcessorNumber = processorNumber, LinkNumber = 1 });
+                    plans.Add(new LinkPlan { Link = encGroups[p].Link2, ProcessorNumber = processorNumber, LinkNumber = 2 });
                 }
 
                 // ── Identify the head: by enclosure name first (the ONLY way to see a module-less LV21), else by
@@ -373,6 +375,14 @@ namespace TurboSuite.Zones.OneLine
                     double spineY = panelBottomY - G.Layout.LinkSpineDropFt;
                     Wire(new XY(lx, ey), new XY(lx, spineY), dashed: false);       // drop the lane to the spine
                     Mark(new XY(headRightX + G.Layout.MarkerExitOffset, ey), ControlWireType.QsControlLink);   // at the head RIGHT-edge exit
+
+                    // Which link this row is, hung just below the spine right of the lane drop: deeper lanes run
+                    // to the left and the next row's panels start well below. Only a keypad terminus can reach it,
+                    // and a keypads-only tail moves right to clear it (below).
+                    string linkLabel = $"PROC {pl.ProcessorNumber} LINK {pl.LinkNumber}";
+                    double linkLabelX = lx + G.Layout.LinkLabelDx;
+                    Note(new XY(linkLabelX, spineY - G.Layout.LinkLabelDrop),
+                        linkLabel, ControlTextAlign.Left, G.LargeTextTypeName);
 
                     double spineFromX = lx;                          // spine starts at the lane drop
 
@@ -521,12 +531,18 @@ namespace TurboSuite.Zones.OneLine
                     if (pl.HasKeypads)
                     {
                         // Tail advances off the last node with the same measured gap (its fan can't collide with
-                        // the tail). Keypads-only link (no located nodes) → anchor at col1LeftX, as before.
+                        // the tail). Keypads-only link (no located nodes) → anchor at col1LeftX, pushed right only
+                        // when a lane this far over would land the terminus on the link label.
                         double kx = double.IsNaN(prevCx)
-                            ? col1LeftX
+                            ? Math.Max(col1LeftX, linkLabelX + linkLabel.Length * G.Layout.KeypadListCharWidth
+                                                  - G.Layout.KeypadListTextDx)
                             : prevCx + Math.Max(G.Layout.PanelCenterToCenter, prevFanWidth + G.Layout.FanGapPad);
-                        Wire(new XY(spineFromX, spineY), new XY(kx, spineY), dashed: false);
-                        Tick(wires, new XY(kx, spineY), G.Layout.KeypadTickHalf);
+
+                        // The terminus sits one glyph→text step past kx, so the note beyond it lines up with the
+                        // list's row text while the list itself stays anchored off kx.
+                        double tickX = kx + G.Layout.KeypadListTextDx;
+                        Wire(new XY(spineFromX, spineY), new XY(tickX, spineY), dashed: false);
+                        Tick(wires, new XY(tickX, spineY), G.Layout.KeypadTickHalf);
 
                         var keypadRecs = pl.Link.KeypadRecords;
                         if (keypadRecs.Count > 0)
@@ -562,7 +578,7 @@ namespace TurboSuite.Zones.OneLine
                                     ControlTextAlign.Left, G.LargeTextTypeName, ControlVerticalAlign.Middle);
                             }
                             // The homerun wiring rule, centered on the spine terminus wire.
-                            Note(new XY(kx + G.Layout.KeypadTailBlockDx, spineY),
+                            Note(new XY(tickX + G.Layout.KeypadTailBlockDx, spineY),
                                 "KEYPADS (MAX 10 PER HOMERUN)", ControlTextAlign.Left, G.LargeTextTypeName,
                                 ControlVerticalAlign.Middle);
                         }
@@ -570,7 +586,7 @@ namespace TurboSuite.Zones.OneLine
                         {
                             // Legacy stub: location-less keypads (room unmapped), or no records. Two-line
                             // note, centered on the spine terminus wire (same trick as the located note).
-                            Note(new XY(kx + G.Layout.KeypadTailBlockDx, spineY),
+                            Note(new XY(tickX + G.Layout.KeypadTailBlockDx, spineY),
                                 "ALL KEYPADS\r(MAX 10 KEYPADS PER HOMERUN)",
                                 ControlTextAlign.Left, G.LargeTextTypeName, ControlVerticalAlign.Middle);
                         }
@@ -647,6 +663,8 @@ namespace TurboSuite.Zones.OneLine
         private sealed class LinkPlan
         {
             public PackedLink Link = default!;
+            public int ProcessorNumber;   // 1-based, job-wide, in pack order (the capacity bars' order)
+            public int LinkNumber;        // 1 or 2 on that processor — kept when a dead link drops out of the rows
             public int Row;
             public double Y;
             public bool IsCC;
