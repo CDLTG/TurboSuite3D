@@ -7,6 +7,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.6.2] — 2026-11-04
+
+### Added
+- TurboZones: one-line shows spare Ethernet links and a processor daisy chain.
+
+### Changed
+- TurboZones: one-line labels link rows and aligns the keypad terminus with its list.
+- TurboZones: Draw One-Line button matches the suite's styling.
+
+### Fixed
+- TurboDocs: PDF exports no longer fail with "The loaded license is not valid", which began with the PDFsharp 6.5.0 update in 1.6.1. TurboSuite now selects PDFsharp's AGPL license.
+
 ## [1.6.1] — 2026-11-03
 
 ### Added
@@ -374,6 +386,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.6.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.2
 [1.6.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.1
 [1.6.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.0
 [1.5.5]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.5.5
