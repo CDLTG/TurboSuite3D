@@ -37,7 +37,8 @@ namespace TurboSuite.Zones.OneLine
     /// A numbered row exists only for a physical cable that is actually drawn and stamped:
     /// <list type="bullet">
     ///   <item>QS control link — always (the spine; panel-to-panel links are QS, drawn + labeled as QS).</item>
-    ///   <item>CAT6 — always (the per-head Ethernet-to-Home-Network stub).</item>
+    ///   <item>CAT6 — always (the per-head Ethernet-to-Home-Network stubs, live + spare, and the spare
+    ///   inter-processor daisy chain — all one cable type, so one row).</item>
     ///   <item>QS Sivoia shade control link — only when the job has shade panels.</item>
     /// </list>
     /// <b>Clear Connect Type A is NOT a numbered cable</b> — there is no CC wire. A wireless ("RF") link is QS
@@ -111,8 +112,8 @@ namespace TurboSuite.Zones.OneLine
         /// signals the planner draws from, so the numbered legend and the stamped markers stay 1:1.</summary>
         public static ControlWireLegend ForPack(LinkPackResult? pack)
         {
-            // QS and CAT6 are definitional for a Lutron control job (every processor has a QS spine and an
-            // Ethernet-to-Home-Network stub), so they are always present.
+            // QS and CAT6 are definitional for a Lutron control job (every processor has a QS spine and
+            // Ethernet-to-Home-Network stubs), so they are always present.
             var used = new List<ControlWireType> { ControlWireType.QsControlLink, ControlWireType.Cat6 };
 
             bool anyShade = false;

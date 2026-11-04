@@ -63,7 +63,8 @@ namespace TurboSuite.Zones.OneLine
         /// The 42×30 landscape page module (locked 2026-09-24). The planner packs whole processor enclosures
         /// onto a page and BREAKS to the next when the next enclosure would exceed the 4-row budget — an
         /// enclosure is never split (the structural goal is a processor enclosure contained on one sheet), and
-        /// every tie is enclosure-local, so no wire is ever cut by a page boundary. Each page is its own owned
+        /// every tie but the spare Ethernet daisy chain is enclosure-local, so that chain is the only wire a page
+        /// boundary can cut (drawn as a labeled stub on each side). Each page is its own owned
         /// Drafting View, keyed by page index (Sheet 1..N — stable, unlike processor identity). The usable
         /// rectangle is the sheet minus its border margin and the titleblock strip, expressed in MODEL FEET
         /// (paper inches × <see cref="ViewScale"/>).
@@ -353,14 +354,30 @@ namespace TurboSuite.Zones.OneLine
             // edge — it reuses <see cref="LastRowExitAboveOrigin"/> as its height so the two stay aligned by
             // construction (clear of the QS fan on the right and the 120 V feed on top; per the Lutron reference sheet).
 
-            // ── Ethernet-to-Home-Network stub (per processor head, following the Lutron reference sheet). NO shared
-            //    switch node / trunk: each head gets its own CAT6 stub LEFT out of its left edge with a two-line
-            //    "ETHERNET LINK TO HOME NETWORK" label and a CAT6 wire marker (the legend key, #5). Nothing ties
-            //    heads together, so nothing crosses a page boundary. ──
+            // ── Ethernet-to-Home-Network stubs (per processor head, following the Lutron reference sheet). NO shared
+            //    switch node / trunk: each head gets two CAT6 stubs LEFT out of its left edge — the live link and,
+            //    one pitch above it, a labeled SPARE — each with a two-line label and a CAT6 wire marker. ──
             public const double EthernetStubLen = 72.0 / 12.0;                          // 6'-0" run LEFT out of the head left edge
             public static readonly double EthernetStubAboveOrigin = LastRowExitAboveOrigin;  // stub Y: inline with the bottom-row exit wire (0'-9")
             public const double EthernetLabelDx = -(80.0 + 117.0 / 128.0) / 12.0;       // label X: 6'-8 117/128" LEFT of the head origin
             public const double EthernetLabelDy = (25.0 + 19.0 / 256.0) / 12.0;         // label Y: 2'-1 19/256" ABOVE the head origin
+            /// <summary>The spare stub + its label sit this far above the live stub + its label. Tied to
+            /// <see cref="HeadExitPitch"/> so the two stubs line up with the bottom two QS exits on the head's right
+            /// edge, as the live stub already does with the bottom one. That leaves the spare stub tight above the
+            /// live label (about 2" off its insertion point), accepted for the alignment.</summary>
+            public const double EthernetSparePitch = HeadExitPitch;                     // 1'-6"
+
+            // ── Spare Ethernet daisy chain between processor heads: an open chain in drawn order, on the head
+            //    column's centerline (clear of the Ethernet stubs on the left and the QS lanes on the right).
+            //    A full run carries its marker + note at its midpoint; a stub keeps its marker MarkerExitOffset
+            //    off the head edge, with its note in line with the wire past the free end. ──
+            /// <summary>Length of the stub drawn at each end of a chain link that crosses a sheet break.</summary>
+            public const double DaisyChainStubLen = 36.0 / 12.0;                        // 3'-0"
+            /// <summary>Gap from a full run's wire to its note, which sits LEFT of the wire (the QS lanes drop
+            /// through the right).</summary>
+            public const double DaisyChainLabelDx = 9.5 / 12.0;                         // 0'-9 1/2"
+            /// <summary>Gap from a stub's free end to its center-aligned note.</summary>
+            public const double DaisyChainStubNoteGap = 3.0 / 12.0;                     // 0'-3"
 
             /// <summary>120 V feed stub length (rises from a panel's top edge). Still used by the shade motor-tap
             /// stub; the 120 V feed itself now uses the L-run knobs below.</summary>

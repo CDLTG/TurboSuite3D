@@ -22,14 +22,17 @@ namespace TurboSuite.Zones.OneLine
     /// lane + lowest exit) — dropping to each row's spine (matching the Lutron reference sheets). Downstream panels/shades hang
     /// along each QS row in rule-#5 order (Modules → Shades → Keypads, natural-name within a category); keypads
     /// collapse to one tail stub; a Clear Connect link doglegs to its row and draws a wireless stub. Each head
-    /// draws its own Ethernet-to-Home-Network stub out its left edge (Lutron-style — no shared switch node).</para>
+    /// draws its own Ethernet-to-Home-Network stubs out its left edge, live + spare (Lutron-style — no shared
+    /// switch node), and consecutive heads are tied by a spare Ethernet daisy chain down the head column. The
+    /// chain stays connected only until the home network is live, which is why it is labeled a spare.</para>
     ///
     /// <para><b>Pagination (stage 2, done):</b> enclosures pack onto 42×30 pages IN PACKER ORDER, each
     /// enclosure indivisible. An enclosure is ≤4 link-rows (an LV21 = 2 processors = 4 links), and a page holds
-    /// 4 rows, so an enclosure never splits — it always fits a fresh page. EVERY tie is enclosure-local (QS
-    /// links, the head fan, 120V, shades, keypads, the Ethernet stub), so nothing crosses a page boundary and
-    /// the drawing needs no continuation bubbles. The return type was always a page list, so pagination stayed
-    /// additive.</para>
+    /// 4 rows, so an enclosure never splits — it always fits a fresh page. Every tie but the daisy chain is
+    /// enclosure-local (QS links, the head fan, 120V, shades, keypads, the Ethernet stubs). The chain is the one
+    /// wire a page boundary can cut: it draws as a stub on each side, labeled with the head at the other end.
+    /// Those labels name the panel, not the sheet, because the planner's page index need not match the number
+    /// on the titleblock. The return type was always a page list, so pagination stayed additive.</para>
     /// </summary>
     public static class ControlOnePlannerConstants
     {
@@ -164,18 +167,52 @@ namespace TurboSuite.Zones.OneLine
             // RowPitch lower. The row index is PER PAGE (0..3), so every sheet's content occupies the same band.
             double RowCenterY(int r) => -r * G.Layout.RowPitch;
 
-            // Ethernet-to-Home-Network stub: a CAT6 run LEFT out of the head's left edge, with a two-line label
-            // and a CAT6 wire marker (the legend key, #5), per the Lutron reference sheet. Per head — there is NO
-            // shared switch node or trunk, so nothing ties heads together or crosses a page boundary.
+            // Ethernet-to-Home-Network stubs: a CAT6 run LEFT out of the head's left edge, with a two-line label
+            // and a CAT6 wire marker (the legend key, #5), per the Lutron reference sheet. Per head (one live + one
+            // spare, per PANEL — an LV21's two processors share them) — there is NO shared switch node or trunk.
             void AddEthernet(double headBottomY)
             {
-                double y = headBottomY + G.Layout.EthernetStubAboveOrigin;      // inline with the bottom-row exit
-                var a = new XY(headLeftX, y);                                   // start at the head's left edge
-                var b = new XY(headLeftX - G.Layout.EthernetStubLen, y);        // run 6' LEFT
-                Wire(a, b, dashed: false);   // CAT6 is a wired run → solid
-                Mark(new XY(headLeftX - G.Layout.MarkerExitOffset, y), ControlWireType.Cat6);   // fixed offset off the head LEFT edge
-                Note(new XY(colX + G.Layout.EthernetLabelDx, headBottomY + G.Layout.EthernetLabelDy),
-                    "ETHERNET LINK TO\rHOME NETWORK", ControlTextAlign.Center, G.LargeTextTypeName);
+                void Stub(double raise, string label)
+                {
+                    double y = headBottomY + G.Layout.EthernetStubAboveOrigin + raise;
+                    var a = new XY(headLeftX, y);                                   // start at the head's left edge
+                    var b = new XY(headLeftX - G.Layout.EthernetStubLen, y);        // run 6' LEFT
+                    Wire(a, b, dashed: false);   // CAT6 is a wired run → solid
+                    Mark(new XY(headLeftX - G.Layout.MarkerExitOffset, y), ControlWireType.Cat6);   // fixed offset off the head LEFT edge
+                    Note(new XY(colX + G.Layout.EthernetLabelDx, headBottomY + G.Layout.EthernetLabelDy + raise),
+                        label, ControlTextAlign.Center, G.LargeTextTypeName);
+                }
+
+                Stub(0.0, "ETHERNET LINK TO\rHOME NETWORK");
+                Stub(G.Layout.EthernetSparePitch, "SPARE ETHERNET LINK TO\rHOME NETWORK");
+            }
+
+            // A head's bottom (its family ORIGIN Y — the datum link exits anchor to) and top edge, at its per-page
+            // row. Bottom-aligned to the first row's baseline, so a short LV21 and a tall PD8 share one datum.
+            double HeadBottomY(Enclosure e) => RowCenterY(e.PageRowStart) - G.Panel.PowerPanelHeight / 2.0;
+            double HeadTopY(Enclosure e) => HeadBottomY(e) + e.HeadH;
+
+            // A full daisy-chain run between two heads on one sheet: the CAT6 wire on the head centerline, with its
+            // marker at the wire's midpoint and the note beside it, LEFT of the wire (the QS lanes drop on the right).
+            void AddDaisyChainRun(double fromY, double toY)
+            {
+                Wire(new XY(colX, fromY), new XY(colX, toY), dashed: false);
+                double midY = (fromY + toY) / 2.0;
+                Mark(new XY(colX, midY), ControlWireType.Cat6);
+                Note(new XY(colX - G.Layout.DaisyChainLabelDx, midY), "SPARE ETHERNET\rDAISY CHAIN",
+                    ControlTextAlign.Right, G.LargeTextTypeName, ControlVerticalAlign.Middle);
+            }
+
+            // A daisy-chain stub across a sheet break, leaving a head edge UP or DOWN: the marker a fixed offset off
+            // that edge, and a center-aligned note in line with the wire, just past the stub's free end.
+            void AddDaisyChainStub(double headEdgeY, bool up, string label)
+            {
+                double dir = up ? 1.0 : -1.0;
+                double endY = headEdgeY + dir * G.Layout.DaisyChainStubLen;
+                Wire(new XY(colX, headEdgeY), new XY(colX, endY), dashed: false);
+                Mark(new XY(colX, headEdgeY + dir * G.Layout.MarkerExitOffset), ControlWireType.Cat6);
+                Note(new XY(colX, endY + dir * G.Layout.DaisyChainStubNoteGap), label, ControlTextAlign.Center,
+                    G.LargeTextTypeName, up ? ControlVerticalAlign.Bottom : ControlVerticalAlign.Top);
             }
 
             // ── Phase 0: resolve every physical enclosure (NO drawing yet). Walk the groups MERGING consecutive
@@ -296,12 +333,12 @@ namespace TurboSuite.Zones.OneLine
 
                 // Head is BOTTOM-ALIGNED to its first (top) row's baseline, in the left column (per the Lutron reference sheet).
                 // headBottomY is the head's ORIGIN Y (center-bottom of the artwork) — the datum link exits anchor to.
-                double headBottomY = RowCenterY(rowStart) - G.Panel.PowerPanelHeight / 2.0;
+                double headBottomY = HeadBottomY(enc);
                 var headCenter = new XY(colX, headBottomY + headH / 2.0);
 
                 panelNodes.Add(Node(headRd, headCenter));
                 Add120V(headCenter, headH);    // 120 V feed on top
-                AddEthernet(headBottomY);      // CAT6 stub LEFT to the home network (per head, Lutron-style)
+                AddEthernet(headBottomY);      // CAT6 stubs LEFT to the home network, live + spare (per head, Lutron-style)
 
                 // ── Fan the live links out of the head's right edge as separate, crossing-free lanes ──
                 // Live links in row order (shallowest first). Exits anchor to the head ORIGIN: the DEEPEST (last)
@@ -541,10 +578,29 @@ namespace TurboSuite.Zones.OneLine
                 }
             }
 
-            // ── Phase 2: draw each page independently — fresh buckets, per-page row band. Each sheet is fully
-            //    self-contained: every tie is enclosure-local (QS links, the head fan, 120V, shades, keypads, and
-            //    each head's own Ethernet-to-Home-Network stub), and an enclosure never splits across pages, so
-            //    nothing crosses a page boundary and no continuation bubbles are needed. ──
+            // The chain's ties for one enclosure on the page being drawn: down to its successor (a full run on the
+            // same page, a labeled stub across a page break) and, when it opens a page, a labeled stub up toward its
+            // predecessor. The chain is open and in drawn order, so N heads get N−1 links and a lone head gets none.
+            void AddDaisyChain(int enclosureIndex)
+            {
+                var enc = enclosures[enclosureIndex];
+                if (enclosureIndex > 0 && enclosures[enclosureIndex - 1].Page != enc.Page)
+                    AddDaisyChainStub(HeadTopY(enc), up: true,
+                        $"SPARE ETHERNET\rDAISY CHAIN FROM {enclosures[enclosureIndex - 1].HeadRd.Name}");
+
+                if (enclosureIndex + 1 >= enclosures.Count) return;
+                var next = enclosures[enclosureIndex + 1];
+                if (next.Page == enc.Page)
+                    AddDaisyChainRun(HeadBottomY(enc), HeadTopY(next));
+                else
+                    AddDaisyChainStub(HeadBottomY(enc), up: false,
+                        $"SPARE ETHERNET\rDAISY CHAIN TO {next.HeadRd.Name}");
+            }
+
+            // ── Phase 2: draw each page independently — fresh buckets, per-page row band. An enclosure never splits
+            //    across pages and every tie but the spare daisy chain is enclosure-local (QS links, the head fan,
+            //    120V, shades, keypads, and each head's own Ethernet-to-Home-Network stubs), so the chain's labeled
+            //    stubs are the only continuation a sheet carries. ──
             var drawings = new List<ControlOneLineDrawing>();
             for (int pg = 1; pg <= pageCount; pg++)
             {
@@ -557,8 +613,12 @@ namespace TurboSuite.Zones.OneLine
                 markers = new List<ControlMarker>();
                 notes = new List<ControlNote>();
 
-                foreach (var enc in enclosures)
-                    if (enc.Page == pg) DrawEnclosure(enc);
+                for (int e = 0; e < enclosures.Count; e++)
+                {
+                    if (enclosures[e].Page != pg) continue;
+                    DrawEnclosure(enclosures[e]);
+                    AddDaisyChain(e);
+                }
 
                 drawings.Add(new ControlOneLineDrawing(pg, pageCount, panelNodes, shadeNodes, wires,
                     markers, notes, repeaterNodes, glyphNodes));

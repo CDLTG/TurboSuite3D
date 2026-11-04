@@ -146,8 +146,9 @@ its QS links off its **right edge** as separate, crossing-free **dogleg lanes** 
 lowest exit) across a widened head→column-1 gap, each dropping into its row's spine; a completely **dead (0/0)
 link is dropped** so live rows stay consecutive; each row a QS **spine 1' below the panels with a caret up to
 each panel origin**, nodes at a **measured per-gap center-to-center** (a 12' floor, widened only to clear a wide fan); **bottom-aligned shades** with a top **`n MOTORS`** tap;
-rule-#5 node order; keypad + wireless stubs; each head draws its own **Ethernet-to-Home-Network stub** out its
-left edge — Lutron-style, no shared switch node), and
+rule-#5 node order; keypad + wireless stubs; each head draws its own **Ethernet-to-Home-Network stubs** out its
+left edge — live + spare, Lutron-style, no shared switch node — and consecutive heads are tied by a **spare
+Ethernet daisy chain**), and
 `ControlRenderDataFactory` (PanelResult + BrandConfig →
 per-panel render data; module tiles **bottom-up**, part-number-labeled). The packer exposes per-link
 composition via `PackedLink.Units` (Section 2a). `Shim/Zones/Services/ControlOneLineService.cs` replays it
@@ -160,10 +161,22 @@ warns-and-skips** (no box-and-text fallback — the families are authored, so a 
 to surface, not a look-alike to draw).
 
 The renderer-drawn head-end glyphs follow the firm's sheet style: each processor head draws its own
-**Ethernet-to-Home-Network stub** — a CAT6 run LEFT out of its left edge (inline with the bottom-row exit) with
-a two-line label + a CAT6 marker (per the Lutron reference sheet), **no shared switch node or trunk** so nothing ties
-heads together or crosses a page — and the 120 V feed draws as a Lutron-style **L to a terminus square** (a
-plain glyph, **not** a wire marker/legend key). Prominent labels (Ethernet-link, 120V, keypad / wireless /
+**Ethernet-to-Home-Network stubs** — two CAT6 runs LEFT out of its left edge, the live link (inline with the
+bottom-row exit) and a labeled **spare** inline with the next exit up, each with a two-line label + a CAT6 marker (per the
+Lutron reference sheet), **no shared switch node or trunk**. That is **per panel, not per processor**: an LV21's two
+processors share the pair. The 120 V feed draws as a Lutron-style **L to a terminus square** (a
+plain glyph, **not** a wire marker/legend key).
+
+**Spare Ethernet daisy chain.** All processor panels are chained so processors can talk while the network is down
+or not yet installed; the chain is disconnected once the network is live, which is why it is labeled a **spare** and
+carries no further note. It is an **open chain in drawn order** (N heads, N−1 links; a lone head, none) running straight
+down the head column's centerline, bottom of one head to top of the next, clear of the Ethernet stubs and the QS lanes.
+An LV21's two processors are jumpered inside the enclosure with no wire to pull, so that jumper is deliberately not
+drawn. A full run carries its marker and note at its midpoint, the note left of the wire. **It is the one wire that can
+cross a sheet:** a break draws a stub on each side labeled with the head at the other end (`SPARE ETHERNET DAISY CHAIN
+TO 2-A` / `FROM 1-B`), by panel name because the planner's page index need not match the titleblock's sheet number. A
+stub's marker stays by the head, and its center-aligned note sits in line with the wire, just past the free end.
+Prominent labels (Ethernet-link, 120V, keypad / wireless /
 motor stubs) render in the firm `AL_Annotation_4.5"` text style, resolved by name and falling back to the
 generic note type when absent (`ControlNote.TextTypeName`).
 
@@ -222,7 +235,8 @@ drawn here). Everything drawn is a WIRED run, so every segment is **solid** (sol
 shown by the keypad **glyph**, not a dashed RF line, so the legend carries **no** `RF CONNECTION` / `WIRED
 CONNECTION` line-style sample keys — only the numbered cable rows. The shade row reads **"SHADE WIRING BY OTHERS"**
 (control context only). Head-sourced markers sit at `Layout.MarkerExitOffset` off the head edge — QS/wireless
-right, CAT6 left — while the shade-link marker stays on its motor stub. Legend title is the larger
+right, CAT6 left, a daisy-chain stub below/above — while a full daisy-chain run's marker sits at its midpoint and the
+shade-link marker stays on its motor stub. Legend title is the larger
 `AL_Annotation_6.75"` over 4.5" body rows.
 
 **Status:** the 10 families are authored (the 6 panel/tile/shade/marker families + the `ControlRepeaterDetail`
@@ -231,8 +245,8 @@ sizes, rung anchor offsets incl. the LV21's) is transcribed into `ControlOneLine
 bottom-aligned shades, the row-per-link 28' layout, the **head-panel dogleg fan + one-head LV21 placement**
 (name-identified head, dead-link row compaction, LV21 tile offsets), per-head **Ethernet stubs**, **42×30
 pagination**, and the **wire legend** are in. Pagination packs whole processor enclosures onto pages
-(**indivisible, ≤4 rows each**, greedy in packer order) and prunes orphaned sheets on shrink; every tie is
-enclosure-local, so there are **no continuation bubbles**. **Cross-session ViewId persistence** is now in:
+(**indivisible, ≤4 rows each**, greedy in packer order) and prunes orphaned sheets on shrink; every tie but the
+spare daisy chain is enclosure-local, so its labeled stubs are the **only continuation** a sheet carries. **Cross-session ViewId persistence** is now in:
 the per-page one-line view ids + the wire-legend view id are stored in a **dedicated** ES schema
 (`ZonesOneLineViewStorageService`, `OneLineViewState` — its own GUID, not the panel-settings schema, so it
 never re-bumps that one), read at window open and written on Draw via the work queue; redraws still also find

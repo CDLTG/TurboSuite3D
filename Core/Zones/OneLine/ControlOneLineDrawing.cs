@@ -214,9 +214,10 @@ namespace TurboSuite.Zones.OneLine
     /// shade nodes, the wire segments, the wire-type markers, and the native notes. The shim renderer wipes this
     /// page's owned Drafting View and replays it, so the drawing is regenerated from the snapshot every run
     /// (never hand-edited). One drawing per 42×30 page; the common case is a single page
-    /// (<see cref="PageCount"/> == 1). There are no cross-page continuation glyphs: every tie is enclosure-local
-    /// and an enclosure is never split across pages (the structural goal is a processor enclosure contained on
-    /// one sheet), so no wire is ever cut by a page boundary.
+    /// (<see cref="PageCount"/> == 1). An enclosure is never split across pages (the structural goal is a
+    /// processor enclosure contained on one sheet) and every tie but the spare Ethernet daisy chain is
+    /// enclosure-local, so that chain is the only wire a page boundary can cut — drawn as a labeled stub on each
+    /// side, naming the head at the other end.
     /// </summary>
     public sealed class ControlOneLineDrawing
     {

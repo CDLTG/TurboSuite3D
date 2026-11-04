@@ -13,8 +13,8 @@ namespace TurboSuite.Tests.Zones
     //  ControlOneLinePlanner (Section 2, #4) — the pure horizontal-layout planner. These build a
     //  LinkPackResult directly (isolating the planner from the packer) + render-data dicts, and assert
     //  the shape: the processor-hosting panel is the head, downstream nodes follow rule-#5 order, keypads
-    //  are a tail stub only where they landed, Clear Connect draws a wireless stub, and a shared HOME
-    //  NETWORK node feeds CAT6 to each head.
+    //  are a tail stub only where they landed, Clear Connect draws a wireless stub, each head draws live +
+    //  spare CAT6 stubs to the home network, and a spare CAT6 daisy chain ties consecutive heads.
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     public class ControlOneLinePlannerTests
     {
@@ -327,10 +327,10 @@ namespace TurboSuite.Tests.Zones
         }
 
         /// <summary>Multi-processor: each bay's head sits at the left column on its own row, and each head draws
-        /// its OWN Ethernet-to-Home-Network stub (a CAT6 marker + a labeled note) out its left edge — there is no
-        /// shared switch node tying the heads together (per the Lutron reference sheet).</summary>
+        /// its OWN Ethernet-to-Home-Network stubs (live + spare, each a CAT6 marker + a labeled note) out its left
+        /// edge — there is no shared switch node (per the Lutron reference sheet).</summary>
         [Fact]
-        public void EachProcessorDrawsItsOwnEthernetStub()
+        public void EachProcessorDrawsItsOwnEthernetStubs()
         {
             var pack = Pack(
                 Group(Qs(U("1-A", LinkCategory.Modules, 8)), EmptyQs(), location: 1),
@@ -343,10 +343,204 @@ namespace TurboSuite.Tests.Zones
             Assert.Equal(2, heads.Count);
             Assert.All(heads, h => Assert.Equal(ControlOneLineGeometry.Layout.ProcessorColumnX, h.Center.X, 3));
             Assert.NotEqual(heads[0].Center.Y, heads[1].Center.Y);
-            // One Ethernet stub per head: a CAT6 marker + a labeled note each.
-            Assert.Equal(2, page.Markers.Count(m => m.Type == ControlWireType.Cat6));
-            Assert.Equal(2, page.Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
+            // Two Ethernet stubs per head + the one daisy-chain link between them, each with a CAT6 marker.
+            Assert.Equal(5, page.Markers.Count(m => m.Type == ControlWireType.Cat6));
+            Assert.Equal(2, page.Notes.Count(n => n.Text == LiveEthernetLabel));
+            Assert.Equal(2, page.Notes.Count(n => n.Text == SpareEthernetLabel));
         }
+
+        /// <summary>The spare is a full second stub, not just a label: left edge out, its marker in the shared
+        /// marker column, and one pitch above the live stub, which stays exactly where it was.</summary>
+        [Fact]
+        public void SpareEthernetStubSitsOnePitchAboveTheLiveStub()
+        {
+            var pack = Pack(Group(Qs(U("1-A", LinkCategory.Modules, 8)), EmptyQs()));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A") };
+
+            var page = BuildOne(pack, panels);
+
+            var head = Assert.Single(page.Panels, p => p.HostsProcessor);
+            double headBottomY = HeadBottomY(head);
+            double headLeftX = head.Center.X - ControlOneLineGeometry.Panel.Width / 2.0;
+            double liveY = headBottomY + ControlOneLineGeometry.Layout.EthernetStubAboveOrigin;
+            double spareY = liveY + ControlOneLineGeometry.Layout.EthernetSparePitch;
+
+            foreach (double y in new[] { liveY, spareY })
+            {
+                Assert.Contains(page.Wires, w => Near(w.Start, headLeftX, y)
+                    && Near(w.End, headLeftX - ControlOneLineGeometry.Layout.EthernetStubLen, y));
+                Assert.Contains(page.Markers, m => m.Type == ControlWireType.Cat6
+                    && Near(m.Position, headLeftX - ControlOneLineGeometry.Layout.MarkerExitOffset, y));
+            }
+
+            var live = Assert.Single(page.Notes, n => n.Text == LiveEthernetLabel);
+            var spare = Assert.Single(page.Notes, n => n.Text == SpareEthernetLabel);
+            Assert.Equal(headBottomY + ControlOneLineGeometry.Layout.EthernetLabelDy, live.Position.Y, 3);
+            Assert.Equal(live.Position.Y + ControlOneLineGeometry.Layout.EthernetSparePitch, spare.Position.Y, 3);
+            Assert.Equal(live.Position.X, spare.Position.X, 3);
+        }
+
+        /// <summary>The head's two Ethernet stubs line up with its bottom two QS exits across the enclosure.</summary>
+        [Fact]
+        public void EthernetStubsAlignWithTheBottomTwoQsExits()
+        {
+            var pack = Pack(Group(
+                Qs(U("1-A", LinkCategory.Modules, 8), U("1-B", LinkCategory.Modules, 6)),
+                Qs(U("1-C", LinkCategory.Modules, 6))));
+            var panels = new Dictionary<string, ControlPanelRenderData>
+            {
+                ["1-A"] = Proc("1-A"), ["1-B"] = Dimmer("1-B"), ["1-C"] = Dimmer("1-C"),
+            };
+
+            var page = BuildOne(pack, panels);
+
+            var head = Assert.Single(page.Panels, p => p.HostsProcessor);
+            double headRightX = head.Center.X + ControlOneLineGeometry.Panel.Width / 2.0;
+            double headLeftX = head.Center.X - ControlOneLineGeometry.Panel.Width / 2.0;
+            double liveY = HeadBottomY(head) + ControlOneLineGeometry.Layout.EthernetStubAboveOrigin;
+            double spareY = liveY + ControlOneLineGeometry.Layout.EthernetSparePitch;
+
+            foreach (double y in new[] { liveY, spareY })
+            {
+                Assert.Contains(page.Wires, w => Near(w.Start, headLeftX, y));    // Ethernet stub, left edge
+                Assert.Contains(page.Wires, w => Near(w.Start, headRightX, y));   // QS exit, right edge
+            }
+        }
+
+        /// <summary>One panel, no chain — even an LV21, whose two processors are jumpered inside the enclosure
+        /// with no wire to pull. It also gets one live + one spare stub per PANEL, not per processor.</summary>
+        [Fact]
+        public void LoneHeadDrawsNoDaisyChain_EvenAnLv21WithTwoProcessors()
+        {
+            var pack = Pack(Lv21ThreeRows("1-A", "1-B", "1-C", "1-D"));
+            var panels = new Dictionary<string, ControlPanelRenderData>
+            {
+                ["1-A"] = Lv21("1-A"), ["1-B"] = Dimmer("1-B"), ["1-C"] = Dimmer("1-C"), ["1-D"] = Dimmer("1-D"),
+            };
+
+            var page = BuildOne(pack, panels);
+
+            Assert.DoesNotContain(page.Notes, n => n.Text.Contains("DAISY CHAIN"));
+            Assert.Equal(2, page.Markers.Count(m => m.Type == ControlWireType.Cat6));
+            Assert.Single(page.Notes, n => n.Text == LiveEthernetLabel);
+            Assert.Single(page.Notes, n => n.Text == SpareEthernetLabel);
+        }
+
+        /// <summary>Two heads on one sheet: a straight CAT6 run on the centerline from the upper head's bottom to
+        /// the lower head's top, with its marker at the wire's midpoint and its note beside it, left of the wire
+        /// (the QS lanes drop through the right).</summary>
+        [Fact]
+        public void HeadsOnOneSheetAreTiedByAStraightDaisyChainRun()
+        {
+            var pack = Pack(
+                Group(Qs(U("1-A", LinkCategory.Modules, 8)), EmptyQs(), location: 1),
+                Group(Qs(U("2-A", LinkCategory.Modules, 8)), EmptyQs(), location: 2));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A"), ["2-A"] = Proc("2-A") };
+
+            var page = BuildOne(pack, panels);
+
+            var upper = Assert.Single(page.Panels, p => p.Name == "1-A");
+            var lower = Assert.Single(page.Panels, p => p.Name == "2-A");
+            double fromY = HeadBottomY(upper);
+            double toY = HeadTopY(lower);
+            Assert.True(fromY > toY);
+
+            Assert.Contains(page.Wires, w => Near(w.Start, upper.Center.X, fromY) && Near(w.End, upper.Center.X, toY));
+            double midY = (fromY + toY) / 2.0;
+            Assert.Contains(page.Markers, m => m.Type == ControlWireType.Cat6 && Near(m.Position, upper.Center.X, midY));
+
+            var label = Assert.Single(page.Notes, n => n.Text.Contains("DAISY CHAIN"));
+            Assert.Equal("SPARE ETHERNET\rDAISY CHAIN", label.Text);
+            Assert.Equal(ControlTextAlign.Right, label.Align);
+            Assert.Equal(ControlVerticalAlign.Middle, label.VAlign);
+            Assert.True(Near(label.Position, upper.Center.X - ControlOneLineGeometry.Layout.DaisyChainLabelDx, midY));
+        }
+
+        /// <summary>The chain across a sheet break: a stub + label on each side naming the head at the other end.
+        /// Five heads on three sheets exercise every case — a sheet that only sends, one that receives, chains
+        /// and sends, and one that only receives — and the chain stays open (no wrap from the last to the first).</summary>
+        [Fact]
+        public void DaisyChainContinuesAcrossSheetsAsNamedStubs()
+        {
+            ProcessorGroup Pd8(string h, string d1, string d2)
+                => Group(Qs(U(h, LinkCategory.Modules, 8), U(d1, LinkCategory.Modules, 6)),
+                         Qs(U(d2, LinkCategory.Modules, 6)));
+            var names = new[] { "A", "B", "C", "D", "E" };
+            var pack = Pack(names.Select(n => Pd8(n, n + "2", n + "3")).ToArray());
+            var panels = new Dictionary<string, ControlPanelRenderData>();
+            foreach (var n in names)
+            {
+                panels[n] = Proc(n);
+                panels[n + "2"] = Dimmer(n + "2");
+                panels[n + "3"] = Dimmer(n + "3");
+            }
+
+            var pages = ControlOneLinePlanner.Build(pack, panels, "TurboControl");
+
+            Assert.Equal(3, pages.Count);
+            Assert.Equal(new[] { "SPARE ETHERNET\rDAISY CHAIN", "SPARE ETHERNET\rDAISY CHAIN TO C" }, ChainLabels(pages[0]));
+            Assert.Equal(new[] { "SPARE ETHERNET\rDAISY CHAIN", "SPARE ETHERNET\rDAISY CHAIN FROM B", "SPARE ETHERNET\rDAISY CHAIN TO E" }, ChainLabels(pages[1]));
+            Assert.Equal(new[] { "SPARE ETHERNET\rDAISY CHAIN FROM D" }, ChainLabels(pages[2]));
+
+            // Page 1's outgoing stub drops off B; page 3's incoming stub rises off E. Each stub is the fixed length,
+            // ending in open space, with its marker by the head and a center-aligned note in line with the wire,
+            // just past the free end: hanging below a stub that drops, sitting above one that rises.
+            var b = Assert.Single(pages[0].Panels, p => p.Name == "B");
+            double bBottom = HeadBottomY(b);
+            double bEnd = bBottom - ControlOneLineGeometry.Layout.DaisyChainStubLen;
+            Assert.Contains(pages[0].Wires, w => Near(w.Start, b.Center.X, bBottom) && Near(w.End, b.Center.X, bEnd));
+            Assert.Contains(pages[0].Markers, m => m.Type == ControlWireType.Cat6
+                && Near(m.Position, b.Center.X, bBottom - ControlOneLineGeometry.Layout.MarkerExitOffset));
+            var outgoing = Assert.Single(pages[0].Notes, n => n.Text.EndsWith(" TO C"));
+            Assert.Equal(ControlTextAlign.Center, outgoing.Align);
+            Assert.Equal(ControlVerticalAlign.Top, outgoing.VAlign);
+            Assert.True(Near(outgoing.Position, b.Center.X, bEnd - ControlOneLineGeometry.Layout.DaisyChainStubNoteGap));
+
+            var e = Assert.Single(pages[2].Panels, p => p.Name == "E");
+            double eTop = HeadTopY(e);
+            double eEnd = eTop + ControlOneLineGeometry.Layout.DaisyChainStubLen;
+            Assert.Contains(pages[2].Wires, w => Near(w.Start, e.Center.X, eTop) && Near(w.End, e.Center.X, eEnd));
+            Assert.Contains(pages[2].Markers, m => m.Type == ControlWireType.Cat6
+                && Near(m.Position, e.Center.X, eTop + ControlOneLineGeometry.Layout.MarkerExitOffset));
+            var incoming = Assert.Single(pages[2].Notes, n => n.Text.EndsWith(" FROM D"));
+            Assert.Equal(ControlTextAlign.Center, incoming.Align);
+            Assert.Equal(ControlVerticalAlign.Bottom, incoming.VAlign);
+            Assert.True(Near(incoming.Position, e.Center.X, eEnd + ControlOneLineGeometry.Layout.DaisyChainStubNoteGap));
+
+            // CAT6 markers: 2 per head + 1 per chain run. Page 1 = 2 heads + run + stub; page 2 = 2 heads + run +
+            // two stubs; page 3 = 1 head + stub.
+            Assert.Equal(6, pages[0].Markers.Count(m => m.Type == ControlWireType.Cat6));
+            Assert.Equal(7, pages[1].Markers.Count(m => m.Type == ControlWireType.Cat6));
+            Assert.Equal(3, pages[2].Markers.Count(m => m.Type == ControlWireType.Cat6));
+        }
+
+        /// <summary>The chain does not change the wire legend's roster: it is the same CAT6 cable, one number.</summary>
+        [Fact]
+        public void DaisyChainAndSpareStubsShareTheCat6LegendNumber()
+        {
+            var pack = Pack(
+                Group(Qs(U("1-A", LinkCategory.Modules, 8)), EmptyQs(), location: 1),
+                Group(Qs(U("2-A", LinkCategory.Modules, 8)), EmptyQs(), location: 2));
+            var panels = new Dictionary<string, ControlPanelRenderData> { ["1-A"] = Proc("1-A"), ["2-A"] = Proc("2-A") };
+
+            var page = BuildOne(pack, panels);
+
+            int cat6 = ControlWireLegend.ForPack(pack).NumberFor(ControlWireType.Cat6);
+            Assert.All(page.Markers.Where(m => m.Type == ControlWireType.Cat6), m => Assert.Equal(cat6, m.Number));
+        }
+
+        private const string LiveEthernetLabel = "ETHERNET LINK TO\rHOME NETWORK";
+        private const string SpareEthernetLabel = "SPARE ETHERNET LINK TO\rHOME NETWORK";
+
+        private static double NodeHeight(ControlPanelNode p)
+            => ControlOneLineGeometry.Panel.Height(p.ModuleTiles.Count, p.LvSlots.Count);
+        private static double HeadBottomY(ControlPanelNode p) => p.Center.Y - NodeHeight(p) / 2.0;
+        private static double HeadTopY(ControlPanelNode p) => p.Center.Y + NodeHeight(p) / 2.0;
+        private static bool Near(XY a, double x, double y)
+            => System.Math.Abs(a.X - x) < 1e-6 && System.Math.Abs(a.Y - y) < 1e-6;
+        private static string[] ChainLabels(ControlOneLineDrawing page)
+            => page.Notes.Where(n => n.Text.Contains("DAISY CHAIN")).Select(n => n.Text)
+                .OrderBy(t => t, System.StringComparer.Ordinal).ToArray();
 
         /// <summary>An LV21's two processor compartments arrive as two same-named <see cref="ProcessorGroup"/>s.
         /// The planner MERGES them into ONE drawn head, found by name (the LV21 carries no modules, so it is no
@@ -383,7 +577,7 @@ namespace TurboSuite.Tests.Zones
 
         /// <summary>Two 3-row LV21s (6 rows) don't co-fit on one 4-row page, and an enclosure is indivisible, so
         /// each lands on its own sheet. Rows re-base per page (both heads bottom-align to row 0 → identical Y),
-        /// and HOME NETWORK is repeated on each sheet so no wire crosses the page boundary.</summary>
+        /// and each sheet's head draws its own home-network stubs; only the daisy chain continues across the break.</summary>
         [Fact]
         public void TwoFullEnclosuresThatDoNotCoFitPaginateOnePerSheet()
         {
@@ -413,9 +607,9 @@ namespace TurboSuite.Tests.Zones
             Assert.All(new[] { "2-B", "2-C", "2-D" }, n => Assert.Contains(pages[1].Panels, p => p.Name == n));
             // Per-page row re-basing: both heads sit at the same Y band (row 0), not 28' apart down a shared sheet.
             Assert.Equal(head1.Center.Y, head2.Center.Y, 3);
-            // Each sheet's head draws its own Ethernet stub — self-contained, nothing crosses the page break.
-            Assert.Single(pages[0].Notes, n => n.Text.Contains("ETHERNET LINK"));
-            Assert.Single(pages[1].Notes, n => n.Text.Contains("ETHERNET LINK"));
+            // Each sheet's head draws its own live + spare Ethernet stubs.
+            Assert.Equal(2, pages[0].Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
+            Assert.Equal(2, pages[1].Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
         }
 
         /// <summary>Greedy in-order pack: three 2-row PD8s (6 rows) fill a sheet with the FIRST TWO (4 rows), then
@@ -443,9 +637,9 @@ namespace TurboSuite.Tests.Zones
             var page2Heads = pages[1].Panels.Where(p => p.HostsProcessor).Select(p => p.Name).OrderBy(n => n).ToList();
             Assert.Equal(new[] { "A", "B" }, page1Heads);
             Assert.Equal(new[] { "C" }, page2Heads);
-            // Ethernet stubs are per head: page 1 has two heads (two stubs), page 2 one.
-            Assert.Equal(2, pages[0].Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
-            Assert.Single(pages[1].Notes, n => n.Text.Contains("ETHERNET LINK"));
+            // Ethernet stubs are per head, live + spare: page 1 has two heads (four stubs), page 2 one (two).
+            Assert.Equal(4, pages[0].Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
+            Assert.Equal(2, pages[1].Notes.Count(n => n.Text.Contains("ETHERNET LINK")));
         }
     }
 }
