@@ -154,7 +154,7 @@ TurboSuite selects tag families by their **`TurboSuite Role` type parameter**, n
 - RevitAPI.dll and RevitAPIUI.dll (Revit 2024, 2025, or 2026, depending on the channel)
 - Xceed.Wpf.AvalonDock.dll (ships with Revit) — used by TurboTab for document tab coloring
 - [ACadSharp](https://github.com/DomCR/ACadSharp) (NuGet) — .NET library for reading AutoCAD DWG/DXF files without requiring an AutoCAD installation
-- [PDFsharp](https://github.com/empira/PDFsharp) (NuGet) — PDF generation, reading, stamping, and merging. Used by TurboDocs.
+- [PDFsharp](https://github.com/empira/PDFsharp) (NuGet, used under the [AGPL v3](https://www.gnu.org/licenses/agpl-3.0.html)) — PDF generation, reading, stamping, and merging. Used by TurboDocs.
 - .NET Framework 4.8 (Revit 2024) / .NET 8.0-windows (Revit 2025) / .NET 10.0-windows (Revit 2026) / WPF
 
 ## Building from Source
@@ -173,7 +173,7 @@ Platform target is **x64**. Requires the .NET 8.0 SDK and a local install of the
 
 ## License
 
-Released under the [GNU General Public License v3.0](LICENSE).
+Released under the [GNU General Public License v3.0](LICENSE). TurboDocs links PDFsharp under the GNU Affero General Public License v3, as GPLv3 section 13 permits, so the AGPL's network-interaction terms apply to the combined work.
 
 ## Acknowledgments
 

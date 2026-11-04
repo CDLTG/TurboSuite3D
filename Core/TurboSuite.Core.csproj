@@ -20,6 +20,8 @@
          accepts. All other Counts spill constructs (FILTER/VSTACK/BYROW/TOCOL/HSTACK/
          XLOOKUP) parse fine. See roadmap Dependencies-1. -->
     <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <!-- PDFsharp 6.5+ is AGPL/commercial (6.2.4 was MIT) and refuses to run until a license is
+         selected. See Docs/Services/PdfSharpLicensing.cs. -->
     <PackageReference Include="PDFsharp" Version="6.5.0" />
     <!-- Pin System.Security.Cryptography.Pkcs to the patched 8.0.2 over the
          vulnerable 8.0.1 that PDFsharp (through 6.5.0) still floors its graph on

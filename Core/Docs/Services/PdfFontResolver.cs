@@ -36,9 +36,12 @@ internal sealed class PdfFontResolver : IFontResolver
     /// <summary>
     /// Idempotently install this resolver before the first render. Each PDF service calls this
     /// from its static constructor, so it is guaranteed to run before any XFont/XGraphics touch.
+    /// Also selects the PDFsharp license, which the same static constructors need before their
+    /// first PdfDocument.
     /// </summary>
     public static void EnsureRegistered()
     {
+        PdfSharpLicensing.EnsureSelected();
         if (GlobalFontSettings.FontResolver != null) return;
         lock (RegisterLock)
         {

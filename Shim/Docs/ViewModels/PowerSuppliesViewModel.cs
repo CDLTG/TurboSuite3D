@@ -240,6 +240,8 @@ public class PowerSuppliesViewModel : ViewModelBase
             {
                 // Merge each checked-and-ready output into one PDF, in reading order:
                 // schedule → lookup table → breakdown.
+                // No PDF service has run yet here, so select the license before the first document.
+                PdfSharpLicensing.EnsureSelected();
                 using var pdf = new PdfDocument();
                 pdf.Info.Title = $"{ProjectName} Power Supplies";
 
