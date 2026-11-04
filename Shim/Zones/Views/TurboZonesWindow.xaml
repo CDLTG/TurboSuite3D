@@ -288,7 +288,8 @@
                         <!-- Section 2: generate the control one-line (Lutron only — see PanelTab.ShowDrawOneLine). -->
                         <Button Content="Draw One-Line"
                                 Command="{Binding PanelTab.DrawOneLineCommand}"
-                                DockPanel.Dock="Right" Height="24" Padding="10,0" VerticalAlignment="Center"
+                                Style="{StaticResource RevitButtonStyle}"
+                                DockPanel.Dock="Right" Height="24" Padding="16,0" VerticalAlignment="Center"
                                 Visibility="{Binding PanelTab.ShowDrawOneLine, Converter={StaticResource BoolToVisibility}}"/>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Brand:" VerticalAlignment="Center" Margin="0,0,4,0"
