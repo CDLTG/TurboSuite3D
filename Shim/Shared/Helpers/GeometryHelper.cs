@@ -58,6 +58,18 @@ public static class GeometryHelper
     }
 
     /// <summary>
+    /// True for a line-based family with a boxed plan symbol — a usable <see cref="ParameterNames.SymbolLength"/>
+    /// and <see cref="ParameterNames.SymbolWidth"/> — as opposed to a centerline-only tape run, which lacks
+    /// them. Told apart purely by parameters, no role or naming needed.
+    /// </summary>
+    public static bool IsBoxedLineBasedFixture(FamilyInstance fixture)
+    {
+        return IsLineBasedFixture(fixture)
+            && ParameterHelper.ReadLength(fixture, ParameterNames.SymbolWidth) is > 0
+            && ParameterHelper.ReadLength(fixture, ParameterNames.SymbolLength) is > 0;
+    }
+
+    /// <summary>
     /// True for a line-based fixture whose line runs (near-)perpendicular to the plan — LED tape run up a
     /// wall. Its curve projects to a point, so there is no in-plan line direction: BasisX is ~±Z and the
     /// BasisX angle the plan-offset helpers rotate by is noise. Callers place it off its wall face instead

@@ -15,9 +15,17 @@ Every offset is a 1/4" = 1'-0" reference value scaled by `K = view.Scale / 48` o
 
 ### Linear point fixtures (light bars)
 
-For **linear** point fixtures (a LocationPoint family whose long plan extent is ≥ 3× its short one — the same test TurboWire uses via `GeometryHelper.TryGetLinearLongAxis`), the wire's connector-end vertex is anchored at the bar's **end** rather than its center, so the switchleg arc springs from the end the tag sits off — no manual v1 drag. The end is the long-axis end toward the wire (nearest `Vertex2`, i.e. the side clicked); the tag and the `Vertex2`/`Vertex3` arc are unchanged, and the electrical connection is untouched (a display-only vertex move). Non-linear fixtures (square downlights) keep the center anchor. Horizontal (ceiling/floor) path only — line-based, wall-sconce, chandelier, and electrical-fixture paths are unaffected.
+For **linear** point fixtures (a LocationPoint family whose long plan extent is ≥ 3× its short one — the same test TurboWire uses via `GeometryHelper.TryGetLinearLongAxis`), the wire's connector-end vertex is anchored at the bar's **end** rather than its center, so the switchleg arc springs from the end the tag sits off — no manual v1 drag. The end is the long-axis end toward the wire (nearest `Vertex2`, i.e. the side clicked); the tag and the `Vertex2`/`Vertex3` arc are unchanged, and the electrical connection is untouched (a display-only vertex move). Non-linear fixtures (square downlights) keep the center anchor. Horizontal (ceiling/floor) path only — tape, wall-sconce, chandelier, and electrical-fixture paths are unaffected.
 
 At smaller view scales with the `Symbol Length` divisor re-mapped (e.g. ÷96 at 1/8"), a short bar can stop counting as linear and keep the center anchor (see TurboWire's README, "Known limitation at smaller view scales"). This is accepted: Revit clips the wire at the nested annotation's edge line, so it still reads as leaving from the end in most configurations.
+
+### Custom-length linear fixtures (line-based)
+
+A line-based family with a boxed plan symbol (`Symbol Length` and `Symbol Width` both set, `GeometryHelper.IsBoxedLineBasedFixture`) and **no** `Remote Power Supply` bubbles exactly like a linear point fixture: it takes `HorizontalPlacementCalculator`, so the tag sits past the bar's end and the wire leaves from that end. Your click picks which end. Because the source is a `LinearTag` or run tag, the frame comes from the fixture's line rather than the tag's `Orientation`/`Angle`, and the tag only picks the side of the line.
+
+The same family **on a `Remote Power Supply` is functionally tape** and stays on `LineBasedPlacementCalculator`, as do tape itself and wall-hosted or plumb runs. TurboTag treats these hybrid families as line-based in both modes.
+
+**Authoring requirement:** the wire end is measured as `connector ± half length`, so the connector must sit at the line's midpoint unless the type uses a remote power supply, where it belongs at the feed end like tape. Drive the connector's position from the line's start with a `Connector Offset` formula: `if(Remote Power Supply, 0, Length / 2)`. TurboWire's end-to-end routing relies on the same centered connector. The code reads the connector's actual position, not this parameter (TurboMask uses it only as a fallback for a family with no connector).
 
 ### Chandeliers / decorative pendants
 
@@ -44,6 +52,7 @@ Tag/detail families are found by their `TurboSuite Role` type parameter, not by 
 |-----------|----|---------|
 | `Remote Power Supply` | Lighting Fixture type | Selects remote vs. standard switchleg tag |
 | `Scale Factor` | Fixture instance | Scales wire offset distances for wall sconces (a size knob, composed with the view-scale `K`, not a substitute for it) |
+| `Symbol Length`, `Symbol Width` | Line-based fixture | Both above zero marks a boxed fixture rather than tape, so it can bubble like a linear fixture |
 
 ## Recognized electrical fixture families
 

@@ -87,6 +87,20 @@ namespace TurboSuite.Shared.Helpers
         }
 
         /// <summary>
+        /// Reads a length-valued (Double, internal feet) parameter, instance first then the type symbol,
+        /// returning null when absent or unset.
+        /// </summary>
+        public static double? ReadLength(FamilyInstance fixture, string name)
+        {
+            foreach (var p in new[] { fixture.LookupParameter(name), fixture.Symbol?.LookupParameter(name) })
+            {
+                if (p != null && p.StorageType == StorageType.Double && p.HasValue)
+                    return p.AsDouble();
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Get Linear Length from element (instance parameter)
         /// </summary>
         public static double GetLinearLength(Element element)

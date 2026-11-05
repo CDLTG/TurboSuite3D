@@ -705,25 +705,9 @@ public class MaskCommand : IExternalCommand
     {
         if (fixture.Location is not LocationCurve) return LineBasedKind.None;
 
-        double? width = ReadLengthParam(fixture, ParameterNames.SymbolWidth);
-        double? length = ReadLengthParam(fixture, ParameterNames.SymbolLength);
-        if (width is > 0 && length is > 0)
-            return LineBasedKind.Fixture;
-        return LineBasedKind.Tape;
-    }
-
-    /// <summary>
-    /// Reads a length-valued (Double, internal feet) parameter, instance first then the type symbol,
-    /// returning null when absent or unset.
-    /// </summary>
-    private static double? ReadLengthParam(FamilyInstance fixture, string name)
-    {
-        foreach (var p in new[] { fixture.LookupParameter(name), fixture.Symbol?.LookupParameter(name) })
-        {
-            if (p != null && p.StorageType == StorageType.Double && p.HasValue)
-                return p.AsDouble();
-        }
-        return null;
+        return GeometryHelper.IsBoxedLineBasedFixture(fixture)
+            ? LineBasedKind.Fixture
+            : LineBasedKind.Tape;
     }
 
     /// <summary>
@@ -734,8 +718,8 @@ public class MaskCommand : IExternalCommand
     private static void DrawFixtureRectangle(Document doc, View view, FamilyInstance fixture,
         GraphicsStyle? style, List<ElementId> groupMemberIds)
     {
-        double? length = ReadLengthParam(fixture, ParameterNames.SymbolLength);
-        double? width = ReadLengthParam(fixture, ParameterNames.SymbolWidth);
+        double? length = ParameterHelper.ReadLength(fixture, ParameterNames.SymbolLength);
+        double? width = ParameterHelper.ReadLength(fixture, ParameterNames.SymbolWidth);
         if (length is not > 0 || width is not > 0) return;
         if (fixture.Location is not LocationCurve lc || lc.Curve == null) return;
 
@@ -800,7 +784,7 @@ public class MaskCommand : IExternalCommand
             try { return connector.Origin; } catch { }
         }
 
-        double? offset = ReadLengthParam(fixture, ParameterNames.ConnectorOffset);
+        double? offset = ParameterHelper.ReadLength(fixture, ParameterNames.ConnectorOffset);
         if (offset.HasValue && fixture.Location is LocationCurve lc && lc.Curve != null)
         {
             XYZ start = lc.Curve.GetEndPoint(0);

@@ -119,8 +119,20 @@ public class BubbleCommand : IExternalCommand
         var isChandelier = !isLineBased && !isPictureLight && !isVerticalFace && IsChandelierFamily(fixture);
         var hasRemotePowerSupply = ParameterHelper.HasRemotePowerSupply(fixture);
 
+        // A boxed line-based family without a remote power supply is a static linear fixture of custom
+        // length, so it bubbles like one: tag past the bar's end, wire from that end. On a remote power
+        // supply it is functionally tape and stays on the line-based path (linear feed, or the remote
+        // switchleg with dynamic driver tags). Wall-hosted and plumb runs also stay there: the horizontal
+        // calculator assumes the bar lies flat in plan.
+        var bubblesAsLinearFixture = !hasRemotePowerSupply
+            && GeometryHelper.IsBoxedLineBasedFixture(fixture)
+            && !GeometryHelper.IsOnVerticalFace(fixture)
+            && !GeometryHelper.IsVerticalLineBasedFixture(fixture);
+
         IPlacementCalculator placement;
-        if (isLineBased)
+        if (bubblesAsLinearFixture)
+            placement = new HorizontalPlacementCalculator(doc, activeView, fixture, selectedTag, g);
+        else if (isLineBased)
             placement = new LineBasedPlacementCalculator(doc, activeView, fixture, selectedTag, g);
         else if (isPictureLight)
             placement = new PictureLightPlacementCalculator(doc, activeView, fixture, selectedTag, g);
@@ -226,7 +238,8 @@ public class BubbleCommand : IExternalCommand
             wallNormal = GeometryHelper.GetWallFaceNormalFromTransform(fixture);
         }
 
-        CreateTagAndWire(doc, activeView, fixture, selectedTag, placement, tagTypeId, wireTypeId, fixtureConnector, g, isLineBased, isWallSconce, wallNormal);
+        CreateTagAndWire(doc, activeView, fixture, selectedTag, placement, tagTypeId, wireTypeId, fixtureConnector, g,
+            isLineBased && !bubblesAsLinearFixture, isWallSconce, wallNormal);
 
         return Result.Succeeded;
     }
@@ -642,9 +655,10 @@ public class BubbleCommand : IExternalCommand
     }
 
     /// <summary>
-    /// For a linear (light-bar) point fixture, resolves the long-axis END the switchleg wire should
+    /// For a linear (light-bar) fixture, resolves the long-axis END the switchleg wire should
     /// anchor to — the end on the side the wire heads (nearest Vertex2), matching how a drafter drags
-    /// v1 off the connector center to the bar end. Returns false for non-linear fixtures (square
+    /// v1 off the connector center to the bar end. Measured from the connector, so a line-based family
+    /// must pin its connector to the line midpoint. Returns false for non-linear fixtures (square
     /// downlights) or when the end coincides with the connector, leaving the plain center-anchored
     /// wire. Uses the shared linear test from TurboWire (<see cref="GeometryHelper.TryGetLinearLongAxis"/>).
     /// </summary>

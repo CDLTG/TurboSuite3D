@@ -41,8 +41,16 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
             ?? throw new InvalidOperationException("Fixture has no valid location for placement calculation.");
         TagPoint = sourceTag.TagHeadPosition;
 
+        // A line-based fixture on this path (see BubbleCommand's bubblesAsLinearFixture) is framed by its
+        // own line rather than its tag: the frame always runs along the bar, whatever the LinearTag's
+        // Orientation/Angle report, and the tag only picks a side of the line. So the bubble lands past
+        // the bar's end even when a Combined tag sits far along the fixture.
+        bool isLineBased = GeometryHelper.IsLineBasedFixture(fixture);
+
         RotatesWithComponent = DetermineRotationMode(sourceTag);
-        Rotation = CalculateRotation(fixture, sourceTag, RotatesWithComponent);
+        Rotation = isLineBased
+            ? GeometryHelper.GetFixtureLocationRotation(fixture)
+            : CalculateRotation(fixture, sourceTag, RotatesWithComponent);
 
         GlobalToLocal = Transform.CreateRotationAtPoint(XYZ.BasisZ, -Rotation, FixturePoint);
         LocalToGlobal = GlobalToLocal.Inverse;
@@ -50,7 +58,9 @@ internal abstract class PlacementCalculatorBase : IPlacementCalculator
         FixtureLocal = GlobalToLocal.OfPoint(FixturePoint);
         TagLocal = GlobalToLocal.OfPoint(TagPoint);
 
-        Condition = DetermineCondition(FixtureLocal, TagLocal);
+        Condition = isLineBased
+            ? (TagLocal.Y > FixtureLocal.Y ? PlacementCondition.Up : PlacementCondition.Down)
+            : DetermineCondition(FixtureLocal, TagLocal);
         (SymbolLength, SymbolWidth) = CalculateSymbolDimensions(view, fixture, sourceTag, g);
     }
 
