@@ -14,9 +14,17 @@ namespace TurboSuite.Driver.Services
     {
         /// <summary>
         /// Get the recommended driver configuration for a list of fixtures,
-        /// evaluating each valid driver candidate from the project
+        /// evaluating each valid driver candidate from the project.
         /// </summary>
-        public DriverRecommendation GetRecommendation(List<FixtureData> fixtures, List<DriverCandidateInfo> driverCandidates)
+        /// <param name="links">The project's fixture-type → driver-family links (TurboRPS → Driver
+        /// Match). When the circuit's fixtures are linked, only the linked family's types are
+        /// candidates — a hard restriction with no fallback to other families or TBD. When unlinked,
+        /// the result reports a tie (<see cref="DriverRecommendation.TiedCandidates"/>) if a different
+        /// family equals the winner on every ranking criterion. Null = no links.</param>
+        public DriverRecommendation GetRecommendation(
+            List<FixtureData> fixtures,
+            List<DriverCandidateInfo> driverCandidates,
+            DriverLinks links = null)
         {
             if (fixtures == null || fixtures.Count == 0)
                 return null;
@@ -46,11 +54,40 @@ namespace TurboSuite.Driver.Services
             var validCandidates = driverCandidates?.Where(c => c.IsValidDriver).ToList()
                 ?? new List<DriverCandidateInfo>();
 
-            if (validCandidates.Count == 0)
-                return NoMatchRecommendation();
+            // Links: a linked fixture type restricts the pool to its family. Every linked fixture
+            // on the circuit must agree; unlinked fixtures riding along defer to the link.
+            var linkedFamilies = new List<ElementRef>();
+            if (links != null && links.Count > 0)
+            {
+                foreach (var f in fixturesWithPower)
+                {
+                    if (links.TryGetFamily(f.TypeRef, out var fam) && !linkedFamilies.Contains(fam))
+                        linkedFamilies.Add(fam);
+                }
+            }
 
-            // Evaluate each valid candidate
+            if (linkedFamilies.Count > 1)
+            {
+                string names = string.Join(", ", linkedFamilies.Select(fam => FamilyNameOf(fam, driverCandidates)));
+                return NoMatchRecommendation(
+                    $"Fixture types on this circuit are linked to different driver families ({names}) — " +
+                    "fix the links in TurboRPS → Driver Match.");
+            }
+
+            string linkedFamilyName = null;
+            if (linkedFamilies.Count == 1)
+            {
+                var linked = linkedFamilies[0];
+                linkedFamilyName = FamilyNameOf(linked, driverCandidates);
+                validCandidates = validCandidates
+                    .Where(c => !c.IsTbd && c.FamilyRef == linked)
+                    .ToList();
+            }
+
+            // Evaluate each valid candidate. Every evaluation is retained: tie detection needs to
+            // look back at the ones that equalled the winner.
             CandidateEvaluation bestEval = null;
+            var evaluations = new List<CandidateEvaluation>();
 
             foreach (var candidate in validCandidates)
             {
@@ -58,6 +95,7 @@ namespace TurboSuite.Driver.Services
                 if (eval == null)
                     continue;
 
+                evaluations.Add(eval);
                 if (bestEval == null || IsBetterCandidate(eval, bestEval))
                 {
                     bestEval = eval;
@@ -65,9 +103,41 @@ namespace TurboSuite.Driver.Services
             }
 
             if (bestEval == null)
-                return NoMatchRecommendation();
+            {
+                if (linkedFamilyName == null)
+                    return NoMatchRecommendation();
+
+                string hint = fixtureVoltages.Count == 0 || fixtureDimmingProtocols.Count == 0
+                    ? " The fixtures don't declare both Voltage and Dimming Protocol yet."
+                    : string.Empty;
+                var noFit = NoMatchRecommendation(
+                    $"Linked family {linkedFamilyName} has no type that can serve this circuit.{hint}");
+                noFit.LinkedFamilyName = linkedFamilyName;
+                return noFit;
+            }
 
             var best = bestEval;
+
+            // Tie: on an unlinked circuit, a real candidate from a DIFFERENT family that is neither
+            // better nor worse than the winner. TBD never ties (it only wins when nothing real fits).
+            // Same-family ties are not ties here — TurboDriver keeps sizing within the family.
+            var tied = new List<DriverCandidateInfo>();
+            if (linkedFamilyName == null && !best.Candidate.IsTbd)
+            {
+                tied.Add(best.Candidate);
+                var seenFamilies = new HashSet<string>(StringComparer.Ordinal) { FamilyKey(best.Candidate) };
+                foreach (var eval in evaluations)
+                {
+                    if (ReferenceEquals(eval, best) || eval.Candidate.IsTbd)
+                        continue;
+                    if (IsBetterCandidate(eval, best) || IsBetterCandidate(best, eval))
+                        continue;
+                    if (seenFamilies.Add(FamilyKey(eval.Candidate)))
+                        tied.Add(eval.Candidate);   // first per family ⇒ deterministic
+                }
+                if (tied.Count < 2)
+                    tied.Clear();
+            }
 
             // Assign driver indices to sub-drivers (unless already assigned by fixture-limited packing)
             if (!best.DriverIndicesPreAssigned)
@@ -96,16 +166,32 @@ namespace TurboSuite.Driver.Services
                 SubDriverAssignments = best.SubDrivers,
                 RecommendedCandidate = best.Candidate,
                 HasMatch = true,
-                WarningMessage = null
+                WarningMessage = null,
+                TiedCandidates = tied,
+                LinkedFamilyName = linkedFamilyName
             };
+        }
+
+        /// <summary>Family identity for tie grouping: the Family element when known, else its name
+        /// (callers without element handles still group same-named types as one family).</summary>
+        private static string FamilyKey(DriverCandidateInfo c)
+            => c.FamilyRef.IsValid
+                ? "#" + c.FamilyRef.Value
+                : "n:" + (c.FamilyName ?? string.Empty).ToUpperInvariant();
+
+        private static string FamilyNameOf(ElementRef family, List<DriverCandidateInfo> candidates)
+        {
+            var match = candidates?.FirstOrDefault(c => c.FamilyRef == family && !string.IsNullOrEmpty(c.FamilyName));
+            return match?.FamilyName ?? "(unknown family)";
         }
 
         /// <summary>
         /// Unified "no driver" result. Returned whenever no real driver matches and no TBD
-        /// placeholder is present in the project. No fabricated fallback — the circuit fails
-        /// loudly so the designer either specifies a driver or adds the TBD family.
+        /// placeholder is present in the project — or when a link restricts the circuit to a family
+        /// that can't serve it, or two links conflict (<paramref name="warning"/> says which). No
+        /// fabricated fallback — the circuit fails loudly.
         /// </summary>
-        private static DriverRecommendation NoMatchRecommendation()
+        private static DriverRecommendation NoMatchRecommendation(string warning = null)
         {
             return new DriverRecommendation
             {
@@ -117,7 +203,7 @@ namespace TurboSuite.Driver.Services
                 SubDriverAssignments = new List<SubDriverAssignment>(),
                 RecommendedCandidate = null,
                 HasMatch = false,
-                WarningMessage = "No matching driver — specify a driver type or add a TBD placeholder."
+                WarningMessage = warning ?? "No matching driver — specify a driver type or add a TBD placeholder."
             };
         }
 

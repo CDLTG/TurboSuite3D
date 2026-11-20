@@ -31,6 +31,11 @@ namespace TurboSuite.Driver.Models
         /// </summary>
         public string FamilyName { get; set; }
 
+        /// <summary>Revit-free handle to the owning <c>Family</c>. The target of a fixture-type →
+        /// driver-family link (<see cref="DriverLinks"/>), and the identity a tie compares: two
+        /// candidates tie only across <i>different</i> families.</summary>
+        public ElementRef FamilyRef { get; set; }
+
         public string Manufacturer { get; set; }
         public double TotalPower { get; set; }
         public double SubDriverPower { get; set; }

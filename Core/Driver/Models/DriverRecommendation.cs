@@ -18,6 +18,21 @@ namespace TurboSuite.Driver.Models
         public DriverCandidateInfo RecommendedCandidate { get; set; }
         public bool HasMatch { get; set; }
         public string WarningMessage { get; set; }
+
+        /// <summary>
+        /// On an unlinked circuit, the real candidates (one representative — the best type — per
+        /// driver family) that equal the winner on every ranking criterion, winner first. Empty when
+        /// there is no tie. When <see cref="IsTie"/>, the winner's packing still fills this
+        /// recommendation for display, but consumers must NOT act on it: no family is preferred
+        /// until the user links the fixture type in TurboRPS → Driver Match.
+        /// </summary>
+        public List<DriverCandidateInfo> TiedCandidates { get; set; } = new List<DriverCandidateInfo>();
+
+        /// <summary>True when two or more driver families tie for this circuit.</summary>
+        public bool IsTie => TiedCandidates != null && TiedCandidates.Count > 1;
+
+        /// <summary>The linked driver family that restricted the candidate pool; null when unlinked.</summary>
+        public string LinkedFamilyName { get; set; }
     }
 
     /// <summary>

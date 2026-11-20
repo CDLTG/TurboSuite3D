@@ -9,6 +9,7 @@ using TurboSuite.Dmx;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
+using TurboSuite.Shared.Services;
 
 namespace TurboSuite.Driver.Services
 {
@@ -25,7 +26,15 @@ namespace TurboSuite.Driver.Services
     /// driver stays in the list (it's roleless) so the grid can show <i>why</i> it isn't valid.</item>
     /// <item><b>RPS fixtures</b> — Lighting Fixtures with the <c>Remote Power Supply</c> type parameter
     /// checked (the only fixtures TurboDriver sizes a driver for).</item>
+    /// <item><b>Links</b> — the project's fixture-type → driver-family links
+    /// (<see cref="DriverLinkStorageService"/>), broken ones included.</item>
     /// </list>
+    ///
+    /// <para>Drivers are grouped into <b>families</b>: a link targets a family (TurboDriver still sizes
+    /// among its types), so the tab picks a family and shows every type in it.</para>
+    ///
+    /// <para><b>Worksharing:</b> a link write borrows the link store (when it exists) and nothing else —
+    /// same per-operation lease as <see cref="RpsRevitOperations"/>.</para>
     /// </summary>
     public class DriverMatchOperations : IDriverMatchOperations
     {
@@ -43,36 +52,89 @@ namespace TurboSuite.Driver.Services
             var catalog = new MatchCatalog();
             if (doc == null) return catalog;
 
-            catalog.Drivers = CollectDrivers(doc);
+            catalog.Families = CollectFamilies(doc);
             catalog.Fixtures = CollectFixtures(doc);
+            catalog.Links = DriverLinkStorageService.LoadAll(doc);
             return catalog;
         }
 
-        private static List<DriverOption> CollectDrivers(Document doc)
+        public bool? SetLink(ElementRef fixtureTypeRef, ElementRef driverFamilyRef)
+        {
+            var doc = _uidoc?.Document;
+            if (doc == null) return false;
+
+            if (doc.GetElement(fixtureTypeRef.ToElementId()) is not FamilySymbol fixtureType
+                || doc.GetElement(driverFamilyRef.ToElementId()) is not Family family)
+            {
+                TaskDialog.Show("TurboRPS", "That fixture type or driver family no longer exists. Click Reload.");
+                return false;
+            }
+
+            var entries = DriverLinkStorageService.LoadRaw(doc)
+                .Where(e => !string.Equals(e.FixtureTypeKey, fixtureType.UniqueId, StringComparison.Ordinal))
+                .ToList();
+            entries.Add((fixtureType.UniqueId, family.UniqueId));
+
+            return Write(doc, entries);
+        }
+
+        public bool? RemoveLink(string fixtureTypeKey)
+        {
+            var doc = _uidoc?.Document;
+            if (doc == null || string.IsNullOrEmpty(fixtureTypeKey)) return false;
+
+            var raw = DriverLinkStorageService.LoadRaw(doc);
+            var entries = raw
+                .Where(e => !string.Equals(e.FixtureTypeKey, fixtureTypeKey, StringComparison.Ordinal))
+                .ToList();
+            if (entries.Count == raw.Count) return true;   // already gone (e.g. a teammate removed it)
+
+            return Write(doc, entries);
+        }
+
+        /// <summary>Lease the store (if it exists yet), then save. Null = refused or rolled back,
+        /// already reported to the user.</summary>
+        private static bool? Write(Document doc, List<(string FixtureTypeKey, string DriverFamilyKey)> entries)
+        {
+            var storeId = DriverLinkStorageService.FindStorageId(doc);
+            var workingSet = storeId != null ? new[] { storeId } : Array.Empty<ElementId>();
+            var lease = WorksharingLease.Acquire(doc, workingSet, "driver link");
+            if (!lease.IsGranted)
+            {
+                TaskDialog.Show("TurboRPS", lease.DenialMessage);
+                return null;
+            }
+
+            if (!DriverLinkStorageService.Save(doc, entries))
+            {
+                TaskDialog.Show("TurboRPS", WorksharingMessages.RolledBack);
+                return null;
+            }
+            return true;
+        }
+
+        private static List<DriverFamilyOption> CollectFamilies(Document doc)
         {
             var collector = new FamilyTypeCollectorService();
 
-            // Filter to driver-shaped devices FIRST, then build candidates — candidate order mirrors
-            // the input list, so index i pairs back to driverSymbols[i] for the display name.
             var driverSymbols = collector.GetAllLightingDeviceTypes(doc)
                 .Where(IsDriverShaped)
                 .ToList();
 
             var candidates = collector.GetDriverCandidates(driverSymbols);
 
-            var options = new List<DriverOption>();
-            for (int i = 0; i < candidates.Count && i < driverSymbols.Count; i++)
-            {
-                var sym = driverSymbols[i];
-                options.Add(new DriverOption
+            return candidates
+                .GroupBy(c => c.FamilyRef)
+                .Select(g => new DriverFamilyOption
                 {
-                    DisplayName = $"{sym.FamilyName} : {sym.Name}",
-                    Driver = candidates[i]
-                });
-            }
-
-            return options
-                .OrderBy(o => o.DisplayName, StringComparer.OrdinalIgnoreCase)
+                    FamilyRef = g.Key,
+                    FamilyName = g.First().FamilyName,
+                    IsTbd = g.Any(c => c.IsTbd),
+                    Types = g.OrderBy(c => c.TotalPower)
+                             .ThenBy(c => c.FamilyTypeName, NaturalStringComparer.OrdinalIgnoreCase)
+                             .ToList()
+                })
+                .OrderBy(f => f.FamilyName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 
@@ -91,9 +153,12 @@ namespace TurboSuite.Driver.Services
             foreach (var s in symbols)
             {
                 string typeMark = s.LookupParameter(ParameterNames.TypeMark)?.AsString();
+                string display = $"{s.FamilyName} : {s.Name}";
                 var fixture = new FixtureData
                 {
                     FixtureId = ElementRef.None,
+                    TypeRef = s.Id.ToRef(),
+                    TypeDisplayName = display,
                     TypeMark = typeMark,
                     // Type-level wattage only; a linear fixture's real wattage is per-instance
                     // (Linear Power) and isn't knowable here — the diagnostic treats wattage as info.
@@ -107,7 +172,8 @@ namespace TurboSuite.Driver.Services
 
                 options.Add(new FixtureOption
                 {
-                    DisplayName = $"{s.FamilyName} : {s.Name}",
+                    DisplayName = display,
+                    TypeRef = s.Id.ToRef(),
                     Fixture = fixture
                 });
             }

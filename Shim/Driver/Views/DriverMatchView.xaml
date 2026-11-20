@@ -13,7 +13,17 @@
 
             <local:VerdictToGlyphConverter x:Key="VerdictGlyph"/>
             <local:VerdictToForegroundConverter x:Key="VerdictForeground"/>
-            <local:VerdictToRowBrushConverter x:Key="VerdictRowBrush"/>
+
+            <Style x:Key="GlyphText" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Margin" Value="0,0,6,0"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="CellText" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -24,9 +34,11 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Type pickers (RPS Fixture first, then Driver) -->
+        <!-- Pickers (RPS Fixture first, then Driver Family) -->
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -45,44 +57,34 @@
                       DisplayMemberPath="DisplayName"
                       SelectedItem="{Binding SelectedFixture}"/>
 
-            <TextBlock Grid.Column="2" Text="Driver" VerticalAlignment="Center"
+            <TextBlock Grid.Column="2" Text="Driver Family" VerticalAlignment="Center"
                        Margin="0,0,8,0" FontWeight="SemiBold"
                        Foreground="{StaticResource TextPrimaryBrush}"/>
             <ComboBox Grid.Column="3" Margin="0,0,16,0" Height="26"
                       VerticalContentAlignment="Center"
-                      ItemsSource="{Binding Drivers}"
+                      ItemsSource="{Binding DriverFamilies}"
                       DisplayMemberPath="DisplayName"
-                      SelectedItem="{Binding SelectedDriver}"/>
+                      SelectedItem="{Binding SelectedFamily}"/>
 
             <Button Grid.Column="4" Content="Reload" Width="84" Height="26"
                     Style="{StaticResource RevitButtonStyle}"
                     Command="{Binding ReloadCommand}"
-                    ToolTip="Re-collect driver and RPS fixture types from the project (after reloading a family)."/>
+                    ToolTip="Re-collect driver families, RPS fixture types and links from the project (after reloading a family)."/>
         </Grid>
 
-        <!-- Column captions for the comparison -->
-        <Grid Grid.Row="1" Margin="0,12,0,4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="150"/>
-                <ColumnDefinition Width="300"/>
-                <ColumnDefinition Width="300"/>
-                <ColumnDefinition Width="28"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Field" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
-            <TextBlock Grid.Column="1" Text="Fixture" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
-            <TextBlock Grid.Column="2" Text="Driver" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
-            <TextBlock Grid.Column="4" Text="Notes" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
-        </Grid>
+        <!-- Selected fixture's driver-relevant spec -->
+        <TextBlock Grid.Row="1" Margin="2,10,0,6" Text="{Binding FixtureSummary}"
+                   Foreground="{StaticResource TextSecondaryBrush}"/>
 
-        <!-- Comparison grid -->
+        <!-- One row per driver type in the family -->
         <DataGrid Grid.Row="2"
-                  ItemsSource="{Binding Checks}"
+                  ItemsSource="{Binding Rows}"
                   AutoGenerateColumns="False"
-                  HeadersVisibility="None"
+                  HeadersVisibility="Column"
                   IsReadOnly="True"
                   CanUserAddRows="False"
                   CanUserResizeRows="False"
+                  CanUserSortColumns="False"
                   GridLinesVisibility="Horizontal"
                   HorizontalGridLinesBrush="#EEEEEE"
                   BorderBrush="{StaticResource SeparatorBrush}"
@@ -90,62 +92,101 @@
                   RowHeaderWidth="0">
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
-                    <Setter Property="Background" Value="{Binding Verdict, Converter={StaticResource VerdictRowBrush}}"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Matches}" Value="False">
+                            <Setter Property="Background" Value="#FDECEA"/>
+                        </DataTrigger>
+                    </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Width="150" Binding="{Binding Field}">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="FontWeight" Value="SemiBold"/>
-                            <Setter Property="Margin" Value="6,4"/>
-                            <Setter Property="VerticalAlignment" Value="Center"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
-                <DataGridTextColumn Width="300" Binding="{Binding FixtureValue}">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Margin" Value="6,4"/>
-                            <Setter Property="TextWrapping" Value="Wrap"/>
-                            <Setter Property="VerticalAlignment" Value="Center"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
-                <DataGridTextColumn Width="300" Binding="{Binding DriverValue}">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Margin" Value="6,4"/>
-                            <Setter Property="TextWrapping" Value="Wrap"/>
-                            <Setter Property="VerticalAlignment" Value="Center"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
-                <DataGridTemplateColumn Width="28">
+                <DataGridTemplateColumn Header="Type" Width="180">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding Verdict, Converter={StaticResource VerdictGlyph}}"
-                                       Foreground="{Binding Verdict, Converter={StaticResource VerdictForeground}}"
-                                       FontWeight="Bold" FontSize="14"
+                            <StackPanel Margin="6,4" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding TypeName}" FontWeight="SemiBold" Style="{StaticResource CellText}"/>
+                                <TextBlock Text="{Binding CatalogNumber}" FontSize="11"
+                                           Foreground="{StaticResource TextSecondaryBrush}" Style="{StaticResource CellText}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Valid" Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Valid.Verdict, Converter={StaticResource VerdictGlyph}}"
+                                       Foreground="{Binding Valid.Verdict, Converter={StaticResource VerdictForeground}}"
+                                       ToolTip="{Binding Valid.DriverValue}"
+                                       FontWeight="Bold" FontSize="13"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Width="*" Binding="{Binding Reason}">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Margin" Value="6,4"/>
-                            <Setter Property="TextWrapping" Value="Wrap"/>
-                            <Setter Property="VerticalAlignment" Value="Center"/>
-                            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+
+                <DataGridTemplateColumn Header="Voltage" Width="100">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="6,4" ToolTip="{Binding Voltage.Reason}">
+                                <TextBlock Text="{Binding Voltage.Verdict, Converter={StaticResource VerdictGlyph}}"
+                                           Foreground="{Binding Voltage.Verdict, Converter={StaticResource VerdictForeground}}"
+                                           Style="{StaticResource GlyphText}"/>
+                                <TextBlock Text="{Binding Voltage.DriverValue}" Style="{StaticResource CellText}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Dimming" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="6,4" ToolTip="{Binding Dimming.Reason}">
+                                <TextBlock Text="{Binding Dimming.Verdict, Converter={StaticResource VerdictGlyph}}"
+                                           Foreground="{Binding Dimming.Verdict, Converter={StaticResource VerdictForeground}}"
+                                           Style="{StaticResource GlyphText}"/>
+                                <TextBlock Text="{Binding Dimming.DriverValue}" Style="{StaticResource CellText}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Mfr" Width="140">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="6,4" ToolTip="{Binding Manufacturer.Reason}">
+                                <TextBlock Text="{Binding Manufacturer.Verdict, Converter={StaticResource VerdictGlyph}}"
+                                           Foreground="{Binding Manufacturer.Verdict, Converter={StaticResource VerdictForeground}}"
+                                           Style="{StaticResource GlyphText}"/>
+                                <TextBlock Text="{Binding Manufacturer.DriverValue}" Style="{StaticResource CellText}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Capacity" Width="190">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Capacity.DriverValue}" Margin="6,4"
+                                       TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Notes" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Notes}" Margin="6,4" TextWrapping="Wrap"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Verdict bar -->
-        <Border Grid.Row="3" Margin="0,10,0,0" Padding="12,8" CornerRadius="0">
+        <!-- Family verdict bar -->
+        <Border Grid.Row="3" Margin="0,10,0,0" Padding="12,8">
             <Border.Style>
                 <Style TargetType="Border">
                     <!-- Neutral until both sides are picked. -->
@@ -177,8 +218,64 @@
                        Foreground="{StaticResource TextPrimaryBrush}"/>
         </Border>
 
+        <!-- Link bar: the selected fixture type's link state + actions -->
+        <Grid Grid.Row="4" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{Binding LinkStatusText}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" Margin="2,0,12,0"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+            <Button Grid.Column="1" Content="{Binding LinkButtonText}" MinWidth="110" Height="26"
+                    Padding="10,0" Margin="0,0,8,0"
+                    Style="{StaticResource RevitButtonStyle}"
+                    Command="{Binding LinkCommand}"
+                    ToolTip="Link the selected fixture type to the selected driver family. TurboDriver then only uses this family for circuits carrying the type."/>
+            <Button Grid.Column="2" Content="Unlink" Width="84" Height="26"
+                    Style="{StaticResource RevitButtonStyle}"
+                    Command="{Binding UnlinkCommand}"
+                    ToolTip="Remove the selected fixture type's link."/>
+        </Grid>
+
+        <!-- Every link in the project -->
+        <Expander Grid.Row="5" Margin="0,10,0,0" Header="{Binding LinksHeader}">
+            <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0">
+                <ItemsControl ItemsSource="{Binding Links}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="2,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding FixtureDisplay}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="1" Text="→" Margin="8,0" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding FamilyDisplay}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="3" Text="broken — ignored" Margin="8,0"
+                                           VerticalAlignment="Center" FontWeight="SemiBold"
+                                           Foreground="#C0392B"
+                                           Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}"/>
+                                <Button Grid.Column="4" Content="Unlink" Width="70" Height="22"
+                                        Style="{StaticResource RevitButtonStyle}"
+                                        Command="{Binding DataContext.UnlinkLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Expander>
+
         <!-- Footer status -->
-        <TextBlock Grid.Row="4" Margin="2,8,0,0" Text="{Binding Status}"
+        <TextBlock Grid.Row="6" Margin="2,8,0,0" Text="{Binding Status}"
                    Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
     </Grid>
 </UserControl>

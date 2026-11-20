@@ -32,7 +32,12 @@ namespace TurboSuite.Driver.Services
         /// on the circuit), not driven by a wattage-sized driver. TurboRPS doesn't model decoders, so
         /// this is a terminal "present &amp; wired → OK / not driver-managed" outcome — no wattage
         /// recommendation applies and no action is needed here (built in TurboDMX). See TurboRPS-2.</summary>
-        DmxManaged
+        DmxManaged,
+
+        /// <summary>Two or more driver families serve the (unlinked) circuit equally well on every
+        /// ranking criterion, so no family is preferred. An open issue until the user links the
+        /// fixture type to a family in Driver Match (or defers the circuit); TurboDriver refuses it.</summary>
+        Tie
     }
 
     /// <summary>Result of classification: the status plus, for <see cref="RpsStatus.Rebuild"/>,
@@ -87,6 +92,12 @@ namespace TurboSuite.Driver.Services
             // otherwise mis-classify as NotDeployed even though it's fully developed.
             if (isDmxDecoderManaged)
                 return new RpsClassification(RpsStatus.DmxManaged, null);
+
+            // 0b. Tie — no driver family is preferred, so nothing below can be judged against the
+            // recommendation. Precedes NotDeployed because TurboDriver refuses a tied circuit until
+            // its fixture type is linked; NEW would point the user at a command that won't run.
+            if (recommendation != null && recommendation.IsTie)
+                return new RpsClassification(RpsStatus.Tie, null);
 
             // 1. NotDeployed — qualifying circuit with zero placed supplies.
             if (placedInstanceCount == 0)

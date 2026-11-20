@@ -17,6 +17,19 @@ namespace TurboSuite.Driver.ViewModels
         public double LinearLength { get; set; }
     }
 
+    /// <summary>One tied driver family in a TIE row's detail pane.</summary>
+    public class TieFamilyRow
+    {
+        public string FamilyName { get; set; }
+        public string TypeName { get; set; }
+        public string CatalogNumber { get; set; }
+
+        /// <summary>True when this family is the one already placed on the circuit.</summary>
+        public bool IsPlaced { get; set; }
+
+        public string PlacedNote => IsPlaced ? "← placed" : string.Empty;
+    }
+
     /// <summary>
     /// One row in the TurboRPS dashboard grid. Wraps a <see cref="RpsCircuitData"/> DTO and
     /// exposes display strings, the (checkbox) selection state — settable only on
@@ -73,8 +86,16 @@ namespace TurboSuite.Driver.ViewModels
             RpsStatus.NotDeployed => "NEW",
             RpsStatus.NoMatch => "NO MATCH",
             RpsStatus.DmxManaged => "DMX",
+            RpsStatus.Tie => "TIE",
             _ => ""
         };
+
+        /// <summary>Two or more driver families serve this circuit equally — no family is preferred
+        /// until the fixture type is linked in Driver Match.</summary>
+        public bool IsTie => _data.Status == RpsStatus.Tie;
+
+        private string TiedFamilyNames =>
+            string.Join(" / ", (_data.TiedCandidates ?? new List<DriverCandidateInfo>()).Select(c => c.FamilyName));
 
         /// <summary>What the Status column shows and the row tint keys off. Deferral masks the real
         /// verdict to a neutral "DEFERRED"; a drifted deferral becomes "REVIEW".</summary>
@@ -112,6 +133,7 @@ namespace TurboSuite.Driver.ViewModels
         {
             get
             {
+                if (IsTie) return $"tie ({_data.TiedCandidates?.Count ?? 0} families)";
                 if (string.IsNullOrEmpty(_data.RecommendedTypeName)) return "—";
                 return $"{_data.RecommendedTypeName} ×{_data.RecommendedCount}";
             }
@@ -131,6 +153,8 @@ namespace TurboSuite.Driver.ViewModels
                     return $"deferred — was {BaseStatusText}";
                 if (_data.Status == RpsStatus.DmxManaged)
                     return "DMX Decoder controlled";
+                if (IsTie)
+                    return $"tie: {TiedFamilyNames} → link in Driver Match";
                 if (_data.Status == RpsStatus.Rebuild)
                     return _data.RebuildReason;
                 if (_data.HasSplitSegments)
@@ -177,8 +201,32 @@ namespace TurboSuite.Driver.ViewModels
 
         public string RecommendedHeader =>
             _data.Status == RpsStatus.DmxManaged ? "DMX decoder — not driver-managed"
+            : IsTie ? "Tie: no driver family is preferred"
             : string.IsNullOrEmpty(_data.RecommendedTypeName) ? "No matching driver"
             : RecommendedDisplay;
+
+        /// <summary>Why no driver matched (e.g. two links conflict, or the linked family can't serve
+        /// the circuit); null when a driver matched. Shown under the header in the detail pane.</summary>
+        public string RecommendationWarning =>
+            _data.Recommendation != null && !_data.Recommendation.HasMatch
+                ? _data.Recommendation.WarningMessage
+                : null;
+
+        public bool HasRecommendationWarning => !string.IsNullOrEmpty(RecommendationWarning);
+
+        /// <summary>The tied families (one representative type each), winner first.</summary>
+        public List<TieFamilyRow> TieRows => (_data.TiedCandidates ?? new List<DriverCandidateInfo>())
+            .Select(c => new TieFamilyRow
+            {
+                FamilyName = c.FamilyName,
+                TypeName = c.FamilyTypeName,
+                CatalogNumber = c.CatalogNumber,
+                IsPlaced = _data.PlacedFamilyRef.IsValid && c.FamilyRef == _data.PlacedFamilyRef
+            })
+            .ToList();
+
+        /// <summary>The fixture types on this tied circuit that need a link (with project-wide circuit counts).</summary>
+        public List<TieFixtureType> TieFixtureTypes => _data.UnlinkedFixtureTypes ?? new List<TieFixtureType>();
 
         /// <summary>After a successful in-place swap, flip this row to Ok and update the placed
         /// summary to the recommended type. The split-note (if any) persists — only the driver

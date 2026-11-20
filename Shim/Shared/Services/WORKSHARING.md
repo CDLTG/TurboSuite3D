@@ -155,7 +155,7 @@ When the rule is unsure, **borrow more, not less**. Over-borrowing only blocks a
 | | operation | Load Names Apply: its circuits + that tab's room-override store. One-line redraw: the content it wipes + stale sheets. A refused page draw also silences the chained wire legend |
 | **TurboName** | session | lock + CAD Room Source store + **the view** + its linked CAD imports (nearly every write is view-level; the import pin is flipped to force regen). Built only when workshared |
 | | operation | auto-generate: the regions it clears; Assign Room Names: its regions |
-| **TurboRPS** | operation | retyped drivers (+ any inactive target type it activates); the circuit carrying the defer entity |
+| **TurboRPS** | operation | retyped drivers (+ any inactive target type it activates); the circuit carrying the defer entity; the driver-link store on Link / Unlink (Driver Match tab — nothing when the store doesn't exist yet) |
 | **Settings dialog** | operation | the General Settings store, leased on save |
 | **TurboDriver** | operation | selected fixtures + (when they're on one circuit) the circuit, every element on it and the wires between its existing supplies. Leased before `GetOrCreateCircuit` (`DriverCommand.LeaseWorkingSet`) |
 | **TurboWire** | operation | fixtures + their existing circuits (+ pre-selected circuits) up front (`LeaseCircuitWork`); re-run wires leased where found (`AcquireOrThrow`) |

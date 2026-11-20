@@ -1,4 +1,6 @@
 #nullable disable
+using System;
+using System.Linq;
 using TurboSuite.Driver.Models;
 
 namespace TurboSuite.Driver.Services
@@ -16,13 +18,26 @@ namespace TurboSuite.Driver.Services
         public static string Signature(RpsCircuitData data)
         {
             if (data == null) return string.Empty;
-            return string.Join("|",
+            string signature = string.Join("|",
                 data.Status,
                 data.PlacedTypeName ?? string.Empty,
                 data.PlacedCount,
                 data.DistinctPlacedTypeCount,
                 data.RecommendedTypeName ?? string.Empty,
                 data.RecommendedCount);
+
+            // A tie also records WHICH families tie, so a third family joining (or one dropping out)
+            // re-surfaces the deferral. Appended only for Tie, so every non-tie signature stays
+            // byte-identical to the stored ones and existing deferrals don't flip to REVIEW.
+            if (data.Status == RpsStatus.Tie && data.TiedCandidates != null && data.TiedCandidates.Count > 0)
+            {
+                var families = data.TiedCandidates
+                    .Select(c => c.FamilyName ?? string.Empty)
+                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+                signature += "|tie:" + string.Join(",", families);
+            }
+
+            return signature;
         }
     }
 }

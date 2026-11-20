@@ -114,6 +114,9 @@ namespace TurboSuite.Driver.ViewModels
         public int NewCount => Rows.Count(r => r.Status == RpsStatus.NotDeployed && !r.IsDeferred);
         public int NoMatchCount => Rows.Count(r => r.Status == RpsStatus.NoMatch && !r.IsDeferred);
 
+        /// <summary>Unlinked circuits where two or more driver families tie — open until linked.</summary>
+        public int TieCount => Rows.Count(r => r.Status == RpsStatus.Tie && !r.IsDeferred);
+
         /// <summary>DMX-decoder-controlled circuits — present &amp; wired, not driver-managed. Not an
         /// open issue (no TurboRPS action), so excluded from the issue counts (TurboRPS-2).</summary>
         public int DmxCount => Rows.Count(r => r.Status == RpsStatus.DmxManaged && !r.IsDeferred);
@@ -130,6 +133,7 @@ namespace TurboSuite.Driver.ViewModels
                 if (RebuildCount > 0) parts.Add($"{RebuildCount} rebuild");
                 if (NewCount > 0) parts.Add($"{NewCount} new");
                 if (NoMatchCount > 0) parts.Add($"{NoMatchCount} no match");
+                if (TieCount > 0) parts.Add($"{TieCount} tie");
                 if (DmxCount > 0) parts.Add($"{DmxCount} DMX");
                 if (ReviewCount > 0) parts.Add($"{ReviewCount} review");
                 if (DeferredCount > 0) parts.Add($"{DeferredCount} deferred");
@@ -190,6 +194,7 @@ namespace TurboSuite.Driver.ViewModels
             OnPropertyChanged(nameof(RebuildCount));
             OnPropertyChanged(nameof(NewCount));
             OnPropertyChanged(nameof(NoMatchCount));
+            OnPropertyChanged(nameof(TieCount));
             OnPropertyChanged(nameof(DmxCount));
             OnPropertyChanged(nameof(DeferredCount));
             OnPropertyChanged(nameof(ReviewCount));
@@ -291,6 +296,11 @@ namespace TurboSuite.Driver.ViewModels
                     }
                 });
         }
+
+        /// <summary>Re-scan the circuits from outside the tab — the Driver Match tab calls this after a
+        /// link change so the Circuits grid reflects it. Queued on the shared FIFO work queue, so it
+        /// runs after the link save that triggered it.</summary>
+        public void RequestRescan() => Rescan();
 
         private void Rescan()
         {

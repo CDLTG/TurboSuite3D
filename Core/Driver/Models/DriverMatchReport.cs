@@ -44,4 +44,38 @@ namespace TurboSuite.Driver.Models
         /// <summary>One-line plain-language verdict for the summary bar.</summary>
         public string Summary { get; set; }
     }
+
+    /// <summary>One driver type in the Driver Match family grid: its per-field checks against the
+    /// selected RPS fixture type, laid out as columns.</summary>
+    public class TypeMatchRow
+    {
+        public DriverCandidateInfo Driver { get; set; }
+        public string TypeName { get; set; }
+        public string CatalogNumber { get; set; }
+
+        public MatchCheck Valid { get; set; }
+        public MatchCheck Voltage { get; set; }
+        public MatchCheck Dimming { get; set; }
+        public MatchCheck Manufacturer { get; set; }
+        public MatchCheck Capacity { get; set; }
+
+        /// <summary>True when no hard gate failed for this type.</summary>
+        public bool Matches { get; set; }
+
+        /// <summary>The first failing gate's reason, or a soft warning, or empty.</summary>
+        public string Notes { get; set; }
+    }
+
+    /// <summary>A whole driver family compared against one RPS fixture type — one row per type.</summary>
+    public class FamilyMatchReport
+    {
+        public List<TypeMatchRow> Rows { get; set; } = new List<TypeMatchRow>();
+        public int MatchingCount { get; set; }
+        public int TotalCount { get; set; }
+
+        /// <summary>True when at least one type can serve the fixture.</summary>
+        public bool Matches => MatchingCount > 0;
+
+        public string Summary { get; set; }
+    }
 }

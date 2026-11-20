@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
+using TurboSuite.Abstractions;
 using TurboSuite.Dmx;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Helpers;
@@ -161,9 +162,12 @@ namespace TurboSuite.Driver.Services
 
         private FixtureData CreateFixtureData(FamilyInstance element)
         {
+            var symbol = element.Symbol;
             return new FixtureData
             {
                 FixtureId = element.Id.ToRef(),
+                TypeRef = symbol?.Id.ToRef() ?? ElementRef.None,
+                TypeDisplayName = symbol != null ? $"{symbol.FamilyName} : {symbol.Name}" : string.Empty,
                 TypeMark = ParameterHelper.GetTypeMark(element),
                 Comments = ParameterHelper.GetComments(element),
                 LinearLength = ParameterHelper.GetLinearLength(element),

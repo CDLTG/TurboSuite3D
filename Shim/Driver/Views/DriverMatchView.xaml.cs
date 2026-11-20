@@ -9,8 +9,9 @@ using TurboSuite.Driver.Models;
 namespace TurboSuite.Driver.Views
 {
     /// <summary>
-    /// Driver Match comparison panel (the "Driver Match" tab of the TurboRPS window). Read-only;
-    /// binds to <see cref="TurboSuite.Driver.ViewModels.DriverMatchViewModel"/>.
+    /// Driver Match panel (the "Driver Match" tab of the TurboRPS window): an RPS fixture type against
+    /// every type of a driver family, plus the project's fixture-type → driver-family links. Binds to
+    /// <see cref="TurboSuite.Driver.ViewModels.DriverMatchViewModel"/>.
     /// </summary>
     public partial class DriverMatchView : UserControl
     {
@@ -56,33 +57,6 @@ namespace TurboSuite.Driver.Views
                     _ => Info
                 }
                 : Info;
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => throw new NotSupportedException();
-
-        private static Brush Freeze(string hex)
-        {
-            var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-            b.Freeze();
-            return b;
-        }
-    }
-
-    /// <summary>Verdict → subtle row tint (only Fail and Warn are tinted).</summary>
-    public class VerdictToRowBrushConverter : IValueConverter
-    {
-        private static readonly Brush FailTint = Freeze("#FDECEA");
-        private static readonly Brush WarnTint = Freeze("#FFF8E1");
-
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-            => value is MatchVerdict v
-                ? v switch
-                {
-                    MatchVerdict.Fail => FailTint,
-                    MatchVerdict.Warn => WarnTint,
-                    _ => Brushes.Transparent
-                }
-                : Brushes.Transparent;
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
             => throw new NotSupportedException();

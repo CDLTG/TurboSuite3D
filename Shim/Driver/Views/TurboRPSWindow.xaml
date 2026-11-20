@@ -37,6 +37,8 @@
             <SolidColorBrush x:Key="ReviewRowBrush" Color="#FFF3CD"/>
             <!-- DMX: green — decoder-controlled, present & wired, not driver-managed (no action). -->
             <SolidColorBrush x:Key="DmxRowBrush" Color="#D4EDDA"/>
+            <!-- TIE: amber — two driver families serve the circuit equally; needs a link in Driver Match. -->
+            <SolidColorBrush x:Key="TieRowBrush" Color="#FFF3CD"/>
 
             <Style x:Key="TableHeaderStyle" TargetType="TextBlock">
                 <Setter Property="FontWeight" Value="SemiBold"/>
@@ -176,6 +178,9 @@
                             <DataTrigger Binding="{Binding StatusText}" Value="DMX">
                                 <Setter Property="Background" Value="{StaticResource DmxRowBrush}"/>
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusText}" Value="TIE">
+                                <Setter Property="Background" Value="{StaticResource TieRowBrush}"/>
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding StatusText}" Value="DEFERRED">
                                 <Setter Property="Background" Value="{StaticResource DeferredRowBrush}"/>
                             </DataTrigger>
@@ -242,8 +247,58 @@
                             <TextBlock Text="{Binding RecommendedHeader}" FontWeight="SemiBold"
                                        Margin="0,2,0,8" TextWrapping="Wrap"/>
 
-                            <!-- Sub-driver packing -->
+                            <!-- Why nothing matched (link conflict / linked family can't serve it / no driver) -->
+                            <TextBlock Text="{Binding RecommendationWarning}" TextWrapping="Wrap"
+                                       Margin="0,0,0,8" Foreground="#C0392B"
+                                       Visibility="{Binding HasRecommendationWarning, Converter={StaticResource BoolToVisibility}}"/>
+
+                            <!-- Tie block: the tied families + the fixture types to link -->
+                            <StackPanel Margin="0,0,0,8"
+                                        Visibility="{Binding IsTie, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="These driver families serve this circuit equally well:"
+                                           TextWrapping="Wrap" Margin="0,0,0,4"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <ItemsControl ItemsSource="{Binding TieRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding FamilyName}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding CatalogNumber}" FontSize="11" TextWrapping="Wrap"
+                                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{Binding PlacedNote}" Margin="6,0,0,0"
+                                                           FontWeight="SemiBold" Foreground="{StaticResource HeaderBlueBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Link these fixture types in Driver Match:" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" Margin="0,8,0,2"/>
+                                <ItemsControl ItemsSource="{Binding TieFixtureTypes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Margin="8,1,0,1"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <!-- Sub-driver packing (hidden on a tie — no family is preferred) -->
                             <ItemsControl ItemsSource="{Binding SubDriverAssignments}">
+                                <ItemsControl.Style>
+                                    <Style TargetType="ItemsControl">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsTie}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ItemsControl.Style>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="0,1,0,4">

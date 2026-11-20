@@ -34,21 +34,35 @@ namespace TurboSuite.Driver.Services
                 .GroupBy(c => c.SymbolRef)
                 .ToDictionary(g => g.Key, g => g.First());
 
+            // The project's fixture-type → driver-family links (Driver Match), loaded once.
+            var links = DriverLinkStorageService.LoadActive(doc);
+
+            // Size the driver over fixtures that actually need one. On a switched/relay
+            // circuit, line-voltage fixtures (e.g. recessed downlights) ride the same
+            // circuit for total-wattage/power-density but must not inflate the driver
+            // recommendation — and excluding them keeps the recommendation matching what
+            // TurboDriver placed (it sizes off the user's RPS-fixture selection).
+            var rpsByCircuit = circuits
+                .Select(c => c.LightingFixtures.Where(f => f.HasRemotePowerSupply).ToList())
+                .ToList();
+
+            // How many circuits carry each RPS fixture type — a tie's detail pane shows it, since one
+            // link resolves every circuit carrying the type.
+            var circuitsPerType = rpsByCircuit
+                .SelectMany(fixtures => fixtures.Select(f => f.TypeRef).Where(r => r.IsValid).Distinct())
+                .GroupBy(r => r)
+                .ToDictionary(g => g.Key, g => g.Count());
+
             var result = new List<RpsCircuitData>();
 
-            foreach (var circuit in circuits)
+            for (int ci = 0; ci < circuits.Count; ci++)
             {
-                // Size the driver over fixtures that actually need one. On a switched/relay
-                // circuit, line-voltage fixtures (e.g. recessed downlights) ride the same
-                // circuit for total-wattage/power-density but must not inflate the driver
-                // recommendation — and excluding them keeps the recommendation matching what
-                // TurboDriver placed (it sizes off the user's RPS-fixture selection).
-                var rpsFixtures = circuit.LightingFixtures
-                    .Where(f => f.HasRemotePowerSupply)
-                    .ToList();
+                var circuit = circuits[ci];
+                var rpsFixtures = rpsByCircuit[ci];
 
                 var recommendation = new DriverSelectionService()
-                    .GetRecommendation(rpsFixtures, candidates);
+                    .GetRecommendation(rpsFixtures, candidates, links);
+                bool isTie = recommendation?.IsTie == true;
 
                 // Summarize placed driver instances.
                 var placedDeviceRefs = new List<ElementRef>();
@@ -109,7 +123,22 @@ namespace TurboSuite.Driver.Services
                         .Select(f => f.DimmingProtocol)
                         .Distinct(StringComparer.OrdinalIgnoreCase));
 
-                var reco = recommendation?.RecommendedCandidate;
+                // On a tie no family is preferred: nothing to recommend or swap to.
+                var reco = isTie ? null : recommendation?.RecommendedCandidate;
+
+                var unlinkedTypes = isTie
+                    ? rpsFixtures
+                        .Where(f => f.TypeRef.IsValid)
+                        .GroupBy(f => f.TypeRef)
+                        .Select(g => new TieFixtureType
+                        {
+                            TypeMark = g.First().TypeMark,
+                            TypeDisplayName = g.First().TypeDisplayName,
+                            CircuitCount = circuitsPerType.TryGetValue(g.Key, out int n) ? n : 1
+                        })
+                        .OrderBy(t => t.TypeMark ?? string.Empty, NaturalStringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                    : new List<TieFixtureType>();
 
                 // Deferral flag persisted on the circuit element (shared via the model).
                 var (deferred, deferredSig) = RpsDeferralStorageService.Read(doc.GetElement(circuit.CircuitId));
@@ -143,6 +172,10 @@ namespace TurboSuite.Driver.Services
                     RecommendedCount = recommendation?.DriverCount ?? 0,
 
                     Fixtures = rpsFixtures,
+
+                    TiedCandidates = isTie ? recommendation.TiedCandidates : new List<DriverCandidateInfo>(),
+                    PlacedFamilyRef = placedCandidate?.FamilyRef ?? ElementRef.None,
+                    UnlinkedFixtureTypes = unlinkedTypes,
 
                     IsDeferred = deferred,
                     DeferredSignature = deferredSig

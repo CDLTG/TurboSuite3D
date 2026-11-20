@@ -9,6 +9,14 @@ namespace TurboSuite.Driver.Models
     public class FixtureData
     {
         public ElementRef FixtureId { get; set; }
+
+        /// <summary>The fixture's type (<c>FamilySymbol</c>). The key a driver-family link hangs off
+        /// (see <see cref="DriverLinks"/>); <see cref="ElementRef.None"/> when unknown.</summary>
+        public ElementRef TypeRef { get; set; }
+
+        /// <summary>"Family : Type" of the fixture's type, for tie / link messages.</summary>
+        public string TypeDisplayName { get; set; }
+
         public string TypeMark { get; set; }
         public string Comments { get; set; }
         public double LinearLength { get; set; }

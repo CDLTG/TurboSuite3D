@@ -55,7 +55,7 @@ namespace TurboSuite.Driver
                 // Bail only when BOTH tabs would be empty — no RPS circuits AND no driver/fixture types
                 // to compare. With no circuits but types present (e.g. mid family-build), the window still
                 // opens so the Driver Match tab is usable.
-                if (circuits.Count == 0 && matchCatalog.Drivers.Count == 0 && matchCatalog.Fixtures.Count == 0)
+                if (circuits.Count == 0 && matchCatalog.Families.Count == 0 && matchCatalog.Fixtures.Count == 0)
                 {
                     TaskDialog.Show("TurboRPS",
                         "Nothing to show.\n\n" +

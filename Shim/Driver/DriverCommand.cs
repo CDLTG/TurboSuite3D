@@ -97,9 +97,12 @@ namespace TurboSuite.Driver
                 var availableTypes = typeService.GetAllLightingDeviceTypes(doc);
                 var driverCandidates = typeService.GetDriverCandidates(availableTypes);
 
+                // The project's fixture-type → driver-family links (TurboRPS → Driver Match).
+                var links = DriverLinkStorageService.LoadActive(doc);
+
                 var selectionService = new DriverSelectionService();
                 var recommendation = selectionService.GetRecommendation(
-                    circuitData.LightingFixtures, driverCandidates);
+                    circuitData.LightingFixtures, driverCandidates, links);
 
                 if (recommendation == null)
                 {
@@ -131,6 +134,16 @@ namespace TurboSuite.Driver
                     TaskDialog.Show("TurboDriver",
                         "No matching power supply found for the selected fixtures.\n\n" +
                         recommendation.WarningMessage);
+                    return Result.Cancelled;
+                }
+
+                // Tie: two or more driver families serve these fixtures equally well and none is
+                // linked, so there is no right answer to place. Refuse BEFORE the circuit-info
+                // dialog and every destructive step; Cancelled discards a freshly created circuit
+                // (same invariant as the aborts above). The user resolves it with a link.
+                if (recommendation.IsTie)
+                {
+                    TaskDialog.Show("TurboDriver", TieRefusalMessage(recommendation, circuitData.LightingFixtures));
                     return Result.Cancelled;
                 }
 
@@ -265,6 +278,40 @@ namespace TurboSuite.Driver
                     $"An unexpected error occurred:\n{ex.Message}\n\nNo changes were made.");
                 return Result.Failed;
             }
+        }
+
+        /// <summary>The tie refusal: which families tie (with catalog numbers) and which fixture
+        /// types to link. Doesn't name the circuit — it may be the freshly created one that the
+        /// Cancelled return discards.</summary>
+        private static string TieRefusalMessage(DriverRecommendation recommendation, List<FixtureData> fixtures)
+        {
+            var families = recommendation.TiedCandidates
+                .Select(c => string.IsNullOrWhiteSpace(c.CatalogNumber)
+                    ? c.FamilyName
+                    : $"{c.FamilyName} ({c.CatalogNumber})")
+                .ToList();
+            string familyList = families.Count == 2
+                ? $"{families[0]} and {families[1]}"
+                : string.Join(", ", families);
+
+            var fixtureTypes = fixtures
+                .Where(f => f.HasRemotePowerSupply && f.EffectiveWattage > 0)
+                .GroupBy(f => f.TypeRef)
+                .Select(g => g.First())
+                .Select(f => string.IsNullOrWhiteSpace(f.TypeMark)
+                    ? f.TypeDisplayName
+                    : $"{f.TypeMark} ({f.TypeDisplayName})")
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .OrderBy(s => s, NaturalStringComparer.OrdinalIgnoreCase)
+                .ToList();
+            string fixtureList = fixtureTypes.Count > 0
+                ? "\n\n• " + string.Join("\n• ", fixtureTypes)
+                : string.Empty;
+
+            return $"These fixtures tie between driver families {familyList} — TurboDriver can't tell " +
+                   "which one they're meant for, so it placed nothing.\n\n" +
+                   "Link the fixture type(s) below to the right family in TurboRPS → Driver Match, " +
+                   $"then re-run TurboDriver.{fixtureList}";
         }
 
         /// <summary>

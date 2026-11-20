@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using TurboSuite.Abstractions;
 using TurboSuite.Dmx;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Constants;
@@ -81,6 +82,7 @@ namespace TurboSuite.Driver.Services
                     CatalogNumber = catalogNumber,
                     FamilyTypeName = symbol.Name,
                     FamilyName = symbol.FamilyName,
+                    FamilyRef = symbol.Family?.Id.ToRef() ?? ElementRef.None,
                     Manufacturer = manufacturer,
                     TotalPower = power,
                     SubDriverPower = subPower,

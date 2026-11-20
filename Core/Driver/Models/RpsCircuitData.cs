@@ -75,6 +75,18 @@ namespace TurboSuite.Driver.Models
 
         public List<FixtureData> Fixtures { get; set; } = new List<FixtureData>();
 
+        /// <summary>On a <see cref="RpsStatus.Tie"/>, one representative type per tied driver family,
+        /// winner first (mirrors <see cref="DriverRecommendation.TiedCandidates"/>). Empty otherwise.</summary>
+        public List<DriverCandidateInfo> TiedCandidates { get; set; } = new List<DriverCandidateInfo>();
+
+        /// <summary>The family of the single placed driver type (None when nothing placed / mixed) —
+        /// marks which tied family is already on the circuit.</summary>
+        public ElementRef PlacedFamilyRef { get; set; }
+
+        /// <summary>On a tie: the distinct RPS fixture types on this circuit that need a link, each
+        /// with the number of circuits project-wide that carry it (a link fixes all of them).</summary>
+        public List<TieFixtureType> UnlinkedFixtureTypes { get; set; } = new List<TieFixtureType>();
+
         /// <summary>User has intentionally deferred this circuit — a knowingly "incorrect" driver
         /// config kept for external reasons. Deferred circuits render neutral (not amber/red), are
         /// excluded from the issue counts and batch-correct, and hidden by "Show only issues".
@@ -86,6 +98,25 @@ namespace TurboSuite.Driver.Models
         /// the circuit changed since deferral, so the row is surfaced for review instead of staying
         /// silently neutral. Null when not deferred.</summary>
         public string DeferredSignature { get; set; }
+    }
+
+    /// <summary>A fixture type listed in a tied circuit's detail pane as needing a link.</summary>
+    public class TieFixtureType
+    {
+        public string TypeMark { get; set; }
+        public string TypeDisplayName { get; set; }
+
+        /// <summary>RPS circuits project-wide carrying this fixture type.</summary>
+        public int CircuitCount { get; set; }
+
+        public string Display
+        {
+            get
+            {
+                string mark = string.IsNullOrWhiteSpace(TypeMark) ? "" : TypeMark + " — ";
+                return $"{mark}{TypeDisplayName} (on {CircuitCount} circuit{(CircuitCount == 1 ? "" : "s")})";
+            }
+        }
     }
 
     /// <summary>One in-place driver retype: set <see cref="DeviceRef"/>'s symbol to

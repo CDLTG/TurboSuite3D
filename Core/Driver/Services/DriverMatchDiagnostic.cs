@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using TurboSuite.Driver.Models;
 
@@ -28,11 +29,124 @@ namespace TurboSuite.Driver.Services
     /// LOCKSTEP: these checks must track <see cref="DriverSelectionService"/>.EvaluateCandidate. If a
     /// new hard filter is ever added to the matcher, add a hard-gate check here too (validity itself
     /// is already shared through <see cref="DriverValidity"/>).
+    ///
+    /// Fixture-type → driver-family links are NOT a per-pair gate and so are not checked here: a link
+    /// restricts the matcher's candidate pool to one family, it doesn't change whether a given type
+    /// fits. The Driver Match tab shows link state separately.
     /// </summary>
     public static class DriverMatchDiagnostic
     {
         private const string Blank = "(blank)";
         private const string NA = "—";
+
+        /// <summary>
+        /// Compare every type of a driver family against one RPS fixture type (the Driver Match
+        /// grid). Each row reuses <see cref="Compare"/> so the per-type verdict can never disagree
+        /// with the single-pair diagnostic.
+        /// </summary>
+        public static FamilyMatchReport CompareFamily(FixtureData fixture, DriverFamilyOption family)
+        {
+            var report = new FamilyMatchReport();
+            if (fixture == null || family == null)
+            {
+                report.Summary = "Select an RPS fixture and a driver family to compare.";
+                return report;
+            }
+
+            var types = family.Types ?? new List<DriverCandidateInfo>();
+            foreach (var driver in types)
+            {
+                var pair = Compare(fixture, driver);
+                var valid = pair.Checks.FirstOrDefault(c => c.Field == "Valid driver" || c.Field == "Driver type");
+                var firstFail = pair.Checks.FirstOrDefault(c => c.IsHardGate && c.Verdict == MatchVerdict.Fail);
+                var mfr = pair.Checks.FirstOrDefault(c => c.Field == "Manufacturer");
+
+                string notes = firstFail != null
+                    ? $"{firstFail.Field}: {firstFail.Reason}"
+                    : mfr != null && mfr.Verdict == MatchVerdict.Warn ? "Manufacturer differs" : string.Empty;
+
+                report.Rows.Add(new TypeMatchRow
+                {
+                    Driver = driver,
+                    TypeName = driver.FamilyTypeName,
+                    CatalogNumber = driver.CatalogNumber,
+                    Valid = valid,
+                    Voltage = pair.Checks.FirstOrDefault(c => c.Field == "Voltage"),
+                    Dimming = pair.Checks.FirstOrDefault(c => c.Field == "Dimming Protocol"),
+                    Manufacturer = mfr,
+                    Capacity = CapacityCheck(driver),
+                    Matches = pair.Matches,
+                    Notes = notes
+                });
+            }
+
+            report.TotalCount = report.Rows.Count;
+            report.MatchingCount = report.Rows.Count(r => r.Matches);
+
+            string label = string.IsNullOrWhiteSpace(fixture.TypeMark) ? "this fixture" : fixture.TypeMark.Trim();
+
+            if (report.TotalCount == 0)
+            {
+                report.Summary = "✗ This family has no driver types.";
+            }
+            else if (family.IsTbd)
+            {
+                report.Summary = "✓ TBD placeholder (wildcard) — matches any circuit; a real driver is preferred " +
+                                 "when one fits. TBD can't be linked.";
+            }
+            else if (report.MatchingCount > 0)
+            {
+                report.Summary = $"✓ {report.MatchingCount} of {report.TotalCount} type{(report.TotalCount == 1 ? "" : "s")} " +
+                                 $"can serve {label}. TurboDriver sizes among those.";
+                bool allMfrDiffer = report.Rows.Where(r => r.Matches)
+                    .All(r => r.Manufacturer != null && r.Manufacturer.Verdict == MatchVerdict.Warn);
+                if (allMfrDiffer)
+                    report.Summary += " Manufacturer differs — a same-manufacturer family is preferred when one fits.";
+            }
+            else
+            {
+                // Most common blocking field across the types (first in check order on a tie).
+                var fails = report.Rows
+                    .Select(r => new[] { r.Valid, r.Voltage, r.Dimming }
+                        .FirstOrDefault(c => c != null && c.IsHardGate && c.Verdict == MatchVerdict.Fail))
+                    .Where(c => c != null)
+                    .ToList();
+                var common = fails
+                    .GroupBy(c => c.Field)
+                    .OrderByDescending(g => g.Count())
+                    .FirstOrDefault()?
+                    .First();
+                report.Summary = common == null
+                    ? "✗ No type in this family matches."
+                    : $"✗ No type in this family matches — most common: {common.Field}: {common.Reason}";
+            }
+
+            return report;
+        }
+
+        /// <summary>The Capacity column: the type's rating, with the derated packing ceiling when
+        /// derated. Informational — never gates.</summary>
+        private static MatchCheck CapacityCheck(DriverCandidateInfo driver)
+        {
+            string text;
+            if (driver.IsTbd || driver.SubDriverPower <= 0)
+            {
+                text = NA;
+            }
+            else
+            {
+                int subs = driver.SubDriverCount > 0 ? driver.SubDriverCount : 1;
+                text = subs > 1
+                    ? $"{Fmt(driver.TotalPower)} W ({subs} × {Fmt(driver.SubDriverPower)} W)"
+                    : $"{Fmt(driver.TotalPower)} W";
+                double derate = driver.DerateFactor > 0 ? driver.DerateFactor : 1.0;
+                if (derate < 1.0)
+                    text += $", {Fmt(driver.SubDriverPower * derate)} W derated";
+                if (driver.MaximumFixtures > 0)
+                    text += $", max {driver.MaximumFixtures} fixtures";
+            }
+            return Soft("Capacity", NA, text, MatchVerdict.Info, null);
+        }
 
         public static DriverMatchReport Compare(FixtureData fixture, DriverCandidateInfo driver)
         {
