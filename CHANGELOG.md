@@ -7,6 +7,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.6.3] — 2026-11-20
+
+### Added
+- TurboRPS: Driver Match tab links a fixture type to a driver family, a per-project hard restriction that resolves ties between driver families the matcher can't tell apart.
+- TurboRPS: circuits where two driver families tie on every ranking criterion are flagged TIE, with the families and fixture types to link listed in the detail pane.
+
+### Changed
+- TurboDriver: refuses a tied circuit before any dialog or destructive step instead of silently picking the alphabetically-first family.
+- TurboBubble: boxed line-based fixtures without a remote power supply are tagged and wired like static linear fixtures (tag past the bar's end, wire from that end) instead of on the tape path.
+- TurboName: layer rows drop their tooltips except on role tags; role toggles show a hand cursor.
+
 ## [1.6.2] — 2026-11-04
 
 ### Added
@@ -386,6 +397,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.6.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.3
 [1.6.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.2
 [1.6.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.1
 [1.6.0]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.0
