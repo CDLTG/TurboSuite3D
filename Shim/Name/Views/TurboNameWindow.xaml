@@ -24,6 +24,7 @@
                 <Setter Property="Padding" Value="0"/>
                 <Setter Property="FontSize" Value="10"/>
                 <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
@@ -280,8 +281,7 @@
 
                                             <StackPanel Grid.Column="0" Orientation="Horizontal">
                                                 <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                                          VerticalAlignment="Center" Margin="0,0,4,0"
-                                                          ToolTip="Show/hide this layer in the view"/>
+                                                          VerticalAlignment="Center" Margin="0,0,4,0"/>
                                                 <ToggleButton Content="W" Style="{StaticResource RoleToggleRed}"
                                                               IsChecked="{Binding IsWall}" ToolTip="Wall layer (region-gen)"/>
                                                 <ToggleButton Content="D" Style="{StaticResource RoleToggleRed}"
@@ -297,14 +297,12 @@
                                             </StackPanel>
 
                                             <TextBlock Grid.Column="1" Text="{Binding LayerName}" VerticalAlignment="Center"
-                                                       Margin="6,0,8,0" TextTrimming="CharacterEllipsis"
-                                                       ToolTip="{Binding LayerName}"/>
+                                                       Margin="6,0,8,0" TextTrimming="CharacterEllipsis"/>
 
                                             <!-- Line-preview swatch = the Line Graphics button. Disabled while preview on / picking. -->
                                             <Button Grid.Column="2" Style="{StaticResource LineSwatchButton}"
                                                     Click="LineGraphicsButton_Click"
-                                                    IsEnabled="{Binding DataContext.LineEditingEnabled, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
-                                                    ToolTip="Edit this layer's line color / weight / pattern (VG override)">
+                                                    IsEnabled="{Binding DataContext.LineEditingEnabled, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}">
                                                 <Border Width="120" Height="16" BorderBrush="#BBBBBB"
                                                         BorderThickness="1" Background="White">
                                                     <Line X1="5" Y1="8" X2="113" Y2="8"
