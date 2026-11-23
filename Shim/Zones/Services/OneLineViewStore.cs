@@ -2,6 +2,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -21,7 +22,7 @@ namespace TurboSuite.Zones.Services
 
         public void Save(OneLineViewState state)
         {
-            if (!ZonesOneLineViewStorageService.Save(_doc, state))
+            if (ZonesOneLineViewStorageService.Save(_doc, state) == StorageSaveOutcome.RolledBack)
                 TaskDialog.Show("TurboZones", WorksharingMessages.RolledBack);
         }
     }

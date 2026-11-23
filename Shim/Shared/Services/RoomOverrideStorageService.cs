@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Shared.Services
 {
@@ -32,11 +33,13 @@ namespace TurboSuite.Shared.Services
 
         private readonly Guid _schemaGuid;
         private readonly string _schemaName;
+        private readonly string _label;
 
-        public RoomOverrideStore(Guid schemaGuid, string schemaName)
+        public RoomOverrideStore(Guid schemaGuid, string schemaName, string label)
         {
             _schemaGuid = schemaGuid;
             _schemaName = schemaName;
+            _label = label;
         }
 
         private Schema GetOrCreateSchema()
@@ -82,7 +85,10 @@ namespace TurboSuite.Shared.Services
 
         public ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, _schemaGuid);
 
-        public void Write(Document doc, IDictionary<string, string> overrides)
+        /// <summary>Runs inside the <b>caller's</b> transaction, beside its model edits. When the storage-generation
+        /// guard refuses, the override is skipped and the caller's model edits still commit (the guard blocks
+        /// stored data only, and has told the user).</summary>
+        public StorageSaveOutcome Write(Document doc, IDictionary<string, string> overrides)
         {
             bool hasAny = overrides != null && overrides.Count > 0;
 
@@ -93,7 +99,9 @@ namespace TurboSuite.Shared.Services
 
             // Nothing to persist and nothing previously persisted — don't create an
             // empty DataStorage just to hold an empty map.
-            if (!hasAny && existingStorage == null) return;
+            if (!hasAny && existingStorage == null) return StorageSaveOutcome.Saved;
+
+            if (!StorageGenerationService.AuthorizeWrite(doc, _label)) return StorageSaveOutcome.Blocked;
 
             var schema = GetOrCreateSchema();
             var storage = existingStorage ?? DataStorage.Create(doc);
@@ -105,11 +113,12 @@ namespace TurboSuite.Shared.Services
             entity.Set(CircuitKeysField, (IList<string>)keys);
             entity.Set(OverrideValuesField, (IList<string>)values);
             storage.SetEntity(entity);
+            return StorageSaveOutcome.Saved;
         }
 
-        public void Upsert(Document doc, IDictionary<string, string> changes)
+        public StorageSaveOutcome Upsert(Document doc, IDictionary<string, string> changes)
         {
-            if (changes == null || changes.Count == 0) return;
+            if (changes == null || changes.Count == 0) return StorageSaveOutcome.Saved;
 
             var map = Load(doc);
             foreach (var kvp in changes)
@@ -121,7 +130,7 @@ namespace TurboSuite.Shared.Services
                     map[kvp.Key] = kvp.Value;
             }
 
-            Write(doc, map);
+            return Write(doc, map);
         }
     }
 
@@ -136,7 +145,7 @@ namespace TurboSuite.Shared.Services
     public static class RoomOverrideStorageService
     {
         private static readonly RoomOverrideStore Store = new RoomOverrideStore(
-            new Guid("1e1e5492-69a2-4ea0-b911-0c0ce104a17e"), "TurboZonesRoomOverridesV1");
+            new Guid("1e1e5492-69a2-4ea0-b911-0c0ce104a17e"), "TurboZonesRoomOverridesV1", "room overrides");
 
         /// <summary>Reads the persisted overrides as a <c>circuit UniqueId → override</c> map.
         /// Empty (never null) when nothing has been saved. No transaction required.</summary>
@@ -149,14 +158,14 @@ namespace TurboSuite.Shared.Services
         /// overrides and deleted circuits absent from <paramref name="overrides"/> are pruned. Use
         /// only when the caller enumerated <b>every</b> lighting circuit (TurboZones' apply);
         /// otherwise use <see cref="Upsert"/>. <b>Assumes an already-open transaction.</b></summary>
-        public static void Write(Document doc, IDictionary<string, string> overrides)
+        public static StorageSaveOutcome Write(Document doc, IDictionary<string, string> overrides)
             => Store.Write(doc, overrides);
 
         /// <summary>Merges a handful of <c>circuit UniqueId → override</c> changes into the stored
         /// map, preserving untouched overrides. A blank/null value clears that circuit's override.
         /// Use from callers that know only a subset of circuits (TurboWire's dialog). <b>Assumes an
         /// already-open transaction.</b></summary>
-        public static void Upsert(Document doc, IDictionary<string, string> changes)
+        public static StorageSaveOutcome Upsert(Document doc, IDictionary<string, string> changes)
             => Store.Upsert(doc, changes);
     }
 
@@ -169,7 +178,7 @@ namespace TurboSuite.Shared.Services
     public static class ShadeRoomOverrideStorageService
     {
         private static readonly RoomOverrideStore Store = new RoomOverrideStore(
-            new Guid("36d2d485-86e4-47a4-a553-3a367f24343c"), "TurboShadeRoomOverridesV1");
+            new Guid("36d2d485-86e4-47a4-a553-3a367f24343c"), "TurboShadeRoomOverridesV1", "shade room overrides");
 
         /// <summary><see cref="RoomOverrideStorageService.Load"/>, for the shade store.</summary>
         public static Dictionary<string, string> Load(Document doc) => Store.Load(doc);
@@ -178,11 +187,11 @@ namespace TurboSuite.Shared.Services
         public static ElementId FindStorageId(Document doc) => Store.FindStorageId(doc);
 
         /// <summary><see cref="RoomOverrideStorageService.Write"/>, for the shade store.</summary>
-        public static void Write(Document doc, IDictionary<string, string> overrides)
+        public static StorageSaveOutcome Write(Document doc, IDictionary<string, string> overrides)
             => Store.Write(doc, overrides);
 
         /// <summary><see cref="RoomOverrideStorageService.Upsert"/>, for the shade store.</summary>
-        public static void Upsert(Document doc, IDictionary<string, string> changes)
+        public static StorageSaveOutcome Upsert(Document doc, IDictionary<string, string> changes)
             => Store.Upsert(doc, changes);
     }
 }

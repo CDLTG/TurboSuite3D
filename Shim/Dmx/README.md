@@ -69,7 +69,7 @@ While the window is open, the active view's DMX fixtures are colored by **Contro
 
 ## Persistence (`Shim/Dmx/Services/DmxStorageService.cs`)
 
-Doc-singleton ExtensibleStorage on a `DataStorage` element (schema `e5f6a7b8-…`, `TurboSuiteDmxModule`) — the whole `DmxModuleState` (settings, declared loops, clusters, control-system tags, solve snapshot) serialized to **one JSON blob** in `StateJson`, with a parallel `PayloadVersion` int. JSON-backed so payload-shape growth bumps `PayloadVersion`, **not** the GUID (change the GUID only for a true ES field add/remove — see CLAUDE.md). Tolerant read: a corrupt/forward-incompatible payload starts clean rather than crashing the window. Only the `Control Zone` value lives natively (on the tape); this schema references zones by string.
+Doc-singleton ExtensibleStorage on a `DataStorage` element (schema `e5f6a7b8-…`, `TurboSuiteDmxModule`) — the whole `DmxModuleState` (settings, declared loops, clusters, control-system tags, solve snapshot) serialized to **one JSON blob** in `StateJson`, with a parallel `PayloadVersion` int. JSON-backed so payload-shape growth bumps `PayloadVersion`, **not** the GUID (ES field changes follow CLAUDE.md "ExtensibleStorage Schema Changes"). Tolerant read: a corrupt/forward-incompatible payload starts clean rather than crashing the window — and is **never overwritten**: while the stored payload won't parse, saves are refused with a one-time notice. Only the `Control Zone` value lives natively (on the tape); this schema references zones by string.
 
 ## Layout
 

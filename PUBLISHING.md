@@ -75,6 +75,8 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -ServerPath "\\SERVERNAME
 
 This restores all files from `<ServerPath>\2025\Archive\1.0.0\` and updates that channel's `version.txt`. The current deployment is first snapshotted to `Archive\<current>-rolledback-<timestamp>\`, so the rollback is itself reversible. Users see the restored version on their next Revit launch and are prompted to "update" (downgrade) to it.
 
+**Rolling back across a storage-generation bump** (a release whose CHANGELOG says users must update promptly) leaves every project the newer build saved stamped with the newer generation, so the rolled-back build **refuses to save TurboSuite settings in those projects** for everyone. Either roll forward instead, or run the un-stamp recipe (CLAUDE.md "ExtensibleStorage Schema Changes") on each affected project.
+
 ## Installation (end users)
 
 Users run **`TurboSuiteInstaller.exe`** from the share root. It:

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Shared.Services
 {
@@ -63,8 +64,8 @@ namespace TurboSuite.Shared.Services
         /// <summary>The store's id, or null when this project has none yet — for a session lease.</summary>
         public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
 
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool Save(Document doc, List<(string Name, int ClickOrder)> roomOrder)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome Save(Document doc, List<(string Name, int ClickOrder)> roomOrder)
         {
             var schema = GetOrCreateSchema();
 
@@ -72,17 +73,8 @@ namespace TurboSuite.Shared.Services
                 .Select(r => r.ClickOrder > 0 ? $"{r.Name}|{r.ClickOrder}" : r.Name)
                 .ToList();
 
-            using (var tx = new Transaction(doc, "TurboSuite - Save Room Order"))
-            {
-                tx.Start();
-
-                var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-                var entity = new Entity(schema);
-                entity.Set(FieldName, (IList<string>)encoded);
-                storage.SetEntity(entity);
-
-                return CommitGuard.TryCommit(tx);
-            }
+            return DataStorageHelper.SaveEntity(doc, schema, "the room order", "TurboSuite - Save Room Order",
+                entity => entity.Set(FieldName, (IList<string>)encoded));
         }
     }
 }

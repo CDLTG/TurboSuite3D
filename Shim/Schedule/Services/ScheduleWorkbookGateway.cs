@@ -9,6 +9,7 @@ using TurboSuite.Abstractions;
 using TurboSuite.Schedule.Models;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Schedule.Services
 {
@@ -141,7 +142,8 @@ namespace TurboSuite.Schedule.Services
             _workQueue.Enqueue(
                 () =>
                 {
-                    if (newlyChosen) WorkbookPathStorageService.Save(_doc, chosen);
+                    if (newlyChosen && WorkbookPathStorageService.Save(_doc, chosen) == StorageSaveOutcome.RolledBack)
+                        Autodesk.Revit.UI.TaskDialog.Show("TurboSchedule", WorksharingMessages.RolledBack);
                     return (object)ScheduleTypeCollector.Collect(_doc);
                 },
                 modelObj =>

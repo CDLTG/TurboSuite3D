@@ -9,6 +9,7 @@ using TurboSuite.Abstractions;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Driver.Services
 {
@@ -130,12 +131,9 @@ namespace TurboSuite.Driver.Services
 
             // The deferral lives in ExtensibleStorage on the circuit element itself.
             if (!Lease(new[] { circuit.Id }, "circuit")) return null;
-            if (!RpsDeferralStorageService.Save(_doc, circuit, deferred, signature))
-            {
-                TaskDialog.Show("TurboRPS", WorksharingMessages.RolledBack);
-                return null;
-            }
-            return true;
+            var outcome = RpsDeferralStorageService.Save(_doc, circuit, deferred, signature);
+            if (outcome == StorageSaveOutcome.RolledBack) TaskDialog.Show("TurboRPS", WorksharingMessages.RolledBack);
+            return outcome == StorageSaveOutcome.Saved ? true : null;
         }
 
         private bool Lease(IEnumerable<ElementId> workingSet, string itemNoun)

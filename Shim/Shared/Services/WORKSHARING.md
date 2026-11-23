@@ -74,6 +74,7 @@ A refusal shows one message that says who to ask and what to do:
 - **Lock stores lease every duplicate**, not the lowest-id one. Two users can each create the lock before either syncs. Validated: after both sync there are two stores, the first user to lease takes both, and the second is refused with the first user's name.
 - **Data stores** (room order, panel settings, CAD Room Source…) are separate from the lock and **must also be in the working set** when the module writes them.
 - A modeless command whose lease is refused must still **return `Result.Succeeded`**. Otherwise Revit discards the lock store the command may have just created.
+- **The storage-generation guard is separate from leasing** (`StorageGenerationService`, CLAUDE.md "ExtensibleStorage Schema Changes"). Its stamp is append-only — raising it *creates* a `DataStorage`, so it needs no borrow and never joins a working set — and is read as the max over every stamp. A teammate's newer stamp is invisible until they sync and you reload. Lock stores are exempt from the guard.
 
 ## The working-set rule
 

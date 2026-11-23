@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Shared.Services
 {
@@ -99,8 +100,8 @@ namespace TurboSuite.Shared.Services
         /// <summary>Persists the explicit picks. Entries with a non-positive location are
         /// dropped, so clearing a pick (location → 0) removes it from the store. An entry flagged
         /// <c>IsOverride</c> is suffixed <c>|O</c> so it survives as a deliberate override.</summary>
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool Save(Document doc, IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome Save(Document doc, IReadOnlyList<(string Name, int Location, bool IsOverride)> roomLocations)
         {
             var schema = GetOrCreateSchema();
 
@@ -109,17 +110,8 @@ namespace TurboSuite.Shared.Services
                 .Select(r => r.IsOverride ? $"{r.Name}|{r.Location}|O" : $"{r.Name}|{r.Location}")
                 .ToList();
 
-            using (var tx = new Transaction(doc, "TurboSuite - Save Room Locations"))
-            {
-                tx.Start();
-
-                var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-                var entity = new Entity(schema);
-                entity.Set(FieldName, (IList<string>)encoded);
-                storage.SetEntity(entity);
-
-                return CommitGuard.TryCommit(tx);
-            }
+            return DataStorageHelper.SaveEntity(doc, schema, "room locations", "TurboSuite - Save Room Locations",
+                entity => entity.Set(FieldName, (IList<string>)encoded));
         }
     }
 }

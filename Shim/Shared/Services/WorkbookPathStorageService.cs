@@ -1,6 +1,7 @@
 using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Shared.Services
 {
@@ -50,19 +51,12 @@ namespace TurboSuite.Shared.Services
             return schema == null ? null : DataStorageHelper.FindDataStorage(doc, schema)?.Id;
         }
 
-        public static void Save(Document doc, string path)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome Save(Document doc, string path)
         {
             var schema = GetOrCreateSchema();
-
-            using var tx = new Transaction(doc, "TurboSchedule - Save workbook path");
-            tx.Start();
-
-            var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-            var entity = new Entity(schema);
-            entity.Set(PathField, path ?? "");
-            storage.SetEntity(entity);
-
-            tx.Commit();
+            return DataStorageHelper.SaveEntity(doc, schema, "the TurboSchedule workbook path", "TurboSchedule - Save workbook path",
+                entity => entity.Set(PathField, path ?? ""));
         }
     }
 }

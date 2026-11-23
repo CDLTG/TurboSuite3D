@@ -6,6 +6,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -80,27 +81,20 @@ namespace TurboSuite.Zones.Services
         /// <summary>The store's id, or null when this project has none yet — for TurboZones' session lease.</summary>
         public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
 
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool Save(Document doc, OneLineViewState state)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome Save(Document doc, OneLineViewState state)
         {
             state ??= new OneLineViewState();
             var schema = GetOrCreateSchema();
 
-            using (var tx = new Transaction(doc, "TurboZones - Save One-Line Views"))
+            return DataStorageHelper.SaveEntity(doc, schema, "TurboZones one-line views", "TurboZones - Save One-Line Views", entity =>
             {
-                tx.Start();
-
-                var storage = FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-                var entity = new Entity(schema);
                 entity.Set(PageKeysField,
                     (IList<string>)state.PageViewIds.Keys.Select(k => k.ToString(CultureInfo.InvariantCulture)).ToList());
                 entity.Set(PageValuesField,
                     (IList<string>)state.PageViewIds.Values.Select(v => v.ToString(CultureInfo.InvariantCulture)).ToList());
                 entity.Set(WireLegendViewIdField, state.WireLegendViewId.ToString(CultureInfo.InvariantCulture));
-                storage.SetEntity(entity);
-
-                return CommitGuard.TryCommit(tx);
-            }
+            });
         }
     }
 }

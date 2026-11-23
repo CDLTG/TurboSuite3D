@@ -8,6 +8,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Shared.Models;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Name.Services;
 
@@ -907,7 +908,7 @@ public class TurboNameApiHandler : IExternalEventHandler
 
         if (cleanup.Settings != null)
         {
-            if (!CadRoomSourceStorageService.Save(_doc, cleanup.Settings))
+            if (CadRoomSourceStorageService.Save(_doc, cleanup.Settings) == StorageSaveOutcome.RolledBack)
                 Dispatch(() => TaskDialog.Show("TurboName", WorksharingMessages.RolledBack));
             CadRoomSourceSettingsCache.Invalidate();
         }

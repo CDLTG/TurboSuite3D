@@ -2,6 +2,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 using TurboSuite.Zones.Models;
 
 namespace TurboSuite.Zones.Services
@@ -22,7 +23,7 @@ namespace TurboSuite.Zones.Services
 
         public void Save(PanelSettings settings)
         {
-            if (!ZonesPanelSettingsStorageService.Save(_doc, settings))
+            if (ZonesPanelSettingsStorageService.Save(_doc, settings) == StorageSaveOutcome.RolledBack)
                 TaskDialog.Show("TurboZones", WorksharingMessages.RolledBack);
         }
     }

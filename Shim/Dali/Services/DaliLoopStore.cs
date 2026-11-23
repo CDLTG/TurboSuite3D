@@ -3,6 +3,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Dali.Persistence;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Dali.Services
 {
@@ -44,10 +45,11 @@ namespace TurboSuite.Dali.Services
             return ReportIfRolledBack(DaliStorageService.Save(_doc, current));
         }
 
-        private static bool ReportIfRolledBack(bool committed)
+        /// <summary>Surface a rolled-back save (a Blocked one was already explained by the guard). True = saved.</summary>
+        private static bool ReportIfRolledBack(StorageSaveOutcome outcome)
         {
-            if (!committed) TaskDialog.Show("TurboDALI", WorksharingMessages.RolledBack);
-            return committed;
+            if (outcome == StorageSaveOutcome.RolledBack) TaskDialog.Show("TurboDALI", WorksharingMessages.RolledBack);
+            return outcome == StorageSaveOutcome.Saved;
         }
     }
 }

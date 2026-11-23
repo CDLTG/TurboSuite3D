@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Number.Services
 {
@@ -84,22 +85,12 @@ namespace TurboSuite.Number.Services
             if (prefixSuffix != null) yield return prefixSuffix;
         }
 
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool SaveKeypadRoomSorted(Document doc, bool isSorted)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome SaveKeypadRoomSorted(Document doc, bool isSorted)
         {
             var schema = GetOrCreateKeypadSortSchema();
-
-            using (var tx = new Transaction(doc, "TurboNumber - Save Keypad Sort State"))
-            {
-                tx.Start();
-
-                var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-                var entity = new Entity(schema);
-                entity.Set(KeypadSortFieldName, isSorted);
-                storage.SetEntity(entity);
-
-                return CommitGuard.TryCommit(tx);
-            }
+            return DataStorageHelper.SaveEntity(doc, schema, "the TurboNumber keypad sort setting", "TurboNumber - Save Keypad Sort State",
+                entity => entity.Set(KeypadSortFieldName, isSorted));
         }
 
         public static (string prefix, string suffix) LoadPrefixSuffix(Document doc)
@@ -116,23 +107,15 @@ namespace TurboSuite.Number.Services
             return (entity.Get<string>(PrefixFieldName), entity.Get<string>(SuffixFieldName));
         }
 
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool SavePrefixSuffix(Document doc, string prefix, string suffix)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome SavePrefixSuffix(Document doc, string prefix, string suffix)
         {
             var schema = GetOrCreatePrefixSuffixSchema();
-
-            using (var tx = new Transaction(doc, "TurboNumber - Save Prefix/Suffix"))
+            return DataStorageHelper.SaveEntity(doc, schema, "the TurboNumber prefix/suffix", "TurboNumber - Save Prefix/Suffix", entity =>
             {
-                tx.Start();
-
-                var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-                var entity = new Entity(schema);
                 entity.Set(PrefixFieldName, prefix ?? "");
                 entity.Set(SuffixFieldName, suffix ?? "");
-                storage.SetEntity(entity);
-
-                return CommitGuard.TryCommit(tx);
-            }
+            });
         }
     }
 }

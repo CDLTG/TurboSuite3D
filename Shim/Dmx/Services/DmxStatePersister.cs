@@ -4,6 +4,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.Abstractions;
 using TurboSuite.Dmx.Persistence;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Dmx.Services
 {
@@ -55,7 +56,7 @@ namespace TurboSuite.Dmx.Services
             _queue.Enqueue(
                 () =>
                 {
-                    if (!DmxStorageService.Save(_doc, toWrite))
+                    if (DmxStorageService.Save(_doc, toWrite) == StorageSaveOutcome.RolledBack)
                         TaskDialog.Show("TurboDMX", WorksharingMessages.RolledBack);
                     return null;
                 },

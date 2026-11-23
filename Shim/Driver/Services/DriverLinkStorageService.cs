@@ -8,6 +8,7 @@ using TurboSuite.Abstractions;
 using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Driver.Services
 {
@@ -103,8 +104,8 @@ namespace TurboSuite.Driver.Services
 
         /// <summary>Persist the full link list in its own transaction (one undo step). One entry per
         /// fixture type — a later duplicate key wins.</summary>
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool Save(Document doc, IEnumerable<(string FixtureTypeKey, string DriverFamilyKey)> entries)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome Save(Document doc, IEnumerable<(string FixtureTypeKey, string DriverFamilyKey)> entries)
         {
             var schema = GetOrCreateSchema();
 
@@ -118,17 +119,8 @@ namespace TurboSuite.Driver.Services
             }
             var encoded = order.Select(k => $"{k}{Separator}{byFixture[k]}").ToList();
 
-            using (var tx = new Transaction(doc, "TurboRPS - Save Driver Links"))
-            {
-                tx.Start();
-
-                var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-                var entity = new Entity(schema);
-                entity.Set(FieldName, (IList<string>)encoded);
-                storage.SetEntity(entity);
-
-                return CommitGuard.TryCommit(tx);
-            }
+            return DataStorageHelper.SaveEntity(doc, schema, "TurboRPS driver links", "TurboRPS - Save Driver Links",
+                entity => entity.Set(FieldName, (IList<string>)encoded));
         }
     }
 }

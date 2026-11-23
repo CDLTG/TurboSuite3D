@@ -3,6 +3,7 @@ using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Driver.Services
 {
@@ -55,13 +56,20 @@ namespace TurboSuite.Driver.Services
 
         /// <summary>Writes the deferral state to a circuit element inside its own transaction.
         /// Clearing stores Deferred=false with an empty signature.</summary>
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool Save(Document doc, Element circuit, bool deferred, string signature)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome Save(Document doc, Element circuit, bool deferred, string signature)
         {
             var schema = GetOrCreateSchema();
 
             using var tx = new Transaction(doc, "TurboRPS — Defer circuit");
             tx.Start();
+
+            // Per-element store, so not DataStorageHelper.SaveEntity — but the same generation guard.
+            if (!StorageGenerationService.AuthorizeWrite(doc, "TurboRPS circuit deferrals"))
+            {
+                tx.RollBack();
+                return StorageSaveOutcome.Blocked;
+            }
 
             var entity = new Entity(schema);
             entity.Set(DeferredField, deferred);
@@ -69,7 +77,7 @@ namespace TurboSuite.Driver.Services
             entity.Set(SignatureField, signature ?? string.Empty);
             circuit.SetEntity(entity);
 
-            return CommitGuard.TryCommit(tx);
+            return CommitGuard.TryCommit(tx) ? StorageSaveOutcome.Saved : StorageSaveOutcome.RolledBack;
         }
     }
 }

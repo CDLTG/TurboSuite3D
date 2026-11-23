@@ -5,6 +5,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Dmx.Persistence;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Dmx.Services
 {
@@ -85,23 +86,34 @@ namespace TurboSuite.Dmx.Services
         public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
 
         /// <summary>Writes the module state to the document inside its own transaction.</summary>
-        /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-        public static bool Save(Document doc, DmxModuleState state)
+        /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+        public static StorageSaveOutcome Save(Document doc, DmxModuleState state)
         {
             if (state == null) state = new DmxModuleState();
             var schema = GetOrCreateSchema();
             string json = JsonSerializer.Serialize(state, JsonOptions);
 
-            using var tx = new Transaction(doc, "TurboDMX - Save Module State");
-            tx.Start();
+            return DataStorageHelper.SaveEntity(doc, schema, "TurboDMX data", "TurboDMX - Save Module State", entity =>
+            {
+                entity.Set(StateJsonField, json);
+                entity.Set(PayloadVersionField, state.PayloadVersion);
+            }, stored => StoredPayloadReadable(schema, stored));
+        }
 
-            var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-            var entity = new Entity(schema);
-            entity.Set(StateJsonField, json);
-            entity.Set(PayloadVersionField, state.PayloadVersion);
-            storage.SetEntity(entity);
-
-            return CommitGuard.TryCommit(tx);
+        /// <summary>Never overwrite a payload this build can't parse (plan §2e): <see cref="Load"/> showed it as a
+        /// fresh empty state, so saving would replace the project's TurboDMX data with that empty state.</summary>
+        private static bool StoredPayloadReadable(Schema schema, Entity stored)
+        {
+            if (schema.GetField(StateJsonField) == null) return true;
+            string json = stored.Get<string>(StateJsonField);
+            bool present = !string.IsNullOrWhiteSpace(json);
+            bool parsed = false;
+            if (present)
+            {
+                try { JsonSerializer.Deserialize<DmxModuleState>(json, JsonOptions); parsed = true; }
+                catch (JsonException) { }
+            }
+            return PayloadGate.CanWrite(present, parsed);
         }
     }
 }

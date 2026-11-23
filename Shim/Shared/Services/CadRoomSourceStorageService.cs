@@ -3,6 +3,7 @@ using System.Text.Json;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Models;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Shared.Services;
 
@@ -79,22 +80,33 @@ public static class CadRoomSourceStorageService
     /// <summary>The store's id, or null when this project has none yet — for TurboName's session lease.</summary>
     public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
 
-    /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-    public static bool Save(Document doc, CadRoomSourceSettings settings)
+    /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+    public static StorageSaveOutcome Save(Document doc, CadRoomSourceSettings settings)
     {
         if (settings == null) settings = CadRoomSourceSettings.CreateDefaults();
         var schema = GetOrCreateSchema();
         string json = JsonSerializer.Serialize(settings, JsonOptions);
 
-        using var tx = new Transaction(doc, "TurboSuite - Save CAD Room Source Settings");
-        tx.Start();
+        return DataStorageHelper.SaveEntity(doc, schema, "TurboName layer roles", "TurboSuite - Save CAD Room Source Settings", entity =>
+        {
+            entity.Set(StateJsonField, json);
+            entity.Set(PayloadVersionField, PayloadVersion);
+        }, stored => StoredPayloadReadable(schema, stored));
+    }
 
-        var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-        var entity = new Entity(schema);
-        entity.Set(StateJsonField, json);
-        entity.Set(PayloadVersionField, PayloadVersion);
-        storage.SetEntity(entity);
-
-        return CommitGuard.TryCommit(tx);
+    /// <summary>Never overwrite a payload this build can't parse (plan §2e) — <see cref="Load"/> would have
+    /// shown it as empty, so saving would replace it with defaults.</summary>
+    private static bool StoredPayloadReadable(Schema schema, Entity stored)
+    {
+        if (schema.GetField(StateJsonField) == null) return true;
+        string json = stored.Get<string>(StateJsonField);
+        bool present = !string.IsNullOrWhiteSpace(json);
+        bool parsed = false;
+        if (present)
+        {
+            try { JsonSerializer.Deserialize<CadRoomSourceSettings>(json, JsonOptions); parsed = true; }
+            catch (JsonException) { }
+        }
+        return PayloadGate.CanWrite(present, parsed);
     }
 }

@@ -6,6 +6,7 @@ using Autodesk.Revit.UI;
 using TurboSuite.App.ViewModels;
 using TurboSuite.App.Views;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.App;
 
@@ -44,7 +45,7 @@ public class SettingsCommand : IExternalCommand
                 var lease = WorksharingLease.Acquire(doc, store != null ? new[] { store } : new ElementId[0], "setting");
                 if (!lease.IsGranted)
                     TaskDialog.Show("TurboSuite Settings", lease.DenialMessage);
-                else if (!GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel()))
+                else if (GeneralSettingsStorageService.Save(doc, viewModel.ToGeneralModel()) == StorageSaveOutcome.RolledBack)
                     TaskDialog.Show("TurboSuite Settings", WorksharingMessages.RolledBack);
                 GeneralSettingsCache.Invalidate();
             }

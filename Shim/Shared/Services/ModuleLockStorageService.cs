@@ -13,8 +13,8 @@ namespace TurboSuite.Shared.Services
     /// holds it (until they sync) no other TurboSuite user can open that module. The entity carries only the
     /// module name — nothing reads it as data.
     ///
-    /// <para>Additive schema with its own GUID (bump on any field add/remove — see CLAUDE.md "ExtensibleStorage
-    /// Schema Changes"). Only ever created on a workshared document.</para>
+    /// <para>Its own GUID; never change its fields (see CLAUDE.md "ExtensibleStorage Schema Changes"). Exempt from
+    /// the storage-generation guard — it is a lock, not data. Only ever created on a workshared document.</para>
     /// </summary>
     public static class ModuleLockStorageService
     {

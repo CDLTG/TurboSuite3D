@@ -2,6 +2,7 @@ using System;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using TurboSuite.Shared.Models;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Shared.Services;
 
@@ -55,24 +56,18 @@ public static class GeneralSettingsStorageService
     /// <summary>The store's id, or null when this project has none yet — for the Settings dialog's lease.</summary>
     public static ElementId FindStorageId(Document doc) => DataStorageHelper.FindStorageId(doc, SchemaGuid);
 
-    /// <returns>False when Revit rolled the save back (nothing persisted).</returns>
-    public static bool Save(Document doc, GeneralSettings settings)
+    /// <returns>Saved, RolledBack (worksharing denial — report it), or Blocked (the guard already told the user).</returns>
+    public static StorageSaveOutcome Save(Document doc, GeneralSettings settings)
     {
         var schema = GetOrCreateSchema();
-
-        using var tx = new Transaction(doc, "TurboSuite - Save General Settings");
-        tx.Start();
-
-        var storage = DataStorageHelper.FindDataStorage(doc, schema) ?? DataStorage.Create(doc);
-        var entity = new Entity(schema);
-        if (schema.GetField(ShowCommentsDialogField) != null)
-            entity.Set(ShowCommentsDialogField, settings.ShowCircuitCommentsDialog);
-        if (schema.GetField(AutoSplitFixturesField) != null)
-            entity.Set(AutoSplitFixturesField, settings.AutoSplitFixtures);
-        if (schema.GetField(EnableDynamicDriverTagsField) != null)
-            entity.Set(EnableDynamicDriverTagsField, settings.EnableDynamicDriverTags);
-        storage.SetEntity(entity);
-
-        return CommitGuard.TryCommit(tx);
+        return DataStorageHelper.SaveEntity(doc, schema, "TurboSuite Settings", "TurboSuite - Save General Settings", entity =>
+        {
+            if (schema.GetField(ShowCommentsDialogField) != null)
+                entity.Set(ShowCommentsDialogField, settings.ShowCircuitCommentsDialog);
+            if (schema.GetField(AutoSplitFixturesField) != null)
+                entity.Set(AutoSplitFixturesField, settings.AutoSplitFixtures);
+            if (schema.GetField(EnableDynamicDriverTagsField) != null)
+                entity.Set(EnableDynamicDriverTagsField, settings.EnableDynamicDriverTags);
+        });
     }
 }

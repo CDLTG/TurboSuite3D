@@ -10,6 +10,7 @@ using TurboSuite.Driver.Models;
 using TurboSuite.Shared.Constants;
 using TurboSuite.Shared.Helpers;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Driver.Services
 {
@@ -105,12 +106,9 @@ namespace TurboSuite.Driver.Services
                 return null;
             }
 
-            if (!DriverLinkStorageService.Save(doc, entries))
-            {
-                TaskDialog.Show("TurboRPS", WorksharingMessages.RolledBack);
-                return null;
-            }
-            return true;
+            var outcome = DriverLinkStorageService.Save(doc, entries);
+            if (outcome == StorageSaveOutcome.RolledBack) TaskDialog.Show("TurboRPS", WorksharingMessages.RolledBack);
+            return outcome == StorageSaveOutcome.Saved ? true : null;
         }
 
         private static List<DriverFamilyOption> CollectFamilies(Document doc)

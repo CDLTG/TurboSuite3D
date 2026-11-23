@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using TurboSuite.Shared.Services;
+using TurboSuite.Shared.Storage;
 
 namespace TurboSuite.Number.Services
 {
@@ -28,6 +29,14 @@ namespace TurboSuite.Number.Services
         {
             if (!committed) TaskDialog.Show("TurboNumber", WorksharingMessages.RolledBack);
             return committed;
+        }
+
+        /// <summary>Surface a rolled-back ExtensibleStorage save; a Blocked one was already explained by the
+        /// storage-generation guard. True = saved.</summary>
+        public static bool ReportIfRolledBack(StorageSaveOutcome outcome)
+        {
+            if (outcome == StorageSaveOutcome.RolledBack) TaskDialog.Show("TurboNumber", WorksharingMessages.RolledBack);
+            return outcome == StorageSaveOutcome.Saved;
         }
     }
 }
