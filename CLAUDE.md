@@ -96,6 +96,8 @@ Every push updates the **public** GitHub repo (see "Release Status"), so a commi
 4. Only proceed to implementation after confirming feasibility.
 
 ### ExtensibleStorage Schema Changes
+**Templates propagate stored data:** every job starts from one of two firm templates — 3D (a Revit 2022 file, upgraded on use, so it can hold no TurboSuite data while it stays 2022) or 2D (a Revit 2025 file). A new project is a full copy of its template, so any `DataStorage` saved into the 2D template reaches every new 2D job. Never test schema changes in a template.
+
 When adding or removing fields in any storage service (`GeneralSettingsStorageService`, `CadRoomSourceStorageService`, etc.), create a **new schema GUID**. Old schemas are cached in Revit's memory and cannot be updated at runtime. After changing a GUID, the user must:
 1. Close Revit
 2. Build with the new code
