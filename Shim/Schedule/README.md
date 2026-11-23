@@ -2,11 +2,13 @@
 
 A page-per-Type-Mark, form-view spec editor for lighting fixtures (`OST_LightingFixtures`) and drivers (`OST_LightingDevices`) — one screen that unifies the two native Revit spec schedules.
 
-Instead of scrolling a wide schedule grid, it shows **one Type Mark per page** with fields in labeled sections (Identity Data, Electrical, Mechanical, Photometric, Schedule Notes). An edit writes back to **all symbols sharing that Type Mark**, and the whole save is one undo step. Entry `ScheduleCommand.cs`; the field roster is the data-driven `FieldDef` set, cross-symbol reconciliation in `ScheduleTypeCollector`. Modeless — requires no open transaction at launch.
+Instead of scrolling a wide schedule grid, it shows **one Type Mark per page** with fields in labeled sections (Identity Data, Electrical, Mechanical, Photometric, Schedule Notes). An edit writes back to **every type sharing that Type Mark — placed or not** — and the whole save is one undo step.
+
+**A Type Mark is one specification**: every type carrying it must agree. So a page reconciles and writes *all* loaded types with the mark, including unplaced ones — a type placed later (or swapped to via Type Selector, TurboRPS, or a TurboDriver redeploy) already carries the edit. A page exists only for a mark with at least one placed type; loaded-but-never-used types don't add pages, they only join a mark that's in use (and can turn its fields ⟨varies⟩/n/a — the tooltip names them, which is the cue to fix or purge them). Entry `ScheduleCommand.cs`; the field roster is the data-driven `FieldDef` set, cross-symbol reconciliation in `ScheduleTypeCollector`. Modeless — requires no open transaction at launch.
 
 ## Behavior
 
-Pick a Type Mark from the **Type** dropdown or step with ◀ ▶; edit in place. The header shows the current type's **family name** beside the page position — read-only reference only, never written back (joined with `, ` in the rare case a Type Mark spans several families). A blue dot marks a field (and its page) with unsaved edits. **Save** flushes every dirty page in one transaction; **Discard** drops all unsaved edits. Close (footer / ✕ / Esc) prompts if edits are pending. Reopening within the same Revit session returns to the last type; a since-removed type falls back to the first page.
+Pick a Type Mark from the **Type** dropdown or step with ◀ ▶; edit in place. The header lists the **types** behind the current Type Mark beside the page position, grouped by family (`Linear: 4ft, 8ft (not placed) · Cove: Std`), with the full one-per-line list on hover — read-only reference, never written back. These are exactly the types a Save writes to. A blue dot marks a field (and its page) with unsaved edits. **Save** flushes every dirty page in one transaction; **Discard** drops all unsaved edits. Close (footer / ✕ / Esc) prompts if edits are pending. Reopening within the same Revit session returns to the last type; a since-removed type falls back to the first page.
 
 ## Field states
 
@@ -18,6 +20,8 @@ Each field is reconciled across every symbol under the Type Mark and shows one o
 | **⟨varies⟩** | grey `⟨varies⟩` placeholder (or an indeterminate checkbox dash) | Symbols disagree. Left untouched it stays out of Save, so legitimate per-symbol differences are never flattened. Typing/clicking resolves it and applies your value to all. |
 | **read-only** 🔒 | greyed, locked | Formula-driven or API-read-only on a symbol; shown but not writable. |
 | **n/a** | grey `n/a` | The parameter is absent on a symbol in the group (a family-authoring mismatch). Never written. |
+
+Hovering a **⟨varies⟩** field lists each type's value; hovering an **n/a** field names the type(s) missing the parameter (or the per-type parameter kind, when families disagree on storage type). Normal and read-only fields carry no tooltip, and a ⟨varies⟩ tooltip disappears once you type over it (Discard brings it back).
 
 Yes/No parameters render as checkboxes; unit-bearing numbers display and parse through Revit's Project Units (so units and rounding match the rest of the model).
 
@@ -85,7 +89,8 @@ On a workshared model the window takes a **session lease** before it opens: it b
 
 ## Notes
 
-- **Save is by Type Mark, re-resolved at save time.** The writer re-collects symbols by Type Mark + category when you Save, so it writes the current model membership. A value Revit can't parse (`SetValueString` fails) is skipped, reported in the status line, and left dirty — it doesn't abort the rest of the batch.
+- **Save is by Type Mark, re-resolved at save time.** The writer re-collects every loaded symbol by Type Mark + category when you Save (placed or not), so it writes the current membership.
+- **You can't blank a ⟨varies⟩ field to unify it.** Its baseline is empty, so clearing it isn't an edit and nothing is written — unify to a value, or clear each type in Revit. A value Revit can't parse (`SetValueString` fails) is skipped, reported in the status line, and left dirty — it doesn't abort the rest of the batch.
 - **Discard can't be undone by Revit.** Discarded edits were never committed to the model, so Revit's Undo can't bring them back. Discard restores each field to its loaded value — including the ⟨varies⟩ placeholder/dash for fields that started mixed.
 - **Catalog # / Qty** fields accept the same Counts grammar used by TurboDocs — the **Counts syntax ↗** link on the page opens the cheat sheet.
 - **Schedule Notes** rows show a live character count to the right of each field, turning red at 80 characters to flag entries that may overrun the schedule column.

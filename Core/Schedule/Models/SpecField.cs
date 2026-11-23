@@ -56,9 +56,22 @@ public class SpecField : ViewModelBase
             // latter sets _userEdited first, so an edit (or a Discard restore) never re-captures wrongly.
             if (!_userEdited) _originalVaries = value;
             if (SetProperty(ref _isVaries, value))
+            {
                 OnPropertyChanged(nameof(ShowPlaceholder));
+                OnPropertyChanged(nameof(StateToolTip));
+            }
         }
     }
+
+    /// <summary>Per-type values behind a ⟨varies⟩ field (set by the collector at load).</summary>
+    public string VariesDetail { get; set; }
+
+    /// <summary>Which types lack the parameter (or disagree on its storage type) behind an n/a field.</summary>
+    public string NaDetail { get; set; }
+
+    /// <summary>Hover text for the field box — only on an n/a or still-unresolved ⟨varies⟩ field; null
+    /// otherwise, so a normal field shows no tooltip. Typing over ⟨varies⟩ clears it; Discard restores it.</summary>
+    public string StateToolTip => IsNa ? NaDetail : IsVaries ? VariesDetail : null;
 
     public string Value
     {

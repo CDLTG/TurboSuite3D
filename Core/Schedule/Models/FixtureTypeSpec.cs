@@ -1,6 +1,7 @@
 #nullable disable
 using System.Collections.Generic;
 using System.Linq;
+using TurboSuite.Schedule.Services;
 using TurboSuite.Shared.ViewModels;
 
 namespace TurboSuite.Schedule.Models;
@@ -19,12 +20,14 @@ public class CatalogRow
 public class FixtureTypeSpec : ViewModelBase
 {
     public FixtureTypeSpec(string typeMark, PageKind kind, IReadOnlyList<SpecField> fields,
-        string familyName = null)
+        IReadOnlyList<SpecTypeRef> types = null)
     {
         TypeMark = typeMark;
         Kind = kind;
         AllFields = fields;
-        FamilyName = familyName ?? "";
+        Types = types ?? new List<SpecTypeRef>();
+        TypesSummary = SpecTypeBreakdown.Summary(Types);
+        TypesToolTip = SpecTypeBreakdown.List(Types);
 
         foreach (var f in fields)
             f.DirtyChanged += _ => RaiseDirty();
@@ -52,10 +55,15 @@ public class FixtureTypeSpec : ViewModelBase
     public string TypeMark { get; }
     public PageKind Kind { get; }
 
-    /// <summary>Read-only reference: the Revit family name(s) backing this Type Mark group. Usually a
-    /// single family; if the group's symbols span several families they're joined with ", ". Display-only
-    /// (shown in the header), never written back.</summary>
-    public string FamilyName { get; }
+    /// <summary>Read-only reference: every Revit type carrying this Type Mark — placed or not — that a Save
+    /// writes to. Display-only (header + hover), never written back.</summary>
+    public IReadOnlyList<SpecTypeRef> Types { get; }
+
+    /// <summary>Header line: types grouped by family, unplaced ones marked.</summary>
+    public string TypesSummary { get; }
+
+    /// <summary>Header hover: one "Family: Type" per line.</summary>
+    public string TypesToolTip { get; }
     public IReadOnlyList<SpecField> AllFields { get; }
 
     public List<SpecField> IdentityFields { get; }

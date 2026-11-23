@@ -8,7 +8,8 @@ namespace TurboSuite.Schedule.Services;
 
 /// <summary>
 /// Shim-side <see cref="IScheduleWriter"/> — applies every dirty page in one transaction (one undo
-/// entry). Symbols are re-resolved by Type Mark + category at save time. One unparseable value must
+/// entry). Symbols are re-resolved by Type Mark + category at save time — every loaded type carrying the
+/// mark, placed or not (see <see cref="ScheduleTypeCollector"/>). One unparseable value must
 /// not abort the batch: <c>SetValueString</c> failures are collected and the field left dirty while
 /// the rest commits. Invoked on the Revit API thread via the work queue.
 ///
