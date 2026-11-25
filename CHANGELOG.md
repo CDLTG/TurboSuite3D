@@ -7,6 +7,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.6.4] — 2026-11-25
+
+### Added
+- TurboDocs: Control Package cut sheet for Wireless Pico keypads (`Model` = `Wireless Pico`).
+- Storage: a project saved by a newer TurboSuite whose stored data is incompatible now refuses this build's settings saves, with a notice, instead of splitting or overwriting that data. Nothing triggers it yet; model edits are never blocked.
+
+### Changed
+- TurboSchedule: reads and writes every type sharing a Type Mark, placed or not; the header lists those types, and varies/n/a fields show a per-type breakdown on hover.
+
+### Fixed
+- TurboDocs: hybrid repeater cut sheets appear in the Control Package again.
+- TurboDMX, TurboDALI, TurboName: saved data that can't be read is no longer overwritten by the next save.
+- TurboSchedule: warns when the workbook path couldn't be saved because of worksharing, instead of failing silently.
+
 ## [1.6.3] — 2026-11-20
 
 ### Added
@@ -397,6 +411,7 @@ See [README.md](README.md#installation).
 ### Security
 See [SECURITY.md](SECURITY.md).
 
+[1.6.4]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.4
 [1.6.3]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.3
 [1.6.2]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.2
 [1.6.1]: https://github.com/CDLTG/TurboSuite3D/releases/tag/v1.6.1
