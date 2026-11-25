@@ -22,7 +22,8 @@ namespace TurboSuite.Docs.Services;
 /// <see cref="IsAccountedFor"/> can distinguish "no cutsheet by design" from "someone forgot a URL":
 /// a completeness test asserts every part a brand config can emit is in one set or the other.
 ///
-/// URLs are transcribed from <c>Specs/control-cutsheet-urls.txt</c> (the dev-authored fill-in list).
+/// This map is the only record of these URLs: a new control part gets its URL added here, alongside
+/// the BrandConfig change that makes it emittable (the completeness test fails until it does).
 /// When a link rots, the runtime local-PDF override in the grid is the escape hatch — no code change.
 /// </summary>
 public static class ControlCutSheetUrlResolver

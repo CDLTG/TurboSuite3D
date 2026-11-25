@@ -176,7 +176,7 @@ The control BOM is a *recommendation* (derived hardware, no placed element to re
 
 Rows are built by the pure `Core/Docs/Services/ControlCutSheetRowBuilder` (resolve → **collapse identical URLs to one page** whose label lists every part it covers → order: closed by BOM category, then keypads alphabetically, then repeaters → derive a stable key), then mapped onto `FixtureSpecModel` so the shared grid/commands work unchanged. Binding is `CutSheetPdfService.MergePlain` — natural-size pages, per-part bookmarks, **no stamp**; a URL that fails to download or is password-protected renders a notice page.
 
-A part with **no URL** (a keypad/repeater `Model` not in the map; a *blank* `Model` gets no row at all) shows a greyed "— no cutsheet —" row that is **omitted from the output** but still selectable to attach a local PDF; the DALI/DMX parts (`LQSE2-1DALUNV-D`, `QSE-CI-DMX`) are mapped and only appear when those experimental features place hardware. The URL map is transcribed from the dev-authored `Specs/control-cutsheet-urls.txt`; a completeness unit test asserts every part a `BrandConfig` can emit is mapped or explicitly no-cutsheet.
+A part with **no URL** (a keypad/repeater `Model` not in the map; a *blank* `Model` gets no row at all) shows a greyed "— no cutsheet —" row that is **omitted from the output** but still selectable to attach a local PDF; the DALI/DMX parts (`LQSE2-1DALUNV-D`, `QSE-CI-DMX`) are mapped and only appear when those experimental features place hardware. The URL map in `ControlCutSheetUrlResolver` is the only record of these URLs (add one there when a part is added); a completeness unit test asserts every part a `BrandConfig` can emit is mapped or explicitly no-cutsheet.
 
 ### Settings
 
