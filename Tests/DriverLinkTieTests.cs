@@ -27,7 +27,7 @@ namespace TurboSuite.Tests.Driver
         private static DriverCandidateInfo Drv(long id, string family, long familyRef,
             double power = 60, double sub = 60, string mfr = "ACME", string volts = "24",
             string protocol = "0-10V", double derate = 1.0, int maxFixtures = 0, bool tbd = false,
-            string catalog = null)
+            string? catalog = null)
             => new DriverCandidateInfo
             {
                 SymbolRef = new ElementRef(id),
@@ -48,7 +48,7 @@ namespace TurboSuite.Tests.Driver
             };
 
         private static FixtureData Fix(long id, long typeRef = TypeL1, double watts = 30,
-            string mfr = "ACME", string volts = "24", string protocol = "0-10V", string mark = "L1")
+            string mfr = "ACME", string? volts = "24", string? protocol = "0-10V", string mark = "L1")
             => new FixtureData
             {
                 FixtureId = new ElementRef(id),
@@ -66,7 +66,7 @@ namespace TurboSuite.Tests.Driver
             => DriverLinks.From(pairs.ToDictionary(p => new ElementRef(p.type), p => new ElementRef(p.family)));
 
         private static DriverRecommendation Recommend(List<FixtureData> fixtures,
-            List<DriverCandidateInfo> candidates, DriverLinks links = null)
+            List<DriverCandidateInfo> candidates, DriverLinks? links = null)
             => new DriverSelectionService().GetRecommendation(fixtures, candidates, links);
 
         // ── Tie detection ────────────────────────────────────────────────────────────────────────────
