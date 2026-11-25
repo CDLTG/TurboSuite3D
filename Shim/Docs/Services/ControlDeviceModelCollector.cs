@@ -19,7 +19,7 @@ public static class ControlDeviceModelCollector
     {
         return (
             DistinctModels(doc, BuiltInCategory.OST_LightingDevices, Roles.Keypad),
-            DistinctModels(doc, BuiltInCategory.OST_ElectricalFixtures, Roles.HybridRepeater));
+            DistinctModels(doc, BuiltInCategory.OST_ElectricalEquipment, Roles.HybridRepeater));
     }
 
     private static List<string> DistinctModels(Document doc, BuiltInCategory category, string role)
