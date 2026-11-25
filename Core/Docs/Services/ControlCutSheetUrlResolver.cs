@@ -84,6 +84,7 @@ public static class ControlCutSheetUrlResolver
             ["seeTouch"] = Lutron + "369353_hwqs_wired_arch.pdf",
             ["seeTouch Tabletop"] = Lutron + "369349.pdf",
             ["Signature"] = Lutron + "369668.pdf",
+            ["Wireless Pico"] = Lutron + "369847.pdf",
             ["Hybrid Repeater"] = Lutron + "HWQS_Hybrid_Repeater_369351a.pdf",
         };
 

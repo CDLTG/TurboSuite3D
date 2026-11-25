@@ -62,6 +62,7 @@ namespace TurboSuite.Tests.Docs
         [InlineData("seeTouch")]
         [InlineData("seeTouch Tabletop")]
         [InlineData("Signature")]
+        [InlineData("Wireless Pico")]
         [InlineData("Hybrid Repeater")]
         public void ResolveModel_KnownModels_ReturnUrl(string model)
         {
